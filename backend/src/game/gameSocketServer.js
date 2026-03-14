@@ -1900,6 +1900,100 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
 }
 
 /**
+ * Handle a `pass_turn` message from the active (declarant) player.
+ *
+ * The current turn player ("declarant") may pass the active turn to any
+ * same-team, non-eliminated teammate who still holds at least one card.
+ * The target is identified by their **seat index** so the client does not need
+ * to expose internal player IDs.
+ *
+ * Validation (Sub-AC 56a):
+ *   1. Game must be active.
+ *   2. requesterId must be `gs.currentTurnPlayerId` ("declarant eligibility").
+ *   3. targetSeatIndex must resolve to an existing player.
+ *   4. Target player must be on the same team as the requester.
+ *   5. Target player must not be eliminated (holds ≥1 card).
+ *   6. Requester and target may not be the same seat.
+ *
+ * On success:
+ *   - `gs.currentTurnPlayerId` is updated to the target player's id.
+ *   - Updated `game_state` is broadcast to all connected clients.
+ *   - A `turn-passed` event is emitted to all clients with the new active seat.
+ *   - Any active turn or post-declaration timer is cancelled and a fresh timer
+ *     is scheduled for the target player.
+ *
+ * @param {string}          roomCode
+ * @param {string}          requesterId      - The current turn player passing the turn
+ * @param {number}          targetSeatIndex  - Seat index of the intended recipient
+ * @param {import('ws').WebSocket|null} ws   - Requester's socket (for error replies)
+ */
+function handlePassTurn(roomCode, requesterId, targetSeatIndex, ws) {
+  const gs = getGame(roomCode);
+  if (!gs || gs.status !== 'active') return;
+
+  // 1. Only the current turn player may pass the turn (declarant eligibility).
+  if (gs.currentTurnPlayerId !== requesterId) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Not your turn', code: 'NOT_YOUR_TURN' });
+    return;
+  }
+
+  // 2. Resolve target by seat index.
+  const target = gs.players.find((p) => p.seatIndex === targetSeatIndex);
+  if (!target) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Seat not found', code: 'SEAT_NOT_FOUND' });
+    return;
+  }
+
+  // 3. Cannot pass to yourself.
+  if (target.playerId === requesterId) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Cannot pass turn to yourself', code: 'SELF_PASS' });
+    return;
+  }
+
+  // 4. Must pass within the same team.
+  const requester = gs.players.find((p) => p.playerId === requesterId);
+  if (!requester || requester.teamId !== target.teamId) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Must pass turn to a teammate', code: 'WRONG_TEAM' });
+    return;
+  }
+
+  // 5. Target must still have cards (not eliminated).
+  if ((gs.eliminatedPlayerIds && gs.eliminatedPlayerIds.has(target.playerId)) ||
+      getCardCount(gs, target.playerId) === 0) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Target player has no cards', code: 'TARGET_EMPTY_HAND' });
+    return;
+  }
+
+  // Transfer the active turn.
+  gs.currentTurnPlayerId = target.playerId;
+
+  // Broadcast the updated game state so all clients see the new active turn.
+  broadcastStateUpdate(gs, new Set());
+
+  // Emit a dedicated `turn-passed` event with the new active seat details so
+  // the UI can animate / highlight the transition without polling game_state.
+  broadcastToGame(roomCode, {
+    type:              'turn-passed',
+    fromPlayerId:      requesterId,
+    fromSeatIndex:     requester.seatIndex,
+    newActivePlayerId: target.playerId,
+    newActiveSeatIndex: target.seatIndex,
+  });
+
+  // If a post-declaration timer is still running (declarant is passing before
+  // the 30-second window expired), cancel it — the team has made its choice.
+  if (_postDeclarationTimers.has(roomCode)) {
+    cancelPostDeclarationTimer(roomCode);
+  }
+
+  // Cancel the old turn timer (started for requesterId) and schedule a fresh
+  // timer for the new active player.
+  cancelTurnTimer(roomCode);
+  scheduleBotTurnIfNeeded(gs);
+  scheduleTurnTimerIfNeeded(gs);
+}
+
+/**
  * Execute a forced-failed declaration when the turn timer fires while a
  * connected human player has an incomplete card assignment.
  *
@@ -2386,6 +2480,16 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
   broadcastToGame(roomCode, rematchStartPayload);
   // Sub-AC 45c: Start 30-second gathering countdown to track reconnecting players.
   if (gs) { _startRematchGatheringCountdown(roomCode, gs.players); }
+
+  // Sub-AC 45d: Start the 30-second bot-fill window in the room socket server.
+  // After REMATCH_BOT_FILL_TIMEOUT_MS, absent player slots are auto-filled with
+  // bots at the inherited difficulty and the new game starts automatically.
+  // pendingRematchStore is already populated (line above), so roomSocketServer
+  // can read the player roster and game config from there.
+  const roomWS = _getRoomSocketServer();
+  if (roomWS && typeof roomWS.startRematchBotFillTimer === 'function') {
+    roomWS.startRematchBotFillTimer(roomCode);
+  }
 }
 
 
@@ -3173,6 +3277,21 @@ function attachGameSocketServer(httpServer) {
           break;
         }
 
+        case 'pass_turn': {
+          // ── Sub-AC 56a: Active player passes turn to a teammate by seat index ──
+          // The current turn player ("declarant") identifies the recipient by
+          // their seat index (not player ID) so the client doesn't need to
+          // expose internal IDs.  The server validates eligibility and emits
+          // a `turn-passed` event with the new active seat.
+          const { targetSeatIndex: seatIdx } = msg;
+          if (typeof seatIdx === 'number') {
+            handlePassTurn(roomCode, playerId, seatIdx, ws);
+          } else {
+            sendJson(ws, { type: 'error', message: 'targetSeatIndex must be a number', code: 'MISSING_FIELDS' });
+          }
+          break;
+        }
+
         default:
           sendJson(ws, { type: 'error', message: `Unknown message type: ${msg.type}`, code: 'UNKNOWN_TYPE' });
       }
@@ -3253,6 +3372,8 @@ module.exports = {
   handleChooseTurnRecipient,
   // Sub-AC 28b: declarant redirects turn to a same-team player after correct declaration
   handleChooseNextTurn,
+  // Sub-AC 56a: active (declarant) player passes turn to a teammate by seat index
+  handlePassTurn,
   // Declaration phase timer (Sub-AC 23a):
   startDeclarationPhaseTimer,
   // Bot declaration takeover countdown (Sub-AC 3 of AC 41):

@@ -1374,12 +1374,25 @@ function startRematchBotFillTimer(roomCode) {
   const humanPlayers = pending.players.filter((p) => !p.isBot);
   const clients      = getRoomClientMap(code);
 
+  // ── All-bot game: no humans to wait for → start immediately ──────────────
+  if (humanPlayers.length === 0) {
+    console.log(
+      `[RoomWS] Rematch room ${code}: all-bot roster — starting immediately (no humans to wait for).`
+    );
+    process.nextTick(() => {
+      _executeRematchBotFill(code).catch((err) => {
+        console.error('[RoomWS] _executeRematchBotFill (all-bot) error for room', code, ':', err);
+      });
+    });
+    return;
+  }
+
   // ── Fast path: all human players already in the lobby ────────────────────
   const connectedCount = Array.from(clients.keys()).filter((uid) =>
     humanPlayers.some((hp) => hp.playerId === uid)
   ).length;
 
-  if (humanPlayers.length > 0 && connectedCount >= humanPlayers.length) {
+  if (connectedCount >= humanPlayers.length) {
     console.log(
       `[RoomWS] Rematch room ${code}: all ${humanPlayers.length} human(s) already present — ` +
       `starting immediately.`
@@ -1589,8 +1602,11 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
       }
     }
   } finally {
-    // Always clear idempotency guard (pending rematch is cleared on success above).
+    // Always clear idempotency guard and pending rematch (regardless of success/failure).
+    // Clearing here ensures: (a) the next rematch cycle can run, and (b) stale pending
+    // state doesn't interfere with subsequent room operations.
     _startingRooms.delete(code);
+    clearPendingRematch(code);
   }
 }
 
