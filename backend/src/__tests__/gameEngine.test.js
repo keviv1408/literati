@@ -32,7 +32,7 @@
  *    21. moveHistory updated after declaration
  */
 
-const { validateAsk, applyAsk, getDeclarantLockedCards, validateDeclaration, applyDeclaration } = require('../game/gameEngine');
+const { validateAsk, applyAsk, getDeclarantLockedCards, validateDeclaration, applyDeclaration, applyForcedFailedDeclaration, _nextClockwiseOpponent } = require('../game/gameEngine');
 const { buildHalfSuitMap } = require('../game/halfSuits');
 const { serializePlayers, getHalfSuitCardCount } = require('../game/gameState');
 
@@ -529,6 +529,73 @@ describe('applyDeclaration', () => {
     expect(gs.scores.team1).toBe(0);
   });
 
+  // ── AC 26a: wrong-assignment diffs and actual-holder map ─────────────────
+
+  it('incorrect declaration: returns wrongAssignmentDiffs for each mis-assigned card', () => {
+    // p1 holds 1_s; p2 holds 4_s,5_s,6_s — but p1 mistakenly claims 1_s → p3
+    const assignment = {
+      '1_s': 'p3', // wrong: p1 holds it
+      '2_s': 'p1',
+      '3_s': 'p1',
+      '4_s': 'p2',
+      '5_s': 'p2',
+      '6_s': 'p2',
+    };
+    const result = applyDeclaration(gs, 'p1', 'low_s', assignment);
+    expect(result.correct).toBe(false);
+    expect(result.wrongAssignmentDiffs).toHaveLength(1);
+    const diff = result.wrongAssignmentDiffs[0];
+    expect(diff.card).toBe('1_s');
+    expect(diff.claimedPlayerId).toBe('p3');
+    expect(diff.actualPlayerId).toBe('p1');
+  });
+
+  it('incorrect declaration: returns actualHolders map for all 6 half-suit cards', () => {
+    const assignment = {
+      '1_s': 'p3', // wrong: p1 holds it
+      '2_s': 'p1',
+      '3_s': 'p1',
+      '4_s': 'p2',
+      '5_s': 'p2',
+      '6_s': 'p2',
+    };
+    const result = applyDeclaration(gs, 'p1', 'low_s', assignment);
+    // actualHolders must cover all 6 cards in the half-suit
+    expect(Object.keys(result.actualHolders).sort()).toEqual(['1_s', '2_s', '3_s', '4_s', '5_s', '6_s'].sort());
+    // Spot-check a few entries
+    expect(result.actualHolders['1_s']).toBe('p1'); // p1 actually holds 1_s
+    expect(result.actualHolders['4_s']).toBe('p2'); // p2 actually holds 4_s
+  });
+
+  it('incorrect declaration with multiple wrong assignments returns all diffs', () => {
+    // Swap 1_s ↔ 4_s between p1 and p2 so two cards are wrong
+    const assignment = {
+      '1_s': 'p2', // wrong: p1 holds it
+      '2_s': 'p1',
+      '3_s': 'p1',
+      '4_s': 'p1', // wrong: p2 holds it
+      '5_s': 'p2',
+      '6_s': 'p2',
+    };
+    const result = applyDeclaration(gs, 'p1', 'low_s', assignment);
+    expect(result.correct).toBe(false);
+    expect(result.wrongAssignmentDiffs).toHaveLength(2);
+    const cards = result.wrongAssignmentDiffs.map((d) => d.card).sort();
+    expect(cards).toEqual(['1_s', '4_s'].sort());
+  });
+
+  it('correct declaration: wrongAssignmentDiffs is empty and actualHolders covers all 6 cards', () => {
+    const assignment = {
+      '1_s': 'p1', '2_s': 'p1', '3_s': 'p1',
+      '4_s': 'p2', '5_s': 'p2', '6_s': 'p2',
+    };
+    const result = applyDeclaration(gs, 'p1', 'low_s', assignment);
+    expect(result.correct).toBe(true);
+    expect(result.wrongAssignmentDiffs).toHaveLength(0);
+    // actualHolders still populated even for correct declarations
+    expect(Object.keys(result.actualHolders)).toHaveLength(6);
+  });
+
   it('declaredSuits updated with the halfSuitId after declaration', () => {
     const assignment = {
       '1_s': 'p1', '2_s': 'p1', '3_s': 'p1',
@@ -726,5 +793,154 @@ describe('serializePlayers — halfSuitCounts', () => {
         expect(count).toBeGreaterThanOrEqual(0);
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC 29: After failed declaration, turn auto-passes clockwise to next eligible
+//        opponent.
+//
+// Seat layout (clockwise by seatIndex):
+//   p1 (team1, seat 0) → p4 (team2, seat 1) → p2 (team1, seat 2)
+//   → p5 (team2, seat 3) → p3 (team1, seat 4) → p6 (team2, seat 5)
+// ---------------------------------------------------------------------------
+
+describe('_nextClockwiseOpponent (AC 29)', () => {
+  let gs;
+
+  beforeEach(() => {
+    gs = buildTestGame();
+  });
+
+  it('returns the first clockwise opponent with cards from the declarer seat', () => {
+    // p1 is at seat 0. p4 (team2) is at seat 1 and has cards.
+    expect(_nextClockwiseOpponent(gs, 'p1', 2)).toBe('p4');
+  });
+
+  it('skips opponents with 0 cards and returns the next eligible one', () => {
+    // Empty p4's hand; next team-2 seat clockwise from p1 is p5 (seat 3).
+    gs.hands.set('p4', new Set());
+    expect(_nextClockwiseOpponent(gs, 'p1', 2)).toBe('p5');
+  });
+
+  it('wraps around the seat order when no opponent is found before end', () => {
+    // p6 is at seat 5 (team2). After p6, clockwise next opponent is p4 (seat 1).
+    // Empty p4 and p5, only p6 should remain.
+    gs.hands.set('p4', new Set());
+    gs.hands.set('p5', new Set());
+    expect(_nextClockwiseOpponent(gs, 'p1', 2)).toBe('p6');
+  });
+
+  it('from p3 (seat 4), next team-2 clockwise is p6 (seat 5)', () => {
+    gs.currentTurnPlayerId = 'p3';
+    expect(_nextClockwiseOpponent(gs, 'p3', 2)).toBe('p6');
+  });
+
+  it('from p3 (seat 4), wraps around to p4 (seat 1) when p6 has no cards', () => {
+    gs.hands.set('p6', new Set());
+    expect(_nextClockwiseOpponent(gs, 'p3', 2)).toBe('p4');
+  });
+
+  it('returns from _resolveValidTurn fallback if no opponent has any cards', () => {
+    // All team-2 players empty; the game should still be running (not completed).
+    // The fallback returns whoever _resolveValidTurn finds.
+    gs.hands.set('p4', new Set());
+    gs.hands.set('p5', new Set());
+    gs.hands.set('p6', new Set());
+    // With no opponents, falls back — result should be a player with cards on team1.
+    const result = _nextClockwiseOpponent(gs, 'p1', 2);
+    // Must be some player with cards (p1, p2, or p3).
+    expect(['p1', 'p2', 'p3']).toContain(result);
+  });
+
+  it('returns fromPlayerId immediately when game is already completed', () => {
+    gs.status = 'completed';
+    expect(_nextClockwiseOpponent(gs, 'p1', 2)).toBe('p1');
+  });
+});
+
+describe('applyDeclaration — turn pass after failure (AC 29)', () => {
+  let gs;
+
+  beforeEach(() => {
+    gs = buildTestGame();
+  });
+
+  it('incorrect declaration: turn passes to next clockwise opponent (p4)', () => {
+    // p1 (team1, seat0) declares low_s incorrectly.
+    // Winning team = 2; next clockwise opponent from p1 is p4 (seat1).
+    const assignment = {
+      '1_s': 'p3', // wrong: p1 actually holds it
+      '2_s': 'p1',
+      '3_s': 'p1',
+      '4_s': 'p2',
+      '5_s': 'p2',
+      '6_s': 'p2',
+    };
+    const result = applyDeclaration(gs, 'p1', 'low_s', assignment);
+    expect(result.correct).toBe(false);
+    expect(result.newTurnPlayerId).toBe('p4');
+    expect(gs.currentTurnPlayerId).toBe('p4');
+  });
+
+  it('incorrect declaration: skips opponent with no cards, passes to next', () => {
+    // Empty p4's hand; next team-2 clockwise from p1 should be p5 (seat3).
+    gs.hands.set('p4', new Set());
+    const assignment = {
+      '1_s': 'p3', // wrong
+      '2_s': 'p1', '3_s': 'p1',
+      '4_s': 'p2', '5_s': 'p2', '6_s': 'p2',
+    };
+    const result = applyDeclaration(gs, 'p1', 'low_s', assignment);
+    expect(result.correct).toBe(false);
+    expect(result.newTurnPlayerId).toBe('p5');
+  });
+
+  it('correct declaration: declaring team keeps the turn', () => {
+    // p1 (team1) correctly declares low_s; p1 has cards after (high_h etc. not set,
+    // but p1 still has 0 cards after low_s removal, so _resolveValidTurn picks p2 or p3).
+    const assignment = {
+      '1_s': 'p1', '2_s': 'p1', '3_s': 'p1',
+      '4_s': 'p2', '5_s': 'p2', '6_s': 'p2',
+    };
+    const result = applyDeclaration(gs, 'p1', 'low_s', assignment);
+    expect(result.correct).toBe(true);
+    // Turn should stay with team1 (p1 now has 0 cards, so resolves to a teammate).
+    const turnPlayer = gs.players.find((p) => p.playerId === result.newTurnPlayerId);
+    expect(turnPlayer.teamId).toBe(1);
+  });
+});
+
+describe('applyForcedFailedDeclaration — turn pass (AC 29)', () => {
+  let gs;
+
+  beforeEach(() => {
+    gs = buildTestGame();
+  });
+
+  it('forced-failed declaration: turn passes to next clockwise opponent', () => {
+    // p1 (team1, seat0) times out on low_s. Winning team = 2.
+    // Next clockwise from p1 with cards on team2 is p4 (seat1).
+    const result = applyForcedFailedDeclaration(gs, 'p1', 'low_s');
+    expect(result.winningTeam).toBe(2);
+    expect(result.newTurnPlayerId).toBe('p4');
+    expect(gs.currentTurnPlayerId).toBe('p4');
+  });
+
+  it('forced-failed declaration: skips empty opponents, passes to next eligible', () => {
+    gs.hands.set('p4', new Set());
+    const result = applyForcedFailedDeclaration(gs, 'p1', 'low_s');
+    expect(result.winningTeam).toBe(2);
+    expect(result.newTurnPlayerId).toBe('p5');
+  });
+
+  it('forced-failed declaration from team2 player: turn passes to team1 opponent', () => {
+    // Set p4 as current turn player and have p4 do a forced-failed declaration.
+    gs.currentTurnPlayerId = 'p4';
+    // Next clockwise from p4 (seat1) with cards on team1: p2 (seat2).
+    const result = applyForcedFailedDeclaration(gs, 'p4', 'high_s');
+    expect(result.winningTeam).toBe(1);
+    // p2 is at seat2 (next team1 clockwise from p4 seat1).
+    expect(result.newTurnPlayerId).toBe('p2');
   });
 });

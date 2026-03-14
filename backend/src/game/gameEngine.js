@@ -296,21 +296,31 @@ function validateDeclaration(gs, declarerId, halfSuitId, assignment) {
  * @param {string} declarerId
  * @param {string} halfSuitId
  * @param {Object.<string, string>} assignment - { cardId: playerId }
- * @returns {{ correct: boolean, winningTeam: 1|2, newTurnPlayerId: string, lastMove: string }}
+ * @returns {{
+ *   correct: boolean,
+ *   winningTeam: 1|2,
+ *   newTurnPlayerId: string,
+ *   lastMove: string,
+ *   actualHolders: Object.<string, string>,
+ *   wrongAssignmentDiffs: Array<{ card: string, claimedPlayerId: string, actualPlayerId: string|null }>
+ * }}
  */
 function applyDeclaration(gs, declarerId, halfSuitId, assignment) {
   const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId);
   const declarerTeam  = getPlayerTeam(gs, declarerId);
 
-  // Check correctness: every card must be held by the assigned player
+  // Capture actual card holders BEFORE cards are removed from hands.
+  // Also compute wrong-assignment diffs for failed declarations.
+  const actualHolders = {};
   let correct = true;
-  const wrongAssignments = [];
+  const wrongAssignmentDiffs = [];
   for (const card of halfSuitCards) {
     const assignedPlayerId = assignment[card];
-    const holder = _findCardHolder(gs, card);
-    if (holder !== assignedPlayerId) {
+    const actualPlayerId   = _findCardHolder(gs, card);
+    actualHolders[card]    = actualPlayerId;
+    if (actualPlayerId !== assignedPlayerId) {
       correct = false;
-      wrongAssignments.push(card);
+      wrongAssignmentDiffs.push({ card, claimedPlayerId: assignedPlayerId, actualPlayerId });
     }
   }
 
@@ -326,6 +336,9 @@ function applyDeclaration(gs, declarerId, halfSuitId, assignment) {
       hand.delete(card);
     }
   }
+
+  // Sub-AC 27b: detect players whose hands are now empty for the first time
+  const newlyEliminated = _detectNewlyEliminated(gs);
 
   // Mark as declared
   gs.declaredSuits.set(halfSuitId, { teamId: winningTeam, declaredBy: declarerId });
@@ -354,8 +367,13 @@ function applyDeclaration(gs, declarerId, halfSuitId, assignment) {
     gs.tiebreakerWinner = winningTeam;
   }
 
-  // The declarer keeps their turn (or pass if they have 0 cards)
-  gs.currentTurnPlayerId = _resolveValidTurn(gs, declarerId);
+  // AC 29: on a failed declaration, pass turn clockwise to the next eligible opponent.
+  // On a correct declaration, the declaring team keeps the turn.
+  if (correct) {
+    gs.currentTurnPlayerId = _resolveValidTurn(gs, declarerId);
+  } else {
+    gs.currentTurnPlayerId = _nextClockwiseOpponent(gs, declarerId, winningTeam);
+  }
 
   // Check if game is over
   if (gs.declaredSuits.size === 8) {
@@ -367,6 +385,9 @@ function applyDeclaration(gs, declarerId, halfSuitId, assignment) {
     winningTeam,
     newTurnPlayerId: gs.currentTurnPlayerId,
     lastMove: gs.lastMove,
+    actualHolders,
+    wrongAssignmentDiffs,
+    newlyEliminated,
   };
 }
 
@@ -403,6 +424,9 @@ function applyForcedFailedDeclaration(gs, declarerId, halfSuitId) {
     }
   }
 
+  // Sub-AC 27b: detect players whose hands are now empty for the first time
+  const newlyEliminated = _detectNewlyEliminated(gs);
+
   // Mark as declared (won by opposing team)
   gs.declaredSuits.set(halfSuitId, { teamId: winningTeam, declaredBy: declarerId });
 
@@ -427,8 +451,9 @@ function applyForcedFailedDeclaration(gs, declarerId, halfSuitId) {
     gs.tiebreakerWinner = winningTeam;
   }
 
-  // Declarer keeps their turn (or pass if they have 0 cards)
-  gs.currentTurnPlayerId = _resolveValidTurn(gs, declarerId);
+  // AC 29: forced-failed declaration always awards the point to opponents;
+  // pass turn clockwise to the next eligible opponent.
+  gs.currentTurnPlayerId = _nextClockwiseOpponent(gs, declarerId, winningTeam);
 
   // Check if game is over
   if (gs.declaredSuits.size === 8) {
@@ -439,6 +464,7 @@ function applyForcedFailedDeclaration(gs, declarerId, halfSuitId) {
     winningTeam,
     newTurnPlayerId: gs.currentTurnPlayerId,
     lastMove:        gs.lastMove,
+    newlyEliminated,
   };
 }
 
@@ -470,6 +496,47 @@ function _endGame(gs) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Find the next clockwise player from `fromPlayerId` who belongs to
+ * `opponentTeam` and has ≥1 card remaining (AC 29 — turn after failed declaration).
+ *
+ * "Clockwise" is defined by ascending seatIndex order, wrapping around.
+ *
+ * Falls back to:
+ *   1. Any opponent with cards (regardless of seat order).
+ *   2. _resolveValidTurn(gs, fromPlayerId) as a last resort.
+ *
+ * @param {Object} gs
+ * @param {string} fromPlayerId  — the declarer (turn passes FROM them)
+ * @param {number} opponentTeam  — the winning team (1 or 2)
+ * @returns {string}
+ */
+function _nextClockwiseOpponent(gs, fromPlayerId, opponentTeam) {
+  if (gs.status === 'completed') return fromPlayerId;
+
+  // Players sorted clockwise by seatIndex.
+  const sorted = [...gs.players].sort((a, b) => a.seatIndex - b.seatIndex);
+  const fromIdx = sorted.findIndex((p) => p.playerId === fromPlayerId);
+  const n = sorted.length;
+
+  // Search clockwise (fromIdx+1, fromIdx+2, …) for an opponent with cards.
+  for (let i = 1; i < n; i++) {
+    const candidate = sorted[(fromIdx + i) % n];
+    if (candidate.teamId === opponentTeam && getCardCount(gs, candidate.playerId) > 0) {
+      return candidate.playerId;
+    }
+  }
+
+  // Fallback 1: any opponent with cards (shouldn't differ from above, but defensive).
+  const anyOpponent = sorted.find(
+    (p) => p.teamId === opponentTeam && getCardCount(gs, p.playerId) > 0
+  );
+  if (anyOpponent) return anyOpponent.playerId;
+
+  // Fallback 2: any player with cards (e.g. if opponents are all empty).
+  return _resolveValidTurn(gs, fromPlayerId);
+}
+
+/**
  * Determine a valid turn holder starting from `candidateId`.
  *
  * If `candidateId` has ≥1 card, return them unchanged.
@@ -488,6 +555,12 @@ function _resolveValidTurn(gs, candidateId) {
   // If candidate has cards, they're fine.
   if (getCardCount(gs, candidateId) > 0) return candidateId;
 
+  // Sub-AC 27b: if the eliminated player has designated a turn recipient, prefer them.
+  const storedRecipient = gs.turnRecipients?.get(candidateId);
+  if (storedRecipient && getCardCount(gs, storedRecipient) > 0) {
+    return storedRecipient;
+  }
+
   // Try to find a teammate with cards.
   const team = getPlayerTeam(gs, candidateId);
   const teammates = getTeamPlayers(gs, team).filter(
@@ -501,6 +574,36 @@ function _resolveValidTurn(gs, candidateId) {
 
   // Everyone is empty — game should have ended.
   return candidateId;
+}
+
+// ---------------------------------------------------------------------------
+// Elimination helpers (Sub-AC 27b)
+// ---------------------------------------------------------------------------
+
+/**
+ * Scan all players: any player whose hand is now empty AND who was NOT
+ * already in `gs.eliminatedPlayerIds` is newly eliminated.
+ *
+ * Adds the newly-eliminated IDs to `gs.eliminatedPlayerIds` (mutates).
+ *
+ * @param {Object} gs - GameState (mutated: eliminatedPlayerIds updated)
+ * @returns {string[]} Array of newly-eliminated playerIds (may be empty)
+ */
+function _detectNewlyEliminated(gs) {
+  const newlyEliminated = [];
+  if (!gs.eliminatedPlayerIds) {
+    gs.eliminatedPlayerIds = new Set();
+  }
+  for (const player of gs.players) {
+    if (
+      !gs.eliminatedPlayerIds.has(player.playerId) &&
+      getCardCount(gs, player.playerId) === 0
+    ) {
+      gs.eliminatedPlayerIds.add(player.playerId);
+      newlyEliminated.push(player.playerId);
+    }
+  }
+  return newlyEliminated;
 }
 
 // ---------------------------------------------------------------------------
@@ -531,5 +634,7 @@ module.exports = {
   applyDeclaration,
   applyForcedFailedDeclaration,
   _resolveValidTurn,
+  _nextClockwiseOpponent,
   _endGame,
+  _detectNewlyEliminated,
 };

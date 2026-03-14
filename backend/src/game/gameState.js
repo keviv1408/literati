@@ -135,6 +135,19 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
     // Shared UI preference: when true, all clients show inference highlights.
     // Any in-game player can toggle this; it is broadcast in real time.
     inferenceMode: false,
+
+    // ── Player elimination (Sub-AC 27b) ─────────────────────────────────────
+    // Set of playerIds whose hands are now empty (cards removed by a declaration).
+    // Populated by applyDeclaration / applyForcedFailedDeclaration when a
+    // player's card count drops to zero.
+    /** @type {Set<string>} */
+    eliminatedPlayerIds: new Set(),
+
+    // Optional turn-recipient map: when an eliminated player (human or bot)
+    // designates a teammate to receive their future turns, the choice is stored
+    // here.  _resolveValidTurn consults this map before falling back to seat order.
+    /** @type {Map<string, string>} */
+    turnRecipients: new Map(),
   };
 }
 
@@ -296,6 +309,8 @@ function serializePlayers(gs) {
       cardCount:     hand.size,
       isCurrentTurn: p.playerId === gs.currentTurnPlayerId,
       halfSuitCounts,
+      // Sub-AC 27b: true when this player has no cards left (hand emptied by declaration)
+      isEliminated:  gs.eliminatedPlayerIds ? gs.eliminatedPlayerIds.has(p.playerId) : false,
     };
   });
 }
@@ -351,6 +366,9 @@ async function persistGameState(gs, supabase) {
     winner:         gs.winner,
     tiebreakerWinner: gs.tiebreakerWinner,
     moveHistory:    gs.moveHistory,
+    // Sub-AC 27b: persist eliminated player IDs and turn recipients
+    eliminatedPlayerIds: Array.from(gs.eliminatedPlayerIds ?? []),
+    turnRecipients:      Object.fromEntries(gs.turnRecipients ?? new Map()),
   };
 
   try {
@@ -393,6 +411,9 @@ function restoreGameState(snapshot, roomCode, roomId) {
     moveHistory:   snapshot.moveHistory ?? [],
     // Inference mode resets to off on crash recovery (transient UI preference)
     inferenceMode: snapshot.inferenceMode ?? false,
+    // Sub-AC 27b: restore elimination state
+    eliminatedPlayerIds: new Set(snapshot.eliminatedPlayerIds ?? []),
+    turnRecipients:      new Map(Object.entries(snapshot.turnRecipients ?? {})),
   };
   return gs;
 }

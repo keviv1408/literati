@@ -538,13 +538,14 @@ describe('handlePlayerDisconnect', () => {
     cleanupRoom();
   });
 
-  it('7. emits turn_timer_tick events during the 30-second window', () => {
+  it('7. emits timer_tick events during the 30-second window', () => {
     const { sockets } = setupRoom(['p1', 'p2', 'p3'], 'p1');
     handlePlayerDisconnect(ROOM, 'p1', false);
 
     jest.advanceTimersByTime(TIMER_TICK_INTERVAL_MS);
 
-    const ticks = sockets.p2._messages.filter((m) => m.type === 'turn_timer_tick');
+    // timerService now emits 'timer_tick' (phase:'turn') every 1 second.
+    const ticks = sockets.p2._messages.filter((m) => m.type === 'timer_tick' && m.phase === 'turn');
     expect(ticks.length).toBeGreaterThanOrEqual(1);
     expect(ticks[0].playerId).toBe('p1');
     cleanupRoom();
@@ -556,7 +557,7 @@ describe('handlePlayerDisconnect', () => {
 // ---------------------------------------------------------------------------
 
 describe('scheduleTurnTimerIfNeeded — tick events', () => {
-  it('broadcasts turn_timer_tick every TIMER_TICK_INTERVAL_MS', () => {
+  it('broadcasts timer_tick (phase:turn) every second', () => {
     const gs = makeGame({ currentPlayer: 'p1' });
     setGame(ROOM, gs);
 
@@ -567,17 +568,19 @@ describe('scheduleTurnTimerIfNeeded — tick events', () => {
 
     scheduleTurnTimerIfNeeded(gs);
 
+    // timerService fires 'timer_tick' every 1 second; advance > 1 s to get at least one
     jest.advanceTimersByTime(TIMER_TICK_INTERVAL_MS);
 
-    expect(ws1._messages.some((m) => m.type === 'turn_timer_tick')).toBe(true);
-    expect(ws2._messages.some((m) => m.type === 'turn_timer_tick')).toBe(true);
+    // New event name: 'timer_tick' with phase:'turn' (timerService Sub-AC 36.1)
+    expect(ws1._messages.some((m) => m.type === 'timer_tick' && m.phase === 'turn')).toBe(true);
+    expect(ws2._messages.some((m) => m.type === 'timer_tick' && m.phase === 'turn')).toBe(true);
 
     removeConnection(ROOM, 'p1');
     removeConnection(ROOM, 'p2');
     cancelTurnTimer(ROOM);
   });
 
-  it('turn_timer_tick includes remainingMs and expiresAt', () => {
+  it('timer_tick includes remainingMs, remainingS, playerId, and expiresAt', () => {
     const gs = makeGame({ currentPlayer: 'p1' });
     setGame(ROOM, gs);
     const ws = makeMockWs();
@@ -586,7 +589,8 @@ describe('scheduleTurnTimerIfNeeded — tick events', () => {
     scheduleTurnTimerIfNeeded(gs);
     jest.advanceTimersByTime(TIMER_TICK_INTERVAL_MS);
 
-    const tick = ws._messages.find((m) => m.type === 'turn_timer_tick');
+    // New event name: 'timer_tick' with phase:'turn' (timerService Sub-AC 36.1)
+    const tick = ws._messages.find((m) => m.type === 'timer_tick' && m.phase === 'turn');
     expect(tick).toBeDefined();
     expect(tick.playerId).toBe('p1');
     expect(typeof tick.remainingMs).toBe('number');
@@ -606,12 +610,12 @@ describe('scheduleTurnTimerIfNeeded — tick events', () => {
 
     scheduleTurnTimerIfNeeded(gs);
     jest.advanceTimersByTime(TIMER_TICK_INTERVAL_MS);
-    const countBefore = ws._messages.filter((m) => m.type === 'turn_timer_tick').length;
+    const countBefore = ws._messages.filter((m) => m.type === 'timer_tick' && m.phase === 'turn').length;
 
     cancelTurnTimer(ROOM);
     jest.advanceTimersByTime(TIMER_TICK_INTERVAL_MS * 5);
 
-    const countAfter = ws._messages.filter((m) => m.type === 'turn_timer_tick').length;
+    const countAfter = ws._messages.filter((m) => m.type === 'timer_tick' && m.phase === 'turn').length;
     expect(countAfter).toBe(countBefore);
 
     removeConnection(ROOM, 'p1');

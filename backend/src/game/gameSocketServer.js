@@ -129,6 +129,7 @@ const {
   registerConnection,
   removeConnection,
   getRoomConnections,
+  getConnection,
 } = require('./gameStore');
 const {
   createGameState,
@@ -138,6 +139,8 @@ const {
   persistGameState,
   restoreGameState,
   getPlayerTeam,
+  getTeamPlayers,
+  getCardCount,
   getHand,
 } = require('./gameState');
 const {
@@ -1515,6 +1518,97 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = fa
 // Forced-failed declaration handler (AC 24)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Player elimination (Sub-AC 27b)
+// ---------------------------------------------------------------------------
+
+/**
+ * Process players who were newly eliminated (hand dropped to 0) after a
+ * declaration.  For each eliminated player:
+ *   - Broadcasts `player_eliminated` to ALL connections in the room.
+ *   - If the player is a bot: auto-picks first eligible teammate as turn
+ *     recipient and stores it in `gs.turnRecipients`.
+ *   - If the player is human: sends a targeted `choose_turn_recipient_prompt`
+ *     with the list of eligible teammates so the client can show a modal.
+ *
+ * @param {Object}   gs              - Live GameState (already mutated with eliminations)
+ * @param {string[]} newlyEliminated - Player IDs whose hands just reached 0
+ */
+function _processNewlyEliminatedPlayers(gs, newlyEliminated) {
+  if (!newlyEliminated || newlyEliminated.length === 0) return;
+
+  const roomCode = gs.roomCode;
+
+  if (!gs.turnRecipients) gs.turnRecipients = new Map();
+
+  for (const eliminatedId of newlyEliminated) {
+    const eliminatedPlayer = gs.players.find((p) => p.playerId === eliminatedId);
+    if (!eliminatedPlayer) continue;
+
+    // Broadcast elimination to all connected clients (included in game_players
+    // too via isEliminated flag, but this explicit event helps clients animate
+    // and display a toast immediately).
+    broadcastToGame(roomCode, {
+      type:        'player_eliminated',
+      playerId:    eliminatedId,
+      displayName: eliminatedPlayer.displayName,
+      teamId:      eliminatedPlayer.teamId,
+    });
+
+    // Find eligible teammates: same team, not eliminated, still have cards.
+    const eligibleTeammates = getTeamPlayers(gs, eliminatedPlayer.teamId).filter(
+      (p) => p.playerId !== eliminatedId && getCardCount(gs, p.playerId) > 0
+    );
+
+    if (eliminatedPlayer.isBot) {
+      // Bots auto-pick first eligible teammate.
+      if (eligibleTeammates.length > 0) {
+        gs.turnRecipients.set(eliminatedId, eligibleTeammates[0].playerId);
+      }
+    } else {
+      // Human: send a targeted prompt so the client can show the choose-modal.
+      const ws = getConnection(roomCode, eliminatedId);
+      if (ws) {
+        sendJson(ws, {
+          type:              'choose_turn_recipient_prompt',
+          eliminatedPlayerId: eliminatedId,
+          eligibleTeammates:  eligibleTeammates.map((p) => ({
+            playerId:    p.playerId,
+            displayName: p.displayName,
+          })),
+        });
+      }
+    }
+  }
+}
+
+/**
+ * Handle a `choose_turn_recipient` message from an eliminated human player.
+ *
+ * Validates the choice and stores it in `gs.turnRecipients`.  Any future call
+ * to `_resolveValidTurn(gs, eliminatedPlayerId)` will prefer this recipient.
+ *
+ * @param {string} roomCode
+ * @param {string} playerId    - The eliminated player making the choice
+ * @param {string} recipientId - The teammate they chose
+ */
+function handleChooseTurnRecipient(roomCode, playerId, recipientId) {
+  const gs = getGame(roomCode);
+  if (!gs || gs.status !== 'active') return;
+
+  // Must be an eliminated player.
+  if (!gs.eliminatedPlayerIds || !gs.eliminatedPlayerIds.has(playerId)) return;
+
+  // Recipient must be a valid teammate with cards.
+  const playerTeam    = getPlayerTeam(gs, playerId);
+  const recipientTeam = getPlayerTeam(gs, recipientId);
+  if (!playerTeam || playerTeam !== recipientTeam) return;
+  if (getCardCount(gs, recipientId) === 0) return;
+
+  if (!gs.turnRecipients) gs.turnRecipients = new Map();
+  gs.turnRecipients.set(playerId, recipientId);
+}
+
 /**
  * Execute a forced-failed declaration when the turn timer fires while a
  * connected human player has an incomplete card assignment.
@@ -1545,7 +1639,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
   const changedHands = new Set(gs.players.map((p) => p.playerId));
 
   // Apply forced failure (mutates gs)
-  const { winningTeam, newTurnPlayerId, lastMove } = applyForcedFailedDeclaration(
+  const { winningTeam, newTurnPlayerId, lastMove, newlyEliminated } = applyForcedFailedDeclaration(
     gs, declarerId, halfSuitId
   );
 
@@ -1567,6 +1661,9 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
 
   // Broadcast updated state + personalized hands
   broadcastStateUpdate(gs, changedHands);
+
+  // ── Sub-AC 27b: handle newly eliminated players ───────────────────────────
+  _processNewlyEliminatedPlayers(gs, newlyEliminated ?? []);
 
   // Update live games store with new scores
   if (liveGamesStore.get(roomCode)) {
@@ -1641,14 +1738,13 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   const changedHands = new Set(gs.players.map((p) => p.playerId));
 
   // Apply declaration (mutates gs)
-  const { correct, winningTeam, newTurnPlayerId, lastMove } = applyDeclaration(
-    gs, declarerId, halfSuitId, assignment
-  );
+  const { correct, winningTeam, newTurnPlayerId, lastMove, actualHolders, wrongAssignmentDiffs, newlyEliminated } =
+    applyDeclaration(gs, declarerId, halfSuitId, assignment);
 
   // Update bot knowledge
   updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct);
 
-  // Broadcast declaration result
+  // Broadcast declaration result (always sent — correct or incorrect)
   broadcastToGame(roomCode, {
     type:            'declaration_result',
     declarerId,
@@ -1660,8 +1756,26 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     lastMove,
   });
 
+  // On a failed declaration, also broadcast the detailed diff so clients can
+  // highlight exactly which assignments were wrong and who actually held each card.
+  if (!correct) {
+    broadcastToGame(roomCode, {
+      type:                 'declarationFailed',
+      declarerId,
+      halfSuitId,
+      winningTeam,
+      assignment,
+      wrongAssignmentDiffs, // [{ card, claimedPlayerId, actualPlayerId }, ...]
+      actualHolders,        // { [cardId]: actualPlayerId } for all 6 half-suit cards
+      lastMove,
+    });
+  }
+
   // Broadcast updated state + personalized hands
   broadcastStateUpdate(gs, changedHands);
+
+  // ── Sub-AC 27b: handle newly eliminated players ───────────────────────────
+  _processNewlyEliminatedPlayers(gs, newlyEliminated ?? []);
 
   // ── Update live games store with new scores ──────────────────────────────
   if (liveGamesStore.get(roomCode)) {
@@ -2277,6 +2391,29 @@ function attachGameSocketServer(httpServer) {
           break;
         }
 
+        case 'game_advance': {
+          // ── Sub-AC 26c: Declaration result overlay dismissed ───────────────
+          // The client sends this fire-and-forget acknowledgement after the
+          // player dismisses (or auto-dismisses) the declaration result overlay.
+          // The turn has already advanced server-side when `declaration_result`
+          // was broadcast, so no server action is required here.
+          // Silently ignored — no response sent back.
+          break;
+        }
+
+        case 'choose_turn_recipient': {
+          // ── Sub-AC 27b: Eliminated player designates their turn recipient ──
+          // Sent by a human player after they are eliminated (hand is empty).
+          // The server stores the choice in `gs.turnRecipients` so that
+          // `_resolveValidTurn` can prefer this teammate when passing the turn.
+          // Fire-and-forget: no response is sent back.
+          const { recipientId: chosenRecipientId } = msg;
+          if (typeof chosenRecipientId === 'string') {
+            handleChooseTurnRecipient(roomCode, playerId, chosenRecipientId);
+          }
+          break;
+        }
+
         default:
           sendJson(ws, { type: 'error', message: `Unknown message type: ${msg.type}`, code: 'UNKNOWN_TYPE' });
       }
@@ -2351,6 +2488,9 @@ module.exports = {
   _executeReclaim,
   // Forced-failed declaration (AC 24):
   handleForcedFailedDeclaration,
+  // Player elimination (Sub-AC 27b):
+  _processNewlyEliminatedPlayers,
+  handleChooseTurnRecipient,
   // Declaration phase timer (Sub-AC 23a):
   startDeclarationPhaseTimer,
   // Bot declaration takeover countdown (Sub-AC 3 of AC 41):

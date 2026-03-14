@@ -338,6 +338,158 @@ describe('declaration_result broadcast — card removal', () => {
 });
 
 // ---------------------------------------------------------------------------
+// declarationFailed event (Sub-AC 26a)
+// ---------------------------------------------------------------------------
+
+describe('declarationFailed event — incorrect declaration', () => {
+  // Incorrect assignment: 3_s mis-assigned to p5 (p3 actually holds it)
+  const incorrectAssignment = {
+    '1_s': 'p1', '2_s': 'p1',  // locked — p1 holds these, must assign to p1
+    '3_s': 'p5',                 // WRONG: p3 holds 3_s, not p5
+    '4_s': 'p3',                 // correct
+    '5_s': 'p5', '6_s': 'p5',  // correct
+  };
+
+  test('declarationFailed is broadcast to all 6 player connections on incorrect declaration', async () => {
+    await handleDeclare(ROOM, 'p1', 'low_s', incorrectAssignment, wsP1);
+
+    for (const ws of [wsP1, wsP2, wsP3, wsP4, wsP5, wsP6]) {
+      const msgs = ws._sent.filter(m => m.type === 'declarationFailed');
+      expect(msgs).toHaveLength(1);
+    }
+  });
+
+  test('declarationFailed is broadcast to the spectator connection', async () => {
+    await handleDeclare(ROOM, 'p1', 'low_s', incorrectAssignment, wsP1);
+
+    const msgs = wsSpectator._sent.filter(m => m.type === 'declarationFailed');
+    expect(msgs).toHaveLength(1);
+  });
+
+  test('declarationFailed contains correct top-level fields', async () => {
+    await handleDeclare(ROOM, 'p1', 'low_s', incorrectAssignment, wsP1);
+
+    const msg = wsP2._sent.find(m => m.type === 'declarationFailed');
+    expect(msg).toBeDefined();
+    expect(msg.declarerId).toBe('p1');
+    expect(msg.halfSuitId).toBe('low_s');
+    expect(msg.winningTeam).toBe(2);  // opponent team scores on incorrect declaration
+    expect(typeof msg.lastMove).toBe('string');
+    expect(msg.lastMove.length).toBeGreaterThan(0);
+  });
+
+  test('declarationFailed.wrongAssignmentDiffs identifies the mis-assigned card', async () => {
+    await handleDeclare(ROOM, 'p1', 'low_s', incorrectAssignment, wsP1);
+
+    const msg = wsP3._sent.find(m => m.type === 'declarationFailed');
+    expect(msg).toBeDefined();
+    expect(Array.isArray(msg.wrongAssignmentDiffs)).toBe(true);
+    expect(msg.wrongAssignmentDiffs).toHaveLength(1);
+
+    const diff = msg.wrongAssignmentDiffs[0];
+    expect(diff.card).toBe('3_s');
+    expect(diff.claimedPlayerId).toBe('p5');  // p1 claimed 3_s belonged to p5
+    expect(diff.actualPlayerId).toBe('p3');   // p3 actually held 3_s
+  });
+
+  test('declarationFailed.actualHolders maps all 6 half-suit cards to their actual holders', async () => {
+    await handleDeclare(ROOM, 'p1', 'low_s', incorrectAssignment, wsP1);
+
+    const msg = wsP4._sent.find(m => m.type === 'declarationFailed');
+    expect(msg).toBeDefined();
+    expect(typeof msg.actualHolders).toBe('object');
+
+    const cards = ['1_s', '2_s', '3_s', '4_s', '5_s', '6_s'];
+    expect(Object.keys(msg.actualHolders).sort()).toEqual(cards.sort());
+
+    // Spot-check: p1 held 1_s and 2_s, p3 held 3_s and 4_s, p5 held 5_s and 6_s
+    expect(msg.actualHolders['1_s']).toBe('p1');
+    expect(msg.actualHolders['2_s']).toBe('p1');
+    expect(msg.actualHolders['3_s']).toBe('p3');  // p5 was claimed but p3 actually held it
+    expect(msg.actualHolders['4_s']).toBe('p3');
+    expect(msg.actualHolders['5_s']).toBe('p5');
+    expect(msg.actualHolders['6_s']).toBe('p5');
+  });
+
+  test('declarationFailed.assignment reflects the (incorrect) submitted assignment', async () => {
+    await handleDeclare(ROOM, 'p1', 'low_s', incorrectAssignment, wsP1);
+
+    const msg = wsP5._sent.find(m => m.type === 'declarationFailed');
+    expect(msg).toBeDefined();
+    expect(msg.assignment).toEqual(incorrectAssignment);
+  });
+
+  test('declarationFailed is NOT emitted on a correct declaration', async () => {
+    const correctAssignment = {
+      '1_s': 'p1', '2_s': 'p1',
+      '3_s': 'p3', '4_s': 'p3',
+      '5_s': 'p5', '6_s': 'p5',
+    };
+    await handleDeclare(ROOM, 'p1', 'low_s', correctAssignment, wsP1);
+
+    for (const ws of [wsP1, wsP2, wsP3, wsP4, wsP5, wsP6, wsSpectator]) {
+      const msgs = ws._sent.filter(m => m.type === 'declarationFailed');
+      expect(msgs).toHaveLength(0);
+    }
+  });
+
+  test('declarationFailed precedes declaration_result in broadcast order on incorrect declaration', async () => {
+    // declaration_result is sent first, then declarationFailed
+    await handleDeclare(ROOM, 'p1', 'low_s', incorrectAssignment, wsP1);
+
+    const declResultIdx = wsP2._sent.findIndex(m => m.type === 'declaration_result');
+    const declFailedIdx = wsP2._sent.findIndex(m => m.type === 'declarationFailed');
+    expect(declResultIdx).toBeGreaterThanOrEqual(0);
+    expect(declFailedIdx).toBeGreaterThan(declResultIdx);
+  });
+
+  test('declarationFailed with multiple wrong assignments returns all diffs', async () => {
+    // Swap p1's and p3's card assignments (two wrongs)
+    const doubleWrongAssignment = {
+      '1_s': 'p3', '2_s': 'p3',  // WRONG: p1 holds these (also violates locked-card rule)
+      '3_s': 'p1', '4_s': 'p1',  // WRONG: p3 holds these
+      '5_s': 'p5', '6_s': 'p5',  // correct
+    };
+
+    // Note: this assignment reassigns p1's own locked cards to p3, so validateDeclaration
+    // will reject it (LOCKED_CARD_REASSIGNED). So let's override by removing 1_s,2_s from p1
+    // and giving them to p3 first, making them no longer "locked".
+    const freshGs = makeGame('DECBRD_MULTI');
+    // Move 1_s,2_s to p3 so p1 doesn't hold them (p1 still holds no low_s — need 1 for eligibility)
+    // Actually we need p1 to hold at least one low_s card to declare. Let's instead have p1 hold 5_s,6_s
+    // and p5 hold 1_s,2_s, with p3 holding 3_s,4_s. Then p1's locked cards are 5_s,6_s.
+    freshGs.hands.set('p1', new Set(['5_s', '6_s']));  // team1, declares low_s
+    freshGs.hands.set('p3', new Set(['3_s', '4_s']));  // team1
+    freshGs.hands.set('p5', new Set(['1_s', '2_s']));  // team1
+
+    // Register new game
+    const { setGame: sg, _clearAll: ca } = require('../game/gameStore');
+    sg('DECBRD_MULTI', freshGs);
+
+    const wsList = Array.from({ length: 7 }, () => mockWs());
+    const { registerConnection: rc } = require('../game/gameStore');
+    ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'spec'].forEach((id, i) =>
+      rc('DECBRD_MULTI', id, wsList[i])
+    );
+
+    // p1 declares but incorrectly assigns two cards wrong
+    const assignment = {
+      '1_s': 'p3', '2_s': 'p3',  // WRONG: p5 holds them
+      '3_s': 'p5', '4_s': 'p3',  // 3_s WRONG (p3 holds), 4_s correct (p3 holds)
+      '5_s': 'p1', '6_s': 'p1',  // locked — correct (p1 holds)
+    };
+    await handleDeclare('DECBRD_MULTI', 'p1', 'low_s', assignment, wsList[0]);
+
+    const msg = wsList[1]._sent.find(m => m.type === 'declarationFailed');
+    expect(msg).toBeDefined();
+    // 1_s→p3 (wrong: p5), 2_s→p3 (wrong: p5), 3_s→p5 (wrong: p3)
+    expect(msg.wrongAssignmentDiffs.length).toBeGreaterThanOrEqual(2);
+
+    ca();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Score accumulation across multiple declarations
 // ---------------------------------------------------------------------------
 
