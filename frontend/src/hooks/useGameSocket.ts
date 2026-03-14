@@ -58,6 +58,24 @@ export interface TurnTimerPayload {
 }
 
 /**
+ * Payload for the declaration-phase timer (Sub-AC 23a).
+ *
+ * Sent by the server directly to the declaring player only (not broadcast to
+ * the room) when they enter Step 2 of the DeclareModal card-assignment form.
+ * The client renders a dedicated DeclarationTimerBar with a 60-second
+ * countdown and a 10-second warning threshold.
+ */
+export interface DeclarationTimerPayload {
+  type: 'declaration_timer';
+  /** The declaring player's ID (same as myPlayerId when received). */
+  playerId: string;
+  /** Total duration of the declaration phase timer in ms (60 000). */
+  durationMs: number;
+  /** Server epoch ms when the declaration phase timer fires. */
+  expiresAt: number;
+}
+
+/**
  * Partial wizard state the active player reports mid-flow so the server
  * can complete the action deterministically if the turn timer fires.
  */
@@ -76,6 +94,13 @@ export interface UseGameSocketReturn {
   lastAskResult: AskResultPayload | null;
   lastDeclareResult: DeclarationResultPayload | null;
   turnTimer: TurnTimerPayload | null;
+  /**
+   * Active declaration-phase timer for the local player (Sub-AC 23a).
+   * Non-null when the server has started a 60-second declaration phase timer
+   * for the current player (they entered Step 2 of DeclareModal).
+   * Cleared when the turn ends (ask_result / declaration_result / bot_takeover).
+   */
+  declarationTimer: DeclarationTimerPayload | null;
   rematchVote: RematchVoteUpdatePayload | null;
   rematchDeclined: RematchDeclinedPayload | null;
   /**
@@ -176,6 +201,7 @@ export function useGameSocket({
   const [lastAskResult, setLastAskResult] = useState<AskResultPayload | null>(null);
   const [lastDeclareResult, setLastDeclareResult] = useState<DeclarationResultPayload | null>(null);
   const [turnTimer, setTurnTimer]        = useState<TurnTimerPayload | null>(null);
+  const [declarationTimer, setDeclarationTimer] = useState<DeclarationTimerPayload | null>(null);
   const [rematchVote, setRematchVote]    = useState<RematchVoteUpdatePayload | null>(null);
   const [rematchDeclined, setRematchDeclined] = useState<RematchDeclinedPayload | null>(null);
   const [inferenceMode, setInferenceMode]   = useState<boolean>(false);
@@ -313,6 +339,8 @@ export function useGameSocket({
           setLastAskResult(payload);
           // The bot executed the timed-out player's turn — clear takeover indicator
           setBotTakeover(null);
+          // Turn ended — clear any active declaration phase timer (Sub-AC 23a)
+          setDeclarationTimer(null);
           break;
         }
 
@@ -323,6 +351,8 @@ export function useGameSocket({
           setBotTakeover(null);
           // Declaration is now complete — clear any in-progress declaration banner
           setDeclareProgress(null);
+          // Turn ended — clear declaration phase timer (Sub-AC 23a)
+          setDeclarationTimer(null);
           break;
         }
 
@@ -340,12 +370,38 @@ export function useGameSocket({
         case 'bot_takeover': {
           const payload = msg as unknown as BotTakeoverPayload;
           setBotTakeover(payload);
+          // Bot is taking over — clear the declaration phase timer so the
+          // UI doesn't show a stale countdown (Sub-AC 23a)
+          setDeclarationTimer(null);
           break;
         }
 
         case 'turn_timer': {
           const payload = msg as unknown as TurnTimerPayload;
           setTurnTimer(payload);
+          break;
+        }
+
+        case 'declaration_timer': {
+          // Sub-AC 23a: 60-second declaration phase timer sent only to the
+          // declaring player.  Drives the DeclarationTimerBar component in
+          // DeclareModal Step 2.
+          const payload = msg as unknown as DeclarationTimerPayload;
+          setDeclarationTimer(payload);
+          break;
+        }
+
+        case 'declaration_timer_tick': {
+          // Periodic resync tick — update expiresAt so the client bar stays
+          // accurate even if the page was backgrounded briefly.
+          const { expiresAt: dtExpiresAt, playerId: dtPlayerId } = msg as {
+            expiresAt: number;
+            playerId: string;
+            remainingMs: number;
+          };
+          setDeclarationTimer((prev) =>
+            prev ? { ...prev, expiresAt: dtExpiresAt, playerId: dtPlayerId } : prev,
+          );
           break;
         }
 
@@ -532,6 +588,7 @@ export function useGameSocket({
     lastDeclareResult,
     declareProgress,
     turnTimer,
+    declarationTimer,
     rematchVote,
     rematchDeclined,
     inferenceMode,

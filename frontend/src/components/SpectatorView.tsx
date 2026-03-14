@@ -67,6 +67,7 @@ import type {
 import { halfSuitLabel, SUIT_SYMBOLS } from '@/types/game';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
+import CountdownTimer from '@/components/CountdownTimer';
 
 // ── Variant display helpers ────────────────────────────────────────────────────
 
@@ -327,15 +328,18 @@ export default function SpectatorView({
         </div>
       )}
 
-      {/* ── Turn-timer progress bar ──────────────────────────────────────────
+      {/* ── Turn-timer countdown ─────────────────────────────────────────────
        *  Re-mounts on each new expiresAt value via the `key` prop.
-       *  Spectators see the same timer as players so they can follow along.
+       *  Spectators see the same countdown as players so they can follow along.
+       *  Uses the shared CountdownTimer component (isMyTimer=false → slate scheme).
        */}
       {turnTimer && gameState && (
-        <SpectatorTimerBar
+        <CountdownTimer
           key={turnTimer.expiresAt}
           expiresAt={turnTimer.expiresAt}
           durationMs={turnTimer.durationMs}
+          isMyTimer={false}
+          label="Turn timer"
         />
       )}
 
@@ -575,50 +579,6 @@ function SpectatorHeader({
   );
 }
 
-/**
- * SpectatorTimerBar — animated progress bar for the current turn timer.
- *
- * Identical to the player view's TurnTimerBar but always uses the neutral
- * (non-"my-timer") colour scheme since spectators have no personal turn.
- */
-function SpectatorTimerBar({
-  expiresAt,
-  durationMs,
-}: {
-  expiresAt: number;
-  durationMs: number;
-}) {
-  const [remaining, setRemaining] = useState<number>(() =>
-    Math.max(0, expiresAt - Date.now())
-  );
-
-  useEffect(() => {
-    const tick = () => {
-      const r = Math.max(0, expiresAt - Date.now());
-      setRemaining(r);
-      if (r > 0) requestAnimationFrame(tick);
-    };
-    const raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [expiresAt]);
-
-  const pct  = Math.min(100, (remaining / durationMs) * 100);
-  const secs = Math.ceil(remaining / 1000);
-
-  return (
-    <div
-      className="relative z-10 w-full h-1.5 bg-slate-800"
-      role="timer"
-      aria-label={`${secs}s remaining`}
-      data-testid="spectator-timer-bar"
-    >
-      <div
-        className={['h-full transition-none', pct < 25 ? 'bg-red-500' : 'bg-slate-500'].join(' ')}
-        style={{ width: `${pct}%` }}
-      />
-    </div>
-  );
-}
 
 /**
  * SpectatorPlayerRow — one team's player seats rendered as a horizontal row.

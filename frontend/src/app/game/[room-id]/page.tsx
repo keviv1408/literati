@@ -41,6 +41,7 @@ import RematchVotePanel from '@/components/RematchVotePanel';
 import SpectatorView from '@/components/SpectatorView';
 import DealAnimation from '@/components/DealAnimation';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
+import CountdownTimer from '@/components/CountdownTimer';
 import type { Room } from '@/types/room';
 import type { CardId, HalfSuitId, GameOverPayload, RematchStartPayload } from '@/types/game';
 import type { PlayerInference } from '@/hooks/useCardInference';
@@ -80,6 +81,13 @@ export default function GamePage({ params }: PageProps) {
   const [voteStartedAt, setVoteStartedAt]   = useState<number | undefined>(undefined);
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Score flash (Sub-AC 25b) ───────────────────────────────────────────────
+  //
+  // When a declaration_result arrives, briefly highlight the scoring team's
+  // score in the header (1 | 2 | null). Cleared after 2 s.
+  const [scoreFlash, setScoreFlash]         = useState<1 | 2 | null>(null);
+  const scoreFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Deal animation (Sub-AC 10b) ────────────────────────────────────────────
   //
@@ -226,10 +234,19 @@ export default function GamePage({ params }: PageProps) {
       setLastResultMsg(lastDeclareResult.lastMove);
       if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
       lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5000);
+
+      // ── Score flash: briefly highlight the team that just scored ─────────
+      if (lastDeclareResult.winningTeam) {
+        if (scoreFlashTimer.current) clearTimeout(scoreFlashTimer.current);
+        setScoreFlash(lastDeclareResult.winningTeam);
+        scoreFlashTimer.current = setTimeout(() => setScoreFlash(null), 2000);
+      }
+
       setActionLoading(false);
       setShowDeclare(false);
       setSelectedCard(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastDeclareResult]);
 
   // ── Trigger deal animation on first game_init ─────────────────────────────
@@ -468,9 +485,31 @@ export default function GamePage({ params }: PageProps) {
           <span className="text-xs text-slate-500 hidden sm:inline">{VARIANT_LABELS[room.card_removal_variant]} · {effectivePlayerCount === 6 ? '3v3' : '4v4'}</span>
         </div>
         <div className="flex items-center gap-2 text-sm font-semibold" aria-label="Score" data-testid="game-score">
-          <span className={myTeamId === 1 ? 'text-emerald-300' : 'text-slate-400'}>T1 <span className="text-white text-base">{gameState?.scores.team1 ?? 0}</span></span>
+          {/* Team 1 score — flashes yellow briefly after a declaration */}
+          <span
+            className={[
+              'transition-colors duration-300',
+              scoreFlash === 1
+                ? 'text-yellow-300 scale-110'
+                : myTeamId === 1 ? 'text-emerald-300' : 'text-slate-400',
+            ].join(' ')}
+            data-testid="score-team1"
+          >
+            T1 <span className="text-white text-base">{gameState?.scores.team1 ?? 0}</span>
+          </span>
           <span className="text-slate-600">—</span>
-          <span className={myTeamId === 2 ? 'text-emerald-300' : 'text-slate-400'}><span className="text-white text-base">{gameState?.scores.team2 ?? 0}</span> T2</span>
+          {/* Team 2 score — flashes yellow briefly after a declaration */}
+          <span
+            className={[
+              'transition-colors duration-300',
+              scoreFlash === 2
+                ? 'text-yellow-300 scale-110'
+                : myTeamId === 2 ? 'text-emerald-300' : 'text-slate-400',
+            ].join(' ')}
+            data-testid="score-team2"
+          >
+            <span className="text-white text-base">{gameState?.scores.team2 ?? 0}</span> T2
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {/* Inference mode toggle — shows uniform-distribution probability badges */}
@@ -513,11 +552,12 @@ export default function GamePage({ params }: PageProps) {
         </div>
       )}
       {turnTimer && gameState && (
-        <TurnTimerBar
+        <CountdownTimer
           key={turnTimer.expiresAt}
           expiresAt={turnTimer.expiresAt}
           durationMs={turnTimer.durationMs}
           isMyTimer={turnTimer.playerId === myPlayerId}
+          label={turnTimer.playerId === myPlayerId ? 'Your turn' : 'Turn timer'}
         />
       )}
 
@@ -797,46 +837,6 @@ export default function GamePage({ params }: PageProps) {
       )}
     </div>
     </GameProvider>
-  );
-}
-
-/**
- * Animated progress bar showing remaining time for the current turn.
- * Re-mounts on each new `expiresAt` value (via the `key` prop in the parent).
- */
-function TurnTimerBar({
-  expiresAt, durationMs, isMyTimer,
-}: { expiresAt: number; durationMs: number; isMyTimer: boolean }) {
-  const [remaining, setRemaining] = useState<number>(() =>
-    Math.max(0, expiresAt - Date.now())
-  );
-
-  useEffect(() => {
-    const tick = () => {
-      const r = Math.max(0, expiresAt - Date.now());
-      setRemaining(r);
-      if (r > 0) requestAnimationFrame(tick);
-    };
-    const raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [expiresAt]);
-
-  const pct = Math.min(100, (remaining / durationMs) * 100);
-  const secs = Math.ceil(remaining / 1000);
-  const danger = pct < 25;
-
-  return (
-    <div
-      className="relative z-10 w-full h-1.5 bg-slate-800"
-      role="timer"
-      aria-label={`${secs}s remaining`}
-      data-testid="turn-timer-bar"
-    >
-      <div
-        className={['h-full transition-none', danger ? 'bg-red-500' : isMyTimer ? 'bg-emerald-400' : 'bg-slate-500'].join(' ')}
-        style={{ width: `${pct}%` }}
-      />
-    </div>
   );
 }
 

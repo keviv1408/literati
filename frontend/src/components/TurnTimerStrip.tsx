@@ -15,13 +15,14 @@
  *
  * Behaviour:
  *   • Uses requestAnimationFrame for smooth 60fps progress animation
- *   • Bar turns amber below 50 % and red below 25 %
- *   • Countdown label pulses when in the danger zone (< 25 %)
+ *   • Bar turns red (warning state) when ≤ 10 s remain (WARNING_THRESHOLD_S)
+ *   • Countdown label pulses when in the warning zone (≤ 10 s)
  *   • Automatically stops the RAF loop once remaining reaches 0
  */
 
 import { useState, useEffect } from 'react';
 import type { TurnTimerPayload } from '@/hooks/useGameSocket';
+import { WARNING_THRESHOLD_S } from './CountdownTimer';
 
 export interface TurnTimerStripProps {
   /** Full `turn_timer` payload from the server. */
@@ -57,20 +58,18 @@ export default function TurnTimerStrip({
 
   const pct      = Math.min(100, (remaining / turnTimer.durationMs) * 100);
   const secs     = Math.ceil(remaining / 1000);
-  const isDanger = pct < 25;
-  const isWarn   = pct < 50;
+  // Warning (red) state activates at ≤ WARNING_THRESHOLD_S seconds (10 s).
+  const isWarning = secs <= WARNING_THRESHOLD_S;
 
-  // Colour scheme mirrors the full-width TurnTimerBar in the game page.
-  const fillColour = isDanger
+  // Colour scheme: red during warning zone, otherwise emerald (my timer) or slate.
+  const fillColour = isWarning
     ? 'bg-red-500'
     : isMyTimer
     ? 'bg-emerald-400'
     : 'bg-slate-500';
 
-  const labelColour = isDanger
+  const labelColour = isWarning
     ? 'text-red-400'
-    : isWarn
-    ? 'text-amber-400'
     : isMyTimer
     ? 'text-emerald-300'
     : 'text-slate-400';
@@ -86,7 +85,7 @@ export default function TurnTimerStrip({
           className={[
             'font-medium',
             labelColour,
-            isDanger ? 'animate-pulse' : '',
+            isWarning ? 'animate-pulse' : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -94,9 +93,10 @@ export default function TurnTimerStrip({
           {isMyTimer ? 'Your turn' : 'Turn timer'}
         </span>
         <span
-          className={['font-mono font-bold tabular-nums', isDanger ? 'text-red-400' : 'text-slate-300'].join(
-            ' ',
-          )}
+          className={[
+            'font-mono font-bold tabular-nums',
+            isWarning ? 'text-red-400 animate-pulse' : 'text-slate-300',
+          ].join(' ')}
           aria-label={`${secs} seconds remaining`}
           data-testid="turn-timer-seconds"
         >

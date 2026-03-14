@@ -753,3 +753,214 @@ describe('GamePage — Sub-AC 9.2: game controls always available', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sub-AC 25b: Declaration outcome broadcast — score display and score flash
+//
+// Verifies that:
+//   1. Score header renders with team 1 and team 2 score testids
+//   2. Score updates in the header after game_state broadcast with new scores
+//   3. lastMove text is displayed after a declaration_result arrives
+//   4. declaration_result.correct and .winningTeam are reflected in lastMove
+// ---------------------------------------------------------------------------
+
+describe('GamePage — Sub-AC 25b: declaration outcome broadcast and score display', () => {
+  const MY_PLAYER_ID = 'player-me';
+
+  const players6 = [
+    makePlayer(MY_PLAYER_ID, 'Me',    1, 0),
+    makePlayer('p2',          'Alice', 1, 2),
+    makePlayer('p3',          'Bob',   1, 4),
+    makePlayer('p4',          'Carol', 2, 1),
+    makePlayer('p5',          'Dave',  2, 3),
+    makePlayer('p6',          'Eve',   2, 5),
+  ];
+
+  function makeGameState(overrides: Partial<{
+    scores: { team1: number; team2: number };
+    lastMove: string | null;
+    currentTurnPlayerId: string;
+  }> = {}) {
+    return {
+      status: 'active',
+      currentTurnPlayerId: overrides.currentTurnPlayerId ?? MY_PLAYER_ID,
+      scores: overrides.scores ?? { team1: 0, team2: 0 },
+      lastMove: overrides.lastMove ?? null,
+      winner: null,
+      tiebreakerWinner: null,
+      declaredSuits: [],
+      inferenceMode: false,
+    };
+  }
+
+  beforeEach(() => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
+  });
+
+  it('1. score-team1 and score-team2 testids are present in the header', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit(MY_PLAYER_ID, players6),
+      gameState: makeGameState({ scores: { team1: 0, team2: 0 } }),
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('score-team1')).toBeTruthy();
+      expect(screen.getByTestId('score-team2')).toBeTruthy();
+    });
+  });
+
+  it('2. score header shows 0-0 on game start', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit(MY_PLAYER_ID, players6),
+      gameState: makeGameState({ scores: { team1: 0, team2: 0 } }),
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('game-score')).toBeTruthy();
+    });
+    // Score should show 0 for both teams
+    const scoreEl = screen.getByTestId('game-score');
+    expect(scoreEl.textContent).toContain('0');
+  });
+
+  it('3. score header updates after game_state broadcast with new scores', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit(MY_PLAYER_ID, players6),
+      gameState: makeGameState({ scores: { team1: 0, team2: 0 } }),
+    }));
+
+    await waitFor(() => expect(screen.getByTestId('game-score')).toBeTruthy());
+
+    // Simulate a game_state update after a declaration — Team 1 now has 1 point
+    act(() => sendWsMessage({
+      type: 'game_state',
+      state: makeGameState({
+        scores: { team1: 1, team2: 0 },
+        currentTurnPlayerId: 'p4',
+      }),
+    }));
+
+    await waitFor(() => {
+      // The score display should now show Team 1 with 1 point
+      const scoreEl = screen.getByTestId('game-score');
+      expect(scoreEl.textContent).toContain('1');
+    });
+  });
+
+  it('4. declaration_result triggers lastMove display (correct declaration)', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit(MY_PLAYER_ID, players6),
+      gameState: makeGameState(),
+    }));
+
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    // Simulate receiving a declaration_result (correct declaration by Team 1)
+    act(() => sendWsMessage({
+      type: 'declaration_result',
+      declarerId: MY_PLAYER_ID,
+      halfSuitId: 'low_s',
+      correct: true,
+      winningTeam: 1,
+      newTurnPlayerId: MY_PLAYER_ID,
+      assignment: {
+        '1_s': MY_PLAYER_ID, '2_s': MY_PLAYER_ID,
+        '3_s': 'p2', '4_s': 'p2',
+        '5_s': 'p3', '6_s': 'p3',
+      },
+      lastMove: 'Me declared Low ♠ — correct! Team 1 scores',
+    }));
+
+    // The lastMove message should appear in the UI
+    await waitFor(() => {
+      const lastMoveEl = screen.queryByTestId('last-move-display') ?? document.body;
+      // The message text is rendered by LastMoveDisplay
+      expect(lastMoveEl.textContent).toContain('Team 1 scores');
+    });
+  });
+
+  it('5. declaration_result triggers lastMove display (incorrect declaration)', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit(MY_PLAYER_ID, players6),
+      gameState: makeGameState(),
+    }));
+
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    // Simulate receiving a declaration_result (incorrect — opponent team scores)
+    act(() => sendWsMessage({
+      type: 'declaration_result',
+      declarerId: MY_PLAYER_ID,
+      halfSuitId: 'low_s',
+      correct: false,
+      winningTeam: 2,
+      newTurnPlayerId: 'p4',
+      assignment: {
+        '1_s': MY_PLAYER_ID, '2_s': MY_PLAYER_ID,
+        '3_s': 'p3', '4_s': 'p3',
+        '5_s': 'p2', '6_s': 'p2',
+      },
+      lastMove: 'Me declared Low ♠ — incorrect! Team 2 scores',
+    }));
+
+    await waitFor(() => {
+      const lastMoveEl = screen.queryByTestId('last-move-display') ?? document.body;
+      expect(lastMoveEl.textContent).toContain('Team 2 scores');
+    });
+  });
+
+  it('6. declare modal is closed after declaration_result is received', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit(MY_PLAYER_ID, players6),
+      gameState: makeGameState(),
+    }));
+
+    await waitFor(() => expect(screen.getByTestId('declare-button')).toBeTruthy());
+
+    // Open declare modal
+    act(() => {
+      screen.getByTestId('declare-button').click();
+    });
+
+    // Send declaration_result — modal should close
+    act(() => sendWsMessage({
+      type: 'declaration_result',
+      declarerId: MY_PLAYER_ID,
+      halfSuitId: 'low_s',
+      correct: true,
+      winningTeam: 1,
+      newTurnPlayerId: MY_PLAYER_ID,
+      assignment: {},
+      lastMove: 'Me declared Low ♠ — correct! Team 1 scores',
+    }));
+
+    await waitFor(() => {
+      // DeclareModal should be dismissed
+      expect(screen.queryByTestId('declare-modal')).toBeNull();
+    });
+  });
+});

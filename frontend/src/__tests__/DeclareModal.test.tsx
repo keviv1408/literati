@@ -455,13 +455,14 @@ describe('DeclareModal — seat-targeting interaction (Sub-AC 22c)', () => {
     fireEvent.click(rows[0]);
 
     const chips = screen.getAllByTestId('seat-target-chip');
-    // The pre-fill assigns to first teammate (p1 — Me), so Me chip is pressed
-    const meChip = chips.find((c) => c.getAttribute('data-player-id') === 'p1');
-    expect(meChip).toBeTruthy();
-    expect(meChip!.getAttribute('aria-pressed')).toBe('true');
+    // The pre-fill assigns to first OTHER teammate (p2 — Alice), NOT the player
+    // themselves, because the player knows they don't hold the non-hand cards.
+    const aliceChip = chips.find((c) => c.getAttribute('data-player-id') === 'p2');
+    expect(aliceChip).toBeTruthy();
+    expect(aliceChip!.getAttribute('aria-pressed')).toBe('true');
 
     // Other chips should NOT be pressed
-    const otherChips = chips.filter((c) => c.getAttribute('data-player-id') !== 'p1');
+    const otherChips = chips.filter((c) => c.getAttribute('data-player-id') !== 'p2');
     for (const chip of otherChips) {
       expect(chip.getAttribute('aria-pressed')).toBe('false');
     }
@@ -746,5 +747,424 @@ describe('DeclareModal — card tap-to-select interaction (Sub-AC 22b)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Back/i }));
     // Now in Step 1 — no cards rendered, so no (selected) state possible
     expect(screen.queryByRole('img', { name: /\(selected\)/i })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sub-AC 23d — Submit button: enabled only when complete, disables edits
+// ---------------------------------------------------------------------------
+
+describe('DeclareModal — Sub-AC 23d submit button and form lock-down', () => {
+  /**
+   * Renders the modal in Step 2 (card assignment) with the player holding
+   * one card (1_s).  The remaining 5 slots start pre-filled with p2's id
+   * (first teammate), so isComplete is true from the start.
+   */
+  function setupStep2(overrides: Partial<Parameters<typeof renderModal>[0]> = {}) {
+    renderModal({ myHand: ['1_s'], players: build6Players(), myPlayerId: 'p1', ...overrides });
+    fireEvent.click(screen.getByRole('button', { name: /Low Spades/i }));
+  }
+
+  // ── Submit button identity ────────────────────────────────────────────────
+
+  it('submit button has data-testid="declare-submit-btn"', () => {
+    setupStep2();
+    expect(screen.getByTestId('declare-submit-btn')).toBeTruthy();
+  });
+
+  it('submit button is rendered only in Step 2, not Step 1', () => {
+    renderModal({ myHand: ['1_s'], players: build6Players(), myPlayerId: 'p1' });
+    // Step 1 — no submit button
+    expect(screen.queryByTestId('declare-submit-btn')).toBeNull();
+    // Navigate to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Low Spades/i }));
+    expect(screen.getByTestId('declare-submit-btn')).toBeTruthy();
+  });
+
+  // ── Enabled / disabled based on completeness ─────────────────────────────
+
+  it('submit button is enabled when all 6 cards are assigned', () => {
+    setupStep2();
+    // All pre-filled → complete
+    expect(screen.getByTestId('declare-submit-btn')).not.toBeDisabled();
+  });
+
+  it('submit button is disabled when a dropdown is reset to empty', () => {
+    setupStep2();
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[0], { target: { value: '' } });
+    expect(screen.getByTestId('declare-submit-btn')).toBeDisabled();
+  });
+
+  it('submit button re-enables after re-assigning the cleared card', () => {
+    setupStep2();
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[0], { target: { value: '' } });
+    expect(screen.getByTestId('declare-submit-btn')).toBeDisabled();
+    fireEvent.change(selects[0], { target: { value: 'p2' } });
+    expect(screen.getByTestId('declare-submit-btn')).not.toBeDisabled();
+  });
+
+  // ── Sends payload on click ────────────────────────────────────────────────
+
+  it('clicking submit fires onConfirm with halfSuitId and complete assignment', () => {
+    const onConfirm = jest.fn();
+    renderModal({
+      myHand: ['1_s', '3_s', '4_s', '5_s', '6_s', '9_s'],
+      players: build6Players(),
+      myPlayerId: 'p1',
+      onConfirm,
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Low Spades/i }));
+    fireEvent.click(screen.getByTestId('declare-submit-btn'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    const [halfSuitId, assignment] = onConfirm.mock.calls[0];
+    expect(halfSuitId).toBe('low_s');
+    // All 6 cards should be in the payload
+    expect(Object.keys(assignment)).toHaveLength(6);
+  });
+
+  it('does NOT fire onConfirm when submit is clicked while already loading', () => {
+    const onConfirm = jest.fn();
+    setupStep2({ isLoading: true, onConfirm });
+    // Button is disabled so fireEvent.click should be a no-op, but guard via direct call
+    const btn = screen.getByTestId('declare-submit-btn');
+    expect(btn).toBeDisabled();
+    fireEvent.click(btn);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  // ── Disables further edits once submitted (isLoading=true) ───────────────
+
+  it('shows "Declaring…" label on submit button when isLoading', () => {
+    setupStep2({ isLoading: true });
+    expect(screen.getByTestId('declare-submit-btn').textContent).toMatch(/Declaring…/);
+  });
+
+  it('submit button is disabled while isLoading (in-flight)', () => {
+    setupStep2({ isLoading: true });
+    expect(screen.getByTestId('declare-submit-btn')).toBeDisabled();
+  });
+
+  it('cancel button is disabled while isLoading', () => {
+    setupStep2({ isLoading: true });
+    expect(screen.getByRole('button', { name: /Cancel/i })).toBeDisabled();
+  });
+
+  it('assignment dropdowns are disabled while isLoading', () => {
+    setupStep2({ isLoading: true });
+    const selects = screen.getAllByRole('combobox');
+    // All dropdowns (for non-mine cards) should be disabled
+    selects.forEach((sel) => {
+      expect(sel).toBeDisabled();
+    });
+  });
+
+  it('card rows lose interactivity while isLoading (no tabIndex, no role=button)', () => {
+    setupStep2({ isLoading: true });
+    const rows = screen.queryAllByTestId('assignable-card-row');
+    rows.forEach((row) => {
+      // When isSubmitted, tabIndex is not set (undefined → not rendered as attribute)
+      expect(row.getAttribute('tabIndex') ?? row.getAttribute('tabindex')).toBeNull();
+    });
+  });
+
+  it('seat-targeting chip buttons are disabled while isLoading', () => {
+    // To get the seat-targeting strip showing, we need a card selected for targeting.
+    // However, when isLoading=true from the start, no card can be tapped.
+    // We can verify by checking that chips in the strip are disabled if it appears.
+    // Since the strip only shows when selectedCardForAssign is set (internal state),
+    // and card rows are non-interactive when isLoading, we test the strip in a
+    // controlled way by rendering with a pre-selected state cannot be injected
+    // from outside.  Instead, verify the chip button disabled attribute is set
+    // by rendering with isLoading=false, selecting a card row, then simulating
+    // the loading state via re-render.
+    const { rerender, props } = renderModal({
+      myHand: ['1_s'],
+      players: build6Players(),
+      myPlayerId: 'p1',
+      isLoading: false,
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Low Spades/i }));
+    // Tap first assignable card row to open the seat-targeting strip
+    const rows = screen.getAllByTestId('assignable-card-row');
+    fireEvent.click(rows[0]);
+    // Strip should be visible and chips should be enabled
+    const chips = screen.getAllByTestId('seat-target-chip');
+    expect(chips.length).toBeGreaterThan(0);
+    chips.forEach((chip) => {
+      expect(chip).not.toBeDisabled();
+    });
+    // Re-render with isLoading=true to simulate submission
+    rerender(
+      <DeclareModal {...props} isLoading={true} />
+    );
+    // Chips should now be disabled
+    const chipsAfter = screen.getAllByTestId('seat-target-chip');
+    chipsAfter.forEach((chip) => {
+      expect(chip).toBeDisabled();
+    });
+  });
+
+  // ── aria-busy reflects submission state ───────────────────────────────────
+
+  it('dialog has aria-busy="true" while isLoading', () => {
+    setupStep2({ isLoading: true });
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('dialog does NOT have aria-busy="true" before submission', () => {
+    setupStep2({ isLoading: false });
+    const dialog = screen.getByRole('dialog');
+    // aria-busy should be absent or false
+    const ariaBusy = dialog.getAttribute('aria-busy');
+    expect(ariaBusy === null || ariaBusy === 'false').toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sub-AC 23b — Assignment locking: confirm button + locked visual state
+// ---------------------------------------------------------------------------
+
+describe('DeclareModal — Sub-AC 23b assignment locking', () => {
+  /**
+   * Renders the modal in Step 2 for Low Spades (remove_7s variant).
+   * p1 holds only 1_s; the remaining 5 cards (2_s…6_s) are assignable.
+   */
+  function setupStep2(overrides: Partial<Parameters<typeof renderModal>[0]> = {}) {
+    const result = renderModal({ myHand: ['1_s'], players: build6Players(), myPlayerId: 'p1', ...overrides });
+    fireEvent.click(screen.getByRole('button', { name: /Low Spades/i }));
+    return result;
+  }
+
+  // ── Confirm button presence ───────────────────────────────────────────────
+
+  it('shows confirm-assignment-btn for each non-mine card that has an assignee', () => {
+    setupStep2();
+    // 5 non-mine cards, all pre-filled with first teammate → 5 confirm buttons
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    expect(confirmBtns).toHaveLength(5);
+  });
+
+  it('does NOT show confirm-assignment-btn for in-hand cards', () => {
+    setupStep2();
+    // 1_s is in hand — its row is 'owned-card-row' with no confirm button
+    const ownedRow = screen.getByTestId('owned-card-row');
+    expect(within(ownedRow).queryByTestId('confirm-assignment-btn')).toBeNull();
+  });
+
+  it('confirm-assignment-btn carries the correct aria-label', () => {
+    setupStep2();
+    // Default pre-fill assigns non-mine cards to the first OTHER teammate (p2 = Alice),
+    // since the player knows they don't hold those cards.
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    // aria-label should mention "confirm assignment" and reference the assignee name
+    const label = confirmBtns[0].getAttribute('aria-label') ?? '';
+    expect(label).toMatch(/confirm assignment/i);
+    // Alice (p2) is the first other teammate in the pre-fill
+    expect(label).toMatch(/Alice/i);
+  });
+
+  it('confirm-assignment-btn has the card-id data attribute matching its row', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    const rows = screen.getAllByTestId('assignable-card-row');
+    // Each confirm button's data-card-id matches its sibling row's data-card-id
+    for (let i = 0; i < confirmBtns.length; i++) {
+      expect(confirmBtns[i].getAttribute('data-card-id')).toBe(
+        rows[i].getAttribute('data-card-id'),
+      );
+    }
+  });
+
+  // ── Locking transitions the row ───────────────────────────────────────────
+
+  it('clicking confirm-assignment-btn changes the row testid to locked-card-row', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    // At least one row should now be 'locked-card-row'
+    expect(screen.getAllByTestId('locked-card-row')).toHaveLength(1);
+  });
+
+  it('locked row has data-locked="true"', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    const lockedRows = screen.getAllByTestId('locked-card-row');
+    expect(lockedRows[0].getAttribute('data-locked')).toBe('true');
+  });
+
+  it('locked row renders locked-assignment-badge', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    expect(screen.getAllByTestId('locked-assignment-badge')).toHaveLength(1);
+  });
+
+  it('locked-assignment-badge shows the assignee name', () => {
+    setupStep2();
+    // Non-mine cards are pre-filled with the first OTHER teammate (p2 = Alice)
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    const badge = screen.getByTestId('locked-assignment-badge');
+    expect(badge.textContent).toMatch(/Alice/);
+  });
+
+  it('locked-assignment-badge shows "confirmed" label', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    const badge = screen.getByTestId('locked-assignment-badge');
+    expect(badge.textContent?.toLowerCase()).toContain('confirmed');
+  });
+
+  // ── Locked rows are not editable ─────────────────────────────────────────
+
+  it('locked row does NOT render a dropdown (select)', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    const cardId = confirmBtns[0].getAttribute('data-card-id') as string;
+    fireEvent.click(confirmBtns[0]);
+    // The locked row should not contain any select element
+    const lockedRow = screen.getByTestId('locked-card-row');
+    expect(within(lockedRow).queryByRole('combobox')).toBeNull();
+    void cardId; // suppress unused warning
+  });
+
+  it('locked row does NOT have confirm-assignment-btn', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    const lockedRow = screen.getByTestId('locked-card-row');
+    expect(within(lockedRow).queryByTestId('confirm-assignment-btn')).toBeNull();
+  });
+
+  it('locked row does NOT have role="button" (not tappable for seat-targeting)', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    const lockedRow = screen.getByTestId('locked-card-row');
+    expect(lockedRow.getAttribute('role')).toBeNull();
+  });
+
+  it('locked row does NOT have tabIndex (keyboard navigation disabled)', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    const lockedRow = screen.getByTestId('locked-card-row');
+    expect(lockedRow.getAttribute('tabIndex') ?? lockedRow.getAttribute('tabindex')).toBeNull();
+  });
+
+  it('locked row has descriptive aria-label mentioning "confirmed"', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    const lockedRow = screen.getByTestId('locked-card-row');
+    const label = lockedRow.getAttribute('aria-label') ?? '';
+    expect(label.toLowerCase()).toContain('confirmed');
+  });
+
+  // ── Remaining rows stay editable ─────────────────────────────────────────
+
+  it('locking one card does not affect the other assignable rows', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    // Lock only the first one
+    fireEvent.click(confirmBtns[0]);
+    // 4 rows should still be assignable-card-row
+    expect(screen.getAllByTestId('assignable-card-row')).toHaveLength(4);
+    // 1 locked row
+    expect(screen.getAllByTestId('locked-card-row')).toHaveLength(1);
+  });
+
+  it('multiple cards can be locked independently', () => {
+    setupStep2();
+    let confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    // After first lock, there are 4 confirm buttons left
+    confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    expect(screen.getAllByTestId('locked-card-row')).toHaveLength(2);
+    expect(screen.getAllByTestId('assignable-card-row')).toHaveLength(3);
+  });
+
+  // ── Seat-targeting strip interaction ─────────────────────────────────────
+
+  it('locking a card that is selected for targeting dismisses the seat-targeting strip', () => {
+    setupStep2();
+    // Tap first assignable card row to open targeting strip
+    const rows = screen.getAllByTestId('assignable-card-row');
+    fireEvent.click(rows[0]);
+    expect(screen.getByTestId('seat-targeting-strip')).toBeTruthy();
+    // Find the confirm button that matches the selected card row's card-id
+    const targetCardId = rows[0].getAttribute('data-card-id') as string;
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    const confirmBtn = confirmBtns.find((btn) => btn.getAttribute('data-card-id') === targetCardId);
+    expect(confirmBtn).toBeDefined();
+    fireEvent.click(confirmBtn!);
+    // Strip should be gone because selectedCardForAssign was cleared
+    expect(screen.queryByTestId('seat-targeting-strip')).toBeNull();
+  });
+
+  // ── Back navigation clears locks ─────────────────────────────────────────
+
+  it('navigating Back clears all locked assignments', () => {
+    setupStep2();
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    fireEvent.click(confirmBtns[0]);
+    expect(screen.getAllByTestId('locked-card-row')).toHaveLength(1);
+
+    // Navigate back to Step 1
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }));
+    // Re-enter Step 2 for the same suit
+    fireEvent.click(screen.getByRole('button', { name: /Low Spades/i }));
+    // All rows should be fresh with no locked cards
+    expect(screen.queryAllByTestId('locked-card-row')).toHaveLength(0);
+    expect(screen.getAllByTestId('assignable-card-row')).toHaveLength(5);
+  });
+
+  // ── Submission still works with locked assignments ────────────────────────
+
+  it('Declare! button can be clicked when some assignments are locked', () => {
+    const onConfirm = jest.fn();
+    setupStep2({ onConfirm });
+    const confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    // Lock a few cards
+    fireEvent.click(confirmBtns[0]);
+    confirmBtns.splice(0, 1);
+    // Declare! should still be enabled (all 6 cards are assigned)
+    expect(screen.getByTestId('declare-submit-btn')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('declare-submit-btn'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    const [halfSuitId, assignment] = onConfirm.mock.calls[0];
+    expect(halfSuitId).toBe('low_s');
+    expect(Object.keys(assignment)).toHaveLength(6);
+  });
+
+  it('Declare! button can be clicked when ALL non-hand assignments are locked', () => {
+    const onConfirm = jest.fn();
+    setupStep2({ onConfirm });
+    // Lock all 5 non-mine cards
+    let confirmBtns = screen.getAllByTestId('confirm-assignment-btn');
+    while (confirmBtns.length > 0) {
+      fireEvent.click(confirmBtns[0]);
+      confirmBtns = screen.queryAllByTestId('confirm-assignment-btn');
+    }
+    expect(screen.queryAllByTestId('assignable-card-row')).toHaveLength(0);
+    expect(screen.getAllByTestId('locked-card-row')).toHaveLength(5);
+    // All 6 cards assigned → Declare! enabled
+    expect(screen.getByTestId('declare-submit-btn')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('declare-submit-btn'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Confirm button hidden when isLoading ─────────────────────────────────
+
+  it('confirm-assignment-btn is NOT shown when isLoading=true', () => {
+    setupStep2({ isLoading: true });
+    // When in-flight, confirm buttons should not be rendered
+    expect(screen.queryAllByTestId('confirm-assignment-btn')).toHaveLength(0);
   });
 });

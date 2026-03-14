@@ -41,6 +41,7 @@ import { useState, useEffect, useCallback } from 'react';
 import PlayingCard from './PlayingCard';
 import Avatar from './Avatar';
 import TurnTimerStrip from './TurnTimerStrip';
+import DeclarationTimerBar from './DeclarationTimerBar';
 import {
   halfSuitLabel,
   getHalfSuitCards,
@@ -50,7 +51,7 @@ import {
 } from '@/types/game';
 import type { CardId, HalfSuitId, GamePlayer, DeclaredSuit } from '@/types/game';
 import type { ProbabilityMap } from '@/utils/cardProbabilities';
-import type { TurnTimerPayload } from '@/hooks/useGameSocket';
+import type { TurnTimerPayload, DeclarationTimerPayload } from '@/hooks/useGameSocket';
 
 interface DeclareModalProps {
   myPlayerId: string;
@@ -110,6 +111,20 @@ interface DeclareModalProps {
    * If omitted, the private selection signal is silently skipped (backward-compatible).
    */
   onSuitSelect?: (halfSuitId: HalfSuitId | null) => void;
+  /**
+   * Active 60-second declaration phase timer payload (Sub-AC 23a).
+   *
+   * When provided, `DeclarationTimerBar` is shown in Step 2 (card-assignment
+   * form) displaying the 60-second countdown visible only to the declarant.
+   * The timer bar triggers a warning state (amber + pulse) when ≤ 10 seconds
+   * remain and calls `handleConfirm` automatically when the timer expires so
+   * the current assignment is submitted even if the player did not click
+   * "Declare!".
+   *
+   * If omitted the declaration phase timer is not displayed (backward-
+   * compatible; the standard 30-second `TurnTimerStrip` continues to show).
+   */
+  declarationTimer?: DeclarationTimerPayload | null;
 }
 
 export default function DeclareModal({
@@ -125,6 +140,7 @@ export default function DeclareModal({
   turnTimer,
   onDeclareProgress,
   onSuitSelect,
+  declarationTimer,
 }: DeclareModalProps) {
   const myPlayer  = players.find((p) => p.playerId === myPlayerId);
   const myTeamId  = myPlayer?.teamId;
@@ -144,24 +160,40 @@ export default function DeclareModal({
    * deselects it.  Reset to null whenever the selected suit changes.
    */
   const [selectedCardForAssign, setSelectedCardForAssign] = useState<CardId | null>(null);
+  /**
+   * Sub-AC 23b — Assignment locking.
+   *
+   * Tracks which non-hand card assignments have been explicitly confirmed by
+   * the player.  Once a card is locked its row is visually distinguished
+   * (amber border, lock badge, disabled controls) and the assignment cannot
+   * be revised.  Cards in the player's own hand are always implicitly locked.
+   *
+   * The set is reset whenever the player navigates back to Step 1 (suit
+   * selection) or cancels the modal.
+   */
+  const [lockedAssignments, setLockedAssignments] = useState<Set<CardId>>(new Set());
 
   // When a suit is selected, pre-fill known cards and broadcast initial progress.
-  // Also clear any pending seat-targeting selection from a previous suit.
+  // Also clear any pending seat-targeting selection and locked assignments from a previous suit.
   useEffect(() => {
     if (!selectedSuit) return;
 
-    // Clear seat-targeting selection when suit changes
+    // Clear seat-targeting selection and locked assignments when suit changes
     setSelectedCardForAssign(null);
+    setLockedAssignments(new Set());
 
     const cards = getHalfSuitCards(selectedSuit, variant);
     const initial: Record<CardId, string> = {};
 
+    // For non-hand cards, default to the first OTHER teammate (not the player
+    // themselves) since the player knows they don't hold those cards.
+    const firstOtherTeammate = teammates.find((p) => p.playerId !== myPlayerId);
     for (const card of cards) {
       if (myHand.includes(card)) {
         initial[card] = myPlayerId;
       } else {
-        // Pre-assign to first teammate (unknown; can be changed by player)
-        initial[card] = teammates[0]?.playerId ?? myPlayerId;
+        // Pre-assign to first other teammate (unknown; can be changed by player)
+        initial[card] = firstOtherTeammate?.playerId ?? myPlayerId;
       }
     }
 
@@ -209,6 +241,26 @@ export default function DeclareModal({
     setSelectedCardForAssign(null);
   }, [selectedCardForAssign, setCardAssignee]);
 
+  /**
+   * Sub-AC 23b — Confirm (lock) a card assignment.
+   *
+   * Adds `cardId` to `lockedAssignments` so the row is visually distinguished
+   * and its controls are disabled.  Only non-hand cards can be explicitly
+   * locked this way; hand cards are always implicitly locked.
+   *
+   * Clears any active seat-targeting selection for that card so the strip
+   * dismisses once the assignment is confirmed.
+   */
+  const handleLockAssignment = useCallback((cardId: CardId) => {
+    setLockedAssignments((prev) => {
+      const next = new Set(prev);
+      next.add(cardId);
+      return next;
+    });
+    // Dismiss seat-targeting strip if this card was being targeted
+    setSelectedCardForAssign((prev) => (prev === cardId ? null : prev));
+  }, []);
+
   function handleBack() {
     // Clear private server-side suit selection (Sub-AC 21a)
     onSuitSelect?.(null);
@@ -216,6 +268,7 @@ export default function DeclareModal({
     onDeclareProgress?.(null, {});
     setSelectedSuit(null);
     setAssignment({});
+    setLockedAssignments(new Set());
   }
 
   function handleCancel() {
@@ -224,6 +277,7 @@ export default function DeclareModal({
       onSuitSelect?.(null);
       onDeclareProgress?.(null, {});
     }
+    setLockedAssignments(new Set());
     onCancel();
   }
 
@@ -239,12 +293,30 @@ export default function DeclareModal({
   const suitCards = selectedSuit ? getHalfSuitCards(selectedSuit, variant) : [];
   const isComplete = suitCards.every((c) => assignment[c]);
 
+  /**
+   * Sub-AC 23d — Submitted state.
+   *
+   * True while the declaration is in-flight to the server (isLoading=true).
+   * When true:
+   *   • The submit ("Declare!") button shows "Declaring…" and is disabled.
+   *   • All assignment dropdowns become read-only (disabled).
+   *   • Card-row tap-to-target interactions are suppressed.
+   *   • Seat-targeting chip buttons are disabled.
+   *   • The dialog exposes aria-busy=true for assistive technologies.
+   *
+   * The parent page closes this modal once the server responds
+   * (declaration_result) or the turn timer fires, so there is no need
+   * to track a separate "result received" flag here.
+   */
+  const isSubmitted = isLoading;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Declare a half-suit"
+      aria-busy={isSubmitted}
     >
       <div className="w-full max-w-lg bg-slate-800 rounded-2xl shadow-xl border border-slate-700/50 overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -337,6 +409,22 @@ export default function DeclareModal({
                 <h3 className="font-semibold text-white">{halfSuitLabel(selectedSuit)}</h3>
               </div>
 
+              {/* ── Declaration phase timer (Sub-AC 23a) ─────────────────────
+                  60-second countdown visible only to the declarant.  Replaces
+                  the generic TurnTimerStrip once the server has started the
+                  declaration-phase extension.  Auto-submits on expiry via
+                  handleConfirm so the current assignment is sent even if the
+                  player did not press "Declare!".
+              ─────────────────────────────────────────────────────────────── */}
+              {declarationTimer && (
+                <DeclarationTimerBar
+                  expiresAt={declarationTimer.expiresAt}
+                  durationMs={declarationTimer.durationMs}
+                  onExpiry={handleConfirm}
+                  className="mb-4"
+                />
+              )}
+
               {/* ── Seat-targeting strip (Sub-AC 22c) ────────────────────────
                   Appears when the player taps a card row to enter targeting mode.
                   Shows one chip per teammate; tapping a chip completes the
@@ -362,9 +450,11 @@ export default function DeclareModal({
                           key={p.playerId}
                           type="button"
                           onClick={() => handleSeatTargetClick(p.playerId)}
+                          disabled={isSubmitted}
                           className={[
                             'flex items-center gap-1.5 px-2 py-1.5 rounded-xl border-2 transition-all',
                             'focus:outline-none focus:ring-2 focus:ring-amber-400',
+                            'disabled:opacity-50 disabled:cursor-not-allowed',
                             isCurrentAssignee
                               ? 'border-amber-400 bg-amber-600/40 text-amber-100'
                               : 'border-amber-700/60 bg-amber-900/20 text-amber-200 hover:border-amber-500 hover:bg-amber-800/30',
@@ -404,111 +494,228 @@ export default function DeclareModal({
                   const isMine   = myHand.includes(cardId);
                   const assignee = assignment[cardId];
                   const isSelectedForTargeting = selectedCardForAssign === cardId;
+                  // Sub-AC 23b: is this non-hand card explicitly confirmed/locked?
+                  const isLocked = !isMine && lockedAssignments.has(cardId);
                   // Per-card probability map (only when inference is active)
                   const cardProbs = getCardProbabilities ? getCardProbabilities(cardId) : null;
+                  // Sub-AC 23b/23c: resolved assignee details (locked badge + revision badge)
+                  const assigneePlayer = assignee
+                    ? teammates.find((p) => p.playerId === assignee) ?? null
+                    : null;
+                  const assigneeName = assigneePlayer?.displayName ?? assignee ?? '';
 
                   return (
                     <div
                       key={cardId}
                       className={[
                         'flex items-center gap-3 rounded-xl transition-all duration-100',
-                        // Highlight selected card row; non-mine cards become clickable
-                        !isMine && isSelectedForTargeting
+                        // Sub-AC 23b: confirmed/locked rows use teal border to
+                        // visually distinguish them from still-editable rows
+                        isLocked
+                          ? 'bg-teal-900/20 border border-teal-700/50 rounded-lg p-1 -mx-1'
+                          // Highlight selected card row; non-mine unlocked cards become clickable
+                          : !isMine && isSelectedForTargeting
                           ? 'bg-amber-900/20 ring-2 ring-amber-500/60 p-1 -mx-1'
                           : !isMine
                           ? 'cursor-pointer hover:bg-slate-700/30 rounded-lg p-1 -mx-1'
                           : '',
                       ].join(' ')}
-                      // Tap card row to enter seat-targeting mode (Sub-AC 22c)
-                      onClick={!isMine ? () => handleCardTap(cardId) : undefined}
-                      role={!isMine ? 'button' : undefined}
-                      tabIndex={!isMine ? 0 : undefined}
-                      onKeyDown={!isMine ? (e) => {
+                      // Tap card row to enter seat-targeting mode (Sub-AC 22c).
+                      // Suppressed for locked rows (Sub-AC 23b) and in-flight state (Sub-AC 23d).
+                      onClick={!isMine && !isLocked && !isSubmitted ? () => handleCardTap(cardId) : undefined}
+                      role={!isMine && !isLocked ? 'button' : undefined}
+                      tabIndex={!isMine && !isLocked && !isSubmitted ? 0 : undefined}
+                      onKeyDown={!isMine && !isLocked && !isSubmitted ? (e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
                           handleCardTap(cardId);
                         }
                       } : undefined}
-                      aria-label={!isMine
-                        ? `${cardLabel(cardId)} — tap to ${isSelectedForTargeting ? 'deselect' : 'select for seat targeting'}`
-                        : undefined}
-                      aria-pressed={!isMine ? isSelectedForTargeting : undefined}
-                      data-testid={!isMine ? 'assignable-card-row' : 'owned-card-row'}
+                      aria-label={
+                        isLocked
+                          ? `${cardLabel(cardId)} — confirmed, assigned to ${assigneeName}`
+                          : !isMine
+                          ? `${cardLabel(cardId)} — tap to ${isSelectedForTargeting ? 'deselect' : 'select for seat targeting'}`
+                          : undefined
+                      }
+                      aria-pressed={!isMine && !isLocked ? isSelectedForTargeting : undefined}
+                      data-testid={isMine ? 'owned-card-row' : isLocked ? 'locked-card-row' : 'assignable-card-row'}
                       data-card-id={cardId}
                       data-selected={isSelectedForTargeting ? 'true' : undefined}
+                      data-locked={isLocked ? 'true' : undefined}
                     >
                       {/* Card preview — Sub-AC 22b: selected state lifts the
                           card with an emerald ring to clearly indicate which
-                          card is pending assignment.  Locked (in-hand) cards
-                          are never shown in the selected state. */}
+                          card is pending assignment.  Locked (in-hand or
+                          confirmed) cards are never shown in the selected state. */}
                       <div className="flex-shrink-0 min-w-[36px] min-h-[44px] flex items-center justify-center">
                         <PlayingCard
                           cardId={cardId}
                           size="sm"
-                          selected={!isMine && isSelectedForTargeting}
+                          selected={!isMine && !isLocked && isSelectedForTargeting}
                         />
                       </div>
 
                       {/* Assignment selector */}
                       <div className="flex-1">
                         {isMine ? (
+                          /* Player's own hand — always locked (implicit, Sub-AC 22) */
                           <div className="flex items-center gap-2 px-3 py-2 bg-emerald-900/30 border border-emerald-700/50 rounded-lg">
                             <span className="text-xs text-emerald-400">In your hand ✓</span>
                           </div>
+                        ) : isLocked ? (
+                          /* Sub-AC 23b: explicitly confirmed/locked — visually
+                             distinguished with teal colour and a lock badge.
+                             No dropdown or seat-targeting is rendered, so the
+                             assignment cannot be revised. */
+                          <div
+                            className="flex items-center justify-between gap-2 px-3 py-2 bg-teal-900/30 border border-teal-700/50 rounded-lg"
+                            data-testid="locked-assignment-badge"
+                          >
+                            <span className="text-xs text-teal-300 font-medium">
+                              <span aria-hidden="true">🔒 </span>
+                              {assigneeName}
+                            </span>
+                            <span className="text-[0.6rem] text-teal-500 uppercase tracking-wide font-semibold">
+                              confirmed
+                            </span>
+                          </div>
                         ) : (
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={assignee ?? ''}
-                              onChange={(e) => {
-                                setCardAssignee(cardId, e.target.value);
-                                // Clear seat-targeting selection when dropdown is used
-                                if (selectedCardForAssign === cardId) setSelectedCardForAssign(null);
-                              }}
-                              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                              aria-label={`Who holds ${cardLabel(cardId)}?`}
+                          /* Unconfirmed — editable: revision badge (Sub-AC 23c)
+                             + dropdown (Sub-AC 22c) + confirm (Sub-AC 23b) */
+                          <>
+                          {/* ── Sub-AC 23c: Revision badge ───────────────────
+                              Displayed when a teammate is currently selected for
+                              this card.  Shows the assignee's avatar + name and
+                              a subtle "✎ change" hint.
+                              The badge is a plain <div> (NOT inside a
+                              stopPropagation wrapper) so clicking it bubbles up
+                              to the outer card-row div which calls
+                              handleCardTap(cardId), opening the seat-targeting
+                              strip for in-place revision.  The current assignee
+                              is already highlighted in the strip so the player
+                              can see at a glance who holds the card and pick a
+                              different teammate. ─────────────────────────────── */}
+                          {assignee && (
+                            <div
+                              data-testid="revision-badge"
+                              data-assigned-to={assignee}
+                              className={[
+                                'flex items-center gap-2 px-3 py-1.5 rounded-lg border mb-1.5 transition-all duration-100',
+                                isSubmitted
+                                  ? 'border-slate-700/30 bg-slate-700/10 cursor-default'
+                                  : isSelectedForTargeting
+                                  ? 'border-amber-500/60 bg-amber-900/20 cursor-pointer'
+                                  : 'border-slate-600/40 bg-slate-700/20 hover:border-slate-500 hover:bg-slate-700/40 cursor-pointer',
+                              ].join(' ')}
+                              aria-label={[
+                                `Currently assigned to ${assigneeName}`,
+                                assignee === myPlayerId ? ' (you)' : '',
+                                !isSubmitted ? ' — tap to change' : '',
+                              ].join('')}
                             >
-                              <option value="">Who holds this?</option>
-                              {teammates.map((p) => {
-                                const pct = cardProbs ? (cardProbs[p.playerId] ?? 0) : null;
-                                return (
-                                  <option key={p.playerId} value={p.playerId}>
-                                    {p.displayName}{p.playerId === myPlayerId ? ' (you)' : ''}{pct !== null && pct > 0 ? ` — ~${pct}%` : ''}
-                                  </option>
-                                );
-                              })}
-                            </select>
-                            {/* Inference probability breakdown below the select */}
-                            {cardProbs && Object.keys(cardProbs).length > 0 && (
-                              <div
-                                className="flex flex-wrap gap-1 mt-1"
-                                data-testid="inference-prob-row"
-                                aria-label={`Probability hints for ${cardLabel(cardId)}`}
+                              <Avatar
+                                displayName={assigneeName}
+                                imageUrl={assigneePlayer?.avatarId ?? undefined}
+                                size="xs"
+                              />
+                              <span className="flex-1 text-sm font-medium truncate text-slate-200">
+                                {assigneeName}
+                                {assignee === myPlayerId && (
+                                  <span className="text-xs text-slate-400 ml-1">(you)</span>
+                                )}
+                              </span>
+                              {!isSubmitted && (
+                                <span
+                                  className="text-xs text-slate-500 flex-shrink-0"
+                                  data-testid="revision-badge-change-hint"
+                                  aria-hidden="true"
+                                >
+                                  ✎ change
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <select
+                                value={assignee ?? ''}
+                                onChange={(e) => {
+                                  setCardAssignee(cardId, e.target.value);
+                                  // Clear seat-targeting selection when dropdown is used
+                                  if (selectedCardForAssign === cardId) setSelectedCardForAssign(null);
+                                }}
+                                disabled={isSubmitted}
+                                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
+                                aria-label={`Who holds ${cardLabel(cardId)}?`}
                               >
+                                <option value="">Who holds this?</option>
                                 {teammates.map((p) => {
-                                  const pct = cardProbs[p.playerId] ?? 0;
-                                  if (pct === 0) return null;
-                                  const isAssigned = assignee === p.playerId;
+                                  const pct = cardProbs ? (cardProbs[p.playerId] ?? 0) : null;
                                   return (
-                                    <button
-                                      key={p.playerId}
-                                      type="button"
-                                      onClick={() => setCardAssignee(cardId, p.playerId)}
-                                      className={[
-                                        'text-[0.6rem] font-semibold px-1.5 py-0.5 rounded-full transition-colors',
-                                        isAssigned
-                                          ? 'bg-cyan-600/60 text-cyan-100 border border-cyan-500'
-                                          : 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/60 hover:bg-cyan-800/50',
-                                      ].join(' ')}
-                                      aria-label={`Assign to ${p.displayName} (~${pct}%)`}
-                                      data-testid="inference-prob-chip"
-                                    >
-                                      {p.displayName.slice(0, 6)}: ~{pct}%
-                                    </button>
+                                    <option key={p.playerId} value={p.playerId}>
+                                      {p.displayName}{p.playerId === myPlayerId ? ' (you)' : ''}{pct !== null && pct > 0 ? ` — ~${pct}%` : ''}
+                                    </option>
                                   );
                                 })}
-                              </div>
+                              </select>
+                              {/* Inference probability breakdown below the select */}
+                              {cardProbs && Object.keys(cardProbs).length > 0 && (
+                                <div
+                                  className="flex flex-wrap gap-1 mt-1"
+                                  data-testid="inference-prob-row"
+                                  aria-label={`Probability hints for ${cardLabel(cardId)}`}
+                                >
+                                  {teammates.map((p) => {
+                                    const pct = cardProbs[p.playerId] ?? 0;
+                                    if (pct === 0) return null;
+                                    const isAssigned = assignee === p.playerId;
+                                    return (
+                                      <button
+                                        key={p.playerId}
+                                        type="button"
+                                        onClick={() => setCardAssignee(cardId, p.playerId)}
+                                        className={[
+                                          'text-[0.6rem] font-semibold px-1.5 py-0.5 rounded-full transition-colors',
+                                          isAssigned
+                                            ? 'bg-cyan-600/60 text-cyan-100 border border-cyan-500'
+                                            : 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/60 hover:bg-cyan-800/50',
+                                        ].join(' ')}
+                                        aria-label={`Assign to ${p.displayName} (~${pct}%)`}
+                                        data-testid="inference-prob-chip"
+                                      >
+                                        {p.displayName.slice(0, 6)}: ~{pct}%
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            {/* Sub-AC 23b: Confirm (lock) button.
+                                Shown when a teammate is selected; hidden while
+                                declaration is in-flight (isSubmitted).
+                                Clicking permanently locks this card's assignment
+                                so it cannot be revised within this session. */}
+                            {assignee && !isSubmitted && (
+                              <button
+                                type="button"
+                                onClick={() => handleLockAssignment(cardId)}
+                                className={[
+                                  'flex-shrink-0 p-1.5 rounded-lg border transition-all',
+                                  'border-teal-700/60 bg-teal-900/20 text-teal-400',
+                                  'hover:border-teal-500 hover:bg-teal-800/30 hover:text-teal-200',
+                                  'focus:outline-none focus:ring-2 focus:ring-teal-400',
+                                ].join(' ')}
+                                aria-label={`Confirm assignment of ${cardLabel(cardId)} to ${assigneeName}`}
+                                title="Confirm this assignment (locks it and prevents revision)"
+                                data-testid="confirm-assignment-btn"
+                                data-card-id={cardId}
+                              >
+                                <span aria-hidden="true" className="text-sm">🔒</span>
+                              </button>
                             )}
                           </div>
+                          </>
                         )}
                       </div>
                     </div>
@@ -532,6 +739,7 @@ export default function DeclareModal({
             <button
               onClick={handleConfirm}
               disabled={!isComplete || isLoading}
+              data-testid="declare-submit-btn"
               className="flex-1 py-3 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Declaring…' : 'Declare!'}
