@@ -541,9 +541,14 @@ function _nextClockwiseOpponent(gs, fromPlayerId, opponentTeam) {
  *
  * If `candidateId` has ≥1 card, return them unchanged.
  * Otherwise, find the next player who has cards:
- *   1. Try teammates first (preserve some team continuity).
- *   2. Fall back to any player with cards.
- *   3. If nobody has cards (shouldn't happen if game not over), return candidateId.
+ *   1. Honour any stored turnRecipient designated by the eliminated player (Sub-AC 27b).
+ *   2. AC 19: pass clockwise (ascending seatIndex, wrapping) to the next same-team
+ *      player who has ≥1 card.  "Clockwise" is defined by seatIndex order so that the
+ *      turn stays within the correct team even when the designated turn-holder is
+ *      simultaneously eliminated (e.g. a correct declarant whose only cards were in
+ *      the just-declared half-suit).
+ *   3. Fall back to any player with cards (all teammates empty).
+ *   4. If nobody has cards (game should be over), return candidateId unchanged.
  *
  * @param {Object} gs
  * @param {string} candidateId
@@ -561,14 +566,20 @@ function _resolveValidTurn(gs, candidateId) {
     return storedRecipient;
   }
 
-  // Try to find a teammate with cards.
+  // AC 19: pass clockwise to the next same-team player with cards.
   const team = getPlayerTeam(gs, candidateId);
-  const teammates = getTeamPlayers(gs, team).filter(
-    (p) => p.playerId !== candidateId && getCardCount(gs, p.playerId) > 0
-  );
-  if (teammates.length > 0) return teammates[0].playerId;
+  const sorted = [...gs.players].sort((a, b) => a.seatIndex - b.seatIndex);
+  const fromIdx = sorted.findIndex((p) => p.playerId === candidateId);
+  const n = sorted.length;
 
-  // Fall back to any player with cards (opponents).
+  for (let i = 1; i < n; i++) {
+    const candidate = sorted[(fromIdx + i) % n];
+    if (candidate.teamId === team && getCardCount(gs, candidate.playerId) > 0) {
+      return candidate.playerId;
+    }
+  }
+
+  // Fall back to any player with cards (all teammates are empty).
   const anyWithCards = gs.players.find((p) => getCardCount(gs, p.playerId) > 0);
   if (anyWithCards) return anyWithCards.playerId;
 
@@ -623,6 +634,102 @@ function _findCardHolder(gs, cardId) {
 }
 
 // ---------------------------------------------------------------------------
+// Eligible next-turn players (Sub-AC 28a)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the list of player IDs that are eligible to hold the turn.
+ *
+ * A player is eligible when ALL of the following are true:
+ *   1. They have at least 1 card remaining in their hand.
+ *   2. They are NOT in `gs.eliminatedPlayerIds` (i.e. their hand has not
+ *      been emptied by a previous declaration).
+ *
+ * This list is broadcast to all clients inside `declaration_result` after
+ * every declaration so the UI can immediately highlight which seats are
+ * still active participants.  The list is purely informational — the
+ * authoritative `newTurnPlayerId` field tells the clients WHO actually gets
+ * the next turn; `eligibleNextTurnPlayerIds` tells them WHO COULD have.
+ *
+ * "Including declarant if applicable" means the declaring player appears in
+ * the list when they still hold cards after the 6 half-suit cards are removed
+ * (i.e. they were not eliminated by their own declaration).
+ *
+ * @param {Object} gs - GameState (after cards have been removed)
+ * @returns {string[]} Array of playerIds ordered by seatIndex
+ */
+function getEligibleNextTurnPlayers(gs) {
+  if (!gs || !gs.players) return [];
+
+  return [...gs.players]
+    .sort((a, b) => a.seatIndex - b.seatIndex)
+    .filter((p) => {
+      const hasCards = getCardCount(gs, p.playerId) > 0;
+      const notEliminated = !(gs.eliminatedPlayerIds && gs.eliminatedPlayerIds.has(p.playerId));
+      return hasCards && notEliminated;
+    })
+    .map((p) => p.playerId);
+}
+
+// ---------------------------------------------------------------------------
+// Host migration helper (Sub-AC 40b)
+// ---------------------------------------------------------------------------
+
+/**
+ * Find the next eligible host candidate clockwise from `currentHostId`.
+ *
+ * Traverses the player list starting immediately after the current host
+ * (ascending seatIndex, wrapping around) and returns the first player who
+ * meets ALL of the following criteria:
+ *   1. NOT a bot (`isBot === false`) — bots cannot take on the host role.
+ *   2. NOT eliminated — their hand has not been emptied by a declaration
+ *      (i.e. their playerId is absent from `gs.eliminatedPlayerIds`).
+ *
+ * "Clockwise" is defined by ascending seatIndex, identical to the convention
+ * used throughout the game engine (see `_resolveValidTurn`,
+ * `_nextClockwiseOpponent`).
+ *
+ * Edge cases:
+ *   - If `currentHostId` is not found in the player list, traversal starts
+ *     from seatIndex 0 (i.e. the first player in seat order).
+ *   - Returns `null` when no eligible candidate exists (e.g. all remaining
+ *     players are bots or eliminated).
+ *   - A player with 0 cards who is NOT yet in `eliminatedPlayerIds` is still
+ *     eligible (the calling code should populate `eliminatedPlayerIds` before
+ *     invoking this function if card-emptiness matters).
+ *
+ * @param {Object} gs              - GameState (must have `players` array and
+ *                                   optionally `eliminatedPlayerIds` Set)
+ * @param {string} currentHostId   - playerId of the current host
+ * @returns {string|null}          - playerId of the next eligible candidate,
+ *                                   or null if none is found
+ */
+function nextEligibleHostCandidate(gs, currentHostId) {
+  if (!gs || !gs.players || gs.players.length === 0) return null;
+
+  // Sort players clockwise by seatIndex (same convention as the rest of the engine).
+  const sorted = [...gs.players].sort((a, b) => a.seatIndex - b.seatIndex);
+  const n = sorted.length;
+
+  const fromIdx = sorted.findIndex((p) => p.playerId === currentHostId);
+  // If the host is not in the player list, start the search from index 0.
+  const startIdx = fromIdx === -1 ? 0 : fromIdx;
+
+  for (let i = 1; i < n; i++) {
+    const candidate = sorted[(startIdx + i) % n];
+    const isEliminated =
+      gs.eliminatedPlayerIds != null &&
+      gs.eliminatedPlayerIds.has(candidate.playerId);
+    if (!candidate.isBot && !isEliminated) {
+      return candidate.playerId;
+    }
+  }
+
+  // No eligible candidate found (all remaining players are bots or eliminated).
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -633,6 +740,8 @@ module.exports = {
   validateDeclaration,
   applyDeclaration,
   applyForcedFailedDeclaration,
+  getEligibleNextTurnPlayers,
+  nextEligibleHostCandidate,
   _resolveValidTurn,
   _nextClockwiseOpponent,
   _endGame,

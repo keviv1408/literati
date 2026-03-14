@@ -65,8 +65,13 @@
  *   { type: 'rematch_vote_update', yesCount, noCount, totalCount, humanCount,
  *                                   majority, majorityReached, majorityDeclined,
  *                                   votes, playerVotes }
- *   { type: 'rematch_start',        roomCode }
+ *   { type: 'rematch_starting',     roomCode }
+ *     — majority yes reached; new game created with same teams/seats; clients
+ *       should clear post-game state and render the incoming game_init.
  *   { type: 'rematch_declined',     reason: 'timeout'|'majority_no' }
+ *   { type: 'room_dissolved',      reason: 'timeout'|'majority_no' }
+ *     — broadcast shortly after rematch_declined; signals that the room has been
+ *       permanently closed and clients should stop attempting reconnections.
  *   { type: 'inference_mode_changed', enabled: boolean, toggledBy: string }
  *   { type: 'bot_takeover',         playerId: string,
  *                                   partialState: { halfSuitId?: string, cardId?: string } | null }
@@ -124,6 +129,7 @@ const { getSupabaseClient } = require('../db/supabase');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
   setGame,
+  deleteGame,
   getGame,
   hasGame,
   registerConnection,
@@ -149,6 +155,7 @@ const {
   validateDeclaration,
   applyDeclaration,
   applyForcedFailedDeclaration,
+  getEligibleNextTurnPlayers,
 } = require('./gameEngine');
 const {
   decideBotMove,
@@ -167,9 +174,14 @@ const {
   initRematch,
   castVote,
   getVoteSummary,
+  getRematchGameConfig,
   hasRematch,
   clearRematch,
 } = require('./rematchStore');
+const {
+  setPendingRematch,
+  clearPendingRematch: clearPendingRematchSettings,
+} = require('./pendingRematchStore');
 const {
   addToReclaimQueue,
   removeFromReclaimQueue,
@@ -177,6 +189,30 @@ const {
   clearRoom: clearDisconnectRoom,
 } = require('./disconnectStore');
 const timerService = require('./timerService');
+
+// ---------------------------------------------------------------------------
+// Room socket server — lazy-loaded to avoid circular dependency at startup
+// ---------------------------------------------------------------------------
+
+let _roomSocketServer = null;
+
+/**
+ * Lazy-load the room socket server module.
+ * Required to avoid circular dependency: roomSocketServer → gameSocketServer.
+ * @returns {typeof import('../ws/roomSocketServer')|null}
+ */
+function _getRoomSocketServer() {
+  if (!_roomSocketServer) {
+    try {
+      _roomSocketServer = require('../ws/roomSocketServer');
+    } catch {
+      // If the module is not yet available (e.g. during isolated unit tests),
+      // return null so callers can safely skip the call.
+      return null;
+    }
+  }
+  return _roomSocketServer;
+}
 
 // ---------------------------------------------------------------------------
 // Turn timer configuration
@@ -187,6 +223,16 @@ const BOT_TURN_DELAY_MS = 1500;
 
 /** Time a human player has to act before the server auto-moves for them (ms) */
 const HUMAN_TURN_TIMEOUT_MS = 30_000;
+
+/**
+ * Time the declaring team has to choose which teammate takes the next turn
+ * after a correct declaration (AC 28 / Sub-AC 28c).
+ *
+ * Starts when a human player makes a correct declaration and there are
+ * multiple eligible teammates (with cards) on their team.
+ * On expiry the server auto-selects a random eligible player.
+ */
+const POST_DECLARATION_TURN_SELECTION_MS = 30_000;
 
 /**
  * Extended timeout for the declaration phase (Step 2 of DeclareModal).
@@ -224,6 +270,40 @@ const RECONNECT_WINDOW_MS = 60_000;
  */
 const TIMER_TICK_INTERVAL_MS = 5_000;
 
+/**
+ * How long players from the previous game have to reconnect to the room lobby
+ * after the rematch vote reaches majority (Sub-AC 45c).
+ *
+ * When majority YES is reached the server broadcasts `rematch_start` and
+ * immediately begins this 30-second gathering window.  Players who rejoin
+ * the room WS (/ws/room/<CODE>) within the window are marked as "back".
+ * At expiry, absent human players are replaced by bots and the game starts.
+ *
+ * Live countdown state is broadcast as `rematch_gathering` events to ALL
+ * game-socket connections (old page still open) AND to the new room-socket
+ * connections as players arrive.
+ */
+const REMATCH_GATHER_TIMEOUT_MS = 30_000;
+
+/**
+ * Active rematch-gathering countdowns (Sub-AC 45c).
+ *
+ * Key:   roomCode (upper-cased)
+ * Value: {
+ *   expectedPlayerIds: string[],  — human playerIds from the finished game
+ *   reconnectedIds:    Set<string>,— playerIds that have rejoined the room WS
+ *   timerId:           NodeJS.Timeout,
+ *   tickId:            NodeJS.Timeout,
+ *   expiresAt:         number,     — epoch ms
+ *   durationMs:        number,
+ * }
+ *
+ * Lifecycle:
+ *   - Set:     _startRematchGatheringCountdown (called in handleRematchVote when majority YES)
+ *   - Cleared: _cancelRematchGathering (called when countdown ends or all players rejoin)
+ */
+const _rematchGatheringState = new Map();
+
 /** Pending bot turn timers: roomCode → timeout ID */
 const _botTimers = new Map();
 
@@ -238,6 +318,15 @@ const _botDeclarationTimers = new Map();
 
 /** Pending human turn timeout timers: roomCode → { timerId, tickId } */
 const _turnTimers = new Map();
+
+/**
+ * Active post-declaration turn-selection timers (AC 28 / Sub-AC 28c).
+ * roomCode → { timerId, expiresAt, eligiblePlayers: string[] }
+ *
+ * Set when a human makes a correct declaration and multiple teammates are eligible.
+ * Cleared when a `choose_next_turn` message arrives OR the 30-second timer fires.
+ */
+const _postDeclarationTimers = new Map();
 
 /**
  * Rooms where the declaration-phase timer (Sub-AC 23a) has already been
@@ -473,7 +562,10 @@ async function updateStats(gs) {
       const isWin  = gs.winner !== null && won;
       const isLoss = gs.winner !== null && !won;
 
-      // Count correct/incorrect declarations by this player
+      // Count declaration outcomes (correct, incorrect, and attempted) by this player.
+      // Both regular declarations (applyDeclaration) and forced-failed/timer-expired
+      // declarations (applyForcedFailedDeclaration) record type === 'declaration'
+      // entries in moveHistory, so attempts = correct + incorrect covers all cases.
       let declarationsCorrect = 0;
       let declarationsIncorrect = 0;
       for (const move of gs.moveHistory) {
@@ -482,15 +574,17 @@ async function updateStats(gs) {
           else declarationsIncorrect++;
         }
       }
+      const declarationsAttempted = declarationsCorrect + declarationsIncorrect;
 
       await supabase.rpc('increment_user_stats', {
-        p_user_id:               player.playerId,
-        p_games_played:          1,
-        p_games_completed:       1,
-        p_wins:                  isWin  ? 1 : 0,
-        p_losses:                isLoss ? 1 : 0,
-        p_declarations_correct:  declarationsCorrect,
-        p_declarations_incorrect: declarationsIncorrect,
+        p_user_id:                 player.playerId,
+        p_games_played:            1,
+        p_games_completed:         1,
+        p_wins:                    isWin  ? 1 : 0,
+        p_losses:                  isLoss ? 1 : 0,
+        p_declarations_correct:    declarationsCorrect,
+        p_declarations_incorrect:  declarationsIncorrect,
+        p_declarations_attempted:  declarationsAttempted,
       }).catch((err) => {
         console.error('[game] stats RPC failed for player', player.playerId, ':', err.message);
       });
@@ -701,6 +795,115 @@ function cancelBotDeclarationTimer(roomCode) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Post-declaration turn-selection timer (AC 28 / Sub-AC 28c)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cancel and remove the post-declaration turn-selection timer for a room.
+ * Safe to call even when no timer exists.
+ * @param {string} roomCode
+ */
+function cancelPostDeclarationTimer(roomCode) {
+  const entry = _postDeclarationTimers.get(roomCode);
+  if (entry) {
+    clearTimeout(entry.timerId);
+    _postDeclarationTimers.delete(roomCode);
+  }
+}
+
+/**
+ * Start the 30-second post-declaration turn-selection timer (Sub-AC 28c).
+ *
+ * Called after a HUMAN player makes a CORRECT declaration.  The declaring
+ * team has POST_DECLARATION_TURN_SELECTION_MS (30 s) to choose which
+ * eligible teammate takes the next turn.  If no player sends a valid
+ * `choose_next_turn` message, the server auto-selects a random eligible
+ * player.
+ *
+ * Broadcasts `post_declaration_timer` to ALL connected clients (players +
+ * spectators) so the entire table sees the countdown.
+ *
+ * @param {string}   roomCode       - Room the game is running in
+ * @param {string}   declarerId     - The player who just made the declaration
+ * @param {string[]} eligiblePlayers - Player IDs on the declaring team with cards
+ */
+function startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers) {
+  // Cancel any existing post-declaration timer (safety guard).
+  cancelPostDeclarationTimer(roomCode);
+
+  const expiresAt = Date.now() + POST_DECLARATION_TURN_SELECTION_MS;
+
+  const timerId = setTimeout(() => {
+    _postDeclarationTimers.delete(roomCode);
+
+    const gs = getGame(roomCode);
+    if (!gs || gs.status !== 'active') return;
+
+    // Re-compute eligible players in case card counts changed during the window.
+    const stillEligible = eligiblePlayers.filter(
+      (pid) => getCardCount(gs, pid) > 0,
+    );
+
+    if (stillEligible.length === 0) {
+      // No eligible players remain — fall through to normal turn scheduling.
+      scheduleBotTurnIfNeeded(gs);
+      scheduleTurnTimerIfNeeded(gs);
+      return;
+    }
+
+    // Auto-select a random eligible player.
+    const selected = stillEligible[Math.floor(Math.random() * stillEligible.length)];
+    gs.currentTurnPlayerId = selected;
+
+    console.log(
+      `[game-ws] Post-declaration timer expired for room ${roomCode} — ` +
+      `auto-selected ${selected} (random from ${stillEligible.length} eligible)`
+    );
+
+    // Broadcast the selection to all clients.
+    broadcastToGame(roomCode, {
+      type:             'post_declaration_turn_selected',
+      selectedPlayerId: selected,
+      reason:           'timeout',
+    });
+
+    // Broadcast updated game state (currentTurnPlayerId changed).
+    broadcastStateUpdate(gs, new Set());
+
+    // Now schedule the selected player's turn.
+    scheduleBotTurnIfNeeded(gs);
+    scheduleTurnTimerIfNeeded(gs);
+  }, POST_DECLARATION_TURN_SELECTION_MS);
+
+  _postDeclarationTimers.set(roomCode, { timerId, expiresAt, eligiblePlayers });
+
+  // Broadcast timer start to ALL clients (players + spectators).
+  broadcastToGame(roomCode, {
+    type:            'post_declaration_timer',
+    declarerId,
+    eligiblePlayers,
+    durationMs:      POST_DECLARATION_TURN_SELECTION_MS,
+    expiresAt,
+  });
+}
+
+/**
+ * Handle a `choose_next_turn` message from a human player on the declaring team.
+ *
+ * Validates that:
+ *   1. A post-declaration timer is currently active for the room.
+ *   2. The chooser belongs to the declaring team.
+ *   3. The recipient is in the eligible player list AND still has cards.
+ *
+ * On success: cancels the timer, updates `currentTurnPlayerId`, broadcasts
+ * `post_declaration_turn_selected`, and schedules the selected player's turn.
+ *
+ * @param {string} roomCode
+ * @param {string} chooserId   - The player who sent the message
+ * @param {string} recipientId - The teammate they chose
+ * @param {import('ws').WebSocket|null} ws
+ */
 /**
  * Sanitize a partial selection for inclusion in a `bot_takeover` broadcast.
  *
@@ -1567,16 +1770,21 @@ function _processNewlyEliminatedPlayers(gs, newlyEliminated) {
       }
     } else {
       // Human: send a targeted prompt so the client can show the choose-modal.
-      const ws = getConnection(roomCode, eliminatedId);
-      if (ws) {
-        sendJson(ws, {
-          type:              'choose_turn_recipient_prompt',
-          eliminatedPlayerId: eliminatedId,
-          eligibleTeammates:  eligibleTeammates.map((p) => ({
-            playerId:    p.playerId,
-            displayName: p.displayName,
-          })),
-        });
+      // AC 31: if no eligible teammates remain (last survivor scenario — the
+      // eliminated player's entire team is now out), skip the prompt entirely.
+      // There is nobody to pass the turn to, so the choice is meaningless.
+      if (eligibleTeammates.length > 0) {
+        const ws = getConnection(roomCode, eliminatedId);
+        if (ws) {
+          sendJson(ws, {
+            type:              'choose_turn_recipient_prompt',
+            eliminatedPlayerId: eliminatedId,
+            eligibleTeammates:  eligibleTeammates.map((p) => ({
+              playerId:    p.playerId,
+              displayName: p.displayName,
+            })),
+          });
+        }
       }
     }
   }
@@ -1607,6 +1815,88 @@ function handleChooseTurnRecipient(roomCode, playerId, recipientId) {
 
   if (!gs.turnRecipients) gs.turnRecipients = new Map();
   gs.turnRecipients.set(playerId, recipientId);
+}
+
+/**
+ * Handle a `choose_next_turn` message from the current turn player after a
+ * correct declaration (Sub-AC 28b).
+ *
+ * After a successful declaration the declaring team keeps the turn.  The
+ * current turn player (the declarant, or whoever `_resolveValidTurn` assigned)
+ * may redirect the turn to any same-team teammate who still has cards before
+ * they take an ask/declare action.
+ *
+ * Validation:
+ *   - Game must be active.
+ *   - requesterId must be `gs.currentTurnPlayerId`.
+ *   - chosenPlayerId must be on the same team as the requester.
+ *   - chosenPlayerId must not be eliminated (has ≥1 card).
+ *
+ * On success:
+ *   - `gs.currentTurnPlayerId` is updated to `chosenPlayerId`.
+ *   - Updated `game_state` is broadcast to all clients.
+ *   - Any active turn timer is cancelled and restarted for the new player.
+ *
+ * @param {string}          roomCode
+ * @param {string}          requesterId    - The current turn player redirecting the turn
+ * @param {string}          chosenPlayerId - The teammate chosen to receive the turn
+ * @param {WebSocket|null}  ws
+ */
+function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
+  const gs = getGame(roomCode);
+  if (!gs || gs.status !== 'active') return;
+
+  // Only the current turn player may redirect the turn.
+  if (gs.currentTurnPlayerId !== requesterId) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Not your turn', code: 'NOT_YOUR_TURN' });
+    return;
+  }
+
+  // Chosen player must exist in the game.
+  const requester = gs.players.find((p) => p.playerId === requesterId);
+  const chosen    = gs.players.find((p) => p.playerId === chosenPlayerId);
+  if (!requester || !chosen) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Player not found', code: 'PLAYER_NOT_FOUND' });
+    return;
+  }
+
+  // Must redirect within the same team.
+  if (requester.teamId !== chosen.teamId) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Must choose a teammate', code: 'WRONG_TEAM' });
+    return;
+  }
+
+  // Chosen player must still have cards (not eliminated).
+  if ((gs.eliminatedPlayerIds && gs.eliminatedPlayerIds.has(chosenPlayerId)) ||
+      getCardCount(gs, chosenPlayerId) === 0) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Chosen player has no cards', code: 'TARGET_EMPTY_HAND' });
+    return;
+  }
+
+  // Redirect the turn.
+  gs.currentTurnPlayerId = chosenPlayerId;
+
+  // Broadcast updated game state so all clients immediately see the new turn.
+  broadcastStateUpdate(gs, new Set());
+
+  // Sub-AC 28c: If a post-declaration turn-selection timer is active (the
+  // player chose before the 30-second window expired), broadcast the
+  // selection event and cancel the timer.
+  if (_postDeclarationTimers.has(roomCode)) {
+    cancelPostDeclarationTimer(roomCode);
+    broadcastToGame(roomCode, {
+      type:             'post_declaration_turn_selected',
+      selectedPlayerId: chosenPlayerId,
+      chooserId:        requesterId,
+      reason:           'player_choice',
+    });
+  }
+
+  // Cancel the current turn timer (started for requesterId) and start a
+  // fresh timer for chosenPlayerId so they get the full 30 seconds.
+  cancelTurnTimer(roomCode);
+  scheduleBotTurnIfNeeded(gs);
+  scheduleTurnTimerIfNeeded(gs);
 }
 
 /**
@@ -1646,17 +1936,24 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
   // Update bot knowledge — cards are gone; no assignment to record
   updateKnowledgeAfterDeclaration(gs, halfSuitId, {}, false);
 
+  // Sub-AC 28a: compute eligible next-turn players AFTER cards are removed
+  // (applyForcedFailedDeclaration has already mutated gs).
+  const eligibleNextTurnPlayerIds = getEligibleNextTurnPlayers(gs);
+
   // Broadcast declaration result
   broadcastToGame(roomCode, {
-    type:            'declaration_result',
+    type:                     'declaration_result',
     declarerId,
     halfSuitId,
-    correct:         false,
-    timedOut:        true,
+    correct:                  false,
+    timedOut:                 true,
     winningTeam,
     newTurnPlayerId,
-    assignment:      null,
+    assignment:               null,
     lastMove,
+    // Sub-AC 28a: IDs of all non-eliminated players with cards remaining,
+    // ordered by seatIndex.
+    eligibleNextTurnPlayerIds,
   });
 
   // Broadcast updated state + personalized hands
@@ -1683,7 +1980,13 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
     const supabase = getSupabaseClient();
     await persistGameState(gs, supabase);
     await updateStats(gs);
-    const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout);
+    // Sub-AC 46c: pass game metadata so the rematch store can recreate the
+    // game with the same team assignments and seat order on majority yes.
+    const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout, {
+      roomId:      gs.roomId,
+      variant:     gs.variant,
+      playerCount: gs.playerCount,
+    });
     broadcastToGame(roomCode, {
       type: 'rematch_vote_update',
       ...initialSummary,
@@ -1744,9 +2047,14 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   // Update bot knowledge
   updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct);
 
+  // Sub-AC 28a: compute eligible next-turn players AFTER cards are removed
+  // (applyDeclaration has already mutated gs — hands are updated, newly
+  // eliminated players have been added to gs.eliminatedPlayerIds).
+  const eligibleNextTurnPlayerIds = getEligibleNextTurnPlayers(gs);
+
   // Broadcast declaration result (always sent — correct or incorrect)
   broadcastToGame(roomCode, {
-    type:            'declaration_result',
+    type:                     'declaration_result',
     declarerId,
     halfSuitId,
     correct,
@@ -1754,6 +2062,9 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     newTurnPlayerId,
     assignment,
     lastMove,
+    // Sub-AC 28a: IDs of all non-eliminated players with cards remaining,
+    // ordered by seatIndex.  Includes declarant if they still hold cards.
+    eligibleNextTurnPlayerIds,
   });
 
   // On a failed declaration, also broadcast the detailed diff so clients can
@@ -1807,7 +2118,13 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     await updateStats(gs);
 
     // Initiate rematch vote — bots auto-vote yes, humans vote within timeout
-    const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout);
+    // Sub-AC 46c: pass game metadata so the rematch store can recreate the
+    // game with the same team assignments and seat order on majority yes.
+    const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout, {
+      roomId:      gs.roomId,
+      variant:     gs.variant,
+      playerCount: gs.playerCount,
+    });
     broadcastToGame(roomCode, {
       type:        'rematch_vote_update',
       ...initialSummary,
@@ -1819,6 +2136,31 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   // Persist to Supabase
   const supabase = getSupabaseClient();
   await persistGameState(gs, supabase);
+
+  // ── AC 28 / Sub-AC 28c: Post-declaration turn-selection timer ──────────────
+  // After a CORRECT declaration by a HUMAN, give the declaring team 30 seconds
+  // to choose which eligible teammate takes the next turn.
+  // If no one chooses within the window, the server picks a random eligible player.
+  //
+  // Conditions for starting the timer:
+  //   1. The declaration was correct (declaring team keeps the turn).
+  //   2. The game is still active (not just ended by this declaration).
+  //   3. The declarer is human (bots auto-choose immediately).
+  //   4. There are eligible players on the declaring team (at least 1 with cards).
+  if (correct && gs.status === 'active' && !isBot) {
+    const declaringPlayer = gs.players.find((p) => p.playerId === declarerId);
+    if (declaringPlayer) {
+      const eligiblePlayers = gs.players
+        .filter((p) => p.teamId === declaringPlayer.teamId && getCardCount(gs, p.playerId) > 0)
+        .map((p) => p.playerId);
+
+      if (eligiblePlayers.length > 0) {
+        startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers);
+        // Timer will schedule the next turn after selection (or on expiry).
+        return;
+      }
+    }
+  }
 
   // Schedule next bot or human turn timer as needed
   scheduleBotTurnIfNeeded(gs);
@@ -1910,13 +2252,322 @@ function handleToggleInference(roomCode, playerId) {
 // ---------------------------------------------------------------------------
 
 /**
- * Called when the 60-second rematch vote window expires without a majority yes.
- * Broadcasts `rematch_declined` and cleans up vote state.
+ * Called when the 30-second rematch vote window expires without a majority yes.
+ * Broadcasts `rematch_declined` (so the vote panel can show the timeout reason),
+ * cleans up all in-memory room state (game, partial selections, disconnect queue),
+ * and then emits `room_dissolved` after a 3-second grace period so clients can
+ * display the dissolution notice and navigate away.
+ *
  * @param {string} roomCode
  */
 function _handleRematchTimeout(roomCode) {
-  console.log(`[game-ws] Rematch vote timed out for room ${roomCode} — declining`);
+  console.log(`[game-ws] Rematch vote timed out for room ${roomCode} — dissolving room`);
+
+  // Step 1: notify clients the vote was declined so the vote panel can switch
+  // to a 'timed out' message before the room-dissolved overlay appears.
   broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'timeout' });
+
+  // Step 2: clean up all in-memory state for this room immediately.
+  // The DB room status is already 'completed' (set by persistGameState at game
+  // end), so no extra DB write is needed here.
+  deleteGame(roomCode);
+  clearRoomPartialSelections(roomCode);
+  clearDisconnectRoom(roomCode);
+
+  // Step 3: after a short grace period, emit the final room_dissolved event so
+  // clients display the dissolution notice and can navigate away.
+  setTimeout(() => {
+    broadcastToGame(roomCode, { type: 'room_dissolved', reason: 'timeout' });
+  }, 3000);
+}
+
+/**
+ * Handle a `rematch_initiate` message from the host of a private room.
+ *
+ * Only the host of a non-matchmaking room may call this.  The server
+ * validates host identity and room type against Supabase, then
+ * immediately triggers a rematch without requiring a majority vote:
+ *   1. Clears the active vote (if any) to stop the auto-decline timer.
+ *   2. Resets room status to 'waiting' and clears game_state in Supabase.
+ *   3. Broadcasts `rematch_start` to all connected clients.
+ *
+ * Error codes sent back to the caller:
+ *   HOST_ONLY         — sender is not the room's host_user_id
+ *   NOT_PRIVATE_ROOM  — room is a matchmaking room (no host authority)
+ *   ROOM_NOT_FOUND    — DB lookup failed
+ *   REMATCH_RESET_FAILED — Supabase update failed
+ *
+ * @param {string} roomCode
+ * @param {string} playerId  The calling player's ID (must equal host_user_id)
+ * @param {import('ws').WebSocket|null} ws
+ */
+async function handleRematchInitiate(roomCode, playerId, ws) {
+  const supabase = getSupabaseClient();
+
+  // Look up host_user_id and is_matchmaking from Supabase
+  let dbRoom;
+  try {
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('host_user_id, is_matchmaking')
+      .eq('code', roomCode)
+      .single();
+    if (error || !data) throw error || new Error('Room not found');
+    dbRoom = data;
+  } catch (err) {
+    console.error('[game-ws] handleRematchInitiate: DB lookup failed:', err.message);
+    if (ws) sendJson(ws, { type: 'error', message: 'Room not found', code: 'ROOM_NOT_FOUND' });
+    return;
+  }
+
+  // Only the registered host of a private room may force a rematch
+  if (dbRoom.is_matchmaking) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Rematch initiation is only available in private rooms', code: 'NOT_PRIVATE_ROOM' });
+    return;
+  }
+  if (dbRoom.host_user_id !== playerId) {
+    if (ws) sendJson(ws, { type: 'error', message: 'Only the host can initiate a rematch', code: 'HOST_ONLY' });
+    return;
+  }
+
+  // Clear any active rematch vote (stops the auto-decline timer)
+  clearRematch(roomCode);
+
+  // ── Sub-AC 45b: Clone previous room settings into a pending rematch ─────
+  const gs = getGame(roomCode);
+  let previousSettings = null;
+  if (gs) {
+    previousSettings = {
+      players: gs.players.map((p) => ({
+        playerId:    p.playerId,
+        displayName: p.displayName,
+        avatarId:    p.avatarId ?? null,
+        teamId:      p.teamId,
+        seatIndex:   p.seatIndex,
+        isBot:       p.isBot,
+        isGuest:     p.isGuest,
+      })),
+      variant:       gs.variant,
+      playerCount:   gs.playerCount,
+      inferenceMode: gs.inferenceMode,
+    };
+    setPendingRematch(roomCode, previousSettings);
+    console.log(
+      `[game-ws] Pending rematch settings stored (host-initiated) for room ${roomCode}`
+    );
+  }
+
+  // Reset room to 'waiting' in Supabase so a new game can start
+  try {
+    await supabase
+      .from('rooms')
+      .update({ status: 'waiting', game_state: null })
+      .eq('code', roomCode);
+  } catch (err) {
+    console.error('[game-ws] handleRematchInitiate: Failed to reset room:', err.message);
+    if (ws) sendJson(ws, { type: 'error', message: 'Failed to reset room for rematch', code: 'REMATCH_RESET_FAILED' });
+    return;
+  }
+
+  const rematchStartPayload = { type: 'rematch_start', roomCode };
+  if (previousSettings) {
+    rematchStartPayload.previousTeams = previousSettings.players.map((p) => ({
+      playerId:  p.playerId,
+      teamId:    p.teamId,
+      seatIndex: p.seatIndex,
+      isBot:     p.isBot,
+    }));
+    rematchStartPayload.variant       = previousSettings.variant;
+    rematchStartPayload.playerCount   = previousSettings.playerCount;
+    rematchStartPayload.inferenceMode = previousSettings.inferenceMode;
+  }
+
+  console.log(`[game-ws] Host ${playerId} initiated rematch for room ${roomCode}`);
+  broadcastToGame(roomCode, rematchStartPayload);
+  // Sub-AC 45c: Start 30-second gathering countdown to track reconnecting players.
+  if (gs) { _startRematchGatheringCountdown(roomCode, gs.players); }
+}
+
+
+// ---------------------------------------------------------------------------
+// Rematch gathering countdown (Sub-AC 45c)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the current gathering summary object for a room.
+ * Returns null if no gathering is active.
+ *
+ * @param {string} roomCode
+ * @returns {{
+ *   roomCode:              string,
+ *   expiresAt:             number,
+ *   durationMs:            number,
+ *   reconnectedCount:      number,
+ *   totalCount:            number,
+ *   reconnectedPlayerIds:  string[],
+ *   pendingPlayerIds:      string[],
+ * }|null}
+ */
+function _getGatheringSummary(roomCode) {
+  const code  = roomCode.toUpperCase();
+  const state = _rematchGatheringState.get(code);
+  if (!state) return null;
+
+  const reconnectedPlayerIds = Array.from(state.reconnectedIds);
+  const pendingPlayerIds     = state.expectedPlayerIds.filter(
+    (id) => !state.reconnectedIds.has(id),
+  );
+
+  return {
+    roomCode:            code,
+    expiresAt:           state.expiresAt,
+    durationMs:          state.durationMs,
+    reconnectedCount:    reconnectedPlayerIds.length,
+    totalCount:          state.expectedPlayerIds.length,
+    reconnectedPlayerIds,
+    pendingPlayerIds,
+  };
+}
+
+/**
+ * Cancel the gathering countdown for a room, clearing all timers.
+ * Safe to call even when no gathering is active.
+ *
+ * @param {string} roomCode
+ */
+function _cancelRematchGathering(roomCode) {
+  const code  = roomCode.toUpperCase();
+  const state = _rematchGatheringState.get(code);
+  if (!state) return;
+  if (state.timerId) clearTimeout(state.timerId);
+  if (state.tickId)  clearInterval(state.tickId);
+  _rematchGatheringState.delete(code);
+}
+
+/**
+ * Clear ALL active rematch-gathering countdowns.
+ * Used in tests to reset module state.
+ */
+function _clearAllRematchGatherings() {
+  for (const state of _rematchGatheringState.values()) {
+    if (state.timerId) clearTimeout(state.timerId);
+    if (state.tickId)  clearInterval(state.tickId);
+  }
+  _rematchGatheringState.clear();
+}
+
+/**
+ * Start the 30-second gathering countdown after a rematch vote reaches majority.
+ *
+ * Broadcasts `rematch_gathering` immediately, then every TIMER_TICK_INTERVAL_MS.
+ * When a player rejoins the room WS server, roomSocketServer calls
+ * `notifyRematchPlayerJoined` which updates the reconnected set and re-broadcasts.
+ *
+ * On expiry the state is cleaned up and a final broadcast goes out with
+ * `expired: true`.  The room lobby's auto-start logic proceeds independently.
+ *
+ * @param {string}   roomCode
+ * @param {Array}    players  — full player list from the finished GameState
+ */
+function _startRematchGatheringCountdown(roomCode, players) {
+  const code = roomCode.toUpperCase();
+
+  // Guard: cancel any pre-existing gathering.
+  _cancelRematchGathering(code);
+
+  // Only track human (non-bot) players — bots are always "present".
+  const expectedPlayerIds = (players || [])
+    .filter((p) => !p.isBot)
+    .map((p) => p.playerId);
+
+  if (expectedPlayerIds.length === 0) {
+    console.log(`[game-ws] rematch_gathering: room ${code} has no human players; skipping countdown.`);
+    return;
+  }
+
+  const durationMs = REMATCH_GATHER_TIMEOUT_MS;
+  const expiresAt  = Date.now() + durationMs;
+
+  const broadcastGathering = () => {
+    const s = _getGatheringSummary(code);
+    if (!s) return;
+    broadcastToGame(code, { type: 'rematch_gathering', ...s });
+  };
+
+  const tickId = setInterval(broadcastGathering, TIMER_TICK_INTERVAL_MS);
+
+  const timerId = setTimeout(() => {
+    clearInterval(tickId);
+    const finalSummary = _getGatheringSummary(code);
+    _rematchGatheringState.delete(code);
+    if (finalSummary) {
+      broadcastToGame(code, { type: 'rematch_gathering', ...finalSummary, expired: true });
+    }
+    console.log(
+      `[game-ws] rematch_gathering: 30s expired for room ${code}. ` +
+      `${finalSummary?.reconnectedCount ?? 0}/${finalSummary?.totalCount ?? 0} back.`,
+    );
+  }, durationMs);
+
+  _rematchGatheringState.set(code, {
+    expectedPlayerIds,
+    reconnectedIds: new Set(),
+    timerId,
+    tickId,
+    expiresAt,
+    durationMs,
+  });
+
+  console.log(
+    `[game-ws] rematch_gathering: 30s countdown started for room ${code} ` +
+    `(${expectedPlayerIds.length} human(s) expected).`,
+  );
+
+  broadcastGathering();
+}
+
+/**
+ * Notify the gathering countdown that a player has rejoined the room lobby.
+ *
+ * Called by roomSocketServer when a player connects to /ws/room/<CODE>
+ * while a rematch gathering is active for that room.
+ *
+ * If all expected players have rejoined, the gathering timer is cancelled
+ * early and a final broadcast is sent with `allRejoined: true`.
+ *
+ * @param {string} roomCode
+ * @param {string} playerId  — the userId from the room socket connection
+ */
+function notifyRematchPlayerJoined(roomCode, playerId) {
+  const code  = roomCode.toUpperCase();
+  const state = _rematchGatheringState.get(code);
+  if (!state) return;
+
+  if (!state.expectedPlayerIds.includes(playerId)) return;
+
+  state.reconnectedIds.add(playerId);
+
+  const summary = _getGatheringSummary(code);
+  if (!summary) return;
+
+  if (summary.pendingPlayerIds.length === 0) {
+    _cancelRematchGathering(code);
+    broadcastToGame(code, {
+      type:        'rematch_gathering',
+      ...summary,
+      allRejoined: true,
+      expired:     false,
+    });
+    console.log(
+      `[game-ws] rematch_gathering: all ${summary.totalCount} player(s) rejoined room ${code} — early completion.`,
+    );
+    return;
+  }
+
+  broadcastToGame(code, { type: 'rematch_gathering', ...summary });
+  console.log(
+    `[game-ws] rematch_gathering: "${playerId}" rejoined ${code} (${summary.reconnectedCount}/${summary.totalCount}).`,
+  );
 }
 
 /**
@@ -1948,27 +2599,113 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
   });
 
   if (summary.majorityReached) {
-    // Clear rematch state (stops the timeout)
+    // ── Sub-AC 46c: Rematch room creation preserving teams and seat order ─────
+    // getRematchGameConfig must be called BEFORE clearRematch destroys the store.
+    const config = getRematchGameConfig(roomCode);
+
+    // Clear rematch vote state (stops the timeout timer).
     clearRematch(roomCode);
 
-    // Reset room to 'waiting' in Supabase so a new game can start
+    // Build the seat list.  Prefer the config from the rematch store (captured
+    // at game-over time) and fall back to the live game state if needed.
+    const finishedGs = getGame(roomCode);
+    const sourcePlayers = config?.players ?? finishedGs?.players ?? [];
+    const seats = sourcePlayers.map((p) => ({
+      seatIndex:   p.seatIndex,
+      playerId:    p.playerId,
+      displayName: p.displayName,
+      avatarId:    p.avatarId ?? null,
+      teamId:      p.teamId,
+      isBot:       p.isBot,
+      isGuest:     p.isGuest,
+    }));
+
+    const rematchRoomId      = config?.roomId      ?? finishedGs?.roomId;
+    const rematchVariant     = config?.variant     ?? finishedGs?.variant;
+    const rematchPlayerCount = config?.playerCount ?? finishedGs?.playerCount;
+
+    if (!rematchRoomId || !rematchVariant || !rematchPlayerCount || seats.length === 0) {
+      console.error(
+        `[game-ws] Cannot create rematch game for room ${roomCode}: ` +
+        `missing config (roomId=${rematchRoomId}, variant=${rematchVariant}, ` +
+        `playerCount=${rematchPlayerCount}, seats=${seats.length})`
+      );
+      broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
+      return;
+    }
+
     try {
+      // Spin up a new game instance with the same team assignments and seat
+      // positions — cards are freshly dealt but player identities, teams, and
+      // seat indices are preserved exactly.
+      const newGs = createGame({
+        roomCode,
+        roomId:      rematchRoomId,
+        variant:     rematchVariant,
+        playerCount: rematchPlayerCount,
+        seats,
+      });
+
+      console.log(
+        `[game-ws] Rematch game created for room ${roomCode} — ` +
+        `${seats.length} players, variant=${rematchVariant}`
+      );
+
+      // Mark the room as in_progress in Supabase.
       const supabase = getSupabaseClient();
       await supabase
         .from('rooms')
-        .update({ status: 'waiting', game_state: null })
+        .update({ status: 'in_progress' })
         .eq('code', roomCode);
+
+      // Persist the new game state for crash recovery.
+      await persistGameState(newGs, supabase);
+
+      // ── Broadcast rematch_starting to ALL connections ─────────────────────
+      // Signals that a new game has been spun up; clients should clear the
+      // post-game screen and prepare for the incoming game_init messages.
+      broadcastToGame(roomCode, { type: 'rematch_starting', roomCode });
+
+      // ── Send personalised game_init to every connected player/spectator ───
+      // We reuse the existing open connections — no page reload required.
+      const connections = getRoomConnections(roomCode);
+      for (const [pid, connWs] of connections) {
+        const isSpectator = !newGs.players.find((p) => p.playerId === pid);
+        if (isSpectator) {
+          sendJson(connWs, {
+            type:          'spectator_init',
+            roomCode:      newGs.roomCode,
+            variant:       newGs.variant,
+            playerCount:   newGs.playerCount,
+            players:       serializePlayers(newGs),
+            gameState:     serializePublicState(newGs),
+            inferenceMode: newGs.inferenceMode ?? false,
+          });
+        } else {
+          sendGameInit(newGs, pid, connWs);
+        }
+      }
+
+      // Schedule bot turns and the first human turn timer for the new game.
+      scheduleBotTurnIfNeeded(newGs);
+      scheduleTurnTimerIfNeeded(newGs);
     } catch (err) {
-      console.error('[game-ws] Failed to reset room for rematch:', err.message);
+      console.error('[game-ws] Failed to create rematch game:', err.message);
+      // Fall back to declining so clients aren't left waiting indefinitely.
+      broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
     }
 
-    broadcastToGame(roomCode, { type: 'rematch_start', roomCode });
     return;
   }
 
   if (summary.majorityDeclined) {
     clearRematch(roomCode);
     broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
+    // Broadcast room_dissolved after a short delay so clients can read the decline
+    // reason before seeing the final dissolution notice.
+    setTimeout(() => {
+      broadcastToGame(roomCode, { type: 'room_dissolved', reason: 'majority_no' });
+    }, 3000);
   }
 }
 
@@ -2325,6 +3062,15 @@ function attachGameSocketServer(httpServer) {
           break;
         }
 
+        case 'rematch_initiate': {
+          // ── Sub-AC 45a: Host-only rematch initiation for private rooms ───────
+          // Only the registered host of a non-matchmaking room may send this.
+          // Bypasses the vote window and immediately triggers rematch_start.
+          // The server validates host identity and room type via DB lookup.
+          await handleRematchInitiate(roomCode, playerId, ws);
+          break;
+        }
+
         case 'toggle_inference': {
           handleToggleInference(roomCode, playerId);
           break;
@@ -2414,6 +3160,19 @@ function attachGameSocketServer(httpServer) {
           break;
         }
 
+        case 'choose_next_turn': {
+          // ── Sub-AC 28b: Current turn player redirects turn to a teammate ──
+          // Sent by the current turn player (typically the declarant after a
+          // correct declaration) to pass their turn to a same-team teammate
+          // with cards.  The server validates, updates currentTurnPlayerId,
+          // broadcasts game_state, and restarts the turn timer.
+          const { chosenPlayerId: nextPlayerId } = msg;
+          if (typeof nextPlayerId === 'string') {
+            handleChooseNextTurn(roomCode, playerId, nextPlayerId, ws);
+          }
+          break;
+        }
+
         default:
           sendJson(ws, { type: 'error', message: `Unknown message type: ${msg.type}`, code: 'UNKNOWN_TYPE' });
       }
@@ -2457,6 +3216,7 @@ module.exports = {
   handleAskCard,
   handleDeclare,
   handleRematchVote,
+  handleRematchInitiate,
   handleToggleInference,
   handlePartialSelection,
   handleDeclareProgress,
@@ -2491,13 +3251,24 @@ module.exports = {
   // Player elimination (Sub-AC 27b):
   _processNewlyEliminatedPlayers,
   handleChooseTurnRecipient,
+  // Sub-AC 28b: declarant redirects turn to a same-team player after correct declaration
+  handleChooseNextTurn,
   // Declaration phase timer (Sub-AC 23a):
   startDeclarationPhaseTimer,
   // Bot declaration takeover countdown (Sub-AC 3 of AC 41):
   startBotDeclarationCountdown,
   cancelBotDeclarationTimer,
+  // Post-declaration turn-selection timer (AC 28 / Sub-AC 28c):
+  startPostDeclarationTimer,
+  cancelPostDeclarationTimer,
+  _postDeclarationTimers,
+  POST_DECLARATION_TURN_SELECTION_MS,
   // Countdown timer service (Sub-AC 36.1): 1-second ticks + threshold events
   timerService,
+  // Stats persistence (exported for unit testing — Sub-AC 44c):
+  updateStats,
+  // Pending rematch settings (Sub-AC 45b): clear after new game starts
+  clearPendingRematchSettings,
   // Exposed for test inspection only — do NOT mutate from outside this module:
   _declarationSelections,
   _declarationPhaseStarted,
@@ -2510,4 +3281,11 @@ module.exports = {
   TIMER_TICK_INTERVAL_MS,
   DECLARATION_PHASE_TIMEOUT_MS,
   BOT_DECLARATION_TAKEOVER_MS,
+  // Rematch gathering countdown (Sub-AC 45c):
+  _startRematchGatheringCountdown,
+  notifyRematchPlayerJoined,
+  _cancelRematchGathering,
+  _clearAllRematchGatherings,
+  _rematchGatheringState,
+  REMATCH_GATHER_TIMEOUT_MS,
 };

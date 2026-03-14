@@ -59,6 +59,17 @@ const { getGuestSession } = require('../sessions/guestSessionStore');
 const { buildGameSeats } = require('../game/gameInitService');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
+const {
+  HOST_RECONNECT_WINDOW_MS,
+  startHostDisconnectTimer,
+  cancelHostDisconnectTimer,
+  _clearAllTimers: _clearAllHostDisconnectTimers,
+} = require('./hostDisconnectTimer');
+const {
+  getPendingRematch,
+  clearPendingRematch,
+  hasPendingRematch,
+} = require('../game/pendingRematchStore');
 
 // ---------------------------------------------------------------------------
 // Game socket server — lazy-loaded to avoid circular dependency at startup
@@ -164,6 +175,44 @@ const matchmakingTimers = new Map();
 const MATCHMAKING_LOBBY_TIMEOUT_MS = 30 * 1000;
 
 /**
+ * Map<roomCode, { previousHostId: string }>
+ * Tracks pending host-disconnect reconnect windows.  An entry is created when
+ * the current room host disconnects from the lobby; it is removed if the same
+ * host reconnects before the 60-second window elapses (or when the timer fires
+ * and host authority is transferred to the next player).
+ *
+ * NOTE: The actual timer/tick machinery is managed by hostDisconnectTimer.js.
+ * This map only retains the previousHostId so that reconnects can be matched
+ * to the correct original host.
+ */
+const hostTransferTimers = new Map();
+
+/**
+ * Map<roomCode, ReturnType<typeof setTimeout>>
+ *
+ * Sub-AC 45d — Rematch bot-fill timers.
+ *
+ * Started by startRematchBotFillTimer() immediately after a rematch is agreed
+ * (rematch_start broadcast).  Fires after REMATCH_BOT_FILL_TIMEOUT_MS (30 s)
+ * if not all original human players have rejoined the room lobby.  On expiry,
+ * _executeRematchBotFill() fills absent slots with bots and starts the game.
+ *
+ * Cancelled by cancelRematchBotFillTimer() if all original humans reconnect
+ * before the window expires (in that case _executeRematchBotFill is invoked
+ * immediately via process.nextTick).
+ */
+const _rematchBotFillTimers = new Map();
+
+/**
+ * How long to wait for rematch players to reconnect to the lobby before
+ * auto-filling absent slots with bots and starting the new game (30 s).
+ *
+ * Sub-AC 45d: "After the 30-second window, automatically fill any still-absent
+ * player slots with bots at the inherited difficulty and start the new game."
+ */
+const REMATCH_BOT_FILL_TIMEOUT_MS = 30_000;
+
+/**
  * Return (or create) the per-room player client Map.
  * @param {string} roomCode
  * @returns {Map<string, Object>}
@@ -229,6 +278,160 @@ function getRoomPlayers(roomCode) {
       teamId,
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Host authority transfer
+// ---------------------------------------------------------------------------
+
+/**
+ * Start a host-transfer countdown for `roomCode`.
+ *
+ * If a timer is already running for this room the call is a no-op (guards
+ * against network-flap scenarios where disconnect fires twice).
+ *
+ * @param {string} roomCode
+ * @param {string} currentHostId  userId of the host who just disconnected
+ */
+/**
+ * Start the 60-second host-reconnect countdown for a private room.
+ *
+ * Uses the hostDisconnectTimer module for the actual timer/tick machinery.
+ * Broadcasts:
+ *   { type: 'host_disconnected', roomCode, expiresAt } — immediately
+ *   { type: 'host_disconnect_tick', roomCode, remainingMs, expiresAt } — every 5 s
+ *   { type: 'host_timeout', roomCode } — when 60 s elapses without reconnect
+ *
+ * @param {string} roomCode
+ * @param {string} currentHostId
+ */
+function _startHostTransferTimer(roomCode, currentHostId) {
+  // Don't double-start.
+  if (hostTransferTimers.has(roomCode)) return;
+
+  console.log(
+    `[RoomWS] Host "${currentHostId}" disconnected from room "${roomCode}". ` +
+    `Starting ${HOST_RECONNECT_WINDOW_MS / 1000}s host-reconnect timer.`,
+  );
+
+  const { started, expiresAt } = startHostDisconnectTimer(
+    roomCode,
+    // onTick — broadcast countdown every TICK_INTERVAL_MS
+    (code, remainingMs, exp) => {
+      broadcast(code, {
+        type:        'host_disconnect_tick',
+        roomCode:    code,
+        remainingMs,
+        expiresAt:   exp,
+      });
+    },
+    // onExpiry — host did not reconnect within 60 s; transfer authority
+    (code) => {
+      hostTransferTimers.delete(code);
+      broadcast(code, { type: 'host_timeout', roomCode: code });
+      _executeHostTransfer(code).catch((err) => {
+        console.error(`[RoomWS] Host transfer error for room "${code}":`, err.message);
+      });
+    },
+  );
+
+  if (!started) {
+    // Should not happen due to the has() guard above, but be defensive.
+    console.warn(`[RoomWS] hostDisconnectTimer already active for room "${roomCode}".`);
+    return;
+  }
+
+  // Track the previous host ID so reconnects can be matched.
+  hostTransferTimers.set(roomCode, { previousHostId: currentHostId });
+
+  // Broadcast the start of the countdown to all remaining clients.
+  broadcast(roomCode, {
+    type:      'host_disconnected',
+    roomCode,
+    expiresAt,
+  });
+}
+
+/**
+ * Cancel a pending host-disconnect timer (e.g. because the original host
+ * reconnected before the 60-second window elapsed).
+ *
+ * @param {string} roomCode
+ */
+function _cancelHostTransferTimer(roomCode) {
+  const entry = hostTransferTimers.get(roomCode);
+  if (!entry) return;
+  cancelHostDisconnectTimer(roomCode);
+  hostTransferTimers.delete(roomCode);
+  console.log(`[RoomWS] Host-disconnect timer cancelled for room "${roomCode}".`);
+}
+
+/**
+ * Execute host authority transfer for `roomCode`.
+ *
+ * Called when the host-transfer timer expires with no reconnect.
+ *
+ * Algorithm:
+ *   1. Select the first remaining player in Map insertion order as new host.
+ *   2. Set `isHost = false` on every existing in-memory entry.
+ *   3. Set `isHost = true` on the selected entry.
+ *   4. Persist the new `host_user_id` to Supabase (best-effort).
+ *   5. Broadcast `host_changed` to notify all clients of the new authority.
+ *   6. Broadcast `room_players` so all isHost badges refresh.
+ *
+ * If no players remain the function is a silent no-op.
+ *
+ * @param {string} roomCode
+ * @returns {Promise<void>}
+ */
+async function _executeHostTransfer(roomCode) {
+  const clients = roomClients.get(roomCode);
+  if (!clients || clients.size === 0) {
+    console.log(`[RoomWS] Host transfer skipped — room "${roomCode}" has no remaining players.`);
+    return;
+  }
+
+  // Pick the first remaining player in insertion order as the new host.
+  const [newHostId, newHostEntry] = Array.from(clients.entries())[0];
+
+  // Clear all existing host flags then promote the selected player.
+  for (const entry of clients.values()) {
+    entry.isHost = false;
+  }
+  newHostEntry.isHost = true;
+
+  console.log(
+    `[RoomWS] Host authority transferred in room "${roomCode}" → ` +
+    `userId="${newHostId}" displayName="${newHostEntry.displayName}".`,
+  );
+
+  // Persist to Supabase (best-effort; log but do not throw on failure).
+  try {
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from('rooms')
+      .update({ host_user_id: newHostId })
+      .eq('code', roomCode);
+    if (error) {
+      console.error(`[RoomWS] Supabase host-transfer update failed for room "${roomCode}":`, error.message);
+    }
+  } catch (err) {
+    console.error(`[RoomWS] Supabase host-transfer exception for room "${roomCode}":`, err.message);
+  }
+
+  // Notify all connected clients of the authority change.
+  broadcast(roomCode, {
+    type:        'host_changed',
+    newHostId,
+    newHostName: newHostEntry.displayName,
+  });
+
+  // Broadcast the updated player list so all isHost crown icons refresh.
+  broadcast(roomCode, {
+    type:          'room_players',
+    players:       getRoomPlayers(roomCode),
+    isMatchmaking: false, // host transfer only applies to private rooms
+  });
 }
 
 /**
@@ -1139,6 +1342,259 @@ async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
 }
 
 // ---------------------------------------------------------------------------
+// Sub-AC 45d — Rematch bot-fill timer
+// ---------------------------------------------------------------------------
+
+/**
+ * Start the 30-second window for rematch players to reconnect to the room lobby.
+ *
+ * Called by gameSocketServer.handleRematchVote immediately after broadcasting
+ * `rematch_start`.  If all original human players reconnect before the window
+ * expires the timer is cancelled and _executeRematchBotFill() runs immediately
+ * via process.nextTick.  Otherwise it fires after REMATCH_BOT_FILL_TIMEOUT_MS
+ * and absent slots are replaced by bots.
+ *
+ * The pending rematch settings (players, variant, playerCount, inferenceMode)
+ * MUST already be stored in pendingRematchStore before calling this function.
+ *
+ * @param {string} roomCode
+ */
+function startRematchBotFillTimer(roomCode) {
+  const code = roomCode.toUpperCase();
+
+  // Cancel any lingering timer from a previous rematch cycle.
+  cancelRematchBotFillTimer(code);
+
+  const pending = getPendingRematch(code);
+  if (!pending) {
+    console.warn('[RoomWS] startRematchBotFillTimer: no pending rematch settings for room', code);
+    return;
+  }
+
+  const humanPlayers = pending.players.filter((p) => !p.isBot);
+  const clients      = getRoomClientMap(code);
+
+  // ── Fast path: all human players already in the lobby ────────────────────
+  const connectedCount = Array.from(clients.keys()).filter((uid) =>
+    humanPlayers.some((hp) => hp.playerId === uid)
+  ).length;
+
+  if (humanPlayers.length > 0 && connectedCount >= humanPlayers.length) {
+    console.log(
+      `[RoomWS] Rematch room ${code}: all ${humanPlayers.length} human(s) already present — ` +
+      `starting immediately.`
+    );
+    process.nextTick(() => {
+      _executeRematchBotFill(code).catch((err) => {
+        console.error('[RoomWS] _executeRematchBotFill (immediate) error for room', code, ':', err);
+      });
+    });
+    return;
+  }
+
+  // ── Normal path: start 30-second wait ────────────────────────────────────
+  console.log(
+    `[RoomWS] Rematch room ${code}: starting ${REMATCH_BOT_FILL_TIMEOUT_MS / 1000}s bot-fill ` +
+    `window (${connectedCount}/${humanPlayers.length} human(s) present).`
+  );
+
+  const handle = setTimeout(() => {
+    _rematchBotFillTimers.delete(code);
+    const currentClients = getRoomClientMap(code);
+    _executeRematchBotFill(code, currentClients).catch((err) => {
+      console.error('[RoomWS] _executeRematchBotFill (timer) error for room', code, ':', err);
+    });
+  }, REMATCH_BOT_FILL_TIMEOUT_MS);
+
+  if (handle.unref) handle.unref();
+  _rematchBotFillTimers.set(code, handle);
+}
+
+/**
+ * Cancel the rematch bot-fill timer for a room (if one is pending).
+ * Leaves the pendingRematchStore entry intact — the caller is responsible for
+ * clearing that once the game has started (or if the rematch is abandoned).
+ *
+ * @param {string} roomCode
+ */
+function cancelRematchBotFillTimer(roomCode) {
+  const code   = roomCode.toUpperCase();
+  const handle = _rematchBotFillTimers.get(code);
+  if (handle) {
+    clearTimeout(handle);
+    _rematchBotFillTimers.delete(code);
+  }
+}
+
+/**
+ * Execute the rematch bot-fill: check which original human players have
+ * reconnected to the room lobby, fill absent slots with bots, and start the
+ * new game.
+ *
+ * Bot difficulty is "inherited" from the previous game — since all bots
+ * currently use the same default behaviour this is a no-op today, but the
+ * architecture is designed so that a `difficulty` field on each bot seat can
+ * be propagated here once difficulty tiers are introduced.
+ *
+ * @param {string}              roomCode
+ * @param {Map<string, Object>} [clientsOverride] - Optional clients Map (defaults to live roomClients).
+ * @returns {Promise<void>}
+ */
+async function _executeRematchBotFill(roomCode, clientsOverride) {
+  const code = roomCode.toUpperCase();
+
+  // ── Guard: check pending rematch metadata exists ──────────────────────────
+  const pending = getPendingRematch(code);
+  if (!pending) {
+    console.log(`[RoomWS] _executeRematchBotFill: no pending rematch for room ${code} — skipping.`);
+    return;
+  }
+
+  const { players: originalPlayers, variant, playerCount, inferenceMode } = pending;
+
+  // ── Fetch room metadata (id, current status) from Supabase ───────────────
+  const dbRoom = await fetchRoomMetaFull(code);
+  if (!dbRoom) {
+    console.error(`[RoomWS] _executeRematchBotFill: room ${code} not found in DB.`);
+    clearPendingRematch(code);
+    return;
+  }
+
+  // Guard against double-starts (e.g. if createGame was somehow called twice).
+  if (dbRoom.status !== 'waiting') {
+    console.log(
+      `[RoomWS] _executeRematchBotFill: room ${code} is already '${dbRoom.status}' — skipping.`
+    );
+    clearPendingRematch(code);
+    return;
+  }
+
+  // Idempotency: prevent re-entry if the room is already in the starting set.
+  if (_startingRooms.has(code)) {
+    console.log(`[RoomWS] _executeRematchBotFill: room ${code} already starting — skipping.`);
+    return;
+  }
+  _startingRooms.add(code);
+
+  try {
+    const roomId  = dbRoom.id;
+    const clients = clientsOverride != null ? clientsOverride : getRoomClientMap(code);
+
+    // ── Build occupied-seats Map from reconnected human players ───────────────
+    // Only include clients that were part of the original game (by playerId).
+    // Bot slots from the previous game are left unoccupied so the bot filler
+    // can regenerate them with fresh IDs (same or different bot names).
+    const originalHumanIds = new Set(
+      originalPlayers.filter((p) => !p.isBot).map((p) => p.playerId)
+    );
+
+    const occupiedSeats = new Map();
+    for (const [uid, clientEntry] of clients) {
+      if (!originalHumanIds.has(uid)) continue; // Not part of the original game
+
+      // Look up the player's original seat assignment (seatIndex + teamId).
+      const prev = originalPlayers.find((p) => p.playerId === uid);
+      if (!prev) continue;
+
+      occupiedSeats.set(prev.seatIndex, {
+        seatIndex:   prev.seatIndex,
+        playerId:    uid,
+        displayName: clientEntry.displayName,
+        avatarId:    null,
+        teamId:      prev.teamId,    // Preserve original team assignment
+        isBot:       false,
+        isGuest:     clientEntry.isGuest,
+      });
+    }
+
+    // ── Fill absent slots with bots ───────────────────────────────────────────
+    const { allSeats, botSeats, emptySlots } = buildGameSeats(playerCount, occupiedSeats);
+
+    if (emptySlots.length > 0) {
+      console.log(
+        `[RoomWS] Rematch room ${code}: ${emptySlots.length} absent slot(s) ` +
+        `filled with bots at indices: ${emptySlots.join(', ')}`
+      );
+    }
+
+    // ── Create in-memory game state ────────────────────────────────────────────
+    let gameState = null;
+    try {
+      const gameServer = _getGameServer();
+      gameState = gameServer.createGame({
+        roomCode:    code,
+        roomId,
+        variant,
+        playerCount,
+        seats:       allSeats,
+        inferenceMode,
+      });
+    } catch (err) {
+      console.error('[RoomWS] _executeRematchBotFill: createGame failed for room', code, ':', err);
+      broadcast(code, { type: 'error', message: 'Failed to start rematch. Please try again.' });
+      return;
+    }
+
+    // ── Update Supabase room status to 'in_progress' ──────────────────────────
+    try {
+      const supabase = getSupabase();
+      await supabase.from('rooms').update({ status: 'in_progress' }).eq('code', code);
+    } catch (err) {
+      console.error(
+        '[RoomWS] _executeRematchBotFill: Supabase status update failed for room', code, ':', err
+      );
+      // Non-fatal — continue so the in-memory game starts even if the DB update fails.
+    }
+
+    // ── Broadcast lobby-starting to all connected clients ─────────────────────
+    broadcast(code, {
+      type:      'lobby-starting',
+      roomCode:  code,
+      seats:     allSeats,
+      botsAdded: botSeats.map((b) => b.playerId),
+      isRematch: true,
+    });
+
+    console.log(
+      `[RoomWS] Rematch room ${code}: new game started — ` +
+      `${allSeats.length} seats (${botSeats.length} bot(s)), variant=${variant}`
+    );
+
+    // ── Persist game state asynchronously ─────────────────────────────────────
+    if (gameState) {
+      process.nextTick(async () => {
+        try {
+          const { persistGameState } = require('../game/gameState');
+          const supabase = getSupabase();
+          await persistGameState(gameState, supabase);
+          console.log(`[RoomWS] Rematch game state persisted for room ${code}`);
+        } catch (err) {
+          console.error('[RoomWS] _executeRematchBotFill: persistGameState failed for room', code, ':', err);
+        }
+      });
+
+      // ── Schedule first bot turn if opening player is a bot ────────────────
+      const firstPlayer = gameState.players.find(
+        (p) => p.playerId === gameState.currentTurnPlayerId
+      );
+      if (firstPlayer && firstPlayer.isBot) {
+        setTimeout(() => {
+          try {
+            const gameServer = _getGameServer();
+            gameServer.scheduleBotTurnIfNeeded(gameState);
+          } catch (err) {
+            console.error('[RoomWS] _executeRematchBotFill: scheduleBotTurn error:', err);
+          }
+        }, 3000);
+      }
+    }
+  } finally {
+    // Always clear idempotency guard (pending rematch is cleared on success above).
+    _startingRooms.delete(code);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket server factory
 // ---------------------------------------------------------------------------
 
@@ -1307,14 +1763,39 @@ function attachRoomSocketServer(httpServer) {
     const clients = getRoomClientMap(roomCode);
     const playerCount = meta ? meta.playerCount : 6;
 
-    // If reconnecting, preserve existing teamId; otherwise auto-assign.
+    // Team assignment priority:
+    //   1. Existing in-memory entry (reconnect / tab refresh) — preserves current teamId.
+    //   2. Pending rematch entry — restores the player's team from the previous game.
+    //   3. Auto-assign — for fresh joins with no prior context.
     const existingEntry = clients.get(userId);
-    const teamId = existingEntry
-      ? existingEntry.teamId
-      : autoAssignTeam(clients, playerCount);
+    let teamId;
+    if (existingEntry) {
+      teamId = existingEntry.teamId;
+    } else {
+      const pendingRematch = hasPendingRematch(roomCode) ? getPendingRematch(roomCode) : null;
+      const rematchPlayer  = pendingRematch?.players?.find((p) => p.playerId === userId);
+      teamId = rematchPlayer ? rematchPlayer.teamId : autoAssignTeam(clients, playerCount);
+    }
 
     // ── Register client ─────────────────────────────────────────────────────
     clients.set(userId, { ws, userId, displayName, isGuest, isHost, teamId });
+
+    // ── Cancel any pending host-transfer timer for this room ─────────────────
+    // If the ORIGINAL host reconnects before the grace window elapses, cancel
+    // the transfer timer.  If a different (non-host) player joins while a timer
+    // is running, leave the timer intact — only the original host's reconnect
+    // should reset it.
+    if (!isMatchmakingRoom) {
+      const transferEntry = hostTransferTimers.get(roomCode);
+      if (transferEntry && transferEntry.previousHostId === userId) {
+        _cancelHostTransferTimer(roomCode);
+        console.log(
+          `[RoomWS] Original host "${userId}" reconnected — host-disconnect timer cancelled for room "${roomCode}".`,
+        );
+        // Notify all clients that the host is back.
+        broadcast(roomCode, { type: 'host_reconnected', roomCode });
+      }
+    }
 
     // ── Confirm connection to the joining client ────────────────────────────
     ws.send(JSON.stringify({ type: 'connected', userId }));
@@ -1325,6 +1806,20 @@ function attachRoomSocketServer(httpServer) {
       players:       getRoomPlayers(roomCode),
       isMatchmaking: isMatchmakingRoom,
     });
+
+    // ── Notify rematch gathering countdown (Sub-AC 45c) ─────────────────────
+    // If a 30-second post-rematch gathering countdown is active for this room,
+    // notify the game server that this player has rejoined so the countdown
+    // state is updated and re-broadcast to all game-socket connections.
+    try {
+      const gameServer = _getGameServer();
+      if (gameServer && typeof gameServer.notifyRematchPlayerJoined === 'function') {
+        gameServer.notifyRematchPlayerJoined(roomCode, userId);
+      }
+    } catch (err) {
+      // Non-fatal — gathering timer is best-effort
+      console.warn(`[RoomWS] notifyRematchPlayerJoined error for room ${roomCode}:`, err.message);
+    }
 
     // ── Update live games store with current connected player count ──────────
     if (isMatchmakingRoom && liveGamesStore.get(roomCode)) {
@@ -1368,6 +1863,37 @@ function attachRoomSocketServer(httpServer) {
       }
     }
 
+    // ── Sub-AC 45d: Rematch early-start check ────────────────────────────────
+    // If a rematch bot-fill timer is pending and ALL original human players
+    // have now reconnected, cancel the timer and start the game immediately
+    // rather than waiting for the full 30-second window to expire.
+    if (_rematchBotFillTimers.has(roomCode)) {
+      const rematchPending = getPendingRematch(roomCode);
+      if (rematchPending) {
+        const humanPlayers   = rematchPending.players.filter((p) => !p.isBot);
+        const connectedCount = Array.from(clients.keys()).filter((uid) =>
+          humanPlayers.some((hp) => hp.playerId === uid)
+        ).length;
+
+        if (humanPlayers.length > 0 && connectedCount >= humanPlayers.length) {
+          console.log(
+            `[RoomWS] Rematch room ${roomCode}: all ${humanPlayers.length} human(s) reconnected — ` +
+            `starting early.`
+          );
+          cancelRematchBotFillTimer(roomCode);
+          // Capture the current clients snapshot for the bot-fill call.
+          const earlyClients = clients;
+          process.nextTick(() => {
+            _executeRematchBotFill(roomCode, earlyClients).catch((err) => {
+              console.error(
+                '[RoomWS] _executeRematchBotFill (early reconnect) error for room', roomCode, ':', err
+              );
+            });
+          });
+        }
+      }
+    }
+
     // ── Message handler ─────────────────────────────────────────────────────
     ws.on('message', (data) => {
       let message;
@@ -1379,6 +1905,10 @@ function attachRoomSocketServer(httpServer) {
 
       if (!message || typeof message.type !== 'string') return;
 
+      // Read isHost dynamically so host transfers (which mutate the in-memory
+      // entry) are honoured without requiring a reconnect.
+      const liveIsHost = clients.get(userId)?.isHost ?? false;
+
       if (message.type === 'kick_player') {
         // Kick is not allowed in matchmaking rooms (no host).
         if (isMatchmakingRoom) {
@@ -1386,7 +1916,7 @@ function attachRoomSocketServer(httpServer) {
           return;
         }
         handleKickPlayer(
-          { ws, userId, displayName, isHost, roomCode, clients },
+          { ws, userId, displayName, isHost: liveIsHost, roomCode, clients },
           message,
         );
       } else if (message.type === 'change_team') {
@@ -1397,19 +1927,24 @@ function attachRoomSocketServer(httpServer) {
           ws.send(JSON.stringify({ type: 'error', message: 'Team reassignment is not allowed in matchmaking rooms' }));
           return;
         }
-        handleReassignTeam({ ws, userId, isHost, roomCode, clients }, message);
+        handleReassignTeam({ ws, userId, isHost: liveIsHost, roomCode, clients }, message);
       } else if (message.type === 'start_game') {
         // Manual start_game only allowed for private room hosts.
         if (isMatchmakingRoom) {
           ws.send(JSON.stringify({ type: 'error', message: 'Matchmaking rooms start automatically' }));
           return;
         }
-        handleStartGame({ ws, userId, isHost, roomCode, clients });
+        handleStartGame({ ws, userId, isHost: liveIsHost, roomCode, clients });
       }
     });
 
     // ── Disconnect handler ──────────────────────────────────────────────────
     ws.on('close', () => {
+      // Capture host status from in-memory entry before deleting it so that the
+      // host-transfer timer can be started even if liveIsHost is false at this
+      // moment due to a prior transfer.
+      const wasHost = clients.get(userId)?.isHost ?? false;
+
       clients.delete(userId);
 
       if (clients.size > 0) {
@@ -1418,8 +1953,18 @@ function attachRoomSocketServer(httpServer) {
           players:       getRoomPlayers(roomCode),
           isMatchmaking: isMatchmakingRoom,
         });
+
+        // If the disconnected player was the host (private room only), start
+        // a grace-period timer so that a reconnect within the window cancels
+        // the transfer.  Matchmaking rooms have no host concept.
+        if (wasHost && !isMatchmakingRoom) {
+          _startHostTransferTimer(roomCode, userId);
+        }
       } else {
-        // Clean up empty entries and any pending matchmaking timers.
+        // Clean up empty entries and any pending timers.
+        // Cancel any pending host-transfer timer for this room.
+        _cancelHostTransferTimer(roomCode);
+
         // Only clean up roomMeta if there are also no spectators left, so
         // spectators can still receive messages if the last player disconnects.
         roomClients.delete(roomCode);
@@ -1455,6 +2000,14 @@ function _resetRoomState() {
   roomSpectators.clear();
   roomMeta.clear();
   matchmakingTimers.clear();
+  // Cancel and clear any pending host-disconnect timers (module-level and local map).
+  _clearAllHostDisconnectTimers();
+  hostTransferTimers.clear();
+  // Cancel and clear any pending rematch bot-fill timers (Sub-AC 45d).
+  for (const handle of _rematchBotFillTimers.values()) {
+    clearTimeout(handle);
+  }
+  _rematchBotFillTimers.clear();
   // Reset injected game server so tests get a fresh mock on each require cycle.
   _gameSocketServer = null;
 }
@@ -1472,6 +2025,8 @@ module.exports = {
   roomMeta,
   matchmakingTimers,
   MATCHMAKING_LOBBY_TIMEOUT_MS,
+  hostTransferTimers,
+  HOST_RECONNECT_WINDOW_MS,
   getRoomPlayers,
   broadcast,
   broadcastToSpectators,
@@ -1490,4 +2045,14 @@ module.exports = {
   _setGameServer,
   _startingRooms,
   _resetRoomState,
+  // Host transfer helpers (exported for unit testing):
+  _startHostTransferTimer,
+  _cancelHostTransferTimer,
+  _executeHostTransfer,
+  // Sub-AC 45d — Rematch bot-fill timer (exported for unit testing and gameSocketServer):
+  startRematchBotFillTimer,
+  cancelRematchBotFillTimer,
+  _executeRematchBotFill,
+  _rematchBotFillTimers,
+  REMATCH_BOT_FILL_TIMEOUT_MS,
 };

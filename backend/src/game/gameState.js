@@ -382,6 +382,84 @@ async function persistGameState(gs, supabase) {
 }
 
 /**
+ * Mark a room as abandoned in Supabase.
+ *
+ * Called when an in-progress game is cleaned up without ever completing (e.g.
+ * all players disconnected and the reconnect window expired with no activity,
+ * or the game was explicitly dissolved before all 8 half-suits were declared).
+ *
+ * IMPORTANT: stats are NEVER written for abandoned games — updateStats() in
+ * gameSocketServer.js guards `gs.status !== 'completed'` before touching the
+ * user_stats table, and this function is only called when the game is NOT
+ * completing normally.
+ *
+ * Non-fatal: failures are logged but do not propagate.
+ *
+ * @param {string} roomCode
+ * @param {Object} supabase - Supabase client (service-role)
+ * @returns {Promise<void>}
+ */
+async function markRoomAbandoned(roomCode, supabase) {
+  try {
+    const { error } = await supabase
+      .from('rooms')
+      .update({ status: 'abandoned' })
+      .eq('code', roomCode)
+      .in('status', ['in_progress', 'starting', 'waiting']);
+
+    if (error) {
+      console.warn(
+        `[gameState] markRoomAbandoned: failed to update room ${roomCode}:`,
+        error.message
+      );
+    } else {
+      console.log(`[gameState] Room ${roomCode} marked as abandoned`);
+    }
+  } catch (err) {
+    console.error('[gameState] markRoomAbandoned error:', err);
+  }
+}
+
+/**
+ * Sweep all stale 'in_progress' rooms in Supabase and mark them 'abandoned'.
+ *
+ * Intended to be called once at server startup so rooms that were left in
+ * 'in_progress' by a previous server instance (crash / graceful restart) are
+ * correctly classified.  Only rooms whose updated_at is older than
+ * `staleAfterMs` are touched — this preserves any room that was updated
+ * very recently and whose players might still be reconnecting.
+ *
+ * Uses the mark_stale_games_abandoned() Postgres function added by migration
+ * 009 so the sweep is a single round-trip to the DB.
+ *
+ * @param {Object} supabase - Supabase client (service-role)
+ * @param {number} [staleAfterMs=7200000] - Rooms idle longer than this are
+ *   considered abandoned (default: 2 hours)
+ * @returns {Promise<void>}
+ */
+async function markStaleGamesAbandoned(supabase, staleAfterMs = 2 * 60 * 60 * 1000) {
+  try {
+    // Convert ms to a Postgres interval string (e.g. '7200 seconds')
+    const staleAfterSeconds = Math.floor(staleAfterMs / 1000);
+    const { data, error } = await supabase
+      .rpc('mark_stale_games_abandoned', {
+        stale_after: `${staleAfterSeconds} seconds`,
+      });
+
+    if (error) {
+      console.warn('[gameState] markStaleGamesAbandoned RPC error:', error.message);
+    } else {
+      const count = typeof data === 'number' ? data : 0;
+      if (count > 0) {
+        console.log(`[gameState] Startup cleanup: marked ${count} stale in_progress room(s) as abandoned`);
+      }
+    }
+  } catch (err) {
+    console.error('[gameState] markStaleGamesAbandoned error:', err);
+  }
+}
+
+/**
  * Restore a game state from a Supabase snapshot.
  * Called on server restart / crash recovery.
  *
@@ -432,4 +510,7 @@ module.exports = {
   serializeForPlayer,
   persistGameState,
   restoreGameState,
+  // AC 52: abandoned-game cleanup
+  markRoomAbandoned,
+  markStaleGamesAbandoned,
 };

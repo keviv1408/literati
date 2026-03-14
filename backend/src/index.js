@@ -11,6 +11,7 @@ const authRouter = require('./routes/auth');
 const matchmakingRouter = require('./routes/matchmaking');
 const statsRouter = require('./routes/stats');
 const liveGamesRouter = require('./routes/liveGames');
+const profileRouter = require('./routes/profile');
 const { startCleanupTimer, stopCleanupTimer } = require('./sessions/guestSessionStore');
 const {
   startQueueCleanupTimer,
@@ -21,6 +22,8 @@ const { attachRoomSocketServer } = require('./ws/roomSocketServer');
 const { attachGameSocketServer } = require('./game/gameSocketServer');
 const { attachLiveGamesSocketServer } = require('./ws/liveGamesSocketServer');
 const { initSocket } = require('./socket/server');
+const { markStaleGamesAbandoned } = require('./game/gameState');
+const { getSupabaseClient } = require('./db/supabase');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -71,6 +74,7 @@ app.use('/api/rooms', roomCreationLimiter, roomsRouter);
 app.use('/api/matchmaking', matchmakingRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/live-games', liveGamesRouter);
+app.use('/api/profile', profileRouter);
 
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {
@@ -121,6 +125,14 @@ if (require.main === module) {
     console.log(`Literati backend listening on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log('WebSocket (ws) and Socket.io servers active on the same port');
+
+    // AC 52: On startup, sweep any rooms left in 'in_progress' from a previous
+    // server instance (crash / restart) and mark them 'abandoned' in Supabase.
+    // Only rooms idle for ≥ 2 hours are touched — fresher rooms may have
+    // players who are still in their 60-second reconnect window.
+    markStaleGamesAbandoned(getSupabaseClient()).catch((err) => {
+      console.error('[startup] markStaleGamesAbandoned failed:', err.message);
+    });
   });
 
   // Graceful shutdown: stop the cleanup timer and close the HTTP server.

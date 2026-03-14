@@ -741,7 +741,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
   // ── Create in-memory game state ───────────────────────────────────────────
   let gameState;
   try {
-    const { createGame } = require('../game/gameSocketServer');
+    const { createGame, clearPendingRematchSettings } = require('../game/gameSocketServer');
     gameState = createGame({
       roomCode,
       roomId:      room.id,
@@ -749,6 +749,9 @@ router.post('/:code/start', requireAuth, async (req, res) => {
       playerCount,
       seats:       allSeats,
     });
+    // Sub-AC 45b: clear any stored pending rematch snapshot now that the new
+    // game has been created — prevents stale data bleeding into future rounds.
+    clearPendingRematchSettings(roomCode);
   } catch (err) {
     console.error('[rooms/start] createGame error for room', roomCode, ':', err);
     return res.status(500).json({ error: 'Failed to initialise game' });
