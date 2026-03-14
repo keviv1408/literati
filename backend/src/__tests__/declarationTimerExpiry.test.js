@@ -193,11 +193,14 @@ describe('applyForcedFailedDeclaration', () => {
     expect(gs.tiebreakerWinner).toBe(2); // p1 is team1, opponent is team2
   });
 
-  it('7. declarer keeps their turn if they still have cards', () => {
+  it('7. turn passes clockwise to next eligible opponent after forced failure', () => {
     const gs = buildGame({ currentTurnPlayerId: 'p1' });
-    // p1 still has high_s cards after low_s is removed
+    // p1 (team1) still has high_s cards after low_s is removed
+    // Per spec: "After failed declaration, turn auto-passes clockwise to next eligible opponent"
     applyForcedFailedDeclaration(gs, 'p1', 'low_s');
-    expect(gs.currentTurnPlayerId).toBe('p1');
+    const newTurnPlayer = gs.players.find((p) => p.playerId === gs.currentTurnPlayerId);
+    expect(newTurnPlayer).toBeDefined();
+    expect(newTurnPlayer.teamId).toBe(2); // turn passes to opponent team
   });
 
   it('7b. turn passes to a teammate if declarer has no cards left', () => {
@@ -245,6 +248,7 @@ describe('executeTimedOutTurn — declaration timer expiry (AC 24)', () => {
   let executeTimedOutTurn, cancelTurnTimer;
   let setPartialSelection;
   let _declarationSelections, _reconnectWindows;
+  let cancelBotDeclarationTimer, BOT_DECLARATION_TAKEOVER_MS;
 
   beforeAll(() => {
     ({
