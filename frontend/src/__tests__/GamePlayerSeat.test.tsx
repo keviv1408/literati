@@ -698,3 +698,336 @@ describe('GamePlayerSeat — aria-label composition', () => {
     expect(label).not.toContain('current turn');
   });
 });
+
+// ── Eliminated player (Sub-AC 27b) ────────────────────────────────────────────
+
+describe('GamePlayerSeat — eliminated player', () => {
+  it('renders the eliminated badge when isEliminated is true', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true, cardCount: 0 })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    expect(screen.getByTestId('eliminated-badge')).toBeInTheDocument();
+  });
+
+  it('does NOT render the eliminated badge when isEliminated is false', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: false })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    expect(screen.queryByTestId('eliminated-badge')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render the eliminated badge when isEliminated is undefined', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    expect(screen.queryByTestId('eliminated-badge')).not.toBeInTheDocument();
+  });
+
+  it('sets data-eliminated="true" on the seat when isEliminated is true', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true, cardCount: 0 })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    expect(screen.getByTestId('game-player-seat')).toHaveAttribute('data-eliminated', 'true');
+  });
+
+  it('does NOT set data-eliminated when isEliminated is false', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: false })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    expect(screen.getByTestId('game-player-seat')).not.toHaveAttribute('data-eliminated');
+  });
+
+  it('includes ", eliminated" in aria-label when isEliminated is true', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true, displayName: 'Alice', cardCount: 0 })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    const label = screen.getByTestId('game-player-seat').getAttribute('aria-label') ?? '';
+    expect(label).toContain(', eliminated');
+  });
+
+  it('does NOT show the turn ring for an eliminated player even if it is their turn', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true, playerId: 'p1', cardCount: 0 })}
+        myPlayerId="other"
+        currentTurnPlayerId="p1"
+      />,
+    );
+    // Turn ring should not be rendered because the player is eliminated
+    expect(screen.queryByTestId('turn-ring')).not.toBeInTheDocument();
+  });
+
+  it('applies pointer-events-none to the seat container when isEliminated is true', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true, cardCount: 0 })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).toContain('pointer-events-none');
+  });
+
+  it('does NOT apply pointer-events-none when isEliminated is false', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: false })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).not.toContain('pointer-events-none');
+  });
+
+  it('does NOT apply pointer-events-none when isEliminated is undefined', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).not.toContain('pointer-events-none');
+  });
+
+  it('seat remains in the DOM (visible) when isEliminated is true', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true, cardCount: 0, displayName: 'Alice' })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    // Seat must be present in the DOM (not unmounted/hidden)
+    expect(screen.getByTestId('game-player-seat')).toBeInTheDocument();
+    // Name is still visible
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+  });
+
+  it('applies opacity-50 and grayscale to dim the eliminated seat', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true, cardCount: 0 })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).toContain('opacity-50');
+    expect(seat.className).toContain('grayscale');
+  });
+
+  it('does NOT apply opacity-50 or grayscale for a non-eliminated player', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: false })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).not.toContain('opacity-50');
+    expect(seat.className).not.toContain('grayscale');
+  });
+});
+
+// ── Sub-AC 28b: post-declaration seat highlight ─────────────────────────────
+
+describe('GamePlayerSeat — Sub-AC 28b highlight ring', () => {
+  it('renders a cyan highlight ring when isHighlighted=true', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+      />,
+    );
+    expect(screen.getByTestId('highlight-ring')).toBeInTheDocument();
+  });
+
+  it('does NOT render a highlight ring when isHighlighted=false', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+      />,
+    );
+    expect(screen.queryByTestId('highlight-ring')).toBeNull();
+  });
+
+  it('does NOT render a highlight ring by default (isHighlighted omitted)', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    expect(screen.queryByTestId('highlight-ring')).toBeNull();
+  });
+
+  it('sets data-highlighted="true" on the seat element when highlighted', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.getAttribute('data-highlighted')).toBe('true');
+  });
+
+  it('does not set data-highlighted on the seat when not highlighted', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.getAttribute('data-highlighted')).toBeNull();
+  });
+
+  it('renders with role="button" and tabIndex=0 when highlighted with click handler', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.getAttribute('role')).toBe('button');
+    expect(seat.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('calls onHighlightClick when the highlighted seat is clicked', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    screen.getByTestId('game-player-seat').click();
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT call onHighlightClick when isHighlighted=false', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+        onHighlightClick={handleClick}
+      />,
+    );
+    screen.getByTestId('game-player-seat').click();
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('does NOT show highlight ring when player is eliminated even if isHighlighted=true', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+      />,
+    );
+    // Eliminated seats suppress the highlight
+    expect(screen.queryByTestId('highlight-ring')).toBeNull();
+  });
+
+  it('includes "eligible for next turn" in aria-label when highlighted and not eliminated', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ displayName: 'Bob' })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.getAttribute('aria-label')).toContain('eligible for next turn');
+  });
+
+  it('does not include "eligible for next turn" in aria-label when not highlighted', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ displayName: 'Bob' })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.getAttribute('aria-label')).not.toContain('eligible for next turn');
+  });
+});

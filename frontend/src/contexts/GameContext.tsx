@@ -81,6 +81,18 @@ export interface GameContextValue {
   lastDeclareResult: DeclarationResultPayload | null;
 
   /**
+   * Sub-AC 28a: IDs of all non-eliminated players with at least one card
+   * remaining, as reported by the server in the most recent `declaration_result`
+   * message.  Empty array until the first declaration.
+   *
+   * Components can use this to:
+   *   • Dim eliminated-player seats immediately after a declaration.
+   *   • Power a "who can receive the next turn?" indicator on the table.
+   *   • Drive any animation that highlights still-active participants.
+   */
+  eligibleNextTurnPlayerIds: string[];
+
+  /**
    * Live declaration progress from another player's in-progress DeclareModal.
    * Non-null while the declarant is assigning cards (Step 2).
    * Cleared when declaration_result arrives or declarant cancels.

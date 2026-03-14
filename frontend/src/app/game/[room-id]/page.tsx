@@ -50,7 +50,7 @@ import HalfSuitGrid from '@/components/HalfSuitGrid';
 import { ConnectedScoreboardPanel } from '@/components/ScoreboardPanel';
 import MuteToggle from '@/components/MuteToggle';
 import type { Room } from '@/types/room';
-import type { CardId, HalfSuitId, GameOverPayload, RematchStartPayload } from '@/types/game';
+import type { CardId, HalfSuitId, GameOverPayload, RematchStartPayload, RoomDissolvedPayload } from '@/types/game';
 import type { PlayerInference } from '@/hooks/useCardInference';
 import { halfSuitLabel, SUIT_SYMBOLS } from '@/types/game';
 
@@ -189,11 +189,14 @@ export default function GamePage({ params }: PageProps) {
   const {
     wsStatus, myPlayerId, myHand, players, gameState, variant, playerCount,
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
-    botTakeover, rematchVote, rematchDeclined,
-    inferenceMode, sendAsk, sendDeclare, sendRematchVote, sendToggleInference,
+    botTakeover, rematchVote, rematchDeclined, roomDissolved,
+    inferenceMode, sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate, sendToggleInference,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting, sendGameAdvance,
     declareProgress,
     eliminationPrompt, sendChooseTurnRecipient,
+    eligibleNextTurnPlayerIds,
+    postDeclarationHighlight, sendChooseNextTurn,
+    postDeclarationTimer,
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
@@ -207,10 +210,42 @@ export default function GamePage({ params }: PageProps) {
     },
   });
 
+  // ── Sub-AC 45a: Host detection for private-room Rematch button ───────────
+  //
+  // Only registered users can be hosts (guests cannot create rooms).
+  // A player is the host when:
+  //   1. Their Supabase user ID matches the room's host_user_id.
+  //   2. The room is NOT a matchmaking room (private rooms only).
+  //
+  // This flag gates the "🔄 Rematch" button shown only at game-end.
+  const isHostOfPrivateRoom =
+    !!(authSession?.user?.id &&
+       room &&
+       authSession.user.id === room.host_user_id &&
+       !room.is_matchmaking);
+
   // ── Failed Declaration Reveal visibility guard (Sub-AC 26b) ───────────────
   // Computed here — after useGameSocket — because it depends on `declarationFailed`
   // which is destructured from the hook above.
   const showFailedReveal = Boolean(declarationFailed && !failedRevealDismissed);
+
+  // ── Audio sound callbacks ─────────────────────────────────────────────────
+  //
+  // `useAudio` provides stable callbacks for all game-event sound cues.
+  // Called here (before the game-event effects below) so the callbacks are
+  // in scope when the effects' dep arrays are evaluated.
+  //
+  // Mute is enforced inside audio.ts — the hook always delegates without
+  // duplicating the guard.
+  const {
+    muted,
+    toggleMute,
+    playDealSound,
+    playAskSuccess,
+    playAskFail,
+    playDeclarationSuccess,
+    playDeclarationFail,
+  } = useAudio();
 
   useEffect(() => {
     if (lastAskResult?.lastMove) {
@@ -270,6 +305,13 @@ export default function GamePage({ params }: PageProps) {
 
   useEffect(() => {
     if (lastDeclareResult?.lastMove) {
+      // ── Declaration result sound: correct vs incorrect ───────────────────
+      if (lastDeclareResult.correct) {
+        playDeclarationSuccess();
+      } else {
+        playDeclarationFail();
+      }
+
       setLastResultMsg(lastDeclareResult.lastMove);
       if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
       lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5000);
@@ -291,8 +333,7 @@ export default function GamePage({ params }: PageProps) {
       setShowDeclare(false);
       setSelectedCard(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastDeclareResult]);
+  }, [lastDeclareResult, playDeclarationSuccess, playDeclarationFail]);
 
   // ── Reset FailedDeclarationReveal dismissed flag on new failure (Sub-AC 26b) ─
   // When a fresh declarationFailed payload arrives (a new failed declaration
@@ -320,7 +361,7 @@ export default function GamePage({ params }: PageProps) {
       // ── Deal sound: play once when cards first arrive ───────────────────
       playDealSound();
     }
-  }, [myHand.length]);
+  }, [myHand.length, playDealSound]);
 
   // Redirect to room lobby when rematch is accepted
   useEffect(() => {
@@ -402,18 +443,6 @@ export default function GamePage({ params }: PageProps) {
     variant,
   });
 
-  // ── Audio + turn indicator ────────────────────────────────────────────────
-  // `useAudio` provides the mute toggle and all game-event sound callbacks.
-  const {
-    muted,
-    toggleMute,
-    playDealSound,
-    playAskSuccess,
-    playAskFail,
-    playDeclarationSuccess,
-    playDeclarationFail,
-  } = useAudio();
-
   // `useTurnIndicator` manages the glow + audio chime loop:
   //  • plays a chime on the false → true transition (turn starts)
   //  • re-fires the chime every 8 s while awaiting action
@@ -426,6 +455,34 @@ export default function GamePage({ params }: PageProps) {
     : null;
   const team1Players = players.filter((p) => p.teamId === 1);
   const team2Players = players.filter((p) => p.teamId === 2);
+
+  // ── Sub-AC 28b: Post-declaration seat highlight ───────────────────────────
+  //
+  // After a correct declaration, `postDeclarationHighlight` carries the set of
+  // same-team player IDs eligible to receive the turn.  All clients see the
+  // cyan seat rings (informational); only the current turn player gets a click
+  // handler to redirect the turn via `choose_next_turn`.
+  const highlightedPlayerIds = postDeclarationHighlight
+    ? new Set(postDeclarationHighlight.eligibleSameTeamIds)
+    : undefined;
+
+  // Only the current turn player (typically the declarant) can click a seat.
+  // Other clients see the highlight as read-only visual feedback.
+  const handleChooseNextTurnSeat = useCallback(
+    (chosenPlayerId: string) => {
+      sendChooseNextTurn(chosenPlayerId);
+    },
+    [sendChooseNextTurn],
+  );
+
+  // Pass the click handler only when: highlights are active AND the local
+  // player is the one with the current turn (i.e., the declarant).
+  const seatClickHandler =
+    highlightedPlayerIds &&
+    isMyTurn &&
+    gameState?.currentTurnPlayerId === myPlayerId
+      ? handleChooseNextTurnSeat
+      : undefined;
 
   function handleAsk(targetId: string, cardId: CardId) {
     setActionLoading(true);
@@ -492,20 +549,61 @@ export default function GamePage({ params }: PageProps) {
           scores={scores}
           declaredSuits={gameState?.declaredSuits ?? []}
           myTeamId={myTeamId}
+          players={players}
           variant={VARIANT_LABELS[room.card_removal_variant]}
           roomCode={room.code}
           testId="game-over-screen"
         />
 
-        {/* Rematch voting panel — only shown to actual players (not spectators) */}
-        {myPlayerId && (rematchVote || rematchDeclined) && (
-          <RematchVotePanel
-            rematchVote={rematchVote}
-            rematchDeclined={rematchDeclined}
-            myPlayerId={myPlayerId}
-            onVote={sendRematchVote}
-            voteStartedAt={voteStartedAt}
-          />
+        {/* Room dissolved notice — shown when the server permanently closes the room.
+         *  Takes priority over the vote panel; once dissolved the vote is moot.
+         */}
+        {roomDissolved ? (
+          <div
+            className="flex flex-col items-center gap-3 px-4 py-4 rounded-2xl border border-slate-700/60 bg-slate-800/70 backdrop-blur-sm w-full max-w-sm text-center"
+            data-testid="room-dissolved-notice"
+            role="status"
+            aria-label="Room dissolved"
+          >
+            <span className="text-3xl" aria-hidden="true">🏚️</span>
+            <p className="text-sm font-semibold text-slate-200">Room dissolved</p>
+            <p className="text-xs text-slate-400">
+              {roomDissolved.reason === 'timeout'
+                ? 'The rematch vote timed out and the room has been closed.'
+                : 'The majority voted no and the room has been closed.'}
+            </p>
+          </div>
+        ) : (
+          /* Rematch voting panel — only shown to actual players (not spectators) */
+          myPlayerId && (rematchVote || rematchDeclined) && (
+            <RematchVotePanel
+              rematchVote={rematchVote}
+              rematchDeclined={rematchDeclined}
+              myPlayerId={myPlayerId}
+              onVote={sendRematchVote}
+              voteStartedAt={voteStartedAt}
+            />
+          )
+        )}
+
+        {/* ── Sub-AC 45a: Host Rematch button (private rooms only) ──────────────
+         *  Visible only to the registered host of a non-matchmaking room.
+         *  Clicking sends `rematch_initiate` to the server; the server validates
+         *  host identity via DB lookup and broadcasts `rematch_start` to all
+         *  clients, bypassing the vote window.
+         *
+         *  Not shown when roomDissolved is set (room is permanently closed) or
+         *  when rematchStarted is true (redirect is already in flight).
+         */}
+        {isHostOfPrivateRoom && !roomDissolved && (
+          <button
+            onClick={() => roomCode && sendRematchInitiate(roomCode)}
+            className="py-3 px-6 rounded-xl font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+            data-testid="host-rematch-button"
+            aria-label="Initiate rematch as host"
+          >
+            🔄 Rematch
+          </button>
         )}
 
         <button
@@ -544,6 +642,7 @@ export default function GamePage({ params }: PageProps) {
         lastDeclareResult={lastDeclareResult}
         declareProgress={declareProgress ?? null}
         declarationFailed={declarationFailed}
+        postDeclarationTimer={postDeclarationTimer}
         roomCode={room.code}
         cardRemovalVariant={room.card_removal_variant}
         gamePlayerCount={room.player_count}
@@ -560,6 +659,7 @@ export default function GamePage({ params }: PageProps) {
       wsStatus, myPlayerId, myHand, players, gameState, variant, playerCount,
       lastAskResult, lastDeclareResult, turnTimer, botTakeover, rematchVote, rematchDeclined,
       inferenceMode, sendAsk, sendDeclare, sendRematchVote, sendToggleInference,
+      eligibleNextTurnPlayerIds,
       error: wsError,
     }}>
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden" data-testid="game-view">
@@ -642,6 +742,25 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
 
+      {/* ── Sub-AC 28c: Post-declaration turn-selection countdown ───────────
+       *  Shown to ALL clients for 30 seconds after a human correct declaration
+       *  while the declaring team chooses who takes the next turn.
+       *  On expiry the server auto-selects a random eligible player.
+       */}
+      {postDeclarationTimer && gameState && (
+        <CountdownTimer
+          key={postDeclarationTimer.expiresAt}
+          expiresAt={postDeclarationTimer.expiresAt}
+          durationMs={postDeclarationTimer.durationMs}
+          isMyTimer={
+            postDeclarationTimer.eligiblePlayers.includes(myPlayerId ?? '') ||
+            myPlayerId === postDeclarationTimer.declarerId
+          }
+          label="Choose next turn"
+          data-testid="post-declaration-timer"
+        />
+      )}
+
       {/*
        * Bot-takeover banner (Sub-AC 2 of AC 39)
        *
@@ -696,56 +815,77 @@ export default function GamePage({ params }: PageProps) {
         </div>
       )}
 
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden">
+      <main className="relative z-10 flex-1 flex flex-row items-start px-3 py-3 gap-3 min-h-0 overflow-hidden">
+
         {/*
-         * Half-suit scoreboard grid (Sub-AC 34b).
+         * Side scoreboard panel (Sub-AC 34a).
          *
-         * Always rendered (even when 0 suits are declared) so players can
-         * see all 8 slots and track progress throughout the game.
-         * Declared slots light up in the winning team's color; unclaimed
-         * slots remain neutral.
+         * Displays each team's name and current book count (0–8) with
+         * per-team declared-suit badges.  Hidden on mobile (the compact
+         * header score display serves mobile); shown as a fixed-width side
+         * column on large screens (≥1024 px).  The `scoreFlash` prop drives
+         * the yellow-highlight animation when a team just scored a book.
          */}
-        {gameState && (
-          <div className="w-full max-w-2xl" aria-label="Half-suit scoreboard" data-testid="half-suit-scoreboard-panel">
-            <HalfSuitGrid
-              declaredSuits={gameState.declaredSuits}
-              className="justify-items-center"
+        <div className="hidden lg:flex flex-col w-48 xl:w-56 shrink-0 pt-1" data-testid="side-scoreboard-column">
+          <ConnectedScoreboardPanel myTeamId={myTeamId} scoreFlash={scoreFlash} />
+        </div>
+
+        {/* ── Central game content ──────────────────────────────────────── */}
+        <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden">
+          {/*
+           * Half-suit scoreboard grid (Sub-AC 34b).
+           *
+           * Always rendered (even when 0 suits are declared) so players can
+           * see all 8 slots and track progress throughout the game.
+           * Declared slots light up in the winning team's color; unclaimed
+           * slots remain neutral.
+           */}
+          {gameState && (
+            <div className="w-full max-w-2xl" aria-label="Half-suit scoreboard" data-testid="half-suit-scoreboard-panel">
+              <HalfSuitGrid
+                declaredSuits={gameState.declaredSuits}
+                className="justify-items-center"
+              />
+            </div>
+          )}
+
+          <div className="w-full max-w-2xl" aria-label="Team 2 players" data-testid="team2-row">
+            <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
+            <PlayerRow
+              players={team2Players}
+              myPlayerId={myPlayerId}
+              currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+              playerCount={effectivePlayerCount}
+              indicatorActive={indicatorActive}
+              inferenceActive={inferenceMode}
+              cardInferences={cardInferences}
+              getPlayerSharePercent={getPlayerSharePercent}
+              highlightedPlayerIds={highlightedPlayerIds}
+              onSeatClick={seatClickHandler}
             />
           </div>
-        )}
 
-        <div className="w-full max-w-2xl" aria-label="Team 2 players" data-testid="team2-row">
-          <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
-          <PlayerRow
-            players={team2Players}
-            myPlayerId={myPlayerId}
-            currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-            playerCount={effectivePlayerCount}
-            indicatorActive={indicatorActive}
-            inferenceActive={inferenceMode}
-            cardInferences={cardInferences}
-            getPlayerSharePercent={getPlayerSharePercent}
-          />
-        </div>
-
-        <div className="relative flex items-center justify-center w-full max-w-xs" aria-hidden="true" data-testid="game-table-center">
-          <div className="w-full aspect-[2/1] rounded-full border-2 border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center shadow-inner shadow-black/40">
-            <div className="text-center"><div className="text-2xl mb-0.5">🃏</div><p className="text-[10px] text-slate-500">{effectivePlayerCount === 6 ? '3v3' : '4v4'}</p></div>
+          <div className="relative flex items-center justify-center w-full max-w-xs" aria-hidden="true" data-testid="game-table-center">
+            <div className="w-full aspect-[2/1] rounded-full border-2 border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center shadow-inner shadow-black/40">
+              <div className="text-center"><div className="text-2xl mb-0.5">🃏</div><p className="text-[10px] text-slate-500">{effectivePlayerCount === 6 ? '3v3' : '4v4'}</p></div>
+            </div>
           </div>
-        </div>
 
-        <div className="w-full max-w-2xl" aria-label="Team 1 players" data-testid="team1-row">
-          <PlayerRow
-            players={team1Players}
-            myPlayerId={myPlayerId}
-            currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-            playerCount={effectivePlayerCount}
-            indicatorActive={indicatorActive}
-            inferenceActive={inferenceMode}
-            cardInferences={cardInferences}
-            getPlayerSharePercent={getPlayerSharePercent}
-          />
-          <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
+          <div className="w-full max-w-2xl" aria-label="Team 1 players" data-testid="team1-row">
+            <PlayerRow
+              players={team1Players}
+              myPlayerId={myPlayerId}
+              currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+              playerCount={effectivePlayerCount}
+              indicatorActive={indicatorActive}
+              inferenceActive={inferenceMode}
+              cardInferences={cardInferences}
+              getPlayerSharePercent={getPlayerSharePercent}
+              highlightedPlayerIds={highlightedPlayerIds}
+              onSeatClick={seatClickHandler}
+            />
+            <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
+          </div>
         </div>
       </main>
 
@@ -983,6 +1123,8 @@ function PlayerRow({
   inferenceActive = false,
   cardInferences = {},
   getPlayerSharePercent,
+  highlightedPlayerIds,
+  onSeatClick,
 }: {
   players: import('@/types/game').GamePlayer[];
   myPlayerId: string | null;
@@ -996,6 +1138,18 @@ function PlayerRow({
   cardInferences?: Record<string, PlayerInference>;
   /** Returns uniform-distribution probability % for a player (or undefined if inactive). */
   getPlayerSharePercent?: (player: import('@/types/game').GamePlayer) => number;
+  /**
+   * Sub-AC 28b: Set of player IDs whose seats should show a cyan highlight
+   * ring (eligible to receive the turn after a correct declaration).
+   * When undefined, no seats are highlighted.
+   */
+  highlightedPlayerIds?: Set<string>;
+  /**
+   * Sub-AC 28b: Called when the local player clicks a highlighted seat.
+   * Receives the playerId of the tapped seat.  Only provided to the
+   * current turn player (the declarant); other players pass undefined.
+   */
+  onSeatClick?: (playerId: string) => void;
 }) {
   const seatsPerTeam = Math.floor(playerCount / 2);
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
@@ -1011,6 +1165,9 @@ function PlayerRow({
           ? getPlayerSharePercent(player)
           : undefined;
 
+        // Sub-AC 28b: determine whether this seat should glow cyan
+        const isHl = Boolean(player && highlightedPlayerIds?.has(player.playerId));
+
         return (
           <GamePlayerSeat
             key={player ? player.playerId : `empty-${i}`}
@@ -1024,6 +1181,13 @@ function PlayerRow({
             isActiveTurn={player?.playerId === myPlayerId ? indicatorActive : undefined}
             inference={playerInference}
             inferencePercent={sharePercent}
+            // Sub-AC 28b: highlight eligible seats and wire click handler
+            isHighlighted={isHl}
+            onHighlightClick={
+              isHl && onSeatClick && player
+                ? () => onSeatClick(player.playerId)
+                : undefined
+            }
           />
         );
       })}

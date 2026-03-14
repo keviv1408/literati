@@ -133,6 +133,24 @@ export interface GamePlayerSeatProps {
    */
   inferencePercent?: number;
 
+  /**
+   * Sub-AC 28b: When true, renders a cyan highlight ring around this seat
+   * to indicate the player is eligible to receive the turn after a correct
+   * declaration.  Set on same-team players with cards remaining.
+   */
+  isHighlighted?: boolean;
+
+  /**
+   * Sub-AC 28b: Click handler for the highlight selection flow.
+   *
+   * When `isHighlighted` is true and this prop is provided, the seat becomes
+   * clickable (cursor-pointer, hover scale) and calling this handler emits
+   * `choose_next_turn` to the server.  Only the current turn player (the
+   * declarant) should receive a non-undefined handler; all other clients see
+   * the highlight as read-only informational feedback.
+   */
+  onHighlightClick?: () => void;
+
   /** Extra Tailwind classes forwarded to the outermost element. */
   className?: string;
 }
@@ -169,6 +187,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   isActiveTurn,
   inference,
   inferencePercent,
+  isHighlighted = false,
+  onHighlightClick,
   className = '',
 }) => {
   // ── Empty seat ──────────────────────────────────────────────────────────────
@@ -218,20 +238,28 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   // Has any inference data to display?
   const hasInference = inference !== undefined && Object.keys(inference).length > 0;
 
+  // Sub-AC 28b: clickable only when highlighted AND a handler is provided
+  const isClickable = isHighlighted && Boolean(onHighlightClick) && !isEliminated;
+
   // ── Occupied seat ───────────────────────────────────────────────────────────
   return (
     <div
       className={[
         'relative w-[6.5rem] flex flex-col items-center gap-1',
         'py-2 px-2 rounded-xl border',
+        'transition-transform duration-100',
         // Eliminated players are visually dimmed and cannot act
-        isEliminated ? 'opacity-50 grayscale' : '',
+        isEliminated ? 'opacity-50 grayscale pointer-events-none' : '',
         // Scale up slightly and elevate when it's this player's turn
         !isEliminated && isTurn ? 'scale-110 z-10' : '',
         // Active-turn ring (layout layer — amber offset ring on the container)
         !isEliminated && isTurn ? 'ring-2 ring-amber-400/80 ring-offset-1 ring-offset-slate-950' : '',
         // Active-turn glow animation (box-shadow keyframe from globals.css)
         !isEliminated && isTurn ? 'animate-seat-glow' : '',
+        // Sub-AC 28b: eligible-for-turn highlight (cyan ring, raised z-index)
+        isHighlighted && !isEliminated ? 'ring-2 ring-cyan-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
+        // Sub-AC 28b: clickable seats get pointer cursor and hover scale
+        isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : '',
         // Current user always gets an emerald highlight
         isMe
           ? 'border-emerald-500/70 bg-emerald-900/40'
@@ -240,14 +268,18 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       ]
         .filter(Boolean)
         .join(' ')}
-      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}`}
-      role="listitem"
+      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}${isHighlighted && !isEliminated ? ', eligible for next turn' : ''}`}
+      role={isClickable ? 'button' : 'listitem'}
+      tabIndex={isClickable ? 0 : undefined}
+      onClick={isClickable ? onHighlightClick : undefined}
+      onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onHighlightClick?.(); } } : undefined}
       data-testid="game-player-seat"
       data-seat-index={seatIndex}
       data-player-id={playerId}
       data-team={teamId}
       data-active-turn={isTurn ? 'true' : undefined}
       data-eliminated={isEliminated ? 'true' : undefined}
+      data-highlighted={isHighlighted && !isEliminated ? 'true' : undefined}
     >
       {/* ── Current-turn pulsing ring ─────────────────────────────── */}
       {isTurn && !isEliminated && (
@@ -255,6 +287,18 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           className="absolute inset-0 rounded-xl border-2 border-amber-400/80 animate-pulse pointer-events-none"
           aria-hidden="true"
           data-testid="turn-ring"
+        />
+      )}
+
+      {/* ── Sub-AC 28b: eligible-for-turn pulsing highlight ring ─── */}
+      {/* Shown when the seat belongs to a same-team player who can   */}
+      {/* receive the turn after a correct declaration.  Cyan/teal    */}
+      {/* to distinguish from the amber active-turn ring.             */}
+      {isHighlighted && !isEliminated && (
+        <span
+          className="absolute inset-0 rounded-xl border-2 border-cyan-400/80 animate-pulse pointer-events-none"
+          aria-hidden="true"
+          data-testid="highlight-ring"
         />
       )}
 

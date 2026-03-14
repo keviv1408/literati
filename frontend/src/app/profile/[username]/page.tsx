@@ -2,15 +2,15 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getPublicProfile, type PublicProfile, ApiError } from '@/lib/api';
+import { getProfileByUsername, type PublicProfile, ApiError } from '@/lib/api';
 
 interface Props {
-  params: Promise<{ userId: string }>;
+  params: Promise<{ username: string }>;
 }
 
 export default function ProfilePage({ params }: Props) {
   const router = useRouter();
-  const { userId } = use(params);
+  const { username } = use(params);
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -18,8 +18,8 @@ export default function ProfilePage({ params }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId) return;
-    getPublicProfile(userId)
+    if (!username) return;
+    getProfileByUsername(username)
       .then((res) => setProfile(res.profile))
       .catch((err) => {
         if (err instanceof ApiError && err.status === 404) {
@@ -31,7 +31,7 @@ export default function ProfilePage({ params }: Props) {
         }
       })
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [username]);
 
   return (
     <div
@@ -72,7 +72,7 @@ export default function ProfilePage({ params }: Props) {
           <div className="text-center py-16 space-y-2">
             <p className="text-2xl font-bold text-white">Profile Not Found</p>
             <p className="text-slate-400 text-sm">
-              This player does not exist or has no public stats yet.
+              No player with the name &ldquo;{username}&rdquo; exists or has no public stats yet.
             </p>
           </div>
         )}
@@ -83,7 +83,7 @@ export default function ProfilePage({ params }: Props) {
             className="bg-red-900/30 border border-red-700/50 rounded-xl px-4 py-3 text-red-300 text-sm text-center"
             role="alert"
           >
-            Error loading profile
+            {error}
           </div>
         )}
 
@@ -118,6 +118,21 @@ export default function ProfilePage({ params }: Props) {
               />
               <StatCard label="Wins" value={profile.wins} positive />
               <StatCard label="Losses" value={profile.losses} negative />
+              <StatCard
+                label="Total Declarations"
+                value={profile.declarationsAttempted}
+              />
+              <StatCard
+                label="Declaration Success Rate"
+                value={
+                  profile.declarationsAttempted > 0
+                    ? `${Math.round(
+                        (profile.declarationsCorrect / profile.declarationsAttempted) * 100
+                      )}%`
+                    : '—'
+                }
+                highlight
+              />
               <StatCard
                 label="Declarations Correct"
                 value={profile.declarationsCorrect}

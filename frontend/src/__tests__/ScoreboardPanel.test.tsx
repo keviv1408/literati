@@ -91,6 +91,8 @@ function makeContextValue(gameState: PublicGameState | null): Omit<GameContextVa
     sendToggleInference: () => {},
     sendAsk: () => {},
     sendDeclare: () => {},
+    // Sub-AC 28a: eligible next-turn players (empty until first declaration)
+    eligibleNextTurnPlayerIds: [],
   };
 }
 

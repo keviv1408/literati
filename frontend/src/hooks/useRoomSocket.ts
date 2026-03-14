@@ -114,6 +114,17 @@ export interface UseRoomSocketOptions {
   onKicked?: (reason: string) => void;
 }
 
+/**
+ * Payload emitted when host authority transfers to a new player.
+ * Broadcast by the server as `{ type: 'host_changed', newHostId, newHostName }`.
+ */
+export interface HostChangedEvent {
+  /** userId of the player who became the new host. */
+  newHostId: string;
+  /** Display name of the new host (for showing a notification). */
+  newHostName: string;
+}
+
 export interface UseRoomSocketResult {
   /** Current WebSocket lifecycle state. */
   wsStatus: WsStatus;
@@ -136,6 +147,14 @@ export interface UseRoomSocketResult {
   isKicked: boolean;
   /** Reason string from the 'you-were-kicked' message, if any. */
   kickReason: string | null;
+  /**
+   * Most recent host-authority-transfer notification, or null if no transfer
+   * has occurred this session.  Populated when the server broadcasts
+   * `{ type: 'host_changed' }` after the original host's grace window expires.
+   * The `room_players` snapshot that follows this message will carry the updated
+   * `isHost` flags, so callers may also derive host status directly from `players`.
+   */
+  hostChangedEvent: HostChangedEvent | null;
   /**
    * Emit a 'kick-player' event for the given targetPlayerId.
    * Server enforces that only the host may kick; non-hosts receive an error.
@@ -216,6 +235,7 @@ export function useRoomSocket({
   const [lobbyTimer, setLobbyTimer] = useState<LobbyTimerState | null>(null);
   const [lobbyStarting, setLobbyStarting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [hostChangedEvent, setHostChangedEvent] = useState<HostChangedEvent | null>(null);
 
   // Stable ref to the live WebSocket so emit/kickPlayer don't need re-creation.
   const wsRef = useRef<WebSocket | null>(null);
@@ -268,6 +288,7 @@ export function useRoomSocket({
     setLobbyTimer(null);
     setLobbyStarting(false);
     setLastError(null);
+    setHostChangedEvent(null);
 
     ws.onopen = () => {
       setWsStatus('connected');
@@ -437,6 +458,23 @@ export function useRoomSocket({
           break;
         }
 
+        // ── Host authority transferred ────────────────────────────────────────
+        // Sent by the server when the original host's 30-second grace window
+        // expires without a reconnect and a new player has been promoted.
+        // The server immediately follows this message with a `room_players`
+        // snapshot carrying the updated `isHost` flags — callers relying on
+        // the live player list don't need to do anything beyond re-deriving
+        // `amIHost` from the updated `players` array.
+        // `hostChangedEvent` is exposed so callers can show a toast/banner.
+        case 'host_changed': {
+          const newHostId   = msg.newHostId   as string | undefined;
+          const newHostName = msg.newHostName as string | undefined;
+          if (newHostId && newHostName) {
+            setHostChangedEvent({ newHostId, newHostName });
+          }
+          break;
+        }
+
         // ── kick-confirmed, team-reassigned, etc. — ignored here ─────────────
         default:
           break;
@@ -524,5 +562,6 @@ export function useRoomSocket({
     lobbyTimer,
     lobbyStarting,
     lastError,
+    hostChangedEvent,
   };
 }

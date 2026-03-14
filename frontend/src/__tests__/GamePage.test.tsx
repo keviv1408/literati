@@ -76,13 +76,20 @@ jest.mock('@/contexts/AuthContext', () => ({
 let lastMockWsInstance: MockWebSocket | null = null;
 
 class MockWebSocket {
+  // Mirror the standard WebSocket ready-state constants so hooks that check
+  // `ws.readyState !== WebSocket.OPEN` work correctly in tests.
+  static CONNECTING = 0;
+  static OPEN       = 1;
+  static CLOSING    = 2;
+  static CLOSED     = 3;
+
   onopen: (() => void) | null = null;
   onclose: ((e: CloseEvent) => void) | null = null;
   onerror: (() => void) | null = null;
   onmessage: ((e: MessageEvent) => void) | null = null;
   readyState = 0; // CONNECTING
   close() { this.readyState = 3; }
-  send() {}
+  send(_data: string) {}
   constructor(public url: string) {
     lastMockWsInstance = this;
   }
@@ -964,5 +971,218 @@ describe('GamePage — Sub-AC 25b: declaration outcome broadcast and score displ
       // DeclareModal should be dismissed
       expect(screen.queryByTestId('declare-modal')).toBeNull();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sub-AC 46d: Rematch vote UI — vote panel, rematch-starting overlay,
+// and room-dissolved dissolution notice.
+//
+// Tests:
+//   1. After game_over + rematch_vote_update, RematchVotePanel is shown
+//   2. Clicking Yes sends rematch_vote message to server
+//   3. Clicking No sends rematch_vote message to server
+//   4. rematch_start shows "Rematch starting…" overlay and triggers redirect
+//   5. room_dissolved (timeout) shows dissolution notice instead of vote panel
+//   6. room_dissolved (majority_no) shows dissolution notice with correct text
+//   7. rematch_declined alone shows RematchVotePanel in declined state
+//   8. room_dissolved replaces the vote panel in the UI
+// ---------------------------------------------------------------------------
+
+describe('GamePage — Sub-AC 46d: rematch vote UI and room_dissolved', () => {
+  const MY_PLAYER_ID = 'player-me';
+
+  const players6 = [
+    makePlayer(MY_PLAYER_ID, 'Me',    1, 0),
+    makePlayer('p2',          'Alice', 1, 2),
+    makePlayer('p3',          'Bob',   1, 4),
+    makePlayer('p4',          'Carol', 2, 1),
+    makePlayer('p5',          'Dave',  2, 3),
+    makePlayer('p6',          'Eve',   2, 5),
+  ];
+
+  /** Minimal rematch_vote_update payload for a 6-player game */
+  function makeVoteUpdate(overrides: Record<string, unknown> = {}) {
+    return {
+      type: 'rematch_vote_update',
+      yesCount: 0,
+      noCount: 0,
+      totalCount: 6,
+      humanCount: 6,
+      majority: 4,
+      majorityReached: false,
+      majorityDeclined: false,
+      votes: {},
+      playerVotes: [
+        { playerId: MY_PLAYER_ID, displayName: 'Me',    isBot: false, vote: null },
+        { playerId: 'p2',          displayName: 'Alice', isBot: false, vote: null },
+        { playerId: 'p3',          displayName: 'Bob',   isBot: false, vote: null },
+        { playerId: 'p4',          displayName: 'Carol', isBot: false, vote: null },
+        { playerId: 'p5',          displayName: 'Dave',  isBot: false, vote: null },
+        { playerId: 'p6',          displayName: 'Eve',   isBot: false, vote: null },
+      ],
+      ...overrides,
+    };
+  }
+
+  function makeGameOver() {
+    return {
+      type: 'game_over',
+      winner: 1,
+      tiebreakerWinner: null,
+      scores: { team1: 5, team2: 3 },
+    };
+  }
+
+  /**
+   * game_init establishes myPlayerId so the players-only vote panel guard
+   * passes (`myPlayerId && (rematchVote || rematchDeclined)`).
+   */
+  function makeCompletedGameInit() {
+    return {
+      type: 'game_init',
+      myPlayerId: MY_PLAYER_ID,
+      myHand: [],
+      players: players6.map((p) => ({ ...p, cardCount: 0, isCurrentTurn: false })),
+      gameState: {
+        status: 'completed',
+        currentTurnPlayerId: null,
+        scores: { team1: 5, team2: 3 },
+        lastMove: null,
+        winner: 1,
+        tiebreakerWinner: null,
+        declaredSuits: [],
+        inferenceMode: false,
+      },
+      variant: 'remove_7s',
+      playerCount: 6,
+    };
+  }
+
+  /** Advance to game-over state with WS messages already sent. */
+  async function setupCompletedGame() {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
+    render(<GamePage params={makeParams('ABC123')} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('game-completed-view')).toBeTruthy();
+    });
+
+    act(() => openWs());
+    // Establish myPlayerId so the player-only vote guard passes
+    act(() => sendWsMessage(makeCompletedGameInit()));
+    act(() => sendWsMessage(makeGameOver()));
+    act(() => sendWsMessage(makeVoteUpdate()));
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    lastMockWsInstance = null;
+  });
+
+  it('1. shows RematchVotePanel after game_over + rematch_vote_update', async () => {
+    await setupCompletedGame();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rematch-vote-panel')).toBeTruthy();
+    });
+  });
+
+  it('2. Yes button sends rematch_vote with vote: true', async () => {
+    const sentMessages: unknown[] = [];
+    await setupCompletedGame();
+
+    if (lastMockWsInstance) {
+      lastMockWsInstance.send = (data: string) => sentMessages.push(JSON.parse(data));
+    }
+
+    await waitFor(() => expect(screen.getByTestId('rematch-yes-btn')).toBeTruthy());
+    act(() => { screen.getByTestId('rematch-yes-btn').click(); });
+
+    expect(sentMessages).toContainEqual({ type: 'rematch_vote', vote: true });
+  });
+
+  it('3. No button sends rematch_vote with vote: false', async () => {
+    const sentMessages: unknown[] = [];
+    await setupCompletedGame();
+
+    if (lastMockWsInstance) {
+      lastMockWsInstance.send = (data: string) => sentMessages.push(JSON.parse(data));
+    }
+
+    await waitFor(() => expect(screen.getByTestId('rematch-no-btn')).toBeTruthy());
+    act(() => { screen.getByTestId('rematch-no-btn').click(); });
+
+    expect(sentMessages).toContainEqual({ type: 'rematch_vote', vote: false });
+  });
+
+  it('4. rematch_start shows "Rematch starting…" overlay and redirects', async () => {
+    await setupCompletedGame();
+
+    act(() => sendWsMessage({ type: 'rematch_start', roomCode: 'ABC123' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rematch-starting-view')).toBeTruthy();
+    });
+    expect(screen.getByText(/Rematch starting/i)).toBeTruthy();
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/room/ABC123');
+    });
+  });
+
+  it('5. room_dissolved (timeout) shows dissolution notice', async () => {
+    await setupCompletedGame();
+
+    act(() => sendWsMessage({ type: 'rematch_declined', reason: 'timeout' }));
+    act(() => sendWsMessage({ type: 'room_dissolved',   reason: 'timeout' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('room-dissolved-notice')).toBeTruthy();
+    });
+    expect(screen.getByText(/Room dissolved/i)).toBeTruthy();
+    expect(screen.getByText(/timed out/i)).toBeTruthy();
+  });
+
+  it('6. room_dissolved (majority_no) shows dissolution notice with correct text', async () => {
+    await setupCompletedGame();
+
+    act(() => sendWsMessage({ type: 'rematch_declined', reason: 'majority_no' }));
+    act(() => sendWsMessage({ type: 'room_dissolved',   reason: 'majority_no' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('room-dissolved-notice')).toBeTruthy();
+    });
+    expect(screen.getByText(/majority voted no/i)).toBeTruthy();
+  });
+
+  it('7. rematch_declined alone shows RematchVotePanel in declined state', async () => {
+    await setupCompletedGame();
+
+    act(() => sendWsMessage({ type: 'rematch_declined', reason: 'majority_no' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rematch-declined-panel')).toBeTruthy();
+    });
+    // Vote buttons gone after decline
+    expect(screen.queryByTestId('rematch-vote-buttons')).toBeNull();
+  });
+
+  it('8. room_dissolved replaces the vote panel', async () => {
+    await setupCompletedGame();
+
+    // Vote panel is shown first
+    await waitFor(() => expect(screen.getByTestId('rematch-vote-panel')).toBeTruthy());
+
+    // Dissolution arrives
+    act(() => sendWsMessage({ type: 'rematch_declined', reason: 'timeout' }));
+    act(() => sendWsMessage({ type: 'room_dissolved',   reason: 'timeout' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('room-dissolved-notice')).toBeTruthy();
+    });
+    // Vote panel and decline panel must no longer be shown
+    expect(screen.queryByTestId('rematch-vote-panel')).toBeNull();
+    expect(screen.queryByTestId('rematch-declined-panel')).toBeNull();
   });
 });

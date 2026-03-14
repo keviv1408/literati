@@ -57,7 +57,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import { useCardInference } from '@/hooks/useCardInference';
 import { InferenceProvider, useInferenceContext } from '@/contexts/InferenceContext';
-import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload } from '@/hooks/useGameSocket';
+import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import type {
@@ -132,6 +132,12 @@ export interface SpectatorViewProps {
    * Cleared when the next ask_result / declaration_result arrives.
    */
   declarationFailed?: DeclarationFailedPayload | null;
+  /**
+   * Active post-declaration turn-selection timer (AC 28 / Sub-AC 28c).
+   * Non-null for 30 seconds after a human correct declaration while the
+   * declaring team is choosing who takes the next turn.
+   */
+  postDeclarationTimer?: PostDeclarationTimerPayload | null;
   /** Called when the user clicks "Back to Home". */
   onGoHome: () => void;
 }
@@ -153,6 +159,7 @@ export default function SpectatorView({
   lastDeclareResult,
   declareProgress,
   declarationFailed,
+  postDeclarationTimer,
   roomCode,
   cardRemovalVariant,
   gamePlayerCount,
@@ -389,6 +396,22 @@ export default function SpectatorView({
             className="max-w-xl mx-auto"
           />
         </div>
+      )}
+
+      {/* ── Post-declaration turn-selection countdown (AC 28 / Sub-AC 28c) ───
+       *  Shown to spectators for 30 seconds after a human correct declaration
+       *  while the declaring team chooses who takes the next turn.
+       *  On expiry the server auto-selects a random eligible player.
+       */}
+      {postDeclarationTimer && gameState && (
+        <CountdownTimer
+          key={postDeclarationTimer.expiresAt}
+          expiresAt={postDeclarationTimer.expiresAt}
+          durationMs={postDeclarationTimer.durationMs}
+          isMyTimer={false}
+          label="Choose next turn"
+          className="relative z-10 px-4 pb-1 max-w-xl mx-auto"
+        />
       )}
 
       {/* ── Last move display (AC 35) ────────────────────────────────────────

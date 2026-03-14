@@ -261,6 +261,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     startGame,
     lobbyStarting,
     lastError: wsError,
+    hostChangedEvent,
   } = useRoomSocket({
     // Pass null when already kicked so no socket is opened unnecessarily.
     roomCode: kickedOnEntry ? null : roomCode,
@@ -275,6 +276,23 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // client-side spoofing is possible.
   const myWsPlayer = wsPlayers.find((p) => p.playerId === myPlayerId);
   const amIHostLive = myWsPlayer?.isHost ?? false;
+
+  // ── Host-transfer notification ─────────────────────────────────────────────
+  // When the server broadcasts `host_changed`, display a dismissable banner
+  // so all lobby participants know who the new host is.
+  const [hostChangedBanner, setHostChangedBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hostChangedEvent) return;
+    const isMe = hostChangedEvent.newHostId === myPlayerId;
+    const msg = isMe
+      ? 'You are now the host.'
+      : `${hostChangedEvent.newHostName} is now the host.`;
+    setHostChangedBanner(msg);
+    // Auto-dismiss after 5 seconds.
+    const t = setTimeout(() => setHostChangedBanner(null), 5000);
+    return () => clearTimeout(t);
+  }, [hostChangedEvent, myPlayerId]);
 
   /**
    * True from the moment the host clicks "Start Game" until the server
@@ -805,6 +823,32 @@ export default function RoomLobbyPage({ params }: PageProps) {
           >
             <span aria-hidden="true">🎮</span>
             Matchmaking Game — teams are auto-assigned
+          </div>
+        )}
+
+        {/* ── Host-change notification banner ──────────────────────────────── */}
+        {hostChangedBanner && (
+          <div
+            className="
+              flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl
+              bg-emerald-900/30 border border-emerald-700/50
+              text-emerald-300 text-sm font-medium
+            "
+            role="status"
+            aria-live="polite"
+            data-testid="host-changed-banner"
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden="true">👑</span>
+              {hostChangedBanner}
+            </span>
+            <button
+              onClick={() => setHostChangedBanner(null)}
+              className="text-emerald-400/60 hover:text-emerald-300 transition-colors"
+              aria-label="Dismiss host change notification"
+            >
+              ✕
+            </button>
           </div>
         )}
 

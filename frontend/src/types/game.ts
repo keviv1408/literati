@@ -108,6 +108,20 @@ export interface DeclarationResultPayload {
   newTurnPlayerId: string;
   assignment: Record<CardId, string>; // cardId → playerId
   lastMove: string;
+  /**
+   * Sub-AC 28a: IDs of all non-eliminated players who still have at least one
+   * card remaining after the declaration, ordered by seatIndex.
+   *
+   * Includes the declarant if they still hold cards after the 6 half-suit
+   * cards are removed.  Clients use this to update their game state immediately
+   * on receiving the message — before the subsequent `game_players` broadcast
+   * arrives — so the table layout can reflect who is still an active participant.
+   *
+   * Always present for both correct and incorrect declarations (including
+   * forced-failed timer-expiry declarations).  Optional here for backward
+   * compatibility with legacy client snapshots that pre-date Sub-AC 28a.
+   */
+  eligibleNextTurnPlayerIds?: string[];
 }
 
 /**
@@ -190,15 +204,68 @@ export interface RematchVoteUpdatePayload {
   playerVotes: PlayerVoteRecord[];
 }
 
-/** Broadcast when a majority of players (including bots) voted yes. */
+/**
+ * Per-player team entry included in the rematch_start broadcast so the
+ * lobby can pre-populate the correct team assignments before players reconnect.
+ */
+export interface RematchPreviousTeamEntry {
+  playerId: string;
+  teamId: 1 | 2;
+  seatIndex: number;
+  isBot: boolean;
+}
+
+/**
+ * Broadcast when a majority of players (including bots) voted yes.
+ *
+ * Includes cloned settings from the finished game (Sub-AC 45b) so the
+ * lobby page can immediately show the correct teams, variant, and settings
+ * without waiting for players to reconnect.
+ */
 export interface RematchStartPayload {
   type: 'rematch_start';
+  roomCode: string;
+  /** Team + seat assignments from the finished game (present when available). */
+  previousTeams?: RematchPreviousTeamEntry[];
+  /** Card-removal variant carried forward to the next game. */
+  variant?: 'remove_2s' | 'remove_7s' | 'remove_8s';
+  /** Total seat count carried forward (6 or 8). */
+  playerCount?: number;
+  /** Inference mode flag carried forward. */
+  inferenceMode?: boolean;
+}
+
+/**
+ * Broadcast when majority yes is reached and a new game has been created
+ * server-side with the same team assignments and seat order (Sub-AC 46c).
+ *
+ * After receiving this event clients should clear any post-game UI state.
+ * The server immediately follows this event with personalised `game_init`
+ * messages so the new game begins without a page reload.
+ */
+export interface RematchStartingPayload {
+  type: 'rematch_starting';
+  /** The room code for the new game (same as the finished game). */
   roomCode: string;
 }
 
 /** Broadcast when the vote window expired or majority voted no. */
 export interface RematchDeclinedPayload {
   type: 'rematch_declined';
+  reason: 'timeout' | 'majority_no';
+}
+
+/**
+ * Broadcast to all clients when the room is permanently dissolved after a
+ * declined rematch vote.  Clients should stop trying to reconnect and show
+ * a dissolution notice with a "Back to Home" call-to-action.
+ *
+ * Emitted shortly after `rematch_declined` so that clients have a moment to
+ * display the decline reason before the final dissolution message arrives.
+ */
+export interface RoomDissolvedPayload {
+  type: 'room_dissolved';
+  /** Mirrors the reason from the preceding rematch_declined event. */
   reason: 'timeout' | 'majority_no';
 }
 

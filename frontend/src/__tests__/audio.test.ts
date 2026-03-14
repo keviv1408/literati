@@ -10,6 +10,12 @@
  *   • playTurnChime() — no-op when muted; calls AudioContext when unmuted
  *   • playTurnChime() — no-op when AudioContext is unavailable
  *   • playTurnChime() — fail-silently on AudioContext errors
+ *   • playDealSound() — plays 3-tone descending card-deal sound
+ *   • playAskSuccess() — plays 2-tone ascending success sound
+ *   • playAskFail() — plays 2-tone descending fail sound
+ *   • playDeclarationSuccess() — plays 4-tone ascending fanfare
+ *   • playDeclarationFail() — plays 3-tone descending somber motif
+ *   • All new sounds: no-op when muted / AudioContext unavailable
  */
 
 import {
@@ -17,6 +23,11 @@ import {
   setMuted,
   toggleMuted,
   playTurnChime,
+  playDealSound,
+  playAskSuccess,
+  playAskFail,
+  playDeclarationSuccess,
+  playDeclarationFail,
   MUTE_STORAGE_KEY,
 } from '@/lib/audio';
 
@@ -273,3 +284,98 @@ describe('playTurnChime()', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Shared helper: verify a sound function respects mute and calls AudioContext
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a parameterised suite for any sound function.
+ * Verifies:
+ *   • No-op when muted
+ *   • Calls AudioContext (at least 1 oscillator + gain pair) when unmuted
+ *   • No-op when AudioContext is unavailable
+ *   • Fail-silently on AudioContext constructor error
+ *
+ * @param name     Human-readable function name for test descriptions
+ * @param fn       The sound function under test
+ * @param toneCount Expected number of oscillator+gain pairs (= number of tones)
+ */
+function soundFunctionSuite(
+  name: string,
+  fn: () => void,
+  toneCount: number,
+) {
+  describe(`${name}()`, () => {
+    it('is a no-op when muted', () => {
+      const ctx = buildMockAudioContext();
+      installAudioContext(ctx);
+      localStorageMock.getItem.mockReturnValue('true');
+
+      fn();
+
+      expect(win().AudioContext).not.toHaveBeenCalled();
+    });
+
+    it(`creates AudioContext and plays ${toneCount} tone(s) when unmuted`, () => {
+      const ctx = buildMockAudioContext();
+      installAudioContext(ctx);
+      localStorageMock.getItem.mockReturnValue(null as unknown as string);
+
+      fn();
+
+      expect(win().AudioContext).toHaveBeenCalledTimes(1);
+      expect(ctx.createOscillator).toHaveBeenCalledTimes(toneCount);
+      expect(ctx.createGain).toHaveBeenCalledTimes(toneCount);
+    });
+
+    it('is a no-op when AudioContext is unavailable', () => {
+      removeAudioContext();
+      localStorageMock.getItem.mockReturnValue(null as unknown as string);
+      expect(() => fn()).not.toThrow();
+    });
+
+    it('fails silently if AudioContext constructor throws', () => {
+      win().AudioContext = jest.fn(() => {
+        throw new Error('AudioContext not allowed');
+      });
+      localStorageMock.getItem.mockReturnValue(null as unknown as string);
+      expect(() => fn()).not.toThrow();
+    });
+
+    it('connects all oscillators and gain nodes correctly', () => {
+      const ctx = buildMockAudioContext();
+      installAudioContext(ctx);
+      localStorageMock.getItem.mockReturnValue(null as unknown as string);
+
+      fn();
+
+      ctx.createOscillator.mock.results.forEach((r) => {
+        expect((r.value as MockOscillator).connect).toHaveBeenCalledTimes(1);
+      });
+      ctx.createGain.mock.results.forEach((r) => {
+        expect((r.value as MockGainNode).connect).toHaveBeenCalledWith(ctx.destination);
+      });
+    });
+
+    it('starts and stops each oscillator', () => {
+      const ctx = buildMockAudioContext();
+      installAudioContext(ctx);
+      localStorageMock.getItem.mockReturnValue(null as unknown as string);
+
+      fn();
+
+      ctx.createOscillator.mock.results.forEach((r) => {
+        const osc = r.value as MockOscillator;
+        expect(osc.start).toHaveBeenCalledTimes(1);
+        expect(osc.stop).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+}
+
+soundFunctionSuite('playDealSound',          playDealSound,          3);
+soundFunctionSuite('playAskSuccess',         playAskSuccess,         2);
+soundFunctionSuite('playAskFail',            playAskFail,            2);
+soundFunctionSuite('playDeclarationSuccess', playDeclarationSuccess, 4);
+soundFunctionSuite('playDeclarationFail',    playDeclarationFail,    3);
