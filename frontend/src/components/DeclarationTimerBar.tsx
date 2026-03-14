@@ -7,8 +7,8 @@
  * Behaviour:
  *   • Uses requestAnimationFrame for smooth 60fps countdown
  *   • Normal state: emerald progress bar (plenty of time)
- *   • Warning state (≤ WARNING_THRESHOLD_S seconds): amber bar + label pulse
- *   • Danger state  (≤ DANGER_THRESHOLD_S  seconds): red bar + label pulse
+ *   • Warning state (≤ WARNING_THRESHOLD_S seconds): red bar + label pulse
+ *   • Danger state  (≤ DANGER_THRESHOLD_S  seconds): red bar + seconds pulse
  *   • Calls `onExpiry` exactly once when the remaining time reaches 0
  *     (the parent uses this to auto-submit the current declaration assignment)
  *

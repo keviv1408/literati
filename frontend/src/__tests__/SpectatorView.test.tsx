@@ -280,24 +280,27 @@ describe('SpectatorView', () => {
   });
 
   describe('declared suits', () => {
-    it('renders declared suit badges when suits have been declared', () => {
+    it('renders the HalfSuitGrid with correct team coloring when suits have been declared', () => {
       render(
         <SpectatorView
           {...buildProps({
             gameState: makeGameState({
               declaredSuits: [
-                { halfSuitId: 'low_s', teamId: 1 },
-                { halfSuitId: 'high_h', teamId: 2 },
+                { halfSuitId: 'low_s', teamId: 1, declaredBy: 'p1' },
+                { halfSuitId: 'high_h', teamId: 2, declaredBy: 'p2' },
               ],
             }),
           })}
         />,
       );
-      const badges = screen.getAllByTestId('spectator-declared-badge');
-      expect(badges.length).toBe(2);
+      // HalfSuitGrid renders all 8 slots; declared ones carry team data-team attributes
+      expect(screen.getByTestId('half-suit-slot-low_s')).toHaveAttribute('data-team', '1');
+      expect(screen.getByTestId('half-suit-slot-high_h')).toHaveAttribute('data-team', '2');
+      // Undeclared slot stays neutral
+      expect(screen.getByTestId('half-suit-slot-low_h')).toHaveAttribute('data-team', 'none');
     });
 
-    it('does not render declared suits section when none are declared', () => {
+    it('renders the HalfSuitGrid (all 8 slots) even when no suits are declared', () => {
       render(
         <SpectatorView
           {...buildProps({
@@ -305,7 +308,9 @@ describe('SpectatorView', () => {
           })}
         />,
       );
-      expect(screen.queryByTestId('spectator-declared-suits')).toBeNull();
+      // Grid is always rendered — 8 neutral slots
+      expect(screen.getByTestId('spectator-declared-suits')).toBeInTheDocument();
+      expect(screen.getAllByRole('gridcell')).toHaveLength(8);
     });
   });
 

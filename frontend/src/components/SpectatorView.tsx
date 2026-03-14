@@ -43,6 +43,7 @@
  *   variant={variant}
  *   playerCount={playerCount}
  *   turnTimer={turnTimer}
+ *   declarationTimer={declarationTimer}
  *   lastAskResult={lastAskResult}
  *   lastDeclareResult={lastDeclareResult}
  *   roomCode={roomCode}
@@ -56,16 +57,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import { useCardInference } from '@/hooks/useCardInference';
 import { InferenceProvider, useInferenceContext } from '@/contexts/InferenceContext';
-import type { GameWsStatus, TurnTimerPayload } from '@/hooks/useGameSocket';
+import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload } from '@/hooks/useGameSocket';
+import DeclarationTimerBar from '@/components/DeclarationTimerBar';
+import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import type {
   GamePlayer,
   PublicGameState,
   AskResultPayload,
   DeclarationResultPayload,
+  DeclarationFailedPayload,
   DeclareProgressPayload,
 } from '@/types/game';
 import { halfSuitLabel, SUIT_SYMBOLS } from '@/types/game';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
+import HalfSuitGrid from '@/components/HalfSuitGrid';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CountdownTimer from '@/components/CountdownTimer';
 
@@ -114,6 +119,19 @@ export interface SpectatorViewProps {
    * Received via `declare_progress` WebSocket broadcast (Sub-AC 21b).
    */
   declareProgress?: DeclareProgressPayload | null;
+  /**
+   * Active 60-second declaration phase timer (Sub-AC 36 / 23a).
+   * The server broadcasts `declaration_timer` to ALL connections so spectators
+   * can see the same countdown the declaring player sees.
+   */
+  declarationTimer?: DeclarationTimerPayload | null;
+  /**
+   * Per-card diff from a failed declaration (Sub-AC 26b).
+   * Non-null when the server broadcasts `declarationFailed` after an incorrect
+   * declaration.  The FailedDeclarationReveal overlay is rendered when set.
+   * Cleared when the next ask_result / declaration_result arrives.
+   */
+  declarationFailed?: DeclarationFailedPayload | null;
   /** Called when the user clicks "Back to Home". */
   onGoHome: () => void;
 }
@@ -130,14 +148,27 @@ export default function SpectatorView({
   variant,
   playerCount,
   turnTimer,
+  declarationTimer,
   lastAskResult,
   lastDeclareResult,
   declareProgress,
+  declarationFailed,
   roomCode,
   cardRemovalVariant,
   gamePlayerCount,
   onGoHome,
 }: SpectatorViewProps) {
+  // ── Failed Declaration Reveal dismiss state (Sub-AC 26b) ───────────────────
+  const [failedRevealDismissed, setFailedRevealDismissed] = React.useState(false);
+  const showFailedReveal = Boolean(declarationFailed && !failedRevealDismissed);
+
+  // Reset dismiss flag when a new `declarationFailed` payload arrives
+  const prevDeclarationFailedRef = React.useRef(declarationFailed);
+  if (prevDeclarationFailedRef.current !== declarationFailed) {
+    prevDeclarationFailedRef.current = declarationFailed;
+    if (declarationFailed) setFailedRevealDismissed(false);
+  }
+
   // ── Card inference ─────────────────────────────────────────────────────────
   // Spectators derive card-location knowledge from public ask/declare events.
   // Inference mode is always active for spectators (isSpectator=true on the
@@ -343,6 +374,23 @@ export default function SpectatorView({
         />
       )}
 
+      {/* ── Declaration-phase countdown (Sub-AC 36 / 23a) ────────────────────
+       *  Shown to all spectators during the 60-second card-assignment phase.
+       *  The server broadcasts `declaration_timer` to ALL connections so the
+       *  entire table (players + spectators) can follow the declarant's timer.
+       *  Re-mounts on each new expiresAt value via the `key` prop.
+       */}
+      {declarationTimer && gameState && (
+        <div className="relative z-10 px-4 pb-1">
+          <DeclarationTimerBar
+            key={declarationTimer.expiresAt}
+            expiresAt={declarationTimer.expiresAt}
+            durationMs={declarationTimer.durationMs}
+            className="max-w-xl mx-auto"
+          />
+        </div>
+      )}
+
       {/* ── Last move display (AC 35) ────────────────────────────────────────
        *  Shows only the single most-recent move (no history log per spec).
        *  Uses the shared LastMoveDisplay component.
@@ -368,30 +416,18 @@ export default function SpectatorView({
         className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden"
         aria-label="Spectator game table"
       >
-        {/* Declared half-suit badges */}
-        {gameState && gameState.declaredSuits.length > 0 && (
+        {/*
+         * Half-suit scoreboard grid (Sub-AC 34b).
+         *
+         * Always rendered for spectators so they can track all 8 slots.
+         * Declared slots show the winning team's color; unclaimed slots stay neutral.
+         */}
+        {gameState && (
           <div className="w-full max-w-2xl" data-testid="spectator-declared-suits">
-            <div className="flex flex-wrap gap-1 justify-center">
-              {gameState.declaredSuits.map((ds) => {
-                const [tier, suit] = ds.halfSuitId.split('_');
-                const sym = SUIT_SYMBOLS[suit as 's' | 'h' | 'd' | 'c'] ?? suit;
-                return (
-                  <span
-                    key={ds.halfSuitId}
-                    className={[
-                      'px-2 py-0.5 rounded-full text-xs font-semibold border',
-                      ds.teamId === 1
-                        ? 'bg-emerald-900/50 border-emerald-700/50 text-emerald-300'
-                        : 'bg-violet-900/50 border-violet-700/50 text-violet-300',
-                    ].join(' ')}
-                    title={`${halfSuitLabel(ds.halfSuitId)} — Team ${ds.teamId}`}
-                    data-testid="spectator-declared-badge"
-                  >
-                    {tier === 'high' ? '▲' : '▽'}{sym}
-                  </span>
-                );
-              })}
-            </div>
+            <HalfSuitGrid
+              declaredSuits={gameState.declaredSuits}
+              className="justify-items-center"
+            />
           </div>
         )}
 
@@ -461,6 +497,19 @@ export default function SpectatorView({
           👁 You are spectating · No actions available
         </p>
       </footer>
+
+      {/* ── Failed Declaration Reveal overlay (Sub-AC 26b) ──────────────────
+       *  Spectators also receive the `declarationFailed` broadcast and see
+       *  the same diff overlay as the players so they can follow along.
+       */}
+      {showFailedReveal && declarationFailed && (
+        <FailedDeclarationReveal
+          payload={declarationFailed}
+          players={players}
+          variant={effectiveVariant}
+          onDismiss={() => setFailedRevealDismissed(true)}
+        />
+      )}
     </div>
     </InferenceProvider>
   );

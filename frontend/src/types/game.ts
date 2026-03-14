@@ -43,6 +43,11 @@ export interface GamePlayer {
   isBot: boolean;
   isGuest: boolean;
   isCurrentTurn: boolean;
+  /**
+   * Sub-AC 27b: true when this player's hand was emptied by a declaration
+   * and they can no longer ask, be asked, or declare.
+   */
+  isEliminated?: boolean;
 }
 
 /** A declared half-suit with which team won it. */
@@ -97,9 +102,61 @@ export interface DeclarationResultPayload {
   declarerId: string;
   halfSuitId: HalfSuitId;
   correct: boolean;
+  /** Present and true only when the declaration was forced-failed due to timer expiry. */
+  timedOut?: boolean;
   winningTeam: 1 | 2;
   newTurnPlayerId: string;
   assignment: Record<CardId, string>; // cardId → playerId
+  lastMove: string;
+}
+
+/**
+ * Diff entry for a single incorrectly-assigned card in a failed declaration.
+ * Included in `DeclarationFailedPayload.wrongAssignmentDiffs`.
+ */
+export interface WrongAssignmentDiff {
+  /** Card ID that was assigned incorrectly. */
+  card: CardId;
+  /** Player ID the declarant claimed held this card. */
+  claimedPlayerId: string;
+  /** Player ID who actually holds this card (null if no one held it, which should not happen). */
+  actualPlayerId: string | null;
+}
+
+/**
+ * Broadcast to ALL clients immediately after a failed declaration.
+ *
+ * Carries the detailed per-card diff so clients can show a
+ * FailedDeclarationReveal overlay that highlights which assignments were
+ * wrong, crossing out the claimed holder and showing the actual holder.
+ *
+ * Sent only when `correct === false`; correct declarations have no diff to show.
+ *
+ * Shape mirrors the gameSocketServer.js broadcast at handleDeclare lines ~1665–1674.
+ */
+export interface DeclarationFailedPayload {
+  type: 'declarationFailed';
+  /** The player who made the (incorrect) declaration. */
+  declarerId: string;
+  /** Which half-suit was declared. */
+  halfSuitId: HalfSuitId;
+  /** Team that scored the point (opposite of declarant's team). */
+  winningTeam: 1 | 2;
+  /**
+   * The claimed assignment: cardId → claimed playerId.
+   * This is what the declarant said — some entries will be wrong.
+   */
+  assignment: Record<CardId, string>;
+  /**
+   * Only the cards that were assigned incorrectly.
+   * Subset of the 6 half-suit cards where claimedPlayerId ≠ actualPlayerId.
+   */
+  wrongAssignmentDiffs: WrongAssignmentDiff[];
+  /**
+   * The ground-truth holders for all 6 cards in the half-suit.
+   * cardId → actual playerId (captured before cards were removed from hands).
+   */
+  actualHolders: Record<CardId, string>;
   lastMove: string;
 }
 
@@ -267,6 +324,40 @@ export interface ReconnectExpiredPayload {
   type: 'reconnect_expired';
   /** The player whose reconnect window expired. */
   playerId: string;
+}
+
+// ── Player elimination (Sub-AC 27b) ──────────────────────────────────────────
+
+/**
+ * Broadcast to all connected clients when a player's hand is emptied by a
+ * declaration.  Also included in the updated `game_players` broadcast (via
+ * the `isEliminated` flag), but this explicit event lets clients show a toast
+ * or animation immediately on elimination.
+ */
+export interface PlayerEliminatedPayload {
+  type: 'player_eliminated';
+  /** The player whose hand just reached 0 cards. */
+  playerId: string;
+  /** Their display name for the toast/notification. */
+  displayName: string;
+  /** Their team (1 or 2) for colour-coding the notification. */
+  teamId: 1 | 2;
+}
+
+/**
+ * Sent ONLY to the eliminated human player.  Prompts them to choose which
+ * teammate should receive future turns on their behalf.
+ *
+ * The game continues regardless of whether/when the player responds.
+ * The server stores the choice in `gs.turnRecipients` once received, but the
+ * immediate turn was already determined by `_resolveValidTurn` on the server.
+ */
+export interface ChooseTurnRecipientPromptPayload {
+  type: 'choose_turn_recipient_prompt';
+  /** The eliminated player's own ID (same as myPlayerId when received). */
+  eliminatedPlayerId: string;
+  /** Teammates who still have cards and can receive the turn. */
+  eligibleTeammates: Array<{ playerId: string; displayName: string }>;
 }
 
 // ── Card display helpers ─────────────────────────────────────────────────────

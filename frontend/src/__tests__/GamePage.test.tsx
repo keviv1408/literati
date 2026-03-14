@@ -300,8 +300,10 @@ describe('GamePage — completed room', () => {
     await waitFor(() => {
       expect(screen.getByTestId('game-completed-view')).toBeTruthy();
     });
-    // Score display: "Team 1: 0 • Team 2: 0"
-    expect(screen.getByText(/Final score/)).toBeTruthy();
+    // Score display: GameOverScreen shows score-team1 and score-team2 elements
+    expect(screen.getByTestId('final-score')).toBeTruthy();
+    expect(screen.getByTestId('score-team1')).toBeTruthy();
+    expect(screen.getByTestId('score-team2')).toBeTruthy();
   });
 });
 

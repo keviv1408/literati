@@ -34,14 +34,21 @@ import CardHand from '@/components/CardHand';
 import AskCardModal from '@/components/AskCardModal';
 import CardRequestWizard from '@/components/CardRequestWizard';
 import DeclareModal from '@/components/DeclareModal';
+import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
+import EliminationModal from '@/components/EliminationModal';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import RematchVotePanel from '@/components/RematchVotePanel';
+import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import DealAnimation from '@/components/DealAnimation';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import CountdownTimer from '@/components/CountdownTimer';
+import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
+import HalfSuitGrid from '@/components/HalfSuitGrid';
+import { ConnectedScoreboardPanel } from '@/components/ScoreboardPanel';
+import MuteToggle from '@/components/MuteToggle';
 import type { Room } from '@/types/room';
 import type { CardId, HalfSuitId, GameOverPayload, RematchStartPayload } from '@/types/game';
 import type { PlayerInference } from '@/hooks/useCardInference';
@@ -81,6 +88,24 @@ export default function GamePage({ params }: PageProps) {
   const [voteStartedAt, setVoteStartedAt]   = useState<number | undefined>(undefined);
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Declaration result overlay (Sub-AC 26c) ────────────────────────────────
+  //
+  // Shown immediately after `declaration_result` arrives.  Auto-dismisses after
+  // 3 seconds (with a visible countdown) or earlier if the player presses the
+  // explicit "Dismiss" button.  On dismiss, `sendGameAdvance()` is called to
+  // notify the server that the client is ready for the next turn.
+  const [showDeclarationOverlay, setShowDeclarationOverlay] = useState(false);
+
+  // ── Failed Declaration Reveal (Sub-AC 26b) ────────────────────────────────
+  //
+  // When declarationFailed arrives from the socket, the overlay is shown.
+  // The player (or the auto-dismiss timer inside the component) can dismiss it
+  // by setting failedRevealDismissed to true.  The flag resets automatically
+  // when declarationFailed changes (new failed declaration in the same game).
+  // NOTE: `declarationFailed` is destructured from useGameSocket below.
+  // `showFailedReveal` is therefore computed after the useGameSocket call.
+  const [failedRevealDismissed, setFailedRevealDismissed] = useState(false);
 
   // ── Score flash (Sub-AC 25b) ───────────────────────────────────────────────
   //
@@ -163,9 +188,12 @@ export default function GamePage({ params }: PageProps) {
 
   const {
     wsStatus, myPlayerId, myHand, players, gameState, variant, playerCount,
-    lastAskResult, lastDeclareResult, turnTimer, botTakeover, rematchVote, rematchDeclined,
+    lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
+    botTakeover, rematchVote, rematchDeclined,
     inferenceMode, sendAsk, sendDeclare, sendRematchVote, sendToggleInference,
-    sendPartialSelection, sendDeclareProgress, sendDeclareSelecting, declareProgress,
+    sendPartialSelection, sendDeclareProgress, sendDeclareSelecting, sendGameAdvance,
+    declareProgress,
+    eliminationPrompt, sendChooseTurnRecipient,
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
@@ -178,6 +206,11 @@ export default function GamePage({ params }: PageProps) {
       setRematchStarted(true);
     },
   });
+
+  // ── Failed Declaration Reveal visibility guard (Sub-AC 26b) ───────────────
+  // Computed here — after useGameSocket — because it depends on `declarationFailed`
+  // which is destructured from the hook above.
+  const showFailedReveal = Boolean(declarationFailed && !failedRevealDismissed);
 
   useEffect(() => {
     if (lastAskResult?.lastMove) {
@@ -219,6 +252,12 @@ export default function GamePage({ params }: PageProps) {
           flipTimerRef.current = setTimeout(() => setNewlyArrivedCardId(null), 700);
         }
       }
+      // ── Ask result sound: success vs failure ──────────────────────────
+      if (lastAskResult.success) {
+        playAskSuccess();
+      } else {
+        playAskFail();
+      }
       setLastResultMsg(lastAskResult.lastMove);
       if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
       lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5000);
@@ -227,7 +266,7 @@ export default function GamePage({ params }: PageProps) {
       setShowAskWizard(false);
       setWizardInitialCard(null);
     }
-  }, [lastAskResult, myPlayerId]);
+  }, [lastAskResult, myPlayerId, playAskSuccess, playAskFail]);
 
   useEffect(() => {
     if (lastDeclareResult?.lastMove) {
@@ -242,12 +281,29 @@ export default function GamePage({ params }: PageProps) {
         scoreFlashTimer.current = setTimeout(() => setScoreFlash(null), 2000);
       }
 
+      // ── Declaration result overlay (Sub-AC 26c) ─────────────────────────
+      // Show the overlay with a 3-second auto-dismiss countdown.
+      // The overlay is closed by handleDeclarationOverlayDismiss which also
+      // dispatches game_advance to the server.
+      setShowDeclarationOverlay(true);
+
       setActionLoading(false);
       setShowDeclare(false);
       setSelectedCard(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastDeclareResult]);
+
+  // ── Reset FailedDeclarationReveal dismissed flag on new failure (Sub-AC 26b) ─
+  // When a fresh declarationFailed payload arrives (a new failed declaration
+  // in the same game), re-show the overlay even if the player dismissed the
+  // previous one.  The effect also covers the first arrival (null → payload).
+  useEffect(() => {
+    if (declarationFailed) {
+      setFailedRevealDismissed(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [declarationFailed]);
 
   // ── Trigger deal animation on first game_init ─────────────────────────────
   //
@@ -261,6 +317,8 @@ export default function GamePage({ params }: PageProps) {
     if (myHand.length > 0 && !hasDealtRef.current) {
       hasDealtRef.current = true;
       setIsDealAnimating(true);
+      // ── Deal sound: play once when cards first arrive ───────────────────
+      playDealSound();
     }
   }, [myHand.length]);
 
@@ -345,8 +403,16 @@ export default function GamePage({ params }: PageProps) {
   });
 
   // ── Audio + turn indicator ────────────────────────────────────────────────
-  // `useAudio` provides the mute toggle button for the header.
-  const { muted, toggleMute } = useAudio();
+  // `useAudio` provides the mute toggle and all game-event sound callbacks.
+  const {
+    muted,
+    toggleMute,
+    playDealSound,
+    playAskSuccess,
+    playAskFail,
+    playDeclarationSuccess,
+    playDeclarationFail,
+  } = useAudio();
 
   // `useTurnIndicator` manages the glow + audio chime loop:
   //  • plays a chime on the false → true transition (turn starts)
@@ -374,6 +440,17 @@ export default function GamePage({ params }: PageProps) {
     sendDeclare(halfSuitId, assignment);
   }
 
+  // ── Declaration result overlay dismiss (Sub-AC 26c) ───────────────────────
+  //
+  // Called by DeclarationResultOverlay when the player presses "Dismiss" or
+  // when the 3-second auto-dismiss countdown expires.
+  // 1. Hides the overlay.
+  // 2. Dispatches game_advance to the server so the next turn can proceed.
+  const handleDeclarationOverlayDismiss = useCallback(() => {
+    setShowDeclarationOverlay(false);
+    sendGameAdvance();
+  }, [sendGameAdvance]);
+
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
   if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
@@ -386,7 +463,6 @@ export default function GamePage({ params }: PageProps) {
 
   if (finalGameOver || room.status === 'completed') {
     const { winner, scores, tiebreakerWinner } = finalGameOver ?? { winner: null as number | null, tiebreakerWinner: null as number | null, scores: { team1: 0, team2: 0 } };
-    const isWinner = winner !== null && myTeamId !== null && winner === myTeamId;
 
     // Show a brief "Rematch starting…" overlay while redirect is in flight
     if (rematchStarted) {
@@ -400,14 +476,26 @@ export default function GamePage({ params }: PageProps) {
     }
 
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6" data-testid="game-completed-view">
-        <div className="text-center max-w-sm">
-          <div className="text-5xl mb-4">{isWinner ? '🏆' : winner === null ? '🤝' : '😔'}</div>
-          <h1 className="text-2xl font-bold text-white mb-2">Game Over</h1>
-          {winner ? <p className="text-lg font-semibold text-emerald-300 mb-1">Team {winner} wins!{isWinner && ' 🎉'}{tiebreakerWinner && <span className="text-xs text-slate-500 block">(via tiebreaker)</span>}</p> : <p className="text-lg font-semibold text-slate-300 mb-1">Tie!</p>}
-          <p className="text-slate-400 text-sm mb-4">Final score: T1 {scores.team1} — T2 {scores.team2}</p>
-          <p className="text-slate-500 text-xs font-mono">{room.code} · {VARIANT_LABELS[room.card_removal_variant]}</p>
-        </div>
+      <div
+        className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-8 gap-6 overflow-y-auto"
+        data-testid="game-completed-view"
+      >
+        {/* ── Game-over summary (Sub-AC 32d) ─────────────────────────────────
+         *  Renders the winner announcement, final score, tiebreak reason (if
+         *  applicable), and the full half-suit tally.  declaredSuits is drawn
+         *  from the most-recent gameState snapshot so the tally is always
+         *  complete when the game_over message arrives.
+         */}
+        <GameOverScreen
+          winner={winner ?? null}
+          tiebreakerWinner={tiebreakerWinner ?? null}
+          scores={scores}
+          declaredSuits={gameState?.declaredSuits ?? []}
+          myTeamId={myTeamId}
+          variant={VARIANT_LABELS[room.card_removal_variant]}
+          roomCode={room.code}
+          testId="game-over-screen"
+        />
 
         {/* Rematch voting panel — only shown to actual players (not spectators) */}
         {myPlayerId && (rematchVote || rematchDeclined) && (
@@ -451,9 +539,11 @@ export default function GamePage({ params }: PageProps) {
         variant={variant}
         playerCount={playerCount}
         turnTimer={turnTimer}
+        declarationTimer={declarationTimer}
         lastAskResult={lastAskResult}
         lastDeclareResult={lastDeclareResult}
         declareProgress={declareProgress ?? null}
+        declarationFailed={declarationFailed}
         roomCode={room.code}
         cardRemovalVariant={room.card_removal_variant}
         gamePlayerCount={room.player_count}
@@ -530,16 +620,7 @@ export default function GamePage({ params }: PageProps) {
             🔍
           </button>
           {/* Mute toggle — persists across page refreshes via localStorage */}
-          <button
-            onClick={toggleMute}
-            aria-label={muted ? 'Unmute game sounds' : 'Mute game sounds'}
-            aria-pressed={muted}
-            title={muted ? 'Unmute sounds' : 'Mute sounds'}
-            className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 text-base leading-none"
-            data-testid="mute-toggle"
-          >
-            {muted ? '🔇' : '🔔'}
-          </button>
+          <MuteToggle />
           <div className="flex items-center gap-1.5" title={`Connection: ${wsStatus}`} data-testid="ws-status-indicator">
             <span className={['w-2 h-2 rounded-full', wsStatus === 'connected' ? 'bg-emerald-400' : wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : wsStatus === 'error' ? 'bg-red-500' : 'bg-slate-600'].join(' ')} />
           </div>
@@ -616,19 +697,20 @@ export default function GamePage({ params }: PageProps) {
       )}
 
       <main className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden">
-        {gameState && gameState.declaredSuits.length > 0 && (
-          <div className="w-full max-w-2xl">
-            <div className="flex flex-wrap gap-1 justify-center">
-              {gameState.declaredSuits.map((ds) => {
-                const [tier, suit] = ds.halfSuitId.split('_');
-                const sym = SUIT_SYMBOLS[suit as 's'|'h'|'d'|'c'] ?? suit;
-                return (
-                  <span key={ds.halfSuitId} className={['px-2 py-0.5 rounded-full text-xs font-semibold border', ds.teamId === 1 ? 'bg-emerald-900/50 border-emerald-700/50 text-emerald-300' : 'bg-violet-900/50 border-violet-700/50 text-violet-300'].join(' ')} title={`${halfSuitLabel(ds.halfSuitId)} — Team ${ds.teamId}`}>
-                    {tier === 'high' ? '▲' : '▽'}{sym}
-                  </span>
-                );
-              })}
-            </div>
+        {/*
+         * Half-suit scoreboard grid (Sub-AC 34b).
+         *
+         * Always rendered (even when 0 suits are declared) so players can
+         * see all 8 slots and track progress throughout the game.
+         * Declared slots light up in the winning team's color; unclaimed
+         * slots remain neutral.
+         */}
+        {gameState && (
+          <div className="w-full max-w-2xl" aria-label="Half-suit scoreboard" data-testid="half-suit-scoreboard-panel">
+            <HalfSuitGrid
+              declaredSuits={gameState.declaredSuits}
+              className="justify-items-center"
+            />
           </div>
         )}
 
@@ -833,6 +915,46 @@ export default function GamePage({ params }: PageProps) {
           toX={cardFlight.toX}
           toY={cardFlight.toY}
           onComplete={() => setCardFlight(null)}
+        />
+      )}
+
+      {/* ── Declaration result overlay (Sub-AC 26c) ─────────────────────── */}
+      {/* Shown to all players immediately after declaration_result arrives. */}
+      {/* Auto-dismisses after 3 s; explicit Dismiss button cancels early.   */}
+      {/* On dismiss, dispatches game_advance to the server.                 */}
+      {showDeclarationOverlay && lastDeclareResult && (
+        <DeclarationResultOverlay
+          result={lastDeclareResult}
+          players={players}
+          myTeamId={myTeamId}
+          onDismiss={handleDeclarationOverlayDismiss}
+        />
+      )}
+      {/* ── Failed Declaration Reveal overlay (Sub-AC 26b) ─────────────────
+       *  Shown to ALL clients (players + spectators) when the server broadcasts
+       *  a declarationFailed event (incorrect declaration only).  Displays each
+       *  card in the half-suit with the claimed holder crossed out in red and
+       *  the actual holder highlighted in green.
+       *  Auto-dismisses after 6 seconds; player can also dismiss manually.
+       */}
+      {showFailedReveal && declarationFailed && (
+        <FailedDeclarationReveal
+          payload={declarationFailed}
+          players={players}
+          variant={effectiveVariant}
+          onDismiss={() => setFailedRevealDismissed(true)}
+        />
+      )}
+
+      {/* ── Elimination modal (Sub-AC 27b) ───────────────────────────────────
+       *  Shown ONLY to the human player whose hand was just emptied by a
+       *  declaration.  Prompts them to pick a teammate to receive future turns
+       *  on their behalf.  The game continues regardless of this choice.
+       */}
+      {eliminationPrompt && (
+        <EliminationModal
+          prompt={eliminationPrompt}
+          onChoose={sendChooseTurnRecipient}
         />
       )}
     </div>

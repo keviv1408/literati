@@ -23,6 +23,7 @@ import type {
   HalfSuitId,
   AskResultPayload,
   DeclarationResultPayload,
+  DeclarationFailedPayload,
   DeclareProgressPayload,
   GameOverPayload,
   RematchVoteUpdatePayload,
@@ -33,6 +34,8 @@ import type {
   PlayerDisconnectedPayload,
   PlayerReconnectedPayload,
   ReconnectExpiredPayload,
+  PlayerEliminatedPayload,
+  ChooseTurnRecipientPromptPayload,
 } from '@/types/game';
 import { sortHandByHalfSuit, type CardVariant } from '@/utils/cardSort';
 
@@ -93,6 +96,13 @@ export interface UseGameSocketReturn {
   playerCount: 6 | 8 | null;
   lastAskResult: AskResultPayload | null;
   lastDeclareResult: DeclarationResultPayload | null;
+  /**
+   * Non-null after a failed declaration broadcast.
+   * Carries the per-card diff payload so the FailedDeclarationReveal overlay
+   * can show which cards were assigned incorrectly and who actually held them.
+   * Cleared when a new turn starts (next ask_result or declaration_result).
+   */
+  declarationFailed: DeclarationFailedPayload | null;
   turnTimer: TurnTimerPayload | null;
   /**
    * Active declaration-phase timer for the local player (Sub-AC 23a).
@@ -182,6 +192,32 @@ export interface UseGameSocketReturn {
    * Pass `undefined` to clear (player pressed "Back" or closed the modal).
    */
   sendDeclareSelecting: (halfSuitId?: string) => void;
+  /**
+   * Notify the server that the local player has dismissed the declaration
+   * result overlay and is ready to continue to the next turn (Sub-AC 26c).
+   *
+   * Fire-and-forget — the server does not respond.  The turn has already
+   * advanced on the server when `declaration_result` was broadcast; this
+   * message is a lightweight acknowledgement that allows the client UI to
+   * cleanly transition away from the overlay and render the new turn state.
+   */
+  sendGameAdvance: () => void;
+  /**
+   * Sub-AC 27b: Non-null when this player has just been eliminated (hand
+   * emptied by a declaration) and the server is prompting them to choose
+   * a teammate to receive future turns.
+   *
+   * Cleared after the player calls `sendChooseTurnRecipient` or dismisses.
+   */
+  eliminationPrompt: ChooseTurnRecipientPromptPayload | null;
+  /**
+   * Sub-AC 27b: Notify the server of which teammate this eliminated player
+   * has chosen to receive future turns.  Fire-and-forget.
+   *
+   * Only meaningful when `eliminationPrompt` is non-null.
+   * Pass the `playerId` of the chosen teammate.
+   */
+  sendChooseTurnRecipient: (recipientId: string) => void;
   error: string | null;
 }
 
@@ -200,6 +236,7 @@ export function useGameSocket({
   const [playerCount, setPlayerCount]    = useState<6 | 8 | null>(null);
   const [lastAskResult, setLastAskResult] = useState<AskResultPayload | null>(null);
   const [lastDeclareResult, setLastDeclareResult] = useState<DeclarationResultPayload | null>(null);
+  const [declarationFailed, setDeclarationFailed] = useState<DeclarationFailedPayload | null>(null);
   const [turnTimer, setTurnTimer]        = useState<TurnTimerPayload | null>(null);
   const [declarationTimer, setDeclarationTimer] = useState<DeclarationTimerPayload | null>(null);
   const [rematchVote, setRematchVote]    = useState<RematchVoteUpdatePayload | null>(null);
@@ -210,6 +247,8 @@ export function useGameSocket({
   const [reconnectWindows, setReconnectWindows] = useState<
     Record<string, { expiresAt: number; reconnectWindowMs: number }>
   >({});
+  // Sub-AC 27b: non-null when this player was eliminated and should choose a turn recipient
+  const [eliminationPrompt, setEliminationPrompt] = useState<ChooseTurnRecipientPromptPayload | null>(null);
   const [error, setError]                   = useState<string | null>(null);
 
   const wsRef      = useRef<WebSocket | null>(null);
@@ -341,6 +380,8 @@ export function useGameSocket({
           setBotTakeover(null);
           // Turn ended — clear any active declaration phase timer (Sub-AC 23a)
           setDeclarationTimer(null);
+          // New turn started — clear any lingering failed-declaration overlay
+          setDeclarationFailed(null);
           break;
         }
 
@@ -353,6 +394,17 @@ export function useGameSocket({
           setDeclareProgress(null);
           // Turn ended — clear declaration phase timer (Sub-AC 23a)
           setDeclarationTimer(null);
+          // If the declaration was correct, there will be no `declarationFailed`
+          // event — proactively clear any stale diff from a previous round.
+          if (payload.correct) setDeclarationFailed(null);
+          break;
+        }
+
+        case 'declarationFailed': {
+          // Broadcast sent only for incorrect declarations (correct === false).
+          // Carries the per-card diff so clients can render FailedDeclarationReveal.
+          const payload = msg as unknown as DeclarationFailedPayload;
+          setDeclarationFailed(payload);
           break;
         }
 
@@ -383,9 +435,10 @@ export function useGameSocket({
         }
 
         case 'declaration_timer': {
-          // Sub-AC 23a: 60-second declaration phase timer sent only to the
-          // declaring player.  Drives the DeclarationTimerBar component in
-          // DeclareModal Step 2.
+          // Sub-AC 23a / 36: 60-second declaration phase timer broadcast to ALL
+          // connected clients (players + spectators) so the entire table can follow
+          // the declarant's countdown.  Drives DeclarationTimerBar in DeclareModal
+          // (for the declaring player) and in SpectatorView (for spectators).
           const payload = msg as unknown as DeclarationTimerPayload;
           setDeclarationTimer(payload);
           break;
@@ -468,6 +521,29 @@ export function useGameSocket({
             delete next[payload.playerId];
             return next;
           });
+          break;
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        // ── Sub-AC 27b: Player elimination events ────────────────────────────
+        case 'player_eliminated': {
+          // Broadcast to all: a player's hand just reached 0 cards.
+          // The `game_players` broadcast that follows this message will also
+          // carry the updated `isEliminated: true` flag on the affected player.
+          // This explicit event lets the client show a toast or animate immediately.
+          // For now we just log; the game_players update handles the visual state.
+          const payload = msg as unknown as PlayerEliminatedPayload;
+          console.info(
+            `[game-ws] ${payload.displayName} has been eliminated (team ${payload.teamId})`
+          );
+          break;
+        }
+
+        case 'choose_turn_recipient_prompt': {
+          // Targeted: sent ONLY to the eliminated human player.
+          // Show them a modal to choose which teammate receives future turns.
+          const payload = msg as unknown as ChooseTurnRecipientPromptPayload;
+          setEliminationPrompt(payload);
           break;
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -576,6 +652,31 @@ export function useGameSocket({
     }));
   }, []);
 
+  /**
+   * Acknowledge the declaration result overlay has been dismissed (Sub-AC 26c).
+   * Fire-and-forget — the server ignores this message but it signals the client
+   * is ready for the next turn.
+   */
+  const sendGameAdvance = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'game_advance' }));
+  }, []);
+
+  /**
+   * Sub-AC 27b: Notify the server which teammate should receive future turns
+   * on behalf of this eliminated player.  Fire-and-forget.
+   *
+   * Also clears the local `eliminationPrompt` state so the modal is dismissed.
+   */
+  const sendChooseTurnRecipient = useCallback((recipientId: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'choose_turn_recipient', recipientId }));
+    // Clear the prompt so the modal closes
+    setEliminationPrompt(null);
+  }, []);
+
   return {
     wsStatus,
     myPlayerId,
@@ -586,6 +687,7 @@ export function useGameSocket({
     playerCount,
     lastAskResult,
     lastDeclareResult,
+    declarationFailed,
     declareProgress,
     turnTimer,
     declarationTimer,
@@ -594,6 +696,7 @@ export function useGameSocket({
     inferenceMode,
     botTakeover,
     reconnectWindows,
+    eliminationPrompt,
     sendAsk,
     sendDeclare,
     sendDeclareProgress,
@@ -601,6 +704,8 @@ export function useGameSocket({
     sendToggleInference,
     sendPartialSelection,
     sendDeclareSelecting,
+    sendGameAdvance,
+    sendChooseTurnRecipient,
     error,
   };
 }

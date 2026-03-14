@@ -187,3 +187,28 @@ body:has([role="dialog"]) {
   animation: flip-card-reveal 0.55s ease-in-out forwards;
   transform-style: preserve-3d;
 }
+
+/* ── FailedDeclarationReveal overlay animations (Sub-AC 26b) ───────────────── */
+
+/**
+ * Fade-in for the backdrop overlay.
+ * Used by FailedDeclarationReveal when the `declarationFailed` event arrives.
+ */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+
+/**
+ * Auto-dismiss progress bar — shrinks from full-width to zero over the
+ * AUTO_DISMISS_MS duration (6 000 ms by default).  Applied inline via
+ * style={{ animation: `shrink-width ${ms}ms linear forwards` }}.
+ */
+@keyframes shrink-width {
+  from { width: 100%; }
+  to   { width:   0%; }
+}

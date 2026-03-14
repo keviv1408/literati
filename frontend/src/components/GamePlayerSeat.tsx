@@ -203,7 +203,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   }
 
   // ── Derived flags ───────────────────────────────────────────────────────────
-  const { playerId, displayName, avatarId, teamId, cardCount, isBot, isCurrentTurn } = player;
+  const { playerId, displayName, avatarId, teamId, cardCount, isBot, isCurrentTurn, isEliminated } = player;
 
   const isMe = playerId === myPlayerId;
 
@@ -224,12 +224,14 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       className={[
         'relative w-[6.5rem] flex flex-col items-center gap-1',
         'py-2 px-2 rounded-xl border',
+        // Eliminated players are visually dimmed and cannot act
+        isEliminated ? 'opacity-50 grayscale' : '',
         // Scale up slightly and elevate when it's this player's turn
-        isTurn ? 'scale-110 z-10' : '',
+        !isEliminated && isTurn ? 'scale-110 z-10' : '',
         // Active-turn ring (layout layer — amber offset ring on the container)
-        isTurn ? 'ring-2 ring-amber-400/80 ring-offset-1 ring-offset-slate-950' : '',
+        !isEliminated && isTurn ? 'ring-2 ring-amber-400/80 ring-offset-1 ring-offset-slate-950' : '',
         // Active-turn glow animation (box-shadow keyframe from globals.css)
-        isTurn ? 'animate-seat-glow' : '',
+        !isEliminated && isTurn ? 'animate-seat-glow' : '',
         // Current user always gets an emerald highlight
         isMe
           ? 'border-emerald-500/70 bg-emerald-900/40'
@@ -238,21 +240,37 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       ]
         .filter(Boolean)
         .join(' ')}
-      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}`}
+      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}`}
       role="listitem"
       data-testid="game-player-seat"
       data-seat-index={seatIndex}
       data-player-id={playerId}
       data-team={teamId}
       data-active-turn={isTurn ? 'true' : undefined}
+      data-eliminated={isEliminated ? 'true' : undefined}
     >
       {/* ── Current-turn pulsing ring ─────────────────────────────── */}
-      {isTurn && (
+      {isTurn && !isEliminated && (
         <span
           className="absolute inset-0 rounded-xl border-2 border-amber-400/80 animate-pulse pointer-events-none"
           aria-hidden="true"
           data-testid="turn-ring"
         />
+      )}
+
+      {/* ── Eliminated overlay (Sub-AC 27b) ───────────────────────── */}
+      {/* Shown when a player's hand was emptied by a declaration.     */}
+      {/* A skull badge overlays the avatar to signal they can no      */}
+      {/* longer ask, be asked, or declare.                            */}
+      {isEliminated && (
+        <span
+          className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center rounded-full bg-slate-800 border border-slate-600 text-[9px] leading-none select-none"
+          aria-hidden="true"
+          data-testid="eliminated-badge"
+          title="Eliminated — no cards left"
+        >
+          💀
+        </span>
       )}
 
       {/* ── Avatar with card-count badge ─────────────────────────── */}
