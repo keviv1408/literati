@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Offline — Literati</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #022c22;
+      color: #d1fae5;
+      font-family: system-ui, sans-serif;
+      text-align: center;
+      padding: 2rem;
+    }
+    .card {
+      background: #064e3b;
+      border: 1px solid #065f46;
+      border-radius: 1rem;
+      padding: 2.5rem 2rem;
+      max-width: 360px;
+      width: 100%;
+    }
+    .suit { font-size: 4rem; line-height: 1; margin-bottom: 1rem; }
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+    p { color: #a7f3d0; font-size: 0.95rem; line-height: 1.6; }
+    button {
+      margin-top: 1.5rem;
+      padding: 0.75rem 2rem;
+      border-radius: 0.75rem;
+      background: #059669;
+      color: white;
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #10b981; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="suit">🃏</div>
+    <h1>You're Offline</h1>
+    <p>Check your internet connection and try again. Your game will resume once you're back online.</p>
+    <button onclick="window.location.reload()">Try Again</button>
+  </div>
+</body>
+</html>

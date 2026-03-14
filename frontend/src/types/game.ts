@@ -1,0 +1,366 @@
+/**
+ * Game type definitions for the Literati Literature card game.
+ *
+ * Cards are represented as "{rank}_{suit}" strings:
+ *   rank: 1=Ace, 2-9, 10, 11=Jack, 12=Queen, 13=King
+ *   suit: s=Spades, h=Hearts, d=Diamonds, c=Clubs
+ *
+ * Half-suit IDs: "{low|high}_{s|h|d|c}"  e.g. "low_s", "high_d"
+ */
+
+export type CardSuit = 's' | 'h' | 'd' | 'c';
+
+export type CardRank = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+
+/** Card ID string e.g. "1_s", "13_d", "10_c" */
+export type CardId = string;
+
+/** Half-suit ID string e.g. "low_s", "high_d" */
+export type HalfSuitId = string;
+
+export interface ParsedCard {
+  rank: CardRank;
+  suit: CardSuit;
+  id: CardId;
+}
+
+/** Player info as broadcast by the game WebSocket. */
+export interface GamePlayer {
+  playerId: string;
+  displayName: string;
+  avatarId: string | null;
+  teamId: 1 | 2;
+  seatIndex: number;
+  cardCount: number;
+  /**
+   * Per-half-suit card count map.  Keys are HalfSuitId strings (e.g. "low_s").
+   * Populated by the server in every game_players / game_init broadcast.
+   * Used by CardRequestWizard to grey out opponents with 0 cards in the
+   * currently selected half-suit so the player can't ask them.
+   * Optional for backward-compatibility with older snapshots.
+   */
+  halfSuitCounts?: Record<string, number>;
+  isBot: boolean;
+  isGuest: boolean;
+  isCurrentTurn: boolean;
+}
+
+/** A declared half-suit with which team won it. */
+export interface DeclaredSuit {
+  halfSuitId: HalfSuitId;
+  teamId: 1 | 2;
+  declaredBy: string;
+}
+
+/** Public game state broadcast to all players. */
+export interface PublicGameState {
+  status: 'active' | 'completed';
+  currentTurnPlayerId: string | null;
+  scores: { team1: number; team2: number };
+  lastMove: string | null;
+  winner: 1 | 2 | null;
+  tiebreakerWinner: 1 | 2 | null;
+  declaredSuits: DeclaredSuit[];
+  /**
+   * Shared inference-mode flag — when true all clients show deduction highlights.
+   * Any in-game player can toggle via `toggle_inference` WebSocket message.
+   */
+  inferenceMode: boolean;
+}
+
+/** Full game init payload sent to each player on connection. */
+export interface GameInitPayload {
+  type: 'game_init';
+  roomCode: string;
+  variant: 'remove_2s' | 'remove_7s' | 'remove_8s';
+  playerCount: 6 | 8;
+  myPlayerId: string;
+  myHand: CardId[];
+  players: GamePlayer[];
+  gameState: PublicGameState;
+}
+
+/** Result of an ask-card action. */
+export interface AskResultPayload {
+  type: 'ask_result';
+  askerId: string;
+  targetId: string;
+  cardId: CardId;
+  success: boolean;
+  newTurnPlayerId: string;
+  lastMove: string;
+}
+
+/** Result of a declaration. */
+export interface DeclarationResultPayload {
+  type: 'declaration_result';
+  declarerId: string;
+  halfSuitId: HalfSuitId;
+  correct: boolean;
+  winningTeam: 1 | 2;
+  newTurnPlayerId: string;
+  assignment: Record<CardId, string>; // cardId → playerId
+  lastMove: string;
+}
+
+/** Game over payload. */
+export interface GameOverPayload {
+  type: 'game_over';
+  winner: 1 | 2 | null;
+  tiebreakerWinner: 1 | 2 | null;
+  scores: { team1: number; team2: number };
+}
+
+/** Per-player rematch vote visibility record. */
+export interface PlayerVoteRecord {
+  playerId: string;
+  displayName: string;
+  isBot: boolean;
+  vote: boolean | null; // null = not yet voted
+}
+
+/** Rematch vote tally broadcast after every vote cast (including bot auto-votes). */
+export interface RematchVoteUpdatePayload {
+  type: 'rematch_vote_update';
+  yesCount: number;
+  noCount: number;
+  totalCount: number;
+  humanCount: number;
+  majority: number;
+  majorityReached: boolean;
+  majorityDeclined: boolean;
+  votes: Record<string, boolean>;
+  playerVotes: PlayerVoteRecord[];
+}
+
+/** Broadcast when a majority of players (including bots) voted yes. */
+export interface RematchStartPayload {
+  type: 'rematch_start';
+  roomCode: string;
+}
+
+/** Broadcast when the vote window expired or majority voted no. */
+export interface RematchDeclinedPayload {
+  type: 'rematch_declined';
+  reason: 'timeout' | 'majority_no';
+}
+
+/**
+ * Broadcast to all clients when the shared inference-mode flag is toggled.
+ * Any in-game player can trigger this.
+ */
+export interface InferenceModeChangedPayload {
+  type: 'inference_mode_changed';
+  /** New value of the flag after the toggle. */
+  enabled: boolean;
+  /** Player ID who performed the toggle. */
+  toggledBy: string;
+}
+
+/**
+ * Broadcast to all clients (except the declarant) while the declarant is
+ * filling out the card-assignment form (Step 2 of the DeclareModal).
+ *
+ * Sent for every change in the in-progress assignment so all observers
+ * see live updates.  halfSuitId === null signals that the declaration
+ * was cancelled (declarant went back or closed the modal) — clients
+ * should clear the progress banner when they receive this.
+ *
+ * The server broadcasts this message as fire-and-forget: no state is
+ * persisted.  Clients that connect mid-declaration will not see earlier
+ * progress, but will receive the next progress event when the declarant
+ * makes the next assignment change.
+ */
+export interface DeclareProgressPayload {
+  type: 'declare_progress';
+  /** The player who is making the declaration. */
+  declarerId: string;
+  /**
+   * Which half-suit is being declared.
+   * null → declarant cancelled (went back to Step 1 or closed the modal).
+   */
+  halfSuitId: HalfSuitId | null;
+  /** Number of cards that have been assigned so far (0–6). */
+  assignedCount: number;
+  /** Always 6. */
+  totalCards: number;
+  /**
+   * Partial card → playerId assignment as submitted so far.
+   * Empty when declaration is cancelled (halfSuitId === null).
+   */
+  assignment: Record<CardId, string>;
+}
+
+/**
+ * Broadcast to all clients when a human player's turn timer expires.
+ *
+ * Carries any partial card-selection state the player had in progress
+ * when the timer ran out (null if they hadn't started the wizard yet).
+ * The actual bot-executed move follows immediately after in an ask_result
+ * or declaration_result broadcast.
+ */
+export interface BotTakeoverPayload {
+  type: 'bot_takeover';
+  /** The player whose turn expired. */
+  playerId: string;
+  /**
+   * The partial wizard state the player had reported before time ran out.
+   * null → player had not reported any selection (wizard not opened).
+   *
+   * When present, shape mirrors the partialSelectionStore contract:
+   *   Ask step 2 entered (half-suit chosen):
+   *     { flow: 'ask', halfSuitId: string }
+   *   Ask step 3 entered (card also chosen):
+   *     { flow: 'ask', halfSuitId: string, cardId: string }
+   *   Declare flow:
+   *     { flow: 'declare', halfSuitId: string, assignment?: Record<string, string> }
+   */
+  partialState: {
+    flow: 'ask' | 'declare';
+    halfSuitId?: string;
+    cardId?: string;
+    assignment?: Record<string, string>;
+  } | null;
+}
+
+// ── Reconnect window events (Sub-AC 3 of AC 39) ──────────────────────────────
+
+/**
+ * Broadcast to all connected clients (except the disconnected player, who is
+ * no longer connected) when a human player disconnects during an active game.
+ *
+ * The seat is temporarily filled by a bot for the duration of the reconnect
+ * window.  Clients should show a "disconnected — reconnecting…" badge on the
+ * affected seat with a countdown to `expiresAt`.
+ */
+export interface PlayerDisconnectedPayload {
+  type: 'player_disconnected';
+  /** The player who disconnected. */
+  playerId: string;
+  /** Total reconnect window duration in ms (always 60 000). */
+  reconnectWindowMs: number;
+  /** Epoch ms timestamp when the reconnect window expires. */
+  expiresAt: number;
+}
+
+/**
+ * Broadcast to all OTHER connected clients when a disconnected player
+ * reconnects within the 60-second window and reclaims their seat.
+ *
+ * The bot that was filling the seat is evicted and the human resumes play.
+ * Clients should clear the "disconnected" badge and restore the player avatar.
+ */
+export interface PlayerReconnectedPayload {
+  type: 'player_reconnected';
+  /** The player who reconnected. */
+  playerId: string;
+  /** Their display name (unchanged from before the disconnect). */
+  displayName: string;
+}
+
+/**
+ * Broadcast to all connected clients when the 60-second reconnect window
+ * expires without the player returning.  The bot that replaced them takes
+ * over the seat permanently for the rest of the game.
+ */
+export interface ReconnectExpiredPayload {
+  type: 'reconnect_expired';
+  /** The player whose reconnect window expired. */
+  playerId: string;
+}
+
+// ── Card display helpers ─────────────────────────────────────────────────────
+
+const RANK_DISPLAY: Record<number, string> = {
+  1: 'A', 11: 'J', 12: 'Q', 13: 'K',
+};
+
+export function parseCard(id: CardId): ParsedCard {
+  const [rankStr, suit] = id.split('_');
+  const rank = parseInt(rankStr, 10) as CardRank;
+  return { rank, suit: suit as CardSuit, id };
+}
+
+export function cardRankLabel(rank: CardRank): string {
+  return RANK_DISPLAY[rank] ?? String(rank);
+}
+
+export const SUIT_SYMBOLS: Record<CardSuit, string> = {
+  s: '♠',
+  h: '♥',
+  d: '♦',
+  c: '♣',
+};
+
+export const SUIT_NAMES: Record<CardSuit, string> = {
+  s: 'Spades',
+  h: 'Hearts',
+  d: 'Diamonds',
+  c: 'Clubs',
+};
+
+export const SUIT_COLORS: Record<CardSuit, string> = {
+  s: 'text-gray-900',
+  h: 'text-red-600',
+  d: 'text-red-600',
+  c: 'text-gray-900',
+};
+
+export const SUIT_BORDER_COLORS: Record<CardSuit, string> = {
+  s: 'border-gray-700',
+  h: 'border-red-400',
+  d: 'border-red-400',
+  c: 'border-gray-700',
+};
+
+export function cardLabel(card: CardId): string {
+  const { rank, suit } = parseCard(card);
+  return `${cardRankLabel(rank)}${SUIT_SYMBOLS[suit]}`;
+}
+
+export function halfSuitLabel(halfSuitId: HalfSuitId): string {
+  const [tier, suit] = halfSuitId.split('_');
+  const tierLabel = tier === 'low' ? 'Low' : 'High';
+  return `${tierLabel} ${SUIT_NAMES[suit as CardSuit] ?? suit}`;
+}
+
+// ── Half-suit card compositions ───────────────────────────────────────────────
+
+const ALL_RANKS_SORTED = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+
+function getRemainingRanks(variant: 'remove_2s' | 'remove_7s' | 'remove_8s'): number[] {
+  const REMOVED: Record<string, number> = { remove_2s: 2, remove_7s: 7, remove_8s: 8 };
+  return ALL_RANKS_SORTED.filter((r) => r !== REMOVED[variant]);
+}
+
+export function getHalfSuitCards(
+  halfSuitId: HalfSuitId,
+  variant: 'remove_2s' | 'remove_7s' | 'remove_8s'
+): CardId[] {
+  const [tier, suit] = halfSuitId.split('_');
+  const remaining = getRemainingRanks(variant);
+  const ranks = tier === 'low' ? remaining.slice(0, 6) : remaining.slice(6, 12);
+  return ranks.map((r) => `${r}_${suit}`);
+}
+
+export function getCardHalfSuit(
+  cardId: CardId,
+  variant: 'remove_2s' | 'remove_7s' | 'remove_8s'
+): HalfSuitId | null {
+  const [rankStr, suit] = cardId.split('_');
+  const rank = parseInt(rankStr, 10);
+  const remaining = getRemainingRanks(variant);
+  const idx = remaining.indexOf(rank);
+  if (idx === -1) return null;
+  return idx < 6 ? `low_${suit}` : `high_${suit}`;
+}
+
+export function allHalfSuitIds(): HalfSuitId[] {
+  const ids: HalfSuitId[] = [];
+  for (const tier of ['low', 'high']) {
+    for (const suit of ['s', 'h', 'd', 'c']) {
+      ids.push(`${tier}_${suit}`);
+    }
+  }
+  return ids;
+}

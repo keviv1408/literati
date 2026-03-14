@@ -1,0 +1,933 @@
+'use client';
+
+/**
+ * Game View — /game/[room-id]
+ *
+ * Deep-links players directly into the active game for a given room code.
+ *
+ * Sub-AC 47a: Dynamic route that:
+ *   1. Validates the room-id format (must be 6-char alphanumeric).
+ *   2. Fetches the room by code from GET /api/rooms/:code.
+ *   3. Handles error states:
+ *      - Invalid format       → inline error + Back button (no redirect loop)
+ *      - Room not found (404) → "Room Not Found" state + Back button
+ *      - Room cancelled       → "Game Ended" state + Back button
+ *      - Room still waiting   → redirect to /room/<CODE> lobby
+ *   4. Renders the game view scaffold when the room is in_progress (or
+ *      transitioning through 'starting').
+ *   5. Connects to the backend game WebSocket once auth is resolved so the
+ *      UI receives live game state updates.
+ *
+ * Architecture notes:
+ *   - Uses async params (Next.js 15+ App Router — params are Promises).
+ *   - Reads both AuthContext (registered users) and GuestContext (guests)
+ *     to resolve a bearer token for the WebSocket handshake.
+ *   - The "room-id" URL segment maps to the 6-char room code used across
+ *     the codebase (same code used by /room/[roomCode] lobby).
+ *   - Game engine state (hands, turns, declarations) will be populated in
+ *     later ACs; this scaffold wires the routing, error handling, and
+ *     connection lifecycle.
+ */
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { getRoomByCode, getGuestBearerToken, ApiError } from '@/lib/api';
+import { getCachedToken } from '@/lib/backendSession';
+import { useGuest } from '@/contexts/GuestContext';
+import { useAuth } from '@/contexts/AuthContext';
+import type { Room } from '@/types/room';
+import { API_URL } from '@/lib/api';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/** Room codes are exactly 6 uppercase alphanumeric characters. */
+const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
+
+/** Human-readable labels for each card-removal variant. */
+const VARIANT_LABELS: Record<string, string> = {
+  remove_2s: 'Remove 2s',
+  remove_7s: 'Remove 7s (Classic)',
+  remove_8s: 'Remove 8s',
+};
+
+// ── WebSocket helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Convert an HTTP(S) base URL to a WS(S) base URL.
+ *   "http://localhost:3001"   → "ws://localhost:3001"
+ *   "https://api.example.com" → "wss://api.example.com"
+ */
+function toWsBase(httpUrl: string): string {
+  return httpUrl.replace(/^https?/, (proto) =>
+    proto === 'https' ? 'wss' : 'ws'
+  );
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+/** Minimal game state received via the game WebSocket. Expanded in later ACs. */
+interface GameState {
+  status: 'waiting' | 'active' | 'completed';
+  currentTurnPlayerId: string | null;
+  scores: { team1: number; team2: number };
+  lastMove: string | null;
+}
+
+/** A player entry as broadcast by the game WebSocket. */
+interface GamePlayer {
+  playerId: string;
+  displayName: string;
+  avatarId: string | null;
+  teamId: 1 | 2;
+  seatIndex: number;
+  cardCount: number;
+  isHost: boolean;
+  isBot: boolean;
+}
+
+type WsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
+
+// ── Page props ────────────────────────────────────────────────────────────────
+
+interface PageProps {
+  params: Promise<{ 'room-id': string }>;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function GamePage({ params }: PageProps) {
+  const router = useRouter();
+  const { guestSession } = useGuest();
+  const { session: authSession } = useAuth();
+
+  // ── Resolved route param ────────────────────────────────────────────────────
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+
+  // ── Room fetch state ────────────────────────────────────────────────────────
+  const [room, setRoom] = useState<Room | null>(null);
+  const [loading, setLoading] = useState(true);
+  /** True when the room code format is invalid (not 6-char alphanumeric). */
+  const [invalidFormat, setInvalidFormat] = useState(false);
+  /** True when GET /api/rooms/:code returns 404. */
+  const [notFound, setNotFound] = useState(false);
+
+  // ── Auth / token ────────────────────────────────────────────────────────────
+  const [bearerToken, setBearerToken] = useState<string | null>(null);
+
+  // ── Game WebSocket state ────────────────────────────────────────────────────
+  const [wsStatus, setWsStatus] = useState<WsStatus>('idle');
+  const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
+  const [gamePlayers, setGamePlayers] = useState<GamePlayer[]>([]);
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const roomCodeRef = useRef<string | null>(null);
+
+  // ── Resolve async params (Next.js 15+) ─────────────────────────────────────
+  useEffect(() => {
+    params.then((resolved) => {
+      const raw = resolved['room-id'];
+      const upper = (raw ?? '').toUpperCase();
+      setRoomCode(upper);
+    });
+  }, [params]);
+
+  // ── Resolve bearer token ────────────────────────────────────────────────────
+  // Priority: registered Supabase JWT → cached guest token → fresh guest token.
+  useEffect(() => {
+    if (!roomCode) return;
+
+    // Registered user: use the Supabase JWT directly.
+    if (authSession?.access_token) {
+      setBearerToken(authSession.access_token);
+      return;
+    }
+
+    // Guest user: use cached token or fetch a new one.
+    if (guestSession?.displayName) {
+      const cached = getCachedToken(guestSession.displayName);
+      if (cached) {
+        setBearerToken(cached);
+        return;
+      }
+      getGuestBearerToken(guestSession.displayName)
+        .then(setBearerToken)
+        .catch(() => {
+          // Non-fatal — the game socket will be skipped without auth.
+        });
+    }
+  }, [roomCode, authSession, guestSession]);
+
+  // ── Fetch room details ──────────────────────────────────────────────────────
+  useEffect(() => {
+    // Use strict null check: empty string is a valid (invalid-format) room code.
+    if (roomCode === null) return;
+
+    // Validate format before hitting the network.
+    if (!ROOM_CODE_RE.test(roomCode)) {
+      setInvalidFormat(true);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    getRoomByCode(roomCode)
+      .then(({ room: fetched }) => {
+        if (cancelled) return;
+
+        // If the room is still in the lobby phase, redirect to the lobby page.
+        if (fetched.status === 'waiting' || fetched.status === 'starting') {
+          router.replace(`/room/${fetched.code}`);
+          return;
+        }
+
+        setRoom(fetched);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setNotFound(true);
+        }
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomCode, router]);
+
+  // ── Game WebSocket connection ───────────────────────────────────────────────
+  // Connects when:
+  //   • roomCode is resolved and passes format check
+  //   • bearerToken is available
+  //   • room is in_progress (skip for completed/cancelled rooms)
+  //
+  // The game WS server at /ws/game/<CODE> (later ACs) broadcasts live game
+  // state. This scaffold wires the connection lifecycle; message handling
+  // for cards, turns, and declarations is expanded in subsequent ACs.
+  useEffect(() => {
+    const isPlayable =
+      room?.status === 'in_progress' || room?.status === 'starting';
+    if (!roomCode || !bearerToken || !isPlayable) return;
+
+    roomCodeRef.current = roomCode;
+    const wsBase = toWsBase(API_URL);
+    const wsUrl = `${wsBase}/ws/game/${roomCode}?token=${encodeURIComponent(bearerToken)}`;
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      setWsStatus('error');
+      return;
+    }
+
+    wsRef.current = ws;
+    setWsStatus('connecting');
+
+    ws.onopen = () => {
+      setWsStatus('connected');
+    };
+
+    ws.onclose = () => {
+      wsRef.current = null;
+      setWsStatus((prev) => (prev === 'error' ? 'error' : 'disconnected'));
+    };
+
+    ws.onerror = () => {
+      setWsStatus('error');
+    };
+
+    ws.onmessage = (event: MessageEvent) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(event.data as string) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+
+      switch (msg.type) {
+        // Server confirms auth; record our identity.
+        case 'connected': {
+          const pid =
+            (msg.userId as string | undefined) ??
+            (msg.playerId as string | undefined);
+          if (pid) setMyPlayerId(pid);
+          break;
+        }
+
+        // Full player snapshot.
+        case 'game_players': {
+          if (Array.isArray(msg.players)) {
+            setGamePlayers(msg.players as GamePlayer[]);
+          }
+          break;
+        }
+
+        // Full game state snapshot.
+        case 'game_state': {
+          setGameState(msg.state as GameState);
+          break;
+        }
+
+        // Game ended.
+        case 'game_over': {
+          setRoom((prev) =>
+            prev ? { ...prev, status: 'completed' } : prev
+          );
+          break;
+        }
+
+        default:
+          break;
+      }
+    };
+
+    return () => {
+      ws.close(1000, 'unmount');
+      wsRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, bearerToken, room?.status]);
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  const handleGoHome = useCallback(() => {
+    router.push('/');
+  }, [router]);
+
+  const handleGoLobby = useCallback(() => {
+    if (roomCode) router.push(`/room/${roomCode}`);
+    else router.push('/');
+  }, [router, roomCode]);
+
+  // ── Render: invalid format ──────────────────────────────────────────────────
+  if (invalidFormat) {
+    return (
+      <GameErrorView
+        emoji="🃏"
+        title="Invalid Room Code"
+        body={
+          <>
+            <span className="font-mono font-bold text-red-400">
+              {roomCode ?? '—'}
+            </span>{' '}
+            is not a valid room code. Room codes are 6 characters (letters and
+            digits).
+          </>
+        }
+        onPrimary={handleGoHome}
+        primaryLabel="Back to Home"
+        data-testid="invalid-format-view"
+      />
+    );
+  }
+
+  // ── Render: loading ─────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
+        data-testid="game-loading"
+      >
+        <div className="flex flex-col items-center gap-4 text-slate-400">
+          <svg
+            className="animate-spin h-8 w-8 text-emerald-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-label="Loading game…"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v8z"
+            />
+          </svg>
+          <span className="text-sm">Loading game…</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: not found ───────────────────────────────────────────────────────
+  if (notFound) {
+    return (
+      <GameErrorView
+        emoji="🔍"
+        title="Room Not Found"
+        body={
+          <>
+            No room with code{' '}
+            <span className="font-mono font-bold text-emerald-400">
+              {roomCode}
+            </span>{' '}
+            exists or the room has expired.
+          </>
+        }
+        onPrimary={handleGoHome}
+        primaryLabel="Back to Home"
+        data-testid="not-found-view"
+      />
+    );
+  }
+
+  // ── Render: room not resolved ───────────────────────────────────────────────
+  if (!room) {
+    return (
+      <GameErrorView
+        emoji="⚠️"
+        title="Something Went Wrong"
+        body="Could not load the game. Please try again."
+        onPrimary={handleGoHome}
+        primaryLabel="Back to Home"
+        data-testid="generic-error-view"
+      />
+    );
+  }
+
+  // ── Render: game cancelled ──────────────────────────────────────────────────
+  if (room.status === 'cancelled') {
+    return (
+      <GameErrorView
+        emoji="🚫"
+        title="Game Cancelled"
+        body={
+          <>
+            Room{' '}
+            <span className="font-mono font-bold text-slate-300">
+              {room.code}
+            </span>{' '}
+            was cancelled before the game could start.
+          </>
+        }
+        onPrimary={handleGoHome}
+        primaryLabel="Back to Home"
+        data-testid="cancelled-view"
+      />
+    );
+  }
+
+  // ── Render: game completed ──────────────────────────────────────────────────
+  if (room.status === 'completed') {
+    const team1Score = gameState?.scores.team1 ?? 0;
+    const team2Score = gameState?.scores.team2 ?? 0;
+    const winner =
+      team1Score > team2Score
+        ? 'Team 1'
+        : team2Score > team1Score
+          ? 'Team 2'
+          : null;
+
+    return (
+      <div
+        className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6"
+        data-testid="game-completed-view"
+      >
+        <div className="text-center max-w-sm">
+          <div className="text-5xl mb-4" aria-hidden="true">🏆</div>
+          <h1 className="text-2xl font-bold text-white mb-2">Game Over</h1>
+          {winner ? (
+            <p className="text-emerald-300 font-semibold text-lg mb-1">
+              {winner} wins!
+            </p>
+          ) : (
+            <p className="text-slate-300 font-semibold text-lg mb-1">
+              It&apos;s a tie!
+            </p>
+          )}
+          <p className="text-slate-400 text-sm mb-4">
+            Final score — Team 1: {team1Score} &bull; Team 2: {team2Score}
+          </p>
+          <p className="text-slate-500 text-xs font-mono">
+            Room: <span className="text-slate-400 font-bold">{room.code}</span>
+            &ensp;&bull;&ensp;
+            {VARIANT_LABELS[room.card_removal_variant] ?? room.card_removal_variant}
+          </p>
+        </div>
+        <button
+          onClick={handleGoHome}
+          className="py-3 px-6 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          data-testid="game-over-go-home"
+        >
+          Back to Home
+        </button>
+      </div>
+    );
+  }
+
+  // ── Derive current player info ──────────────────────────────────────────────
+  const myPlayer = gamePlayers.find((p) => p.playerId === myPlayerId) ?? null;
+  const myTeamId = myPlayer?.teamId ?? null;
+  const isMyTurn = gameState?.currentTurnPlayerId === myPlayerId;
+  const currentTurnPlayer = gameState?.currentTurnPlayerId
+    ? gamePlayers.find((p) => p.playerId === gameState.currentTurnPlayerId)
+    : null;
+
+  // Split players by team for the oval table layout.
+  const team1Players = gamePlayers.filter((p) => p.teamId === 1);
+  const team2Players = gamePlayers.filter((p) => p.teamId === 2);
+
+  // ── Render: active game view ────────────────────────────────────────────────
+  return (
+    <div
+      className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden"
+      data-testid="game-view"
+    >
+      {/* ── Background decoration ──────────────────────────────────────────── */}
+      <div
+        className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none"
+        aria-hidden="true"
+      >
+        <span className="absolute text-[20rem] -top-16 -right-16 text-white">♦</span>
+        <span className="absolute text-[14rem] bottom-0 -left-8 text-white">♣</span>
+      </div>
+
+      {/* ── Top bar ────────────────────────────────────────────────────────── */}
+      <header className="relative z-20 flex items-center justify-between px-4 py-3 border-b border-slate-700/50 bg-slate-900/70 backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleGoHome}
+            aria-label="Go to home"
+            className="text-slate-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 rounded-lg p-1"
+          >
+            ←
+          </button>
+          <div>
+            <span className="text-xs text-slate-500 uppercase tracking-widest mr-2">
+              Room
+            </span>
+            <span
+              className="font-mono font-bold text-white text-sm"
+              data-testid="game-room-code"
+            >
+              {room.code}
+            </span>
+          </div>
+          <span className="text-xs text-slate-500 hidden sm:inline">
+            {VARIANT_LABELS[room.card_removal_variant] ?? room.card_removal_variant}
+            &ensp;&bull;&ensp;
+            {room.player_count === 6 ? '3v3' : '4v4'}
+          </span>
+        </div>
+
+        {/* Score display */}
+        <div
+          className="flex items-center gap-3 text-sm font-semibold"
+          aria-label="Score"
+          data-testid="game-score"
+        >
+          <span className={myTeamId === 1 ? 'text-emerald-300' : 'text-slate-400'}>
+            T1&nbsp;
+            <span className="text-white text-base">{gameState?.scores.team1 ?? 0}</span>
+          </span>
+          <span className="text-slate-600">—</span>
+          <span className={myTeamId === 2 ? 'text-emerald-300' : 'text-slate-400'}>
+            <span className="text-white text-base">{gameState?.scores.team2 ?? 0}</span>
+            &nbsp;T2
+          </span>
+        </div>
+
+        {/* Connection status dot */}
+        <div
+          className="flex items-center gap-1.5"
+          title={`WebSocket: ${wsStatus}`}
+          aria-label={`Connection status: ${wsStatus}`}
+          data-testid="ws-status-indicator"
+        >
+          <span
+            className={[
+              'w-2 h-2 rounded-full',
+              wsStatus === 'connected'
+                ? 'bg-emerald-400'
+                : wsStatus === 'connecting'
+                  ? 'bg-yellow-400 animate-pulse'
+                  : wsStatus === 'error'
+                    ? 'bg-red-500'
+                    : 'bg-slate-600',
+            ].join(' ')}
+          />
+          <span className="text-xs text-slate-500 hidden sm:inline capitalize">
+            {wsStatus}
+          </span>
+        </div>
+      </header>
+
+      {/* ── Turn indicator banner ──────────────────────────────────────────── */}
+      {gameState && (
+        <div
+          className={[
+            'relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium',
+            isMyTurn
+              ? 'bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40'
+              : 'bg-slate-800/50 text-slate-400 border-b border-slate-700/40',
+          ].join(' ')}
+          role="status"
+          aria-live="polite"
+          data-testid="turn-indicator"
+        >
+          {isMyTurn ? (
+            <>
+              <span className="text-base" aria-hidden="true">🎯</span>
+              <span>Your turn — ask for a card or declare a half-suit</span>
+            </>
+          ) : currentTurnPlayer ? (
+            <>
+              <span className="text-base" aria-hidden="true">⏳</span>
+              <span>
+                Waiting for{' '}
+                <strong>{currentTurnPlayer.displayName}</strong>…
+              </span>
+            </>
+          ) : (
+            <span>Waiting for game to start…</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Last move display ──────────────────────────────────────────────── */}
+      {gameState?.lastMove && (
+        <div
+          className="relative z-10 flex items-center justify-center px-4 py-1.5 bg-slate-800/40 border-b border-slate-700/30 text-xs text-slate-400"
+          aria-label="Last move"
+          data-testid="last-move-display"
+        >
+          <span className="mr-1.5 text-slate-500" aria-hidden="true">↩</span>
+          {gameState.lastMove}
+        </div>
+      )}
+
+      {/* ── Main game area ─────────────────────────────────────────────────── */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-between px-4 py-4 gap-4 min-h-0">
+
+        {/* ── Team 2 players (top, across the table) ────────────────────────── */}
+        <div
+          className="w-full max-w-2xl"
+          aria-label="Team 2 players"
+          data-testid="team2-row"
+        >
+          <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-2">
+            Team 2
+            {myTeamId === 2 && (
+              <span className="ml-1.5 text-emerald-400">(Your Team)</span>
+            )}
+          </p>
+          <PlayerRow
+            players={team2Players}
+            myPlayerId={myPlayerId}
+            currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+            playerCount={room.player_count}
+          />
+        </div>
+
+        {/* ── Oval table center ──────────────────────────────────────────────── */}
+        <div
+          className="relative flex items-center justify-center w-full max-w-xs"
+          aria-hidden="true"
+          data-testid="game-table-center"
+        >
+          <div className="w-full aspect-[2/1] rounded-full border-2 border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center shadow-inner shadow-black/40">
+            <div className="text-center">
+              <div className="text-3xl mb-1">🃏</div>
+              <p className="text-xs text-slate-500 font-medium">
+                {room.player_count === 6 ? '3v3' : '4v4'}
+              </p>
+              <p className="text-xs text-emerald-600 font-mono">
+                {VARIANT_LABELS[room.card_removal_variant] ?? room.card_removal_variant}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Team 1 players (bottom, your side) ────────────────────────────── */}
+        <div
+          className="w-full max-w-2xl"
+          aria-label="Team 1 players"
+          data-testid="team1-row"
+        >
+          <PlayerRow
+            players={team1Players}
+            myPlayerId={myPlayerId}
+            currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+            playerCount={room.player_count}
+          />
+          <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-2">
+            Team 1
+            {myTeamId === 1 && (
+              <span className="ml-1.5 text-emerald-400">(Your Team)</span>
+            )}
+          </p>
+        </div>
+      </main>
+
+      {/* ── Current player's hand (bottom bar) ────────────────────────────── */}
+      <footer
+        className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 backdrop-blur-sm px-4 py-3"
+        data-testid="player-hand-area"
+      >
+        {myPlayer ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                Your hand — <strong className="text-white">{myPlayer.cardCount}</strong> card{myPlayer.cardCount !== 1 ? 's' : ''}
+              </span>
+              {isMyTurn && (
+                <span
+                  className="text-xs font-semibold text-emerald-400 animate-pulse"
+                  aria-live="polite"
+                >
+                  Your turn!
+                </span>
+              )}
+            </div>
+            {/* Card fan placeholder — populated by hand AC */}
+            <HandPlaceholder cardCount={myPlayer.cardCount} isMyTurn={isMyTurn} />
+          </div>
+        ) : (
+          <div className="text-center text-xs text-slate-500 py-1">
+            {wsStatus === 'connected'
+              ? 'Waiting for game state…'
+              : wsStatus === 'connecting'
+                ? 'Connecting to game…'
+                : wsStatus === 'error'
+                  ? 'Connection error — refresh to retry'
+                  : 'Not connected to game server'}
+          </div>
+        )}
+      </footer>
+
+      {/* ── Lobby redirect notice (if room transitions back) ─────────────── */}
+      {room.status === 'starting' && !gameState && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          data-testid="starting-overlay"
+        >
+          <div className="flex flex-col items-center gap-4 text-white">
+            <svg
+              className="animate-spin h-10 w-10 text-emerald-400"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            <p className="text-lg font-semibold">Game starting…</p>
+            <p className="text-sm text-slate-400">Dealing cards</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+/** Renders a horizontal row of player seats for one team. */
+function PlayerRow({
+  players,
+  myPlayerId,
+  currentTurnPlayerId,
+  playerCount,
+}: {
+  players: GamePlayer[];
+  myPlayerId: string | null;
+  currentTurnPlayerId: string | null;
+  playerCount: 6 | 8;
+}) {
+  const seatsPerTeam = playerCount / 2;
+  const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
+
+  return (
+    <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+      {seats.map((player, i) => {
+        if (!player) {
+          return (
+            <div
+              key={`empty-${i}`}
+              className="flex flex-col items-center gap-1.5 opacity-30"
+              aria-label="Empty seat"
+            >
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-slate-500 text-lg">
+                ?
+              </div>
+              <span className="text-xs text-slate-600">Empty</span>
+            </div>
+          );
+        }
+
+        const isMe = player.playerId === myPlayerId;
+        const isCurrentTurn = player.playerId === currentTurnPlayerId;
+
+        return (
+          <div
+            key={player.playerId}
+            className={[
+              'flex flex-col items-center gap-1 transition-all duration-200',
+              isCurrentTurn ? 'scale-110' : '',
+            ].join(' ')}
+            aria-label={`${player.displayName}${isMe ? ' (you)' : ''}${isCurrentTurn ? ' — current turn' : ''}`}
+            data-testid={`player-seat-${player.playerId}`}
+          >
+            {/* Avatar circle */}
+            <div
+              className={[
+                'relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm font-bold select-none',
+                'border-2 shadow-md',
+                isMe
+                  ? 'bg-emerald-700 border-emerald-400 text-white'
+                  : isCurrentTurn
+                    ? 'bg-amber-700 border-amber-400 text-white'
+                    : 'bg-slate-700 border-slate-600 text-slate-300',
+              ].join(' ')}
+            >
+              {player.isBot ? (
+                <span aria-hidden="true" title="Bot">🤖</span>
+              ) : (
+                <span aria-hidden="true">
+                  {player.displayName.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+
+              {/* Card count badge */}
+              <span
+                className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-slate-800 border border-slate-600 text-[9px] text-slate-300 flex items-center justify-center font-mono font-bold"
+                aria-label={`${player.cardCount} cards`}
+              >
+                {player.cardCount}
+              </span>
+
+              {/* Current turn ring */}
+              {isCurrentTurn && (
+                <span
+                  className="absolute inset-0 rounded-full border-2 border-amber-300 animate-ping opacity-75"
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+
+            {/* Display name */}
+            <span
+              className={[
+                'text-[10px] sm:text-xs max-w-[4rem] truncate text-center leading-tight',
+                isMe ? 'text-emerald-300 font-semibold' : 'text-slate-400',
+              ].join(' ')}
+            >
+              {player.displayName}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Placeholder card fan in the player's hand area (populated in hand AC). */
+function HandPlaceholder({
+  cardCount,
+  isMyTurn,
+}: {
+  cardCount: number;
+  isMyTurn: boolean;
+}) {
+  if (cardCount === 0) {
+    return (
+      <p className="text-xs text-slate-500 text-center py-2">No cards left</p>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-end justify-center gap-1 h-16 overflow-hidden"
+      aria-label={`${cardCount} cards in hand`}
+      role="list"
+    >
+      {Array.from({ length: Math.min(cardCount, 9) }).map((_, i) => (
+        <div
+          key={i}
+          role="listitem"
+          aria-label="Card (face down)"
+          className={[
+            'w-9 h-14 rounded-lg border flex-shrink-0 transition-transform duration-150',
+            'bg-gradient-to-b from-slate-700 to-slate-800',
+            isMyTurn
+              ? 'border-emerald-500/50 hover:-translate-y-2 cursor-pointer'
+              : 'border-slate-600/50',
+          ].join(' ')}
+          style={{
+            // Fan effect: slight rotation for each card.
+            transform: `rotate(${(i - (Math.min(cardCount, 9) - 1) / 2) * 2}deg)`,
+          }}
+        />
+      ))}
+      {cardCount > 9 && (
+        <span className="text-xs text-slate-500 self-center ml-1">
+          +{cardCount - 9}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Generic error / terminal state view used for not-found, invalid, cancelled. */
+function GameErrorView({
+  emoji,
+  title,
+  body,
+  onPrimary,
+  primaryLabel,
+  onSecondary,
+  secondaryLabel,
+  'data-testid': testId,
+}: {
+  emoji: string;
+  title: string;
+  body: React.ReactNode;
+  onPrimary: () => void;
+  primaryLabel: string;
+  onSecondary?: () => void;
+  secondaryLabel?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <div
+      className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6"
+      data-testid={testId}
+    >
+      <div className="text-center max-w-sm">
+        <div className="text-5xl mb-4" aria-hidden="true">
+          {emoji}
+        </div>
+        <h1 className="text-2xl font-bold text-white mb-3">{title}</h1>
+        <p className="text-slate-300 text-sm">{body}</p>
+      </div>
+
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        <button
+          onClick={onPrimary}
+          className="py-3 px-6 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        >
+          {primaryLabel}
+        </button>
+        {onSecondary && secondaryLabel && (
+          <button
+            onClick={onSecondary}
+            className="py-3 px-6 rounded-xl font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          >
+            {secondaryLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
