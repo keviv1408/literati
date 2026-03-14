@@ -311,6 +311,20 @@ export interface UseGameSocketReturn {
    * spectators so everyone sees the selection window expiring.
    */
   postDeclarationTimer: PostDeclarationTimerPayload | null;
+  /**
+   * Sub-AC 56c: True after `sendChooseNextTurn` is called and before the
+   * server sends `post_declaration_turn_selected` acknowledging the selection.
+   *
+   * While true, all Ask/Declare controls should be disabled so the declarant
+   * cannot take any additional action until the server confirms the turn has
+   * been passed to the chosen player.
+   *
+   * Cleared when:
+   *   - `post_declaration_turn_selected` arrives (server acked the choice), or
+   *   - `ask_result` arrives (safety reset — turn moved on), or
+   *   - `declaration_result` arrives (safety reset — new declaration happened).
+   */
+  pendingTurnPassAck: boolean;
   error: string | null;
 }
 
@@ -373,6 +387,8 @@ export function useGameSocket({
   const [postDeclarationHighlight, setPostDeclarationHighlight] = useState<PostDeclarationHighlight | null>(null);
   // Sub-AC 28c: non-null while the 30-second post-declaration turn-selection window is active
   const [postDeclarationTimer, setPostDeclarationTimer] = useState<PostDeclarationTimerPayload | null>(null);
+  // Sub-AC 56c: true between sendChooseNextTurn and the server's post_declaration_turn_selected ack
+  const [pendingTurnPassAck, setPendingTurnPassAck] = useState<boolean>(false);
   const [error, setError]                   = useState<string | null>(null);
 
   const wsRef      = useRef<WebSocket | null>(null);
@@ -510,6 +526,8 @@ export function useGameSocket({
           setPostDeclarationHighlight(null);
           // Sub-AC 28c: clear post-declaration timer (turn is now in progress)
           setPostDeclarationTimer(null);
+          // Sub-AC 56c: safety reset — turn moved on, no longer waiting for ack
+          setPendingTurnPassAck(false);
           break;
         }
 
@@ -529,6 +547,9 @@ export function useGameSocket({
           // If the declaration was correct, there will be no `declarationFailed`
           // event — proactively clear any stale diff from a previous round.
           if (payload.correct) setDeclarationFailed(null);
+          // Sub-AC 56c: safety reset — a new declaration result means any previous
+          // pending ack is moot (another declaration happened in the meantime).
+          setPendingTurnPassAck(false);
 
           // Sub-AC 28b: after a CORRECT declaration, compute the same-team
           // eligible players so the declarant can choose who gets the turn.
@@ -750,6 +771,9 @@ export function useGameSocket({
           // Clears the countdown bar and any seat-highlight overlay.
           setPostDeclarationTimer(null);
           setPostDeclarationHighlight(null);
+          // Sub-AC 56c: server has acknowledged the turn-pass selection —
+          // re-enable normal Ask/Declare interaction for the new turn player.
+          setPendingTurnPassAck(false);
           break;
         }
 
@@ -894,10 +918,12 @@ export function useGameSocket({
   }, []);
 
   /**
-   * Sub-AC 28b: Redirect the current turn to a same-team teammate after a
-   * correct declaration.  Sends `choose_next_turn` to the server and
+   * Sub-AC 28b / 56c: Redirect the current turn to a same-team teammate after
+   * a correct declaration.  Sends `choose_next_turn` to the server,
    * immediately clears the post-declaration highlight so the seat glow
-   * disappears without waiting for a server round-trip.
+   * disappears without waiting for a server round-trip, and sets
+   * `pendingTurnPassAck` to block further Ask/Declare interaction until the
+   * server confirms the selection via `post_declaration_turn_selected`.
    */
   const sendChooseNextTurn = useCallback((chosenPlayerId: string) => {
     const ws = wsRef.current;
@@ -905,6 +931,8 @@ export function useGameSocket({
     ws.send(JSON.stringify({ type: 'choose_next_turn', chosenPlayerId }));
     // Optimistically clear the highlight so the UI responds immediately
     setPostDeclarationHighlight(null);
+    // Sub-AC 56c: block further interaction until server ack arrives
+    setPendingTurnPassAck(true);
   }, []);
 
   return {
@@ -931,6 +959,7 @@ export function useGameSocket({
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight,
     postDeclarationTimer,
+    pendingTurnPassAck,
     sendAsk,
     sendDeclare,
     sendDeclareProgress,

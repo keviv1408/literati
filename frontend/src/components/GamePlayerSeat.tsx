@@ -241,6 +241,11 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   // Sub-AC 28b: clickable only when highlighted AND a handler is provided
   const isClickable = isHighlighted && Boolean(onHighlightClick) && !isEliminated;
 
+  // AC 55: on mobile, avatar upgrades to 'md' (40 px) so the seat card itself
+  // comfortably clears the 44 px minimum tap-target height.  On desktop the
+  // 'sm' size remains — layout is denser and pointer precision is higher.
+  const avatarSize = isClickable ? 'md' : 'sm';
+
   // ── Occupied seat ───────────────────────────────────────────────────────────
   return (
     <div
@@ -258,8 +263,17 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         !isEliminated && isTurn ? 'animate-seat-glow' : '',
         // Sub-AC 28b: eligible-for-turn highlight (cyan ring, raised z-index)
         isHighlighted && !isEliminated ? 'ring-2 ring-cyan-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
-        // Sub-AC 28b: clickable seats get pointer cursor and hover scale
-        isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : '',
+        // Sub-AC 28b + AC 55: clickable seats get pointer cursor, hover scale,
+        // and mobile tap-target enlargement (≥44 px min-height + scale-110).
+        // On mobile the seat is statically enlarged so a thumb can hit it
+        // without needing precision; on desktop (md+) scale resets to 1.0 with
+        // a hover-only scale-up, keeping the table layout compact.
+        isClickable ? [
+          'cursor-pointer active:scale-95',
+          'min-h-[2.75rem]',          // ≥44 px tap-target height on all viewports
+          'scale-110 md:scale-100',   // mobile: always enlarged; desktop: normal base
+          'md:hover:scale-105',       // desktop: subtle hover scale feedback
+        ].join(' ') : '',
         // Current user always gets an emerald highlight
         isMe
           ? 'border-emerald-500/70 bg-emerald-900/40'
@@ -280,6 +294,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       data-active-turn={isTurn ? 'true' : undefined}
       data-eliminated={isEliminated ? 'true' : undefined}
       data-highlighted={isHighlighted && !isEliminated ? 'true' : undefined}
+      data-mobile-tap-target={isClickable ? 'true' : undefined}
     >
       {/* ── Current-turn pulsing ring ─────────────────────────────── */}
       {isTurn && !isEliminated && (
@@ -318,11 +333,13 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       )}
 
       {/* ── Avatar with card-count badge ─────────────────────────── */}
+      {/* AC 55: avatarSize is 'md' (40px) when the seat is a tap target        */}
+      {/* in turn-pass selection mode; 'sm' (32px) otherwise.                   */}
       <div className="relative">
         <Avatar
           displayName={displayName}
           imageUrl={avatarId ?? undefined}
-          size="sm"
+          size={avatarSize}
           aria-label={undefined}
         />
 

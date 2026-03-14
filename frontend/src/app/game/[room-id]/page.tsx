@@ -45,6 +45,7 @@ import SpectatorView from '@/components/SpectatorView';
 import DealAnimation from '@/components/DealAnimation';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import CountdownTimer from '@/components/CountdownTimer';
+import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
 import HalfSuitGrid from '@/components/HalfSuitGrid';
 import { ConnectedScoreboardPanel } from '@/components/ScoreboardPanel';
@@ -196,7 +197,7 @@ export default function GamePage({ params }: PageProps) {
     eliminationPrompt, sendChooseTurnRecipient,
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight, sendChooseNextTurn,
-    postDeclarationTimer,
+    postDeclarationTimer, pendingTurnPassAck,
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
@@ -207,6 +208,14 @@ export default function GamePage({ params }: PageProps) {
     },
     onRematchStart: (_payload: RematchStartPayload) => {
       setRematchStarted(true);
+    },
+    onRematchStarting: (_payload) => {
+      // Sub-AC 46c: new game spun up server-side with same teams/seats.
+      // Clear post-game state so the upcoming game_init seamlessly transitions
+      // into the new game without a page reload.
+      setGameOver(null);
+      setVoteStartedAt(undefined);
+      setRematchStarted(false);
     },
   });
 
@@ -484,6 +493,23 @@ export default function GamePage({ params }: PageProps) {
       ? handleChooseNextTurnSeat
       : undefined;
 
+  // ── Sub-AC 56c: Turn-pass mode ────────────────────────────────────────────
+  //
+  // `isTurnPassMode` is true when the local player is the current turn player
+  // AND is in the post-declaration seat-selection window.  This covers two
+  // sub-states:
+  //   1. `postDeclarationHighlight !== null` — seats are highlighted, waiting
+  //      for the player to tap one.
+  //   2. `pendingTurnPassAck` — the player tapped a seat (highlight cleared
+  //      optimistically) but the server's `post_declaration_turn_selected` ack
+  //      hasn't arrived yet.
+  //
+  // While `isTurnPassMode` is true:
+  //   • Ask and Declare buttons are hidden (replaced by a selection prompt).
+  //   • The ask-prompt hint is suppressed.
+  //   • The turn-indicator banner shows seat-selection guidance.
+  const isTurnPassMode = isMyTurn && (postDeclarationHighlight !== null || pendingTurnPassAck);
+
   function handleAsk(targetId: string, cardId: CardId) {
     setActionLoading(true);
     // Immediately clear the turn indicator so the glow and audio repeat
@@ -527,7 +553,7 @@ export default function GamePage({ params }: PageProps) {
         <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-4" data-testid="rematch-starting-view">
           <span className="text-4xl animate-bounce">🔄</span>
           <p className="text-xl font-bold text-white">Rematch starting…</p>
-          <p className="text-sm text-slate-400">Heading back to the lobby</p>
+          <p className="text-sm text-slate-400">Starting the new game…</p>
         </div>
       );
     }
@@ -729,7 +755,16 @@ export default function GamePage({ params }: PageProps) {
 
       {gameState && (
         <div className={['relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium', isMyTurn ? 'bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40' : 'bg-slate-800/50 text-slate-400 border-b border-slate-700/40'].join(' ')} role="status" aria-live="polite" data-testid="turn-indicator">
-          {isMyTurn ? (<><span aria-hidden="true">🎯</span><span>Your turn — ask for a card or declare</span></>) : currentTurnPlayer ? (<><span aria-hidden="true">⏳</span><span>Waiting for <strong>{currentTurnPlayer.displayName}</strong>{currentTurnPlayer.isBot && ' 🤖'}…</span></>) : (<span>Waiting for game to start…</span>)}
+          {isMyTurn ? (
+            isTurnPassMode ? (
+              // Sub-AC 56c: turn-pass selection window — guide the declarant
+              pendingTurnPassAck
+                ? (<><span aria-hidden="true">⏳</span><span data-testid="turn-pass-pending-label">Choosing next turn…</span></>)
+                : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)
+            ) : (
+              <><span aria-hidden="true">🎯</span><span>Your turn — ask for a card or declare</span></>
+            )
+          ) : currentTurnPlayer ? (<><span aria-hidden="true">⏳</span><span>Waiting for <strong>{currentTurnPlayer.displayName}</strong>{currentTurnPlayer.isBot && ' 🤖'}…</span></>) : (<span>Waiting for game to start…</span>)}
         </div>
       )}
       {turnTimer && gameState && (
@@ -758,6 +793,34 @@ export default function GamePage({ params }: PageProps) {
           }
           label="Choose next turn"
           data-testid="post-declaration-timer"
+        />
+      )}
+
+      {/* ── Sub-AC 56b: Declaration turn-pass prompt ──────────────────────────
+       *  Shown to ALL clients while `postDeclarationHighlight` is non-null —
+       *  i.e. while the current turn player (the declarant) is choosing which
+       *  eligible same-team player receives the next turn.
+       *
+       *  For the DECLARANT (isMyTurn): cyan banner with instruction to click a
+       *  highlighted (cyan-ring) teammate seat.
+       *
+       *  For ALL OTHER PLAYERS: muted status strip showing the declarant's
+       *  name so observers understand why some seats are glowing.
+       *
+       *  The prompt disappears (unmounts) as soon as `postDeclarationHighlight`
+       *  is cleared, which happens when:
+       *    a) The declarant clicks a highlighted seat → `sendChooseNextTurn`
+       *       immediately sets `postDeclarationHighlight` to null (optimistic).
+       *    b) The 30-second timer expires → server sends
+       *       `post_declaration_turn_selected` → hook clears the highlight.
+       *  In both cases the cyan seat rings disappear simultaneously with the
+       *  prompt banner, fulfilling the "clearing highlights when the prompt is
+       *  dismissed" requirement.
+       */}
+      {postDeclarationHighlight && gameState && (
+        <DeclarationTurnPassPrompt
+          isMyTurn={isMyTurn && gameState.currentTurnPlayerId === myPlayerId}
+          chooserName={currentTurnPlayer?.displayName ?? null}
         />
       )}
 
@@ -905,7 +968,9 @@ export default function GamePage({ params }: PageProps) {
           <div className="flex flex-col gap-2" data-testid="game-controls">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">Your hand — <strong className="text-white">{myHand.length}</strong> card{myHand.length !== 1 ? 's' : ''}</span>
-              {isMyTurn && (
+              {/* Sub-AC 56c: during turn-pass mode the declarant must choose a
+               *  teammate seat — Ask/Declare are hidden until the turn advances. */}
+              {isMyTurn && !isTurnPassMode && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
@@ -932,11 +997,22 @@ export default function GamePage({ params }: PageProps) {
                   </button>
                 </div>
               )}
+              {/* Sub-AC 56c: seat-selection prompt — replaces Ask/Declare row
+               *  while the declarant is choosing who gets the next turn.         */}
+              {isTurnPassMode && (
+                <span
+                  className="text-xs text-cyan-300 font-medium animate-pulse"
+                  data-testid="turn-pass-action-prompt"
+                  aria-live="polite"
+                >
+                  {pendingTurnPassAck ? '⏳ Choosing…' : '👆 Tap a highlighted teammate seat above'}
+                </span>
+              )}
             </div>
             <CardHand
               hand={myHand}
               selectedCard={selectedCard}
-              onSelectCard={isMyTurn ? (card) => {
+              onSelectCard={isMyTurn && !isTurnPassMode ? (card) => {
                 // Open the wizard at step 2 with the tapped card pre-selected
                 setWizardInitialCard(card);
                 setShowAskWizard(true);
@@ -944,11 +1020,11 @@ export default function GamePage({ params }: PageProps) {
                 setShowDeclare(false);
               } : undefined}
               isMyTurn={isMyTurn}
-              disabled={actionLoading || !isMyTurn}
+              disabled={actionLoading || !isMyTurn || isTurnPassMode}
               variant={effectiveVariant}
               newlyArrivedCardId={newlyArrivedCardId}
             />
-            {isMyTurn && !showAskWizard && !showDeclare && myHand.length > 0 && (
+            {isMyTurn && !isTurnPassMode && !showAskWizard && !showDeclare && myHand.length > 0 && (
               <p className="text-xs text-slate-500 text-center animate-pulse" data-testid="ask-prompt">Tap a card or click Ask ↑ to ask, or click Declare ↑</p>
             )}
           </div>
@@ -973,8 +1049,8 @@ export default function GamePage({ params }: PageProps) {
         )}
       </footer>
 
-      {/* 3-step card request wizard — visible only to the active player */}
-      {showAskWizard && isMyTurn && (
+      {/* 3-step card request wizard — visible only to the active player (not during turn-pass) */}
+      {showAskWizard && isMyTurn && !isTurnPassMode && (
         <CardRequestWizard
           myPlayerId={myPlayerId!}
           myHand={myHand}

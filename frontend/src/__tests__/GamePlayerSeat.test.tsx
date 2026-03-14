@@ -1031,3 +1031,244 @@ describe('GamePlayerSeat — Sub-AC 28b highlight ring', () => {
     expect(seat.getAttribute('aria-label')).not.toContain('eligible for next turn');
   });
 });
+
+// ── AC 55: Mobile tap-target enlargement during turn-pass selection ───────────
+//
+// When a seat is both highlighted AND has a click handler (turn-pass selection
+// mode), the seat must enlarge on mobile to ensure a minimum 44 px tap-target
+// height, and the avatar must upgrade from 'sm' (32 px) to 'md' (40 px).
+// On desktop (md breakpoint and above) the scale resets to normal so the
+// compact oval-table layout is preserved.
+//
+// Spec requirements:
+//  • min-h-[2.75rem]  → guarantees ≥44 px height on all viewports
+//  • scale-110        → mobile: seat is statically enlarged
+//  • md:scale-100     → desktop: base scale reset to 1.0
+//  • md:hover:scale-105 → desktop: subtle hover feedback only
+//  • Avatar size 'md' (w-10 h-10 = 40 px) when isClickable
+//  • data-mobile-tap-target="true" for e2e / a11y tooling
+
+describe('GamePlayerSeat — AC 55 mobile tap-target enlargement', () => {
+  it('applies min-h-[2.75rem] to guaranteed ≥44px tap-target height when highlighted+clickable', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).toContain('min-h-[2.75rem]');
+  });
+
+  it('applies scale-110 (mobile static enlargement) when highlighted+clickable', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).toContain('scale-110');
+  });
+
+  it('applies md:scale-100 (desktop scale reset) when highlighted+clickable', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).toContain('md:scale-100');
+  });
+
+  it('applies md:hover:scale-105 (desktop hover feedback) when highlighted+clickable', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).toContain('md:hover:scale-105');
+  });
+
+  it('sets data-mobile-tap-target="true" when highlighted+clickable', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.getAttribute('data-mobile-tap-target')).toBe('true');
+  });
+
+  it('does NOT apply min-h-[2.75rem] when isHighlighted=false', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).not.toContain('min-h-[2.75rem]');
+  });
+
+  it('does NOT apply min-h-[2.75rem] when highlighted but no click handler', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        // onHighlightClick intentionally omitted
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.className).not.toContain('min-h-[2.75rem]');
+  });
+
+  it('does NOT apply mobile enlargement when player is eliminated even if highlighted+clickable', () => {
+    const handleClick = jest.fn();
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ isEliminated: true })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    // isClickable is false for eliminated players → no tap-target enlargement
+    expect(seat.className).not.toContain('min-h-[2.75rem]');
+    expect(seat.getAttribute('data-mobile-tap-target')).toBeNull();
+  });
+
+  it('does NOT set data-mobile-tap-target when not highlighted', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+      />,
+    );
+    const seat = screen.getByTestId('game-player-seat');
+    expect(seat.getAttribute('data-mobile-tap-target')).toBeNull();
+  });
+
+  it('renders the Avatar at md size (w-10 h-10 = 40px) when highlighted+clickable', () => {
+    const handleClick = jest.fn();
+    const { container } = render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ avatarId: null })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    // Avatar md size uses Tailwind classes w-10 h-10
+    const avatarEl = container.querySelector('[role="img"]') as HTMLElement;
+    expect(avatarEl).not.toBeNull();
+    expect(avatarEl.className).toContain('w-10');
+    expect(avatarEl.className).toContain('h-10');
+  });
+
+  it('renders the Avatar at sm size (w-8 h-8 = 32px) when NOT highlighted', () => {
+    const { container } = render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ avatarId: null })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+      />,
+    );
+    const avatarEl = container.querySelector('[role="img"]') as HTMLElement;
+    expect(avatarEl).not.toBeNull();
+    expect(avatarEl.className).toContain('w-8');
+    expect(avatarEl.className).toContain('h-8');
+  });
+
+  it('renders Avatar at sm size when highlighted but no click handler (read-only highlight)', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ avatarId: null })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        // No onHighlightClick — other players see cyan ring but cannot click
+      />,
+    );
+    const avatarEl = document.querySelector('[role="img"]') as HTMLElement;
+    expect(avatarEl).not.toBeNull();
+    // isClickable=false → avatarSize='sm'
+    expect(avatarEl.className).toContain('w-8');
+    expect(avatarEl.className).toContain('h-8');
+  });
+
+  it('enlargement classes are removed when turn-pass selection ends (isHighlighted reverts to false)', () => {
+    const handleClick = jest.fn();
+    const { rerender } = render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={true}
+        onHighlightClick={handleClick}
+      />,
+    );
+    // Verify tap-target present during selection mode
+    expect(screen.getByTestId('game-player-seat').className).toContain('min-h-[2.75rem]');
+
+    // Simulate selection complete — isHighlighted clears
+    rerender(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        isHighlighted={false}
+      />,
+    );
+    expect(screen.getByTestId('game-player-seat').className).not.toContain('min-h-[2.75rem]');
+    expect(screen.getByTestId('game-player-seat').getAttribute('data-mobile-tap-target')).toBeNull();
+  });
+});
