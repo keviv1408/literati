@@ -140,7 +140,13 @@ const {
   getPlayerTeam,
   getHand,
 } = require('./gameState');
-const { validateAsk, applyAsk, validateDeclaration, applyDeclaration } = require('./gameEngine');
+const {
+  validateAsk,
+  applyAsk,
+  validateDeclaration,
+  applyDeclaration,
+  applyForcedFailedDeclaration,
+} = require('./gameEngine');
 const {
   decideBotMove,
   completeBotFromPartial,
@@ -167,6 +173,7 @@ const {
   isInReclaimQueue,
   clearRoom: clearDisconnectRoom,
 } = require('./disconnectStore');
+const timerService = require('./timerService');
 
 // ---------------------------------------------------------------------------
 // Turn timer configuration
@@ -177,6 +184,28 @@ const BOT_TURN_DELAY_MS = 1500;
 
 /** Time a human player has to act before the server auto-moves for them (ms) */
 const HUMAN_TURN_TIMEOUT_MS = 30_000;
+
+/**
+ * Extended timeout for the declaration phase (Step 2 of DeclareModal).
+ * When the active player enters Step 2 (card-assignment form), the server
+ * extends the turn timer from HUMAN_TURN_TIMEOUT_MS to this value and
+ * broadcasts a `declaration_timer` event visible only to the declarant.
+ * The new timer still calls `executeTimedOutTurn` on expiry.
+ *
+ * Sub-AC 23a: 60-second declaration phase countdown with 10-second warning.
+ */
+const DECLARATION_PHASE_TIMEOUT_MS = 60_000;
+
+/**
+ * How long the server waits after broadcasting `bot_takeover` for a
+ * declaration before auto-submitting the completed assignment.
+ *
+ * Sub-AC 3 of AC 41: 30-second server-side countdown timer shown to ALL
+ * clients so they can display a "bot is declaring" progress bar.
+ * The assignment is pre-computed immediately on takeover; the timer is purely
+ * cosmetic from a logic perspective but must fire authoritatively server-side.
+ */
+const BOT_DECLARATION_TAKEOVER_MS = 30_000;
 
 /**
  * Window after disconnect for a player to reconnect before the server treats
@@ -195,8 +224,28 @@ const TIMER_TICK_INTERVAL_MS = 5_000;
 /** Pending bot turn timers: roomCode → timeout ID */
 const _botTimers = new Map();
 
+/**
+ * Active bot-declaration-takeover countdown timers (Sub-AC 3 of AC 41).
+ * roomCode → { timerId, tickId, expiresAt }
+ *
+ * Set when a human's declaration is taken over by the bot.
+ * Cleared when the declaration executes (or the turn changes).
+ */
+const _botDeclarationTimers = new Map();
+
 /** Pending human turn timeout timers: roomCode → { timerId, tickId } */
 const _turnTimers = new Map();
+
+/**
+ * Rooms where the declaration-phase timer (Sub-AC 23a) has already been
+ * started for the current turn.  Prevents the 60-second extension from
+ * firing multiple times when the active player sends several consecutive
+ * `partial_selection` messages while filling in the card-assignment form.
+ *
+ * Cleared when the turn ends (cancelTurnTimer / executeTimedOutTurn /
+ * handleAskCard / handleDeclare).
+ */
+const _declarationPhaseStarted = new Set();
 
 /**
  * Active reconnect windows for disconnected human players.
@@ -235,6 +284,27 @@ const _reconnectTimers = new Map();
  * Value: `{ halfSuitId: string }` — the suit selected in Step 1
  */
 const _declarationSelections = new Map();
+
+/**
+ * Tracks declarations taken over by the bot due to mid-declaration disconnect.
+ *
+ * When the active declarer disconnects while the DeclareModal is open, the
+ * server marks the declaration as bot-controlled and preserves the partial
+ * card-assignment state so the bot can continue from where the human left off.
+ *
+ * Key:   roomCode (upper-cased)
+ * Value: {
+ *   playerId:   string,                   — the original human declarant
+ *   halfSuitId: string|null,              — suit chosen in Step 1 (null if not yet chosen)
+ *   assignment: Record<string, string>,   — already-assigned card→player mappings
+ * }
+ *
+ * Lifecycle:
+ *   - Set:     handlePlayerDisconnect (when active declarer disconnects mid-declaration)
+ *   - Cleared: handleDeclare / handleForcedFailedDeclaration / handleAskCard
+ *              (any action that ends the current declaration or supersedes it)
+ */
+const _botControlledDeclarations = new Map();
 
 
 // ---------------------------------------------------------------------------
@@ -470,9 +540,16 @@ function scheduleBotTurnIfNeeded(gs) {
 
 /**
  * Schedule a server-side turn timer for a human player.
+ *
  * When it fires without action, the server auto-executes a move via bot logic.
- * Broadcasts a `turn_timer` event so clients can show a countdown, followed by
- * periodic `turn_timer_tick` events every TIMER_TICK_INTERVAL_MS.
+ *
+ * Broadcasts two event families so clients can display a countdown:
+ *   - Legacy `turn_timer` (start event) for backward compatibility with
+ *     existing client code that reads { playerId, durationMs, expiresAt }.
+ *   - `timer_start` / `timer_tick` / `timer_threshold` (every 1 s, plus a
+ *     one-time threshold event at ≤10 s) via timerService — broadcast to ALL
+ *     players AND spectators in the room.
+ *
  * @param {Object} gs
  */
 function scheduleTurnTimerIfNeeded(gs) {
@@ -481,18 +558,30 @@ function scheduleTurnTimerIfNeeded(gs) {
   const currentPlayer = gs.players.find((p) => p.playerId === gs.currentTurnPlayerId);
   if (!currentPlayer || currentPlayer.isBot) return; // bots handled by _botTimers
 
-  // Cancel any existing human turn timer + tick interval for this room
-  const existing = _turnTimers.get(gs.roomCode);
-  if (existing) {
-    clearTimeout(existing.timerId);
-    if (existing.tickId) clearInterval(existing.tickId);
-  }
+  // Cancel any existing turn timer (timerService + metadata map).
+  cancelTurnTimer(gs.roomCode);
 
-  const expiresAt   = Date.now() + HUMAN_TURN_TIMEOUT_MS;
-  const playerId    = gs.currentTurnPlayerId;
-  const roomCode    = gs.roomCode;
+  const playerId = gs.currentTurnPlayerId;
+  const roomCode = gs.roomCode;
 
-  // Broadcast timer start to all clients (so they can display a countdown)
+  // Start the countdown via timerService.
+  // timerService handles: 1-second tick events, ≤10 s threshold event, and
+  // the expiry callback — all broadcast to ALL connections (players + spectators).
+  const { expiresAt } = timerService.startCountdownTimer(
+    roomCode,
+    'turn',
+    playerId,
+    HUMAN_TURN_TIMEOUT_MS,
+    broadcastToGame,
+    (rc, pid) => {
+      _turnTimers.delete(rc);
+      executeTimedOutTurn(rc, pid);
+    },
+  );
+
+  // Also broadcast the legacy `turn_timer` event so existing client handlers
+  // that read { type:'turn_timer', playerId, durationMs, expiresAt } continue
+  // to work without modification.
   broadcastToGame(roomCode, {
     type:       'turn_timer',
     playerId,
@@ -500,43 +589,83 @@ function scheduleTurnTimerIfNeeded(gs) {
     expiresAt,
   });
 
-  // Emit tick events every TIMER_TICK_INTERVAL_MS so clients can resync
-  const tickId = setInterval(() => {
-    const remaining = expiresAt - Date.now();
-    if (remaining <= 0) {
-      clearInterval(tickId);
-      return;
-    }
-    broadcastToGame(roomCode, {
-      type:        'turn_timer_tick',
-      playerId,
-      remainingMs: Math.max(0, remaining),
-      expiresAt,
-    });
-  }, TIMER_TICK_INTERVAL_MS);
-
-  const timerId = setTimeout(() => {
-    const entry = _turnTimers.get(roomCode);
-    if (entry && entry.tickId) clearInterval(entry.tickId);
-    _turnTimers.delete(roomCode);
-    executeTimedOutTurn(roomCode, playerId);
-  }, HUMAN_TURN_TIMEOUT_MS);
-
-  _turnTimers.set(roomCode, { timerId, tickId, expiresAt });
+  // Track in _turnTimers so concurrent-timer infrastructure (reconnect window)
+  // can detect an active turn timer via _turnTimers.has(roomCode).
+  _turnTimers.set(roomCode, { expiresAt });
 }
 
 /**
  * Cancel the human turn timer (and its tick interval) for a room.
  * Call when a valid move is made or the room is torn down.
+ * Also clears the declaration-phase-started flag (Sub-AC 23a).
  * @param {string} roomCode
  */
 function cancelTurnTimer(roomCode) {
-  const entry = _turnTimers.get(roomCode);
-  if (entry) {
-    clearTimeout(entry.timerId);
-    if (entry.tickId) clearInterval(entry.tickId);
-    _turnTimers.delete(roomCode);
-  }
+  // Delegate actual timer cancellation to timerService (handles tickId + timerId).
+  timerService.cancelCountdownTimer(roomCode);
+  // Clear the metadata entry used by concurrent-timer infrastructure.
+  _turnTimers.delete(roomCode);
+  // Clear declaration-phase flag so the next turn gets a fresh 60s extension.
+  _declarationPhaseStarted.delete(roomCode);
+}
+
+/**
+ * Start (or replace) the turn timer with a 60-second declaration-phase timer.
+ *
+ * Called the FIRST TIME the active player reports a `partial_selection` with
+ * `flow: 'declare'` AND a non-empty `assignment` (i.e. they entered Step 2 of
+ * the DeclareModal card-assignment form).
+ *
+ * Behaviour:
+ *   1. Cancels the existing 30-second turn timer.
+ *   2. Starts a 60-second DECLARATION_PHASE_TIMEOUT_MS timer that calls
+ *      `executeTimedOutTurn` on expiry (same as the original turn timer).
+ *   3. Emits real-time `timer_tick` events every 1 second AND a `timer_threshold`
+ *      event at ≤10 s via timerService — broadcast to ALL players and spectators.
+ *      (Only the timer countdown is broadcast; the card-assignment choices remain
+ *      private until the player submits or times out.)
+ *   4. Broadcasts a `declaration_timer` event to ALL connections (players +
+ *      spectators) so the entire table sees the declaration countdown.
+ *
+ * Sub-AC 23a / 36.1.
+ *
+ * @param {string} roomCode
+ * @param {string} playerId  — The declaring player who entered Step 2.
+ */
+function startDeclarationPhaseTimer(roomCode, playerId) {
+  // Cancel the existing 30-second turn timer (via timerService + metadata map).
+  cancelTurnTimer(roomCode);
+
+  // Start the 60-second countdown via timerService.
+  // Broadcasts `timer_start`, `timer_tick` (every 1 s), and `timer_threshold`
+  // (once at ≤10 s) to ALL connections (players + spectators).
+  const { expiresAt } = timerService.startCountdownTimer(
+    roomCode,
+    'declaration',
+    playerId,
+    DECLARATION_PHASE_TIMEOUT_MS,
+    broadcastToGame,
+    (rc, pid) => {
+      _turnTimers.delete(rc);
+      _declarationPhaseStarted.delete(rc);
+      executeTimedOutTurn(rc, pid);
+    },
+  );
+
+  // Track in _turnTimers with isDeclarationPhase flag so executeTimedOutTurn
+  // can detect that a declaration was in progress when the timer fired.
+  _turnTimers.set(roomCode, { expiresAt, isDeclarationPhase: true });
+
+  // Broadcast the legacy `declaration_timer` event to ALL connections
+  // (players + spectators) so everyone on the table can show the 60-second
+  // countdown.  Only the assignment details remain private — this event only
+  // carries { playerId, durationMs, expiresAt }.
+  broadcastToGame(roomCode, {
+    type:       'declaration_timer',
+    playerId,
+    durationMs: DECLARATION_PHASE_TIMEOUT_MS,
+    expiresAt,
+  });
 }
 
 /**
@@ -550,6 +679,22 @@ function cancelBotTimer(roomCode) {
   if (t) {
     clearTimeout(t);
     _botTimers.delete(roomCode);
+  }
+}
+
+/**
+ * Cancel an active bot-declaration-takeover countdown timer for a room.
+ * Called when the turn ends (ask supersedes the declaration, game ends, etc.)
+ * so the delayed auto-submit does not fire into the wrong game state.
+ *
+ * @param {string} roomCode
+ */
+function cancelBotDeclarationTimer(roomCode) {
+  const entry = _botDeclarationTimers.get(roomCode);
+  if (entry) {
+    clearTimeout(entry.timerId);
+    if (entry.tickId) clearInterval(entry.tickId);
+    _botDeclarationTimers.delete(roomCode);
   }
 }
 
@@ -576,6 +721,91 @@ function sanitizePartialStateForBroadcast(partialState) {
   }
   // Ask flow: safe to broadcast as-is (half-suit + card choice).
   return partialState;
+}
+
+// ---------------------------------------------------------------------------
+// Bot-declaration takeover countdown (Sub-AC 3 of AC 41)
+// ---------------------------------------------------------------------------
+
+/**
+ * Start a 30-second server-side countdown after a bot takes over a
+ * declaration from a human player.
+ *
+ * Sequence:
+ *   1. Pre-compute the completed assignment using completeBotFromPartial.
+ *   2. Broadcast bot_declaration_timer to ALL players so the UI can show
+ *      a visible countdown bar (distinct from the private human declarant timer).
+ *   3. Emit bot_declaration_timer_tick every TIMER_TICK_INTERVAL_MS to ALL
+ *      players for countdown re-sync.
+ *   4. After BOT_DECLARATION_TAKEOVER_MS, auto-submit the declaration via
+ *      handleDeclare and broadcast the result to all players.
+ *
+ * Privacy: The assignment is NOT included in the timer broadcast — only the
+ * duration/expiresAt fields are sent.  The result is revealed when handleDeclare
+ * emits declaration_result as usual.
+ *
+ * @param {string}      roomCode
+ * @param {string}      playerId       - Original human declarant (now bot-controlled)
+ * @param {Object|null} effectivePartial - Partial state to complete from
+ */
+async function startBotDeclarationCountdown(roomCode, playerId, effectivePartial) {
+  // Pre-compute the bot declaration decision right now
+  const gs = getGame(roomCode);
+  if (!gs || gs.status !== 'active' || gs.currentTurnPlayerId !== playerId) return;
+
+  const decision = completeBotFromPartial(gs, playerId, effectivePartial);
+  // If bot cannot declare (e.g., fell back to ask or pass), execute immediately.
+  if (decision.action !== 'declare') {
+    if (decision.action === 'ask') {
+      await handleAskCard(roomCode, playerId, decision.targetId, decision.cardId, null, false);
+    }
+    return;
+  }
+
+  const { halfSuitId, assignment } = decision;
+  const expiresAt = Date.now() + BOT_DECLARATION_TAKEOVER_MS;
+
+  // Emit tick events every TIMER_TICK_INTERVAL_MS to ALL connected clients
+  const tickId = setInterval(() => {
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      clearInterval(tickId);
+      return;
+    }
+    broadcastToGame(roomCode, {
+      type:        'bot_declaration_timer_tick',
+      playerId,
+      remainingMs: Math.max(0, remaining),
+      expiresAt,
+    });
+  }, TIMER_TICK_INTERVAL_MS);
+
+  const timerId = setTimeout(async () => {
+    const entry = _botDeclarationTimers.get(roomCode);
+    if (entry && entry.tickId) clearInterval(entry.tickId);
+    _botDeclarationTimers.delete(roomCode);
+
+    // Re-validate that this is still the active turn (game may have ended)
+    const currentGs = getGame(roomCode);
+    if (!currentGs || currentGs.status !== 'active' || currentGs.currentTurnPlayerId !== playerId) {
+      return;
+    }
+
+    console.log(
+      '[game-ws] Bot declaration timer expired for ' + playerId + ' in room ' + roomCode + ' — auto-submitting'
+    );
+    await handleDeclare(roomCode, playerId, halfSuitId, assignment, null, false);
+  }, BOT_DECLARATION_TAKEOVER_MS);
+
+  _botDeclarationTimers.set(roomCode, { timerId, tickId, expiresAt });
+
+  // Broadcast the timer start to ALL clients (public — bot is visibly declaring)
+  broadcastToGame(roomCode, {
+    type:       'bot_declaration_timer',
+    playerId,
+    durationMs: BOT_DECLARATION_TAKEOVER_MS,
+    expiresAt,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -915,6 +1145,47 @@ function handlePlayerDisconnect(roomCode, playerId, isSpectator) {
   const gs = getGame(roomCode);
   if (!gs || gs.status !== 'active') return;
 
+  // ── Detect mid-declaration disconnect ─────────────────────────────────────
+  // If the disconnecting player is currently the active turn holder AND they
+  // are mid-declaration (DeclareModal open), mark the declaration as bot-
+  // controlled and preserve the already-assigned card mappings so the bot
+  // can continue from exactly where the human left off.
+  if (gs.currentTurnPlayerId === playerId) {
+    const partial    = getPartialSelection(roomCode, playerId);
+    const declKey    = `${roomCode}:${playerId}`;
+    const declSel    = _declarationSelections.get(declKey) ?? null;
+
+    // Three signals that indicate the player is mid-declaration:
+    //   1. partialSelectionStore has a 'declare'-flow entry (player reached Step 2)
+    //   2. _declarationSelections has an entry (player chose a suit in Step 1)
+    //   3. _declarationPhaseStarted has the roomCode (declaration phase timer fired)
+    const isMidDeclaration =
+      partial?.flow === 'declare' ||
+      declSel !== null ||
+      _declarationPhaseStarted.has(roomCode);
+
+    if (isMidDeclaration) {
+      // Preserve the best available half-suit and assignment data.
+      // The partial selection (Step 2) is more complete than declSel (Step 1 only).
+      const halfSuitId = partial?.halfSuitId ?? declSel?.halfSuitId ?? null;
+      const assignment = (partial?.flow === 'declare' && partial.assignment)
+        ? { ...partial.assignment }
+        : {};
+
+      _botControlledDeclarations.set(roomCode, {
+        playerId,
+        halfSuitId,
+        assignment,
+      });
+
+      console.log(
+        `[game-ws] Player ${playerId} disconnected mid-declaration in room ${roomCode} — ` +
+        `bot takeover marked (halfSuit=${halfSuitId}, ` +
+        `assigned=${Object.keys(assignment).length}/6)`
+      );
+    }
+  }
+
   // ── Concurrent timers ──────────────────────────────────────────────────────
   // 1. Always start the 60-second reconnect window for any human player
   startReconnectWindow(roomCode, playerId);
@@ -989,6 +1260,8 @@ async function executeTimedOutTurn(roomCode, playerId) {
   const declarationKey       = `${roomCode}:${playerId}`;
   const declarationSelection = _declarationSelections.get(declarationKey) ?? null;
   _declarationSelections.delete(declarationKey);
+  // Clear declaration-phase-started flag so the next turn starts fresh (Sub-AC 23a).
+  _declarationPhaseStarted.delete(roomCode);
 
   // Broadcast bot_takeover with SANITIZED partial state — never reveals which
   // half-suit the declaring player had selected before confirmation (Sub-AC 21a).
@@ -1005,6 +1278,43 @@ async function executeTimedOutTurn(roomCode, playerId) {
     ?? (declarationSelection
       ? { flow: 'declare', halfSuitId: declarationSelection.halfSuitId }
       : null);
+
+  // ── AC 24: Declaration timer expiry with incomplete assignment → forced failure ──
+  //
+  // When a CONNECTED human player (not in the reconnect window) times out
+  // while mid-declaration with fewer than all 6 cards assigned, the server
+  // treats the attempt as a failed declaration and awards the point to the
+  // opposing team.
+  //
+  // A DISCONNECTED player (in `_reconnectWindows`) falls through to the bot-
+  // completion path so the seat's bot can finish the declaration instead.
+  if (effectivePartial?.flow === 'declare') {
+    const isDisconnected = _reconnectWindows.has(playerId);
+    if (!isDisconnected) {
+      const halfSuitId    = effectivePartial.halfSuitId;
+      const assignment    = effectivePartial.assignment ?? {};
+      const assignedCount = Object.keys(assignment).length;
+      // All half-suits have exactly 6 cards; fewer than 6 means incomplete.
+      if (halfSuitId && assignedCount < 6) {
+        await handleForcedFailedDeclaration(roomCode, playerId, halfSuitId);
+        return;
+      }
+      // If exactly 6 cards are assigned, fall through to completeBotFromPartial
+      // which will validate and execute the complete declaration.
+    }
+  }
+
+  // ── Sub-AC 3 of AC 41: Bot declaration takeover countdown ────────────────
+  // When the human timed out mid-declaration (either with a complete 6-card
+  // assignment OR while disconnected), start a 30-second visible countdown
+  // before the bot auto-submits.  This gives all clients time to show a
+  // "bot is declaring" progress bar.  The assignment is pre-computed now
+  // but not revealed until the timer fires and handleDeclare broadcasts the result.
+  if (effectivePartial?.flow === 'declare') {
+    await startBotDeclarationCountdown(roomCode, playerId, effectivePartial);
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Complete the action: use partial state if available, otherwise full bot logic.
   const decision = completeBotFromPartial(gs, playerId, effectivePartial);
@@ -1056,6 +1366,25 @@ function handlePartialSelection(roomCode, playerId, flow, halfSuitId, cardId, as
   }
 
   setPartialSelection(roomCode, playerId, partial);
+
+  // ── Declaration phase timer extension (Sub-AC 23a) ───────────────────────
+  // The first time the active player reports Step 2 of the declaration flow
+  // (flow: 'declare' with a non-empty assignment), extend the turn timer to
+  // 60 seconds so the player has enough time to assign all 6 cards.
+  //
+  // We guard with `_declarationPhaseStarted` to avoid re-triggering the
+  // extension on every subsequent partial_selection update as the player
+  // changes individual card assignments.
+  if (
+    flow === 'declare' &&
+    assignment &&
+    typeof assignment === 'object' &&
+    Object.keys(assignment).length > 0 &&
+    !_declarationPhaseStarted.has(roomCode)
+  ) {
+    _declarationPhaseStarted.add(roomCode);
+    startDeclarationPhaseTimer(roomCode, playerId);
+  }
 }
 
 /**
@@ -1145,6 +1474,10 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = fa
   clearPartialSelection(roomCode, askerId);
   // Clear any stored declaration selection (ask move supersedes any pending declare)
   _declarationSelections.delete(`${roomCode}:${askerId}`);
+  // Clear bot-controlled declaration tracking — ask supersedes any mid-declaration state
+  _botControlledDeclarations.delete(roomCode);
+  // Cancel any active bot-declaration countdown — ask supersedes the pending declaration
+  cancelBotDeclarationTimer(roomCode);
 
   // Track which hands changed
   const changedHands = new Set([askerId, targetId]);
@@ -1178,6 +1511,98 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = fa
   scheduleTurnTimerIfNeeded(gs);
 }
 
+// ---------------------------------------------------------------------------
+// Forced-failed declaration handler (AC 24)
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a forced-failed declaration when the turn timer fires while a
+ * connected human player has an incomplete card assignment.
+ *
+ * Awards the point to the opposing team unconditionally, removes all 6
+ * half-suit cards from play, and broadcasts `declaration_result` with
+ * `correct: false, timedOut: true`.
+ *
+ * Only called for CONNECTED players whose timer expired mid-declaration
+ * (i.e. player is NOT in `_reconnectWindows`).  Disconnected players in
+ * the reconnect window fall through to the bot-completion path instead
+ * (handled by the disconnect-midgame AC).
+ *
+ * @param {string} roomCode
+ * @param {string} declarerId
+ * @param {string} halfSuitId
+ */
+async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
+  const gs = getGame(roomCode);
+  if (!gs || gs.status !== 'active') return;
+
+  // Clear bot-controlled declaration tracking — forced failure resolves the declaration
+  _botControlledDeclarations.delete(roomCode);
+  // Cancel any active bot-declaration countdown (forced failure supersedes it)
+  cancelBotDeclarationTimer(roomCode);
+
+  // All hands may change (6 cards removed)
+  const changedHands = new Set(gs.players.map((p) => p.playerId));
+
+  // Apply forced failure (mutates gs)
+  const { winningTeam, newTurnPlayerId, lastMove } = applyForcedFailedDeclaration(
+    gs, declarerId, halfSuitId
+  );
+
+  // Update bot knowledge — cards are gone; no assignment to record
+  updateKnowledgeAfterDeclaration(gs, halfSuitId, {}, false);
+
+  // Broadcast declaration result
+  broadcastToGame(roomCode, {
+    type:            'declaration_result',
+    declarerId,
+    halfSuitId,
+    correct:         false,
+    timedOut:        true,
+    winningTeam,
+    newTurnPlayerId,
+    assignment:      null,
+    lastMove,
+  });
+
+  // Broadcast updated state + personalized hands
+  broadcastStateUpdate(gs, changedHands);
+
+  // Update live games store with new scores
+  if (liveGamesStore.get(roomCode)) {
+    liveGamesStore.updateGame(roomCode, { scores: { ...gs.scores } });
+  }
+
+  // Handle game over
+  if (gs.status === 'completed') {
+    broadcastToGame(roomCode, {
+      type:             'game_over',
+      winner:           gs.winner,
+      tiebreakerWinner: gs.tiebreakerWinner,
+      scores:           { ...gs.scores },
+    });
+    liveGamesStore.removeGame(roomCode);
+    clearDisconnectRoom(roomCode);
+    const supabase = getSupabaseClient();
+    await persistGameState(gs, supabase);
+    await updateStats(gs);
+    const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout);
+    broadcastToGame(roomCode, {
+      type: 'rematch_vote_update',
+      ...initialSummary,
+    });
+    return;
+  }
+
+  // Persist to Supabase
+  const supabase = getSupabaseClient();
+  await persistGameState(gs, supabase);
+
+  // Schedule next bot or human turn timer
+  scheduleBotTurnIfNeeded(gs);
+  scheduleTurnTimerIfNeeded(gs);
+}
+
 /**
  * Handle a declaration action.
  *
@@ -1207,6 +1632,10 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   // Clear any stored partial selection and declaration selection (move is complete)
   clearPartialSelection(roomCode, declarerId);
   _declarationSelections.delete(`${roomCode}:${declarerId}`);
+  // Clear bot-controlled declaration tracking (if any) — declaration is resolved
+  _botControlledDeclarations.delete(roomCode);
+  // Cancel any active bot-declaration countdown (declaration is now executing)
+  cancelBotDeclarationTimer(roomCode);
 
   // All hands may change (cards get removed from everyone)
   const changedHands = new Set(gs.players.map((p) => p.playerId));
@@ -1920,11 +2349,25 @@ module.exports = {
   handlePlayerDisconnect,
   // Permanent bot seat + mid-game reclaim (Sub-AC 4 of AC 39):
   _executeReclaim,
+  // Forced-failed declaration (AC 24):
+  handleForcedFailedDeclaration,
+  // Declaration phase timer (Sub-AC 23a):
+  startDeclarationPhaseTimer,
+  // Bot declaration takeover countdown (Sub-AC 3 of AC 41):
+  startBotDeclarationCountdown,
+  cancelBotDeclarationTimer,
+  // Countdown timer service (Sub-AC 36.1): 1-second ticks + threshold events
+  timerService,
   // Exposed for test inspection only — do NOT mutate from outside this module:
   _declarationSelections,
+  _declarationPhaseStarted,
+  _botControlledDeclarations,
+  _botDeclarationTimers,
   _reconnectWindows,
   _reconnectTimers,
   _turnTimers,
   RECONNECT_WINDOW_MS,
   TIMER_TICK_INTERVAL_MS,
+  DECLARATION_PHASE_TIMEOUT_MS,
+  BOT_DECLARATION_TAKEOVER_MS,
 };

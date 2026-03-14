@@ -371,6 +371,78 @@ function applyDeclaration(gs, declarerId, halfSuitId, assignment) {
 }
 
 // ---------------------------------------------------------------------------
+// Forced-failed declaration (AC 24)
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a forced-failed declaration when the turn timer expires while a
+ * connected human player has an incomplete card assignment (AC 24).
+ *
+ * Unlike `applyDeclaration`, this does NOT require a complete assignment.
+ * The opposing team is unconditionally awarded the point, all 6 half-suit
+ * cards are removed from play, and the half-suit is marked as declared.
+ *
+ * @param {Object} gs
+ * @param {string} declarerId
+ * @param {string} halfSuitId
+ * @returns {{ winningTeam: 1|2, newTurnPlayerId: string, lastMove: string }}
+ */
+function applyForcedFailedDeclaration(gs, declarerId, halfSuitId) {
+  const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId);
+  const declarerTeam  = getPlayerTeam(gs, declarerId);
+  const winningTeam   = declarerTeam === 1 ? 2 : 1;
+
+  // Award point to opposing team
+  if (winningTeam === 1) gs.scores.team1++;
+  else gs.scores.team2++;
+
+  // Remove all 6 half-suit cards from all hands
+  for (const card of halfSuitCards) {
+    for (const [, hand] of gs.hands) {
+      hand.delete(card);
+    }
+  }
+
+  // Mark as declared (won by opposing team)
+  gs.declaredSuits.set(halfSuitId, { teamId: winningTeam, declaredBy: declarerId });
+
+  // Build last-move string
+  const suitName = halfSuitLabel(halfSuitId);
+  gs.lastMove = `${_playerName(gs, declarerId)} ran out of time declaring ${suitName} — Team ${winningTeam} scores`;
+
+  // Record move
+  gs.moveHistory.push({
+    type:        'declaration',
+    declarerId,
+    halfSuitId,
+    assignment:  null,
+    correct:     false,
+    timedOut:    true,
+    winningTeam,
+    ts:          Date.now(),
+  });
+
+  // Update tiebreaker tracking
+  if (halfSuitId === TIEBREAKER_HALF_SUIT) {
+    gs.tiebreakerWinner = winningTeam;
+  }
+
+  // Declarer keeps their turn (or pass if they have 0 cards)
+  gs.currentTurnPlayerId = _resolveValidTurn(gs, declarerId);
+
+  // Check if game is over
+  if (gs.declaredSuits.size === 8) {
+    _endGame(gs);
+  }
+
+  return {
+    winningTeam,
+    newTurnPlayerId: gs.currentTurnPlayerId,
+    lastMove:        gs.lastMove,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Game end
 // ---------------------------------------------------------------------------
 
@@ -457,6 +529,7 @@ module.exports = {
   getDeclarantLockedCards,
   validateDeclaration,
   applyDeclaration,
+  applyForcedFailedDeclaration,
   _resolveValidTurn,
   _endGame,
 };

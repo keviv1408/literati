@@ -703,3 +703,229 @@ describe('executeTimedOutTurn with partial state', () => {
     cancelTurnTimer('BOTCMP');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sub-AC 2: random assignment of unassigned cards in mid-declaration takeover
+// ---------------------------------------------------------------------------
+
+describe('Sub-AC 2: random assignment of unassigned cards — mid-declaration takeover', () => {
+  // When the bot takes over a mid-declaration scenario, it must:
+  //   (a) leave already-assigned cards unchanged
+  //   (b) fill every remaining unassigned card
+  //   (c) assign only to members of the declaring team
+  //   (d) not duplicate card keys in the output assignment
+
+  it('30. cards not held by any teammate are randomly assigned to a valid team member', () => {
+    // Team 1 (p1, p2, p3) holds only 1_s and 2_s from low_s.
+    // Opponents (p4) hold the rest of low_s (3_s through 6_s).
+    const gs = buildGame({
+      handOverrides: {
+        p1: new Set(['1_s', '8_s', '9_s', '10_s', '11_s', '12_s']),
+        p2: new Set(['2_s', '13_s', '1_h', '2_h', '3_h']),
+        p3: new Set(['8_h', '9_h', '10_h', '11_h', '12_h', '13_h']),
+        p4: new Set(['3_s', '4_s', '5_s', '6_s', '4_h', '5_h']),
+        p5: new Set(['6_h', '1_d', '2_d', '3_d', '4_d', '5_d']),
+        p6: new Set(['6_d', '8_d', '9_d', '10_d', '11_d', '12_d']),
+      },
+    });
+
+    // Partial: human assigned only 1_s to themselves before timing out
+    const partial = {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: { '1_s': 'p1' },
+    };
+
+    const result = completeBotFromPartial(gs, 'p1', partial);
+
+    expect(result.action).toBe('declare');
+    expect(result.halfSuitId).toBe('low_s');
+
+    // All 6 cards must be present
+    const hsMap = buildHalfSuitMap('remove_7s');
+    const cards = hsMap.get('low_s');
+    for (const card of cards) {
+      expect(result.assignment[card]).toBeDefined();
+    }
+
+    // Every assigned player must be on team 1
+    const team1Ids = new Set(['p1', 'p2', 'p3']);
+    for (const [, assignee] of Object.entries(result.assignment)) {
+      expect(team1Ids.has(assignee)).toBe(true);
+    }
+
+    // 1_s must still be assigned to p1 (original partial preserved)
+    expect(result.assignment['1_s']).toBe('p1');
+  });
+
+  it('31. assignment has no duplicate card keys — each of the 6 cards appears exactly once', () => {
+    const gs = buildGame({
+      handOverrides: {
+        p1: new Set(['1_s', '2_s', '3_s', '8_s', '9_s', '10_s']),
+        p2: new Set(['4_s', '5_s', '6_s', '11_s', '12_s', '13_s']),
+      },
+    });
+
+    const partial = {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: { '1_s': 'p1', '2_s': 'p1' }, // 2 of 6 pre-assigned
+    };
+
+    const result = completeBotFromPartial(gs, 'p1', partial);
+
+    expect(result.action).toBe('declare');
+
+    const hsMap = buildHalfSuitMap('remove_7s');
+    const expectedCards = hsMap.get('low_s');
+    const assignedKeys  = Object.keys(result.assignment);
+
+    // Exactly 6 keys — one per card in the half-suit
+    expect(assignedKeys.length).toBe(expectedCards.length);
+
+    // Every expected card is present exactly once
+    for (const card of expectedCards) {
+      expect(assignedKeys.filter((k) => k === card).length).toBe(1);
+    }
+  });
+
+  it('32. all 6 half-suit cards are assigned after completing an empty partial', () => {
+    const gs = buildGame({
+      handOverrides: {
+        p1: new Set(['1_s', '8_s', '9_s', '10_s', '11_s', '12_s']),
+        p2: new Set(['2_s', '3_s', '4_s', '5_s', '6_s', '13_s']),
+      },
+    });
+
+    // Completely empty assignment — bot must fill all 6 cards from scratch
+    const partial = {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: {},
+    };
+
+    const result = completeBotFromPartial(gs, 'p1', partial);
+    expect(result.action).toBe('declare');
+
+    const hsMap = buildHalfSuitMap('remove_7s');
+    const expectedCards = new Set(hsMap.get('low_s'));
+    const assignedCards = new Set(Object.keys(result.assignment));
+
+    expect(assignedCards).toEqual(expectedCards);
+  });
+
+  it('33. pre-assigned cards in partial are preserved unchanged after bot fill', () => {
+    const gs = buildGame({
+      handOverrides: {
+        p1: new Set(['1_s', '2_s', '3_s', '8_s', '9_s', '10_s']),
+        p2: new Set(['4_s', '5_s', '6_s', '11_s', '12_s', '13_s']),
+      },
+    });
+
+    // Human assigned 3 of 6 cards before timing out
+    const partial = {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: {
+        '1_s': 'p1',
+        '2_s': 'p1',
+        '4_s': 'p2',
+      },
+    };
+
+    const result = completeBotFromPartial(gs, 'p1', partial);
+    expect(result.action).toBe('declare');
+
+    // All three pre-assigned entries must be unchanged
+    expect(result.assignment['1_s']).toBe('p1');
+    expect(result.assignment['2_s']).toBe('p1');
+    expect(result.assignment['4_s']).toBe('p2');
+  });
+
+  it('34. randomly assigned cards are always assigned to the declaring team (10 runs)', () => {
+    // p1 holds 1_s only; remaining 5 low_s cards are with opponents
+    const gs = buildGame({
+      handOverrides: {
+        p1: new Set(['1_s', '8_s', '9_s', '10_s', '11_s', '12_s']),
+        p2: new Set(['13_s', '1_h', '2_h', '3_h', '4_h']),
+        p3: new Set(['5_h', '6_h', '8_h', '9_h', '10_h', '11_h']),
+        p4: new Set(['2_s', '3_s', '4_s', '5_s', '6_s', '12_h']),
+        p5: new Set(['13_h', '1_d', '2_d', '3_d', '4_d', '5_d']),
+        p6: new Set(['6_d', '8_d', '9_d', '10_d', '11_d', '12_d']),
+      },
+    });
+
+    const partial = {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: { '1_s': 'p1' },
+    };
+
+    const team1Ids = new Set(['p1', 'p2', 'p3']);
+
+    // Run 10 times — random assignments must always stay on team 1
+    for (let i = 0; i < 10; i++) {
+      const result = completeBotFromPartial(gs, 'p1', partial);
+      expect(result.action).toBe('declare');
+      for (const [, assignee] of Object.entries(result.assignment)) {
+        expect(team1Ids.has(assignee)).toBe(true);
+      }
+    }
+  });
+
+  it('35. declarant holds all 6 cards — all assigned to declarant', () => {
+    // p1 holds the entire low_s half-suit
+    const gs = buildGame({
+      handOverrides: {
+        p1: new Set(['1_s', '2_s', '3_s', '4_s', '5_s', '6_s']),
+        p2: new Set(['8_s', '9_s', '10_s', '11_s', '12_s', '13_s']),
+      },
+    });
+
+    const partial = {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: {},
+    };
+
+    const result = completeBotFromPartial(gs, 'p1', partial);
+    expect(result.action).toBe('declare');
+
+    const hsMap = buildHalfSuitMap('remove_7s');
+    const cards = hsMap.get('low_s');
+
+    // Every card in low_s should be assigned to p1
+    for (const card of cards) {
+      expect(result.assignment[card]).toBe('p1');
+    }
+  });
+
+  it('36. declaration is structurally valid after random fill completes', () => {
+    // Give team 1 a mix: some cards held by team, some by opponents
+    const gs = buildGame({
+      handOverrides: {
+        p1: new Set(['1_s', '2_s', '8_s', '9_s', '10_s', '11_s']),
+        p2: new Set(['3_s', '12_s', '13_s', '1_h', '2_h']),
+        p3: new Set(['3_h', '4_h', '5_h', '6_h', '8_h']),
+        // Opponents hold 4_s, 5_s, 6_s from low_s
+        p4: new Set(['4_s', '5_s', '6_s', '9_h', '10_h']),
+        p5: new Set(['11_h', '12_h', '13_h', '1_d', '2_d']),
+        p6: new Set(['3_d', '4_d', '5_d', '6_d', '8_d']),
+      },
+    });
+
+    const partial = {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: { '1_s': 'p1', '2_s': 'p1' }, // 2 of 6 pre-assigned
+    };
+
+    const result = completeBotFromPartial(gs, 'p1', partial);
+    expect(result.action).toBe('declare');
+
+    // The completed assignment must pass server-side structural validation
+    const { validateDeclaration } = require('../game/gameEngine');
+    const v = validateDeclaration(gs, 'p1', result.halfSuitId, result.assignment);
+    expect(v.valid).toBe(true);
+  });
+});
