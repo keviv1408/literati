@@ -110,7 +110,7 @@ function broadcastToQueue(filterKey, data) {
  * @param {Object}   msg
  */
 async function handleJoinQueue(ws, connectionId, user, msg) {
-  const { playerCount, cardRemovalVariant } = msg;
+  const { playerCount, cardRemovalVariant, inferenceMode } = msg;
 
   // ── Validate playerCount ────────────────────────────────────────────────────
   const count = Number(playerCount);
@@ -133,7 +133,10 @@ async function handleJoinQueue(ws, connectionId, user, msg) {
     return;
   }
 
-  const filterKey = makeFilterKey(count, cardRemovalVariant);
+  // inferenceMode defaults to true if not provided (backward compat)
+  const inf = inferenceMode !== false;
+
+  const filterKey = makeFilterKey(count, cardRemovalVariant, inf);
 
   // ── Add to queue ────────────────────────────────────────────────────────────
   const { position, queueSize } = joinQueue(filterKey, {
@@ -163,7 +166,7 @@ async function handleJoinQueue(ws, connectionId, user, msg) {
   });
 
   // ── Try to assemble a match ─────────────────────────────────────────────────
-  await tryAssembleMatch(filterKey, count, cardRemovalVariant);
+  await tryAssembleMatch(filterKey, count, cardRemovalVariant, inf);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,8 +254,9 @@ function cleanupQueuedPlayer(playerId) {
  * @param {string} filterKey
  * @param {number} requiredCount - playerCount (6 or 8)
  * @param {string} cardRemovalVariant
+ * @param {boolean} [inferenceMode=true]
  */
-async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant) {
+async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant, inferenceMode = true) {
   const currentSize = getQueueSize(filterKey);
   if (currentSize < requiredCount) {
     return; // not enough players yet — wait for more
@@ -289,8 +293,7 @@ async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant) {
         status: 'waiting',
         // Mark as a matchmaking room: no host controls, auto-start when full.
         is_matchmaking: true,
-        // Inference mode is always enabled for matchmaking rooms (server-enforced).
-        inference_mode: true,
+        inference_mode: inferenceMode,
       })
       .select()
       .single();

@@ -394,7 +394,14 @@ export function useRoomSocket({
         case 'room_players': {
           const rawPlayers = msg.players;
           if (Array.isArray(rawPlayers)) {
-            setPlayers(rawPlayers as LobbyPlayer[]);
+            setPlayers(
+              // Backend sends `userId`; LobbyPlayer uses `playerId`.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (rawPlayers as any[]).map((p) => ({
+                ...p,
+                playerId: p.playerId ?? p.userId,
+              })) as LobbyPlayer[],
+            );
           }
           break;
         }

@@ -35,6 +35,7 @@ export default function MatchmakingPage() {
   // ── Filter selection ────────────────────────────────────────────────────────
   const [playerCount, setPlayerCount] = useState<6 | 8>(6);
   const [cardVariant, setCardVariant] = useState<CardRemovalVariant>('remove_7s');
+  const [inferenceMode, setInferenceMode] = useState(true);
 
   // ── Auth / connection state ─────────────────────────────────────────────────
   const [bearerToken, setBearerToken] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export default function MatchmakingPage() {
       //   2. On server 'connected' event, auto-send 'join-queue'
       setSessionId(session.sessionId);
       setBearerToken(token);
-      setAutoJoinFilter({ playerCount, cardRemovalVariant: cardVariant });
+      setAutoJoinFilter({ playerCount, cardRemovalVariant: cardVariant, inferenceMode });
     } catch (err) {
       setFetchError(
         err instanceof Error
@@ -305,27 +306,50 @@ export default function MatchmakingPage() {
               </div>
             </fieldset>
 
-            {/* Inference mode — always enabled for matchmaking (informational) */}
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-700/50 bg-emerald-900/20">
-              <span
-                className="text-lg select-none flex-shrink-0"
-                aria-hidden="true"
-              >
-                🔍
+            {/* Inference mode toggle */}
+            <label
+              className={`
+                flex items-center justify-between gap-4 p-3 rounded-xl border cursor-pointer
+                transition-all duration-150 select-none
+                focus-within:ring-2 focus-within:ring-emerald-400 focus-within:ring-offset-2 focus-within:ring-offset-slate-900
+                ${inferenceMode
+                  ? 'border-emerald-500 bg-emerald-900/40'
+                  : 'border-slate-600 bg-slate-800/30 hover:border-slate-500 hover:bg-slate-800/50'
+                }
+              `}
+            >
+              <span>
+                <span
+                  className={`font-semibold text-sm ${inferenceMode ? 'text-emerald-300' : 'text-slate-200'}`}
+                >
+                  🔍 Inference Mode
+                </span>
+                <span className="block text-xs text-slate-400 mt-0.5">
+                  Show card-elimination hints and bot reasoning to all players
+                </span>
               </span>
-              <div className="text-left">
-                <p className="text-sm font-semibold text-emerald-300">
-                  Inference Mode
-                  <span className="ml-2 text-xs font-normal text-emerald-500 bg-emerald-900/60 px-2 py-0.5 rounded-full">
-                    Always On
-                  </span>
-                </p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Card-elimination hints and bot reasoning are enabled for all
-                  matchmaking games
-                </p>
-              </div>
-            </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={inferenceMode}
+                aria-label="Toggle inference mode"
+                onClick={() => setInferenceMode((v) => !v)}
+                className={`
+                  relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
+                  transition-colors duration-200 focus:outline-none focus:ring-2
+                  focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900
+                  ${inferenceMode ? 'bg-emerald-600' : 'bg-slate-600'}
+                `}
+              >
+                <span
+                  className={`
+                    inline-block h-4 w-4 transform rounded-full bg-white shadow
+                    transition-transform duration-200
+                    ${inferenceMode ? 'translate-x-6' : 'translate-x-1'}
+                  `}
+                />
+              </button>
+            </label>
 
             {/* Find Game button */}
             <button
