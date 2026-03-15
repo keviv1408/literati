@@ -545,7 +545,7 @@ export default function GamePage({ params }: PageProps) {
   const finalGameOver = gameOver ?? (gameState?.status === 'completed' ? { type: 'game_over' as const, winner: gameState.winner ?? null, tiebreakerWinner: gameState.tiebreakerWinner ?? null, scores: gameState.scores } : null);
 
   if (finalGameOver || room.status === 'completed') {
-    const { winner, scores, tiebreakerWinner } = finalGameOver ?? { winner: null as number | null, tiebreakerWinner: null as number | null, scores: { team1: 0, team2: 0 } };
+    const { winner, scores, tiebreakerWinner } = finalGameOver ?? { winner: null as 1 | 2 | null, tiebreakerWinner: null as 1 | 2 | null, scores: { team1: 0, team2: 0 } };
 
     // Show a brief "Rematch starting…" overlay while redirect is in flight
     if (rematchStarted) {
