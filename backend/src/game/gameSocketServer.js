@@ -222,7 +222,7 @@ function _getRoomSocketServer() {
 const BOT_TURN_DELAY_MS = 1500;
 
 /** Time a human player has to act before the server auto-moves for them (ms) */
-const HUMAN_TURN_TIMEOUT_MS = 30_000;
+const HUMAN_TURN_TIMEOUT_MS = 120_000;
 
 /**
  * Time the declaring team has to choose which teammate takes the next turn
@@ -243,7 +243,7 @@ const POST_DECLARATION_TURN_SELECTION_MS = 30_000;
  *
  * Sub-AC 23a: 60-second declaration phase countdown with 10-second warning.
  */
-const DECLARATION_PHASE_TIMEOUT_MS = 60_000;
+const DECLARATION_PHASE_TIMEOUT_MS = 120_000;
 
 /**
  * How long the server waits after broadcasting `bot_takeover` for a

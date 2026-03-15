@@ -57,6 +57,7 @@ const { WebSocketServer } = require('ws');
 const url = require('url');
 const { getGuestSession } = require('../sessions/guestSessionStore');
 const { buildGameSeats } = require('../game/gameInitService');
+const { guestHostMap } = require('../routes/rooms');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
@@ -562,14 +563,14 @@ async function fetchRoomMetaWithToken(roomCode) {
 /**
  * Fetch minimal room metadata from Supabase (connection-time check).
  * @param {string} roomCode
- * @returns {Promise<{host_user_id: string, status: string, player_count: number, is_matchmaking: boolean}|null>}
+ * @returns {Promise<{id: string, host_user_id: string, status: string, player_count: number, is_matchmaking: boolean}|null>}
  */
 async function fetchRoomMeta(roomCode) {
   try {
     const supabase = getSupabase();
     const { data: room, error } = await supabase
       .from('rooms')
-      .select('host_user_id, status, player_count, is_matchmaking')
+      .select('id, host_user_id, status, player_count, is_matchmaking')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -1773,7 +1774,10 @@ function attachRoomSocketServer(httpServer) {
 
     // ── Determine host status ───────────────────────────────────────────────
     // Matchmaking rooms have no designated host — all players are peers.
-    const isHost = isMatchmakingRoom ? false : (dbRoom.host_user_id === userId);
+    // For guests, host_user_id is null in DB; check the in-memory guestHostMap instead.
+    const isHost = isMatchmakingRoom
+      ? false
+      : (dbRoom.host_user_id === userId || guestHostMap.get(dbRoom.id) === userId);
 
     // ── Auto-assign team ────────────────────────────────────────────────────
     const clients = getRoomClientMap(roomCode);

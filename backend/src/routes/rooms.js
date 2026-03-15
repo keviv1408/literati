@@ -861,3 +861,4 @@ module.exports = router;
 module.exports.VALID_PLAYER_COUNTS = VALID_PLAYER_COUNTS;
 module.exports.VALID_CARD_REMOVAL_VARIANTS = VALID_CARD_REMOVAL_VARIANTS;
 module.exports.ROOM_STATUS = ROOM_STATUS;
+module.exports.guestHostMap = guestHostMap;
