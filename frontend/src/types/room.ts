@@ -78,6 +78,11 @@ export interface CreateRoomResponse {
   room: Room;
 }
 
+/** Response from GET /api/rooms/invite/:inviteCode */
+export interface InviteCodeResponse {
+  room: Room;
+}
+
 // ── UI helper constants ──────────────────────────────────────────────────────
 
 export const PLAYER_COUNT_OPTIONS = [6, 8] as const;
