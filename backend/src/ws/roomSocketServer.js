@@ -1046,14 +1046,6 @@ function buildOccupiedSeats(clients, playerCount) {
 async function handleStartGame(ctx) {
   const { ws, isHost, roomCode, clients } = ctx;
 
-  // ── Authorization ───────────────────────────────────────────────────────────
-  if (!isHost) {
-    ws.send(
-      JSON.stringify({ type: 'error', message: 'Only the host can start the game' }),
-    );
-    return;
-  }
-
   // ── Idempotency guard ──────────────────────────────────────────────────────
   // Prevent duplicate game-start sequences from concurrent calls.
   if (_startingRooms.has(roomCode)) {

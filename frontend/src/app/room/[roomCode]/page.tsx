@@ -1117,7 +1117,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
             spectator.  Empty seats will be filled with bots server-side when
             the host starts the game.
             ─────────────────────────────────────────────────────────────── */}
-        {!isSpectator && amIHostLive && !isCancelled && (
+        {!isSpectator && !isCancelled && (
           <div
             className="
               bg-slate-800/50 border border-slate-700/50
