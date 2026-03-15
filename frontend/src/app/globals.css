@@ -1,0 +1,214 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* ── Team A colour tokens (Emerald / Team 1) ────────────────────────── */
+  /* Raw values mirror the Tailwind `emerald-*` palette used in TEAM_STYLES */
+  --team-a-dot:          #10b981; /* emerald-500          */
+  --team-a-text:         #34d399; /* emerald-400          */
+  --team-a-text-dim:     rgba(16, 185, 129, 0.70); /* emerald-500/70 */
+  --team-a-border:       rgba(5,  150, 105, 0.40); /* emerald-600/40 */
+  --team-a-bg:           rgba(6,   78,  59, 0.20); /* emerald-900/20 */
+  --team-a-bg-active:    rgba(6,   78,  59, 0.40); /* emerald-900/40 */
+  --team-a-ring:         rgba(16, 185, 129, 0.60); /* emerald-500/60 */
+  --team-a-seat-border:  rgba(5,  150, 105, 0.60); /* emerald-600/60 */
+  --team-a-seat-bg:      rgba(6,   78,  59, 0.30); /* emerald-900/30 */
+  --team-a-seat-text:    #6ee7b7;                  /* emerald-300    */
+  --team-a-pill-bg:      rgba(5,  150, 105, 0.40); /* emerald-600/40 */
+
+  /* ── Team B colour tokens (Blue / Team 2) ───────────────────────────── */
+  /* Raw values mirror the Tailwind `blue-*` palette used in TEAM_STYLES   */
+  --team-b-dot:          #3b82f6; /* blue-500             */
+  --team-b-text:         #60a5fa; /* blue-400             */
+  --team-b-text-dim:     rgba(59, 130, 246, 0.70); /* blue-500/70    */
+  --team-b-border:       rgba(37,  99, 235, 0.40); /* blue-600/40    */
+  --team-b-bg:           rgba(30,  58, 138, 0.20); /* blue-900/20    */
+  --team-b-bg-active:    rgba(30,  58, 138, 0.40); /* blue-900/40    */
+  --team-b-ring:         rgba(59, 130, 246, 0.60); /* blue-500/60    */
+  --team-b-seat-border:  rgba(37,  99, 235, 0.60); /* blue-600/60    */
+  --team-b-seat-bg:      rgba(30,  58, 138, 0.30); /* blue-900/30    */
+  --team-b-seat-text:    #93c5fd;                  /* blue-300       */
+  --team-b-pill-bg:      rgba(37,  99, 235, 0.40); /* blue-600/40    */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Modal entrance animation ── */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.18s ease-out both;
+}
+
+/* ── Prevent body scroll when modal is open ── */
+body:has([role="dialog"]) {
+  overflow: hidden;
+}
+
+/* ── Active-turn seat glow / ring pulse ── */
+@keyframes seat-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgba(251, 191, 36, 0.55),
+      0 0 10px 3px rgba(251, 191, 36, 0.20);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(251, 191, 36, 0.85),
+      0 0 18px 7px rgba(251, 191, 36, 0.38);
+  }
+}
+
+.animate-seat-glow {
+  animation: seat-glow 1.4s ease-in-out infinite;
+}
+
+/* ── Card deal animations (Sub-AC 10b) ─────────────────────────────────────── */
+
+/**
+ * Deck shuffle — the stacked face-down cards wobble left/right.
+ * Duration applied via .animate-deck-shuffle (0.4 s).
+ */
+@keyframes deck-shuffle {
+  0%,  100% { transform: translate(   0,    0) rotate(  0deg); }
+  15%        { transform: translate(-10px,  2px) rotate( -4deg); }
+  35%        { transform: translate( 10px, -2px) rotate(  4deg); }
+  55%        { transform: translate(  -6px, 1px) rotate( -2deg); }
+  75%        { transform: translate(   6px,-1px) rotate(  2deg); }
+}
+
+.animate-deck-shuffle {
+  animation: deck-shuffle 0.4s ease-in-out;
+}
+
+/**
+ * Single flying card — translates to (--deal-dx, --deal-dy) and fades out.
+ * Duration and delay are set inline per card via animationDuration / animationDelay.
+ */
+@keyframes card-deal-out {
+  0%   { transform: translate(0, 0) scale(1);   opacity: 1; }
+  100% {
+    transform: translate(var(--deal-dx, 0px), var(--deal-dy, 80px)) scale(0.65);
+    opacity: 0;
+  }
+}
+
+.animate-card-deal {
+  animation: card-deal-out 0.6s ease-in forwards;
+}
+
+/* ── Card flight animation (AC 33 Sub-AC 1) ─────────────────────────────────── */
+
+/**
+ * Card transfer flight — a face-down card flies from the card-giver's seat to
+ * the card-receiver's seat after a successful ask_card.
+ *
+ * The card lifts slightly at the arc midpoint (15 px above the straight line)
+ * and lands at (--flight-dx, --flight-dy) relative to its starting position.
+ * Duration is set inline per flight via animationDuration.
+ */
+@keyframes card-flight {
+  0%   {
+    transform: translate(0, 0) scale(1.05);
+    opacity: 1;
+  }
+  35%  {
+    transform:
+      translate(
+        calc(var(--flight-dx, 0px) * 0.35),
+        calc(var(--flight-dy, 0px) * 0.35 - 18px)
+      )
+      scale(1.1);
+    opacity: 1;
+  }
+  70%  {
+    transform:
+      translate(
+        calc(var(--flight-dx, 0px) * 0.70),
+        calc(var(--flight-dy, 0px) * 0.70 - 6px)
+      )
+      scale(0.95);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--flight-dx, 0px), var(--flight-dy, 0px)) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.animate-card-flight {
+  animation: card-flight 0.6s ease-in-out forwards;
+}
+
+/* ── Card flip reveal animation (Sub-AC 2 of AC 33) ────────────────────────── */
+
+/**
+ * 3-D flip from card-back to card-face.
+ *
+ * Applied to the `transform-style: preserve-3d` inner wrapper inside
+ * CardFlipWrapper.  The inner div starts rotated 180 ° (card-back facing the
+ * viewer because the back-face has an additional 180 ° rotation) and animates
+ * to 0 ° (card-face facing the viewer) over 550 ms.
+ *
+ * Both the front-face div and the back-face div carry backface-visibility:hidden
+ * so only the correct face is visible at any moment in time:
+ *   • inner at 180 °:  front face is edge-on / hidden → back face is visible
+ *   • inner at   0 °:  front face is visible → back face is edge-on / hidden
+ */
+@keyframes flip-card-reveal {
+  from { transform: rotateY(180deg); }
+  to   { transform: rotateY(0deg); }
+}
+
+.animate-card-flip-reveal {
+  animation: flip-card-reveal 0.55s ease-in-out forwards;
+  transform-style: preserve-3d;
+}
+
+/* ── FailedDeclarationReveal overlay animations (Sub-AC 26b) ───────────────── */
+
+/**
+ * Fade-in for the backdrop overlay.
+ * Used by FailedDeclarationReveal when the `declarationFailed` event arrives.
+ */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+
+/**
+ * Auto-dismiss progress bar — shrinks from full-width to zero over the
+ * AUTO_DISMISS_MS duration (6 000 ms by default).  Applied inline via
+ * style={{ animation: `shrink-width ${ms}ms linear forwards` }}.
+ */
+@keyframes shrink-width {
+  from { width: 100%; }
+  to   { width:   0%; }
+}

@@ -1,0 +1,516 @@
+'use strict';
+
+/**
+ * Game state factory and serialisation helpers.
+ *
+ * A GameState object is the single source of truth for a live game.
+ * It lives in the in-memory gameStore (Map<roomCode, GameState>)
+ * and is periodically persisted to Supabase for crash recovery.
+ *
+ * Shape:
+ * {
+ *   roomCode:           string,
+ *   roomId:             string,    // Supabase room UUID
+ *   variant:            'remove_2s'|'remove_7s'|'remove_8s',
+ *   playerCount:        6|8,
+ *   status:             'active'|'completed',
+ *   currentTurnPlayerId:string,
+ *   players:            Player[],
+ *   hands:              Map<playerId, Set<cardId>>,
+ *   declaredSuits:      Map<halfSuitId, { teamId:1|2, declaredBy:string }>,
+ *   scores:             { team1: number, team2: number },
+ *   lastMove:           string|null,
+ *   winner:             1|2|null,
+ *   tiebreakerWinner:   1|2|null,
+ *   // Bot inference: not broadcast to clients
+ *   botKnowledge:       Map<playerId, Map<cardId, boolean>>,
+ *   // Call history for crash recovery
+ *   moveHistory:        MoveRecord[],
+ * }
+ *
+ * Note: partial-selection state (current wizard step for ask/declare) is
+ * maintained in a SEPARATE store (partialSelectionStore.js) keyed by
+ * `roomCode:playerId`.  It is NOT part of the GameState object itself so
+ * it never leaks into the Supabase snapshot or affects crash recovery.
+ *
+ * Player shape:
+ * {
+ *   playerId:    string,
+ *   displayName: string,
+ *   avatarId:    string|null,
+ *   teamId:      1|2,
+ *   seatIndex:   number,
+ *   isBot:       boolean,
+ *   isGuest:     boolean,
+ * }
+ */
+
+const { buildDeck, shuffleDeck, dealCards } = require('./deck');
+const { buildHalfSuitMap, buildCardToHalfSuitMap, allHalfSuitIds } = require('./halfSuits');
+
+// Memoized half-suit maps per variant to avoid rebuilding on every serialization.
+const _halfSuitMapCache = {};
+function _cachedHalfSuitMap(variant) {
+  if (!_halfSuitMapCache[variant]) {
+    _halfSuitMapCache[variant] = buildHalfSuitMap(variant);
+  }
+  return _halfSuitMapCache[variant];
+}
+
+/**
+ * Create a brand-new game state from a lobby seat snapshot.
+ *
+ * @param {{
+ *   roomCode:    string,
+ *   roomId:      string,
+ *   variant:     'remove_2s'|'remove_7s'|'remove_8s',
+ *   playerCount: 6|8,
+ *   seats:       Array<{
+ *     seatIndex:   number,
+ *     playerId:    string,
+ *     displayName: string,
+ *     avatarId:    string|null,
+ *     teamId:      1|2,
+ *     isBot:       boolean,
+ *     isGuest:     boolean,
+ *   }>,
+ * }} options
+ * @returns {Object} A fresh GameState
+ */
+function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
+  // Sort seats by seatIndex to get a consistent player order.
+  const sortedSeats = [...seats].sort((a, b) => a.seatIndex - b.seatIndex);
+
+  // Build and deal the deck.
+  const deck   = shuffleDeck(buildDeck(variant));
+  const dealt  = dealCards(deck, playerCount);
+
+  // Build the hands Map.
+  /** @type {Map<string, Set<string>>} */
+  const hands = new Map();
+  for (let i = 0; i < sortedSeats.length; i++) {
+    hands.set(sortedSeats[i].playerId, new Set(dealt[i]));
+  }
+
+  // The first turn goes to the player in seat 0.
+  const firstTurnPlayerId = sortedSeats[0].playerId;
+
+  return {
+    roomCode,
+    roomId,
+    variant,
+    playerCount,
+    status: 'active',
+    currentTurnPlayerId: firstTurnPlayerId,
+
+    // Immutable player list (ordered by seatIndex).
+    players: sortedSeats.map((s) => ({
+      playerId:    s.playerId,
+      displayName: s.displayName,
+      avatarId:    s.avatarId ?? null,
+      teamId:      s.teamId,
+      seatIndex:   s.seatIndex,
+      isBot:       s.isBot,
+      isGuest:     s.isGuest,
+    })),
+
+    hands,
+
+    // Declared half-suits: halfSuitId → { teamId, declaredBy }
+    /** @type {Map<string, { teamId: 1|2, declaredBy: string }>} */
+    declaredSuits: new Map(),
+
+    scores: { team1: 0, team2: 0 },
+    lastMove: null,
+    winner: null,
+    tiebreakerWinner: null,
+
+    // Bot inference state (not broadcast to clients)
+    /** @type {Map<string, Map<string, boolean|null>>} */
+    botKnowledge: new Map(),
+
+    // Move history for crash recovery
+    moveHistory: [],
+
+    // Shared UI preference: when true, all clients show inference highlights.
+    // Any in-game player can toggle this; it is broadcast in real time.
+    inferenceMode: false,
+
+    // ── Player elimination (Sub-AC 27b) ─────────────────────────────────────
+    // Set of playerIds whose hands are now empty (cards removed by a declaration).
+    // Populated by applyDeclaration / applyForcedFailedDeclaration when a
+    // player's card count drops to zero.
+    /** @type {Set<string>} */
+    eliminatedPlayerIds: new Set(),
+
+    // Optional turn-recipient map: when an eliminated player (human or bot)
+    // designates a teammate to receive their future turns, the choice is stored
+    // here.  _resolveValidTurn consults this map before falling back to seat order.
+    /** @type {Map<string, string>} */
+    turnRecipients: new Map(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Read helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Return all players on a given team.
+ * @param {Object} gs - GameState
+ * @param {1|2} teamId
+ * @returns {Array}
+ */
+function getTeamPlayers(gs, teamId) {
+  return gs.players.filter((p) => p.teamId === teamId);
+}
+
+/**
+ * Return the team ID for a given player.
+ * @param {Object} gs
+ * @param {string} playerId
+ * @returns {1|2|null}
+ */
+function getPlayerTeam(gs, playerId) {
+  const p = gs.players.find((pl) => pl.playerId === playerId);
+  return p ? p.teamId : null;
+}
+
+/**
+ * Return the hand (Set<cardId>) for a player.
+ * @param {Object} gs
+ * @param {string} playerId
+ * @returns {Set<string>}
+ */
+function getHand(gs, playerId) {
+  return gs.hands.get(playerId) ?? new Set();
+}
+
+/**
+ * Return the number of cards a player holds.
+ * @param {Object} gs
+ * @param {string} playerId
+ * @returns {number}
+ */
+function getCardCount(gs, playerId) {
+  return getHand(gs, playerId).size;
+}
+
+/**
+ * Return the number of cards a player holds in a specific half-suit.
+ * This is public information — all players know opponents' per-half-suit counts.
+ *
+ * @param {Object} gs - GameState
+ * @param {string} playerId
+ * @param {string} halfSuitId - e.g. "low_s", "high_d"
+ * @returns {number}
+ */
+function getHalfSuitCardCount(gs, playerId, halfSuitId) {
+  const hand = getHand(gs, playerId);
+  const hsCards = _cachedHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
+  let count = 0;
+  for (const c of hsCards) {
+    if (hand.has(c)) count++;
+  }
+  return count;
+}
+
+/**
+ * Return the half-suit ID for a card given the game's variant.
+ * Uses the shared card-to-half-suit map.
+ * @param {Object} gs
+ * @param {string} card
+ * @returns {string}
+ */
+function cardHalfSuit(gs, card) {
+  const map = buildCardToHalfSuitMap(gs.variant);
+  return map.get(card);
+}
+
+/**
+ * Return true if a half-suit has already been declared.
+ * @param {Object} gs
+ * @param {string} halfSuitId
+ * @returns {boolean}
+ */
+function isHalfSuitDeclared(gs, halfSuitId) {
+  return gs.declaredSuits.has(halfSuitId);
+}
+
+// ---------------------------------------------------------------------------
+// Wire-safe serialization (sent to clients)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the public game-state snapshot sent to ALL clients.
+ * Does NOT include any player's hand.
+ *
+ * @param {Object} gs - GameState
+ * @returns {Object}
+ */
+function serializePublicState(gs) {
+  // Declared suits as plain object array
+  const declaredSuitsArr = Array.from(gs.declaredSuits.entries()).map(
+    ([halfSuitId, info]) => ({ halfSuitId, teamId: info.teamId, declaredBy: info.declaredBy })
+  );
+
+  return {
+    status:              gs.status,
+    currentTurnPlayerId: gs.currentTurnPlayerId,
+    scores:              { ...gs.scores },
+    lastMove:            gs.lastMove,
+    winner:              gs.winner,
+    tiebreakerWinner:    gs.tiebreakerWinner,
+    declaredSuits:       declaredSuitsArr,
+    inferenceMode:       gs.inferenceMode ?? false,
+  };
+}
+
+/**
+ * Build the player list with card counts (not actual cards) for broadcast.
+ *
+ * Each player entry includes:
+ *   - cardCount: total cards held
+ *   - halfSuitCounts: { [halfSuitId]: number } — how many cards in each half-suit.
+ *     This is public information (opponents can infer it) and is used for:
+ *       • Enforcing ask eligibility (server checks target has ≥1 in half-suit)
+ *       • Inference-mode highlights on the client
+ *       • Bot decision-making
+ *
+ * @param {Object} gs
+ * @returns {Array}
+ */
+function serializePlayers(gs) {
+  const halfSuitMap = _cachedHalfSuitMap(gs.variant);
+  const halfSuitIds = allHalfSuitIds();
+
+  return gs.players.map((p) => {
+    const hand = getHand(gs, p.playerId);
+
+    // Compute per-half-suit card counts for this player.
+    const halfSuitCounts = {};
+    for (const hsId of halfSuitIds) {
+      const cards = halfSuitMap.get(hsId) ?? [];
+      let count = 0;
+      for (const c of cards) {
+        if (hand.has(c)) count++;
+      }
+      halfSuitCounts[hsId] = count;
+    }
+
+    return {
+      playerId:      p.playerId,
+      displayName:   p.displayName,
+      avatarId:      p.avatarId,
+      teamId:        p.teamId,
+      seatIndex:     p.seatIndex,
+      isBot:         p.isBot,
+      isGuest:       p.isGuest,
+      cardCount:     hand.size,
+      isCurrentTurn: p.playerId === gs.currentTurnPlayerId,
+      halfSuitCounts,
+      // Sub-AC 27b: true when this player has no cards left (hand emptied by declaration)
+      isEliminated:  gs.eliminatedPlayerIds ? gs.eliminatedPlayerIds.has(p.playerId) : false,
+    };
+  });
+}
+
+/**
+ * Build a personalized game-init message for a specific player.
+ * Includes their full hand but not other players' cards.
+ *
+ * @param {Object} gs
+ * @param {string} playerId
+ * @returns {Object}
+ */
+function serializeForPlayer(gs, playerId) {
+  const hand = Array.from(getHand(gs, playerId));
+
+  return {
+    type:        'game_init',
+    roomCode:    gs.roomCode,
+    variant:     gs.variant,
+    playerCount: gs.playerCount,
+    myPlayerId:  playerId,
+    myHand:      hand,
+    players:     serializePlayers(gs),
+    gameState:   serializePublicState(gs),
+  };
+}
+
+/**
+ * Persist the game state snapshot to Supabase.
+ * Called after every move to enable crash recovery.
+ * Non-fatal: if it fails we log and continue.
+ *
+ * @param {Object} gs - GameState
+ * @param {Object} supabase - Supabase client
+ * @returns {Promise<void>}
+ */
+async function persistGameState(gs, supabase) {
+  // Convert Map structures to plain objects for JSON storage.
+  const snapshot = {
+    variant:             gs.variant,
+    playerCount:         gs.playerCount,
+    status:              gs.status,
+    currentTurnPlayerId: gs.currentTurnPlayerId,
+    players:             gs.players,
+    hands:               Object.fromEntries(
+      Array.from(gs.hands.entries()).map(([pid, set]) => [pid, Array.from(set)])
+    ),
+    declaredSuits: Object.fromEntries(
+      Array.from(gs.declaredSuits.entries())
+    ),
+    scores:         gs.scores,
+    lastMove:       gs.lastMove,
+    winner:         gs.winner,
+    tiebreakerWinner: gs.tiebreakerWinner,
+    moveHistory:    gs.moveHistory,
+    // Sub-AC 27b: persist eliminated player IDs and turn recipients
+    eliminatedPlayerIds: Array.from(gs.eliminatedPlayerIds ?? []),
+    turnRecipients:      Object.fromEntries(gs.turnRecipients ?? new Map()),
+  };
+
+  try {
+    await supabase
+      .from('rooms')
+      .update({ game_state: snapshot, status: gs.status === 'completed' ? 'completed' : 'in_progress' })
+      .eq('code', gs.roomCode);
+  } catch (err) {
+    console.error('[gameState] Failed to persist game state for room', gs.roomCode, ':', err);
+  }
+}
+
+/**
+ * Mark a room as abandoned in Supabase.
+ *
+ * Called when an in-progress game is cleaned up without ever completing (e.g.
+ * all players disconnected and the reconnect window expired with no activity,
+ * or the game was explicitly dissolved before all 8 half-suits were declared).
+ *
+ * IMPORTANT: stats are NEVER written for abandoned games — updateStats() in
+ * gameSocketServer.js guards `gs.status !== 'completed'` before touching the
+ * user_stats table, and this function is only called when the game is NOT
+ * completing normally.
+ *
+ * Non-fatal: failures are logged but do not propagate.
+ *
+ * @param {string} roomCode
+ * @param {Object} supabase - Supabase client (service-role)
+ * @returns {Promise<void>}
+ */
+async function markRoomAbandoned(roomCode, supabase) {
+  try {
+    const { error } = await supabase
+      .from('rooms')
+      .update({ status: 'abandoned' })
+      .eq('code', roomCode)
+      .in('status', ['in_progress', 'starting', 'waiting']);
+
+    if (error) {
+      console.warn(
+        `[gameState] markRoomAbandoned: failed to update room ${roomCode}:`,
+        error.message
+      );
+    } else {
+      console.log(`[gameState] Room ${roomCode} marked as abandoned`);
+    }
+  } catch (err) {
+    console.error('[gameState] markRoomAbandoned error:', err);
+  }
+}
+
+/**
+ * Sweep all stale 'in_progress' rooms in Supabase and mark them 'abandoned'.
+ *
+ * Intended to be called once at server startup so rooms that were left in
+ * 'in_progress' by a previous server instance (crash / graceful restart) are
+ * correctly classified.  Only rooms whose updated_at is older than
+ * `staleAfterMs` are touched — this preserves any room that was updated
+ * very recently and whose players might still be reconnecting.
+ *
+ * Uses the mark_stale_games_abandoned() Postgres function added by migration
+ * 009 so the sweep is a single round-trip to the DB.
+ *
+ * @param {Object} supabase - Supabase client (service-role)
+ * @param {number} [staleAfterMs=7200000] - Rooms idle longer than this are
+ *   considered abandoned (default: 2 hours)
+ * @returns {Promise<void>}
+ */
+async function markStaleGamesAbandoned(supabase, staleAfterMs = 2 * 60 * 60 * 1000) {
+  try {
+    // Convert ms to a Postgres interval string (e.g. '7200 seconds')
+    const staleAfterSeconds = Math.floor(staleAfterMs / 1000);
+    const { data, error } = await supabase
+      .rpc('mark_stale_games_abandoned', {
+        stale_after: `${staleAfterSeconds} seconds`,
+      });
+
+    if (error) {
+      console.warn('[gameState] markStaleGamesAbandoned RPC error:', error.message);
+    } else {
+      const count = typeof data === 'number' ? data : 0;
+      if (count > 0) {
+        console.log(`[gameState] Startup cleanup: marked ${count} stale in_progress room(s) as abandoned`);
+      }
+    }
+  } catch (err) {
+    console.error('[gameState] markStaleGamesAbandoned error:', err);
+  }
+}
+
+/**
+ * Restore a game state from a Supabase snapshot.
+ * Called on server restart / crash recovery.
+ *
+ * @param {Object} snapshot - Raw JSON from Supabase game_state column
+ * @param {string} roomCode
+ * @param {string} roomId
+ * @returns {Object} Restored GameState
+ */
+function restoreGameState(snapshot, roomCode, roomId) {
+  const gs = {
+    roomCode,
+    roomId,
+    variant:             snapshot.variant,
+    playerCount:         snapshot.playerCount,
+    status:              snapshot.status,
+    currentTurnPlayerId: snapshot.currentTurnPlayerId,
+    players:             snapshot.players,
+    hands:               new Map(
+      Object.entries(snapshot.hands).map(([pid, cards]) => [pid, new Set(cards)])
+    ),
+    declaredSuits: new Map(Object.entries(snapshot.declaredSuits)),
+    scores:        snapshot.scores,
+    lastMove:      snapshot.lastMove,
+    winner:        snapshot.winner,
+    tiebreakerWinner: snapshot.tiebreakerWinner,
+    botKnowledge:  new Map(),
+    moveHistory:   snapshot.moveHistory ?? [],
+    // Inference mode resets to off on crash recovery (transient UI preference)
+    inferenceMode: snapshot.inferenceMode ?? false,
+    // Sub-AC 27b: restore elimination state
+    eliminatedPlayerIds: new Set(snapshot.eliminatedPlayerIds ?? []),
+    turnRecipients:      new Map(Object.entries(snapshot.turnRecipients ?? {})),
+  };
+  return gs;
+}
+
+module.exports = {
+  createGameState,
+  getTeamPlayers,
+  getPlayerTeam,
+  getHand,
+  getCardCount,
+  getHalfSuitCardCount,
+  cardHalfSuit,
+  isHalfSuitDeclared,
+  serializePublicState,
+  serializePlayers,
+  serializeForPlayer,
+  persistGameState,
+  restoreGameState,
+  // AC 52: abandoned-game cleanup
+  markRoomAbandoned,
+  markStaleGamesAbandoned,
+};

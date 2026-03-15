@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+htmlcov/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Lock files (large, rarely relevant to implementation)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Cache
+.cache/
+.turbo/
+.parcel-cache/
+
+# Supabase generated
+supabase/.branches/
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large generated files
+*.map
+*.d.ts.map
