@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
@@ -12,6 +12,8 @@ export default function Home() {
   const { clearGuest } = useGuest();
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   async function handlePlayNow() {
     const session = await ensureGuestName();
@@ -53,7 +55,7 @@ export default function Home() {
         </div>
 
         {/* Guest session indicator */}
-        {hasName && guestSession && (
+        {mounted && hasName && guestSession && (
           <div className="flex items-center gap-2 bg-emerald-900/50 border border-emerald-700/50 rounded-full px-4 py-2 text-sm text-emerald-200">
             <span className="text-base" aria-hidden="true">
               👤
@@ -150,7 +152,7 @@ export default function Home() {
       </main>
 
       {/* Create Room modal — shown after guest name is confirmed */}
-      {guestSession && (
+      {mounted && guestSession && (
         <CreateRoomModal
           open={isCreateRoomOpen}
           displayName={guestSession.displayName}
