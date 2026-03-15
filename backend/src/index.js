@@ -28,9 +28,7 @@ const { getSupabaseClient } = require('./db/supabase');
 const app = express();
 const PORT = process.env.PORT || 3012;
 
-// ── Security middleware ────────────────────────────────────────────────────────
-app.use(helmet());
-
+// ── CORS (must be before helmet so preflight OPTIONS get headers) ─────────────
 app.use(
   cors({
     origin: [
@@ -40,6 +38,13 @@ app.use(
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
+  })
+);
+
+// ── Security middleware ────────────────────────────────────────────────────────
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 
