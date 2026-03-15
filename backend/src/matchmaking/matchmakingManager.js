@@ -268,8 +268,10 @@ async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant) {
   try {
     const supabase = getSupabaseClient();
 
-    // The first (longest-waiting) player becomes the room host
-    const hostPlayer = matchedPlayers[0];
+    // Prefer a registered user as host (guests don't exist in auth.users).
+    // Fall back to null if all players are guests.
+    const registeredHost = matchedPlayers.find((p) => !p.isGuest);
+    const hostUserId = registeredHost ? registeredHost.playerId : null;
 
     const roomCode = await generateUniqueRoomCode(supabase);
     const inviteCode = generateInviteCode();
@@ -281,7 +283,7 @@ async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant) {
         code: roomCode,
         invite_code: inviteCode,
         spectator_token: spectatorToken,
-        host_user_id: hostPlayer.playerId,
+        host_user_id: hostUserId,
         player_count: requiredCount,
         card_removal_variant: cardRemovalVariant,
         status: 'waiting',

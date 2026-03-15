@@ -163,17 +163,18 @@ literati/
 
 ### Frontend (`.env.local`)
 ```
-NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=http://localhost:3012
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
 ### Backend (`.env`)
 ```
-PORT=3001
+PORT=3012
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
-JWT_SECRET=...
+SUPABASE_ANON_KEY=...
+FRONTEND_URL=http://localhost:3011
 ```
 
 ## Agent Efficiency Rules

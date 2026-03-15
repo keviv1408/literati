@@ -9,7 +9,7 @@
  *                        Supabase Admin API with email_confirm:true — no email gate);
  *                        sign-in via Supabase browser client signInWithPassword().
  *
- * The base URL is controlled by NEXT_PUBLIC_API_URL (defaults to localhost:3001
+ * The base URL is controlled by NEXT_PUBLIC_API_URL (defaults to localhost:3012
  * for local development; set to the Railway/Fly.io URL in production).
  */
 
@@ -23,7 +23,7 @@ import type {
 // ── Config ───────────────────────────────────────────────────────────────────
 
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3012';
 
 // ── Error class ──────────────────────────────────────────────────────────────
 

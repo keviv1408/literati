@@ -48,8 +48,7 @@ const guestCreateLimiter = rateLimit({
     error: 'Too Many Requests',
     message: 'Too many guest sessions created from this IP. Please try again later.',
   },
-  // Use a custom key so that tests can override by not mounting the limiter.
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
 });
 
 // ---------------------------------------------------------------------------
@@ -288,7 +287,7 @@ const registerLimiter = rateLimit({
     error: 'Too Many Requests',
     message: 'Too many registration attempts from this IP. Please try again later.',
   },
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
 });
 
 /**
@@ -304,7 +303,7 @@ const loginLimiter = rateLimit({
     error: 'Too Many Requests',
     message: 'Too many login attempts from this IP. Please try again later.',
   },
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: () => process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
 });
 
 // ---------------------------------------------------------------------------

@@ -869,7 +869,18 @@ async function handleReassignTeam(ws, connectionId, user, msg) {
  * @returns {WebSocketServer}
  */
 function createWsServer(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer });
+  const wss = new WebSocketServer({ noServer: true });
+
+  // Catch-all upgrade handler: only claim requests whose path is exactly "/ws"
+  // (with optional query string). All other paths are handled by the
+  // path-specific servers registered before this one.
+  httpServer.on('upgrade', (req, socket, head) => {
+    const pathname = url.parse(req.url || '', false).pathname;
+    if (pathname !== '/ws') return; // let other handlers deal with it
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  });
 
   wss.on('connection', async (ws, req) => {
     // Extract the bearer token from the URL query string.

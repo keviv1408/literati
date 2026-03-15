@@ -26,14 +26,17 @@ const { markStaleGamesAbandoned } = require('./game/gameState');
 const { getSupabaseClient } = require('./db/supabase');
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3012;
 
 // ── Security middleware ────────────────────────────────────────────────────────
 app.use(helmet());
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3011',
+      'http://localhost:3011',
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -47,17 +50,9 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later' },
+  skip: () => process.env.NODE_ENV === 'development',
 });
 app.use(generalLimiter);
-
-// ── Stricter limit for room creation ──────────────────────────────────────────
-const roomCreationLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many room creation attempts, please wait' },
-});
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }));
@@ -70,7 +65,7 @@ app.get('/health', (_req, res) => {
 
 // ── API routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
-app.use('/api/rooms', roomCreationLimiter, roomsRouter);
+app.use('/api/rooms', roomsRouter);
 app.use('/api/matchmaking', matchmakingRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/live-games', liveGamesRouter);
