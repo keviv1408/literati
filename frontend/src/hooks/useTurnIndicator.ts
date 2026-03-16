@@ -1,22 +1,20 @@
 'use client';
 
 /**
- * useTurnIndicator — manages the "your turn" visual + audio notification loop.
+ * useTurnIndicator — manages the "your turn" visual + single audio notification.
  *
- * Sub-AC 14-3: Persists both the glow visual and audio chime until the player
- * submits a valid action, then clears them immediately (optimistic clear
- * before the server acknowledges the action).
+ * Sub-AC 14-3: Persists the glow visual until the player submits a valid
+ * action, then clears it immediately (optimistic clear before the server
+ * acknowledges the action). Audio plays once when the turn starts.
  *
  * ### Lifecycle
- * 1. When `isMyTurn` transitions **false → true**: activates the indicator,
- *    plays a turn-start chime, and starts a repeat interval so the player
- *    cannot miss their cue.
+ * 1. When `isMyTurn` transitions **false → true**: activates the indicator
+ *    and plays a single turn-start chime.
  * 2. When `clearIndicator()` is called (player taps Ask or Declare): the
- *    indicator and repeat interval are cleared *immediately*, before the
- *    server responds.
+ *    indicator is cleared *immediately*, before the server responds.
  * 3. When `isMyTurn` transitions **true → false** (server confirmed the
- *    action or enforced a timeout): any remaining state is cleaned up so the
- *    hook is ready for the next turn.
+ *    action or enforced a timeout): remaining state is cleaned up so the hook
+ *    is ready for the next turn.
  *
  * ### Usage in the game page
  * ```tsx
@@ -51,9 +49,8 @@ export interface UseTurnIndicatorReturn {
   /**
    * Call immediately when the player submits a valid action (ask or declare).
    *
-   * Sets `indicatorActive = false` and cancels the audio repeat interval
-   * *before* the server confirms the action, giving instant UI feedback that
-   * the player's input was received.
+   * Sets `indicatorActive = false` *before* the server confirms the action,
+   * giving instant UI feedback that the player's input was received.
    */
   clearIndicator: () => void;
 }
@@ -64,39 +61,23 @@ export interface UseTurnIndicatorReturn {
  * `useTurnIndicator`
  *
  * @param isMyTurn  – Whether it is currently this client's turn.
- * @param repeatMs  – Milliseconds between audio re-triggers while waiting.
- *                    Defaults to 8 000 ms (8 seconds).
  */
 export function useTurnIndicator(
   isMyTurn: boolean,
-  repeatMs = 8_000,
 ): UseTurnIndicatorReturn {
   const [indicatorActive, setIndicatorActive] = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
-  // activeRef mirrors `indicatorActive` without a re-render cost, so the
-  // setInterval callback can read it without a stale-closure issue.
-  const activeRef   = useRef(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeRef = useRef(false);
   // Tracks the previous isMyTurn value to detect false → true transitions.
   const prevTurnRef = useRef(false);
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  const stopInterval = useCallback(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
 
   // ── Public: clearIndicator ────────────────────────────────────────────────
 
   const clearIndicator = useCallback(() => {
     activeRef.current = false;
     setIndicatorActive(false);
-    stopInterval();
-  }, [stopInterval]);
+  }, []);
 
   // ── Turn-change effect ────────────────────────────────────────────────────
 
@@ -111,25 +92,12 @@ export function useTurnIndicator(
 
       // Immediate chime on turn start
       playTurnChime();
-
-      // Re-fire chime on interval so the cue persists until the player acts
-      stopInterval();
-      intervalRef.current = setInterval(() => {
-        // Guard: clearIndicator() may have run between interval ticks
-        if (activeRef.current) playTurnChime();
-      }, repeatMs);
     } else if (!isMyTurn && wasMine) {
       // ── Turn passed (server confirmed action or enforced timeout) ──────
-      // clearIndicator() may have already cleaned up; safe to call again.
       activeRef.current = false;
       setIndicatorActive(false);
-      stopInterval();
     }
-  }, [isMyTurn, repeatMs, stopInterval]);
-
-  // ── Cleanup on unmount ────────────────────────────────────────────────────
-
-  useEffect(() => () => stopInterval(), [stopInterval]);
+  }, [isMyTurn]);
 
   return { indicatorActive, clearIndicator };
 }

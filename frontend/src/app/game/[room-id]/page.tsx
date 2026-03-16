@@ -409,7 +409,7 @@ export default function GamePage({ params }: PageProps) {
 
   const myPlayer          = players.find((p) => p.playerId === myPlayerId) ?? null;
   const myTeamId          = myPlayer?.teamId ?? null;
-  const isMyTurn          = gameState?.currentTurnPlayerId === myPlayerId;
+  const isMyTurn          = Boolean(myPlayerId && gameState?.currentTurnPlayerId === myPlayerId);
 
   // ── Inference mode (Sub-AC 37c) ───────────────────────────────────────────
   //
@@ -446,11 +446,10 @@ export default function GamePage({ params }: PageProps) {
     variant,
   });
 
-  // `useTurnIndicator` manages the glow + audio chime loop:
-  //  • plays a chime on the false → true transition (turn starts)
-  //  • re-fires the chime every 8 s while awaiting action
-  //  • `clearIndicator()` immediately suppresses both the glow and audio
-  //    re-trigger when the player submits an ask or declaration
+  // `useTurnIndicator` manages the glow + turn-start chime:
+  //  • plays a single chime on the false → true transition (turn starts)
+  //  • `clearIndicator()` immediately suppresses the glow when the player
+  //    submits an ask or declaration
   const { indicatorActive, clearIndicator } = useTurnIndicator(isMyTurn ?? false);
 
   const currentTurnPlayer = gameState?.currentTurnPlayerId

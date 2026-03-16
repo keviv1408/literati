@@ -395,6 +395,61 @@ describe('GamePage — in_progress game view', () => {
       expect(screen.getByTestId('game-score')).toBeTruthy();
     });
   });
+
+  it('clears a visible turn timer as soon as ask_result arrives', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('game-view')).toBeTruthy();
+    });
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit('player-me', [
+        makePlayer('player-me', 'Me', 1, 0),
+        makePlayer('p2', 'Alice', 1, 2),
+        makePlayer('p3', 'Bob', 1, 4),
+        makePlayer('p4', 'Carol', 2, 1),
+        makePlayer('p5', 'Dave', 2, 3),
+        makePlayer('p6', 'Eve', 2, 5),
+      ]),
+      gameState: {
+        status: 'active',
+        currentTurnPlayerId: 'player-me',
+        scores: { team1: 0, team2: 0 },
+        lastMove: null,
+        winner: null,
+        tiebreakerWinner: null,
+        declaredSuits: [],
+      },
+    }));
+
+    const futureExpiry = Date.now() + 30_000;
+    act(() => sendWsMessage({
+      type: 'turn_timer',
+      playerId: 'player-me',
+      durationMs: 30_000,
+      expiresAt: futureExpiry,
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('countdown-timer')).toBeTruthy();
+      expect(screen.getByTestId('countdown-timer-label').textContent).toBe('Your turn');
+    });
+
+    act(() => sendWsMessage({
+      type: 'ask_result',
+      askerId: 'player-me',
+      targetId: 'p4',
+      cardId: '5_h',
+      success: false,
+      newTurnPlayerId: 'p4',
+      lastMove: 'Me asked Carol for 5♥ — did not get it',
+    }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('countdown-timer')).toBeNull();
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -465,6 +465,9 @@ export function useGameSocket({
           setGameState(payload.gameState ?? null);
           setVariant(initVariant);
           setPlayerCount(payload.playerCount ?? null);
+          // Reset ephemeral timer state on fresh init to avoid stale countdowns
+          // from a previous turn/room before the next timer event arrives.
+          setTurnTimer(null);
           // Sync inference mode from server state on (re)connect
           setInferenceMode(payload.gameState?.inferenceMode ?? false);
           break;
@@ -481,6 +484,8 @@ export function useGameSocket({
           setGameState(payload.gameState ?? null);
           setVariant(payload.variant ?? null);
           setPlayerCount(payload.playerCount ?? null);
+          // Spectators should not carry over a player's previous turn timer.
+          setTurnTimer(null);
           // Sync inference mode from server state on spectator connect
           setInferenceMode(payload.gameState?.inferenceMode ?? false);
           break;
@@ -516,6 +521,9 @@ export function useGameSocket({
         case 'ask_result': {
           const payload = msg as unknown as AskResultPayload;
           setLastAskResult(payload);
+          // The active turn action completed; old turn timer is no longer valid.
+          // A fresh timer (if needed) will arrive via a new `turn_timer` event.
+          setTurnTimer(null);
           // The bot executed the timed-out player's turn — clear takeover indicator
           setBotTakeover(null);
           // Turn ended — clear any active declaration phase timer (Sub-AC 23a)
@@ -534,6 +542,8 @@ export function useGameSocket({
         case 'declaration_result': {
           const payload = msg as unknown as DeclarationResultPayload;
           setLastDeclareResult(payload);
+          // Declaration completed; clear the previous turn timer immediately.
+          setTurnTimer(null);
           // Sub-AC 28a: update eligible next-turn players list from the server payload
           if (Array.isArray(payload.eligibleNextTurnPlayerIds)) {
             setEligibleNextTurnPlayerIds(payload.eligibleNextTurnPlayerIds);
@@ -611,6 +621,8 @@ export function useGameSocket({
         case 'bot_takeover': {
           const payload = msg as unknown as BotTakeoverPayload;
           setBotTakeover(payload);
+          // Turn timer has already expired once takeover begins.
+          setTurnTimer(null);
           // Bot is taking over — clear the declaration phase timer so the
           // UI doesn't show a stale countdown (Sub-AC 23a)
           setDeclarationTimer(null);

@@ -8,12 +8,11 @@
  *   • Transitions false → true when `isMyTurn` becomes true
  *   • Does NOT re-activate if `isMyTurn` is already true across re-renders
  *   • `clearIndicator()` sets `indicatorActive` to false immediately
- *   • `clearIndicator()` stops the repeat interval (chime stops firing)
+ *   • No periodic reminder chime fires while waiting on your turn
  *   • When `isMyTurn` becomes false, indicator is cleared automatically
  *   • `playTurnChime` is called exactly once when the turn starts
- *   • `playTurnChime` is called again after each repeat interval fires
- *   • `playTurnChime` does NOT fire after `clearIndicator()` even if interval ticks
- *   • Cleanup: interval is cancelled on unmount
+ *   • `playTurnChime` does NOT fire repeatedly while `isMyTurn` remains true
+ *   • Cleanup: no extra chimes fire after unmount
  */
 
 import { renderHook, act } from '@testing-library/react';
@@ -130,14 +129,13 @@ describe('useTurnIndicator — turn start', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Repeat interval
+// No periodic reminder chime
 // ---------------------------------------------------------------------------
 
-describe('useTurnIndicator — repeat interval', () => {
-  it('fires playTurnChime again after repeatMs have passed', () => {
-    const repeatMs = 5_000;
+describe('useTurnIndicator — no periodic reminder chime', () => {
+  it('does not fire playTurnChime again just because time has passed', () => {
     const { rerender } = renderHook(
-      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn, repeatMs),
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
       { initialProps: { isMyTurn: false } },
     );
 
@@ -146,18 +144,17 @@ describe('useTurnIndicator — repeat interval', () => {
     });
     mockPlayTurnChime.mockClear();
 
-    // Advance fake timers by one repeat interval
+    // Advance fake timers; there should be no periodic replay
     act(() => {
-      jest.advanceTimersByTime(repeatMs);
+      jest.advanceTimersByTime(30_000);
     });
 
-    expect(mockPlayTurnChime).toHaveBeenCalledTimes(1);
+    expect(mockPlayTurnChime).not.toHaveBeenCalled();
   });
 
-  it('fires playTurnChime multiple times across multiple intervals', () => {
-    const repeatMs = 4_000;
+  it('does not fire playTurnChime repeatedly across long durations', () => {
     const { rerender } = renderHook(
-      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn, repeatMs),
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
       { initialProps: { isMyTurn: false } },
     );
 
@@ -167,10 +164,10 @@ describe('useTurnIndicator — repeat interval', () => {
     mockPlayTurnChime.mockClear();
 
     act(() => {
-      jest.advanceTimersByTime(repeatMs * 3); // 3 intervals
+      jest.advanceTimersByTime(120_000);
     });
 
-    expect(mockPlayTurnChime).toHaveBeenCalledTimes(3);
+    expect(mockPlayTurnChime).not.toHaveBeenCalled();
   });
 });
 
@@ -197,10 +194,9 @@ describe('useTurnIndicator — clearIndicator()', () => {
     expect(result.current.indicatorActive).toBe(false);
   });
 
-  it('stops the repeat interval after clearIndicator()', () => {
-    const repeatMs = 5_000;
+  it('does not emit extra chimes after clearIndicator()', () => {
     const { result, rerender } = renderHook(
-      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn, repeatMs),
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
       { initialProps: { isMyTurn: false } },
     );
 
@@ -213,9 +209,8 @@ describe('useTurnIndicator — clearIndicator()', () => {
     });
     mockPlayTurnChime.mockClear();
 
-    // Interval should have been cleared — no more chimes
     act(() => {
-      jest.advanceTimersByTime(repeatMs * 3);
+      jest.advanceTimersByTime(30_000);
     });
 
     expect(mockPlayTurnChime).not.toHaveBeenCalled();
@@ -279,10 +274,9 @@ describe('useTurnIndicator — turn end (isMyTurn → false)', () => {
     expect(result.current.indicatorActive).toBe(false);
   });
 
-  it('stops the repeat interval when isMyTurn becomes false', () => {
-    const repeatMs = 5_000;
+  it('does not emit extra chimes when isMyTurn becomes false', () => {
     const { rerender } = renderHook(
-      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn, repeatMs),
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
       { initialProps: { isMyTurn: false } },
     );
 
@@ -296,7 +290,7 @@ describe('useTurnIndicator — turn end (isMyTurn → false)', () => {
     mockPlayTurnChime.mockClear();
 
     act(() => {
-      jest.advanceTimersByTime(repeatMs * 3);
+      jest.advanceTimersByTime(30_000);
     });
 
     expect(mockPlayTurnChime).not.toHaveBeenCalled();
@@ -353,10 +347,9 @@ describe('useTurnIndicator — clearIndicator then turn ends', () => {
 // ---------------------------------------------------------------------------
 
 describe('useTurnIndicator — unmount cleanup', () => {
-  it('cancels the repeat interval when the component unmounts', () => {
-    const repeatMs = 5_000;
+  it('does not emit extra chimes when the component unmounts', () => {
     const { rerender, unmount } = renderHook(
-      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn, repeatMs),
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
       { initialProps: { isMyTurn: false } },
     );
 
@@ -367,9 +360,8 @@ describe('useTurnIndicator — unmount cleanup', () => {
     unmount();
     mockPlayTurnChime.mockClear();
 
-    // Advancing timers after unmount should produce no calls
     act(() => {
-      jest.advanceTimersByTime(repeatMs * 3);
+      jest.advanceTimersByTime(30_000);
     });
 
     expect(mockPlayTurnChime).not.toHaveBeenCalled();
