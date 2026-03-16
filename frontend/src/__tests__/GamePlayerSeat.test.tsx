@@ -19,7 +19,7 @@
  */
 
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import type { GamePlayer } from '@/types/game';
 
@@ -169,6 +169,24 @@ describe('GamePlayerSeat — occupied seat', () => {
     // aria-label is on the outer div
     const el = screen.getByRole('listitem');
     expect(el.getAttribute('aria-label')).toContain('Bob');
+  });
+
+  it('renders voice indicators and exposes them in the aria-label', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer({ displayName: 'Bob' })}
+        myPlayerId={null}
+        currentTurnPlayerId={null}
+        voiceState={{ connected: true, muted: true, speaking: true, local: false }}
+      />,
+    );
+
+    const el = screen.getByRole('listitem');
+    expect(el.getAttribute('aria-label')).toContain('in voice');
+    expect(el.getAttribute('aria-label')).toContain('mic muted');
+    expect(el.getAttribute('aria-label')).toContain('speaking');
+    expect(screen.getByTestId('voice-seat-indicators')).toBeDefined();
   });
 });
 

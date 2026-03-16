@@ -67,6 +67,7 @@ import { BotBadge } from '@/components/BotBadge';
 import InferenceIndicator from '@/components/InferenceIndicator';
 import type { GamePlayer } from '@/types/game';
 import type { PlayerInference } from '@/hooks/useCardInference';
+import type { VoiceSeatState } from '@/hooks/useDailyVoice';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,9 @@ export interface GamePlayerSeatProps {
 
   /** Extra Tailwind classes forwarded to the outermost element. */
   className?: string;
+
+  /** Lightweight Daily voice status for the player's seat, if connected. */
+  voiceState?: VoiceSeatState | null;
 }
 
 // ── Team style map ────────────────────────────────────────────────────────────
@@ -188,6 +192,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   isHighlighted = false,
   onHighlightClick,
   className = '',
+  voiceState = null,
 }) => {
   // ── Empty seat ──────────────────────────────────────────────────────────────
   if (!player) {
@@ -236,6 +241,16 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   // Has any inference data to display?
   const hasInference = inference !== undefined && Object.keys(inference).length > 0;
 
+  const voiceAria = voiceState?.connected
+    ? [
+        'in voice',
+        voiceState.muted ? 'mic muted' : null,
+        voiceState.speaking ? 'speaking' : null,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : null;
+
   // Sub-AC 28b: clickable only when highlighted AND a handler is provided
   const isClickable = isHighlighted && Boolean(onHighlightClick) && !isEliminated;
 
@@ -280,7 +295,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       ]
         .filter(Boolean)
         .join(' ')}
-      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}${isHighlighted && !isEliminated ? ', eligible for next turn' : ''}`}
+      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}${isHighlighted && !isEliminated ? ', eligible for next turn' : ''}${voiceAria ? `, ${voiceAria}` : ''}`}
       role={isClickable ? 'button' : 'listitem'}
       tabIndex={isClickable ? 0 : undefined}
       onClick={isClickable ? onHighlightClick : undefined}
@@ -393,6 +408,33 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           >
             You
           </span>
+        </div>
+      )}
+
+      {voiceState?.connected && (
+        <div
+          className="flex items-center justify-center gap-1 min-h-[0.85rem]"
+          aria-hidden="true"
+          data-testid="voice-seat-indicators"
+        >
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+            title="Connected to voice"
+          />
+          {voiceState.muted && (
+            <span
+              className="text-[0.55rem] text-slate-400 leading-none"
+              title="Mic muted"
+            >
+              🔇
+            </span>
+          )}
+          {voiceState.speaking && (
+            <span
+              className="w-2 h-2 rounded-full bg-amber-300 animate-pulse"
+              title="Speaking"
+            />
+          )}
         </div>
       )}
 

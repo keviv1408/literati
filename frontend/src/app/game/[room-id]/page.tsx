@@ -29,6 +29,7 @@ import { useTurnIndicator } from '@/hooks/useTurnIndicator';
 import { useCardInference } from '@/hooks/useCardInference';
 import { useInference } from '@/hooks/useInference';
 import { GameProvider } from '@/contexts/GameContext';
+import { VoiceProvider, useVoice } from '@/contexts/VoiceContext';
 import CardHand from '@/components/CardHand';
 import AskCardModal from '@/components/AskCardModal';
 import CardRequestWizard from '@/components/CardRequestWizard';
@@ -48,8 +49,10 @@ import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
 import { ConnectedScoreboardPanel } from '@/components/ScoreboardPanel';
 import MuteToggle from '@/components/MuteToggle';
+import VoiceControls from '@/components/VoiceControls';
+import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import type { Room } from '@/types/room';
-import type { CardId, HalfSuitId, GameOverPayload, RematchStartPayload } from '@/types/game';
+import type { CardId, HalfSuitId, GameOverPayload } from '@/types/game';
 import type { PlayerInference } from '@/hooks/useCardInference';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
@@ -201,10 +204,10 @@ export default function GamePage({ params }: PageProps) {
       setGameOver(payload);
       setVoteStartedAt(Date.now());
     },
-    onRematchStart: (_payload: RematchStartPayload) => {
+    onRematchStart: () => {
       setRematchStarted(true);
     },
-    onRematchStarting: (_payload) => {
+    onRematchStarting: () => {
       // Sub-AC 46c: new game spun up server-side with same teams/seats.
       // Clear post-game state so the upcoming game_init seamlessly transitions
       // into the new game without a page reload.
@@ -235,12 +238,7 @@ export default function GamePage({ params }: PageProps) {
   // `useAudio` provides stable callbacks for all game-event sound cues.
   // Called here (before the game-event effects below) so the callbacks are
   // in scope when the effects' dep arrays are evaluated.
-  //
-  // Mute is enforced inside audio.ts — the hook always delegates without
-  // duplicating the guard.
   const {
-    muted,
-    toggleMute,
     playDealSound,
     playAskSuccess,
     playAskFail,
@@ -344,7 +342,6 @@ export default function GamePage({ params }: PageProps) {
     if (declarationFailed) {
       setFailedRevealDismissed(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [declarationFailed]);
 
   // ── Trigger deal animation on first game_init ─────────────────────────────
@@ -679,6 +676,11 @@ export default function GamePage({ params }: PageProps) {
       eligibleNextTurnPlayerIds,
       error: wsError,
     }}>
+    <VoiceProvider
+      roomCode={room.code}
+      bearerToken={bearerToken}
+      canJoin={Boolean(myPlayerId)}
+    >
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden" data-testid="game-view">
       <div className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none" aria-hidden="true">
         <span className="absolute text-[20rem] -top-16 -right-16 text-white">♦</span>
@@ -718,7 +720,8 @@ export default function GamePage({ params }: PageProps) {
             <span className="text-white text-base">{gameState?.scores.team2 ?? 0}</span> T2
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <VoiceControls />
           {/* Inference mode toggle — shows uniform-distribution probability badges */}
           <button
             onClick={sendToggleInference}
@@ -814,6 +817,8 @@ export default function GamePage({ params }: PageProps) {
           chooserName={currentTurnPlayer?.displayName ?? null}
         />
       )}
+
+      <VoiceAudioLayer />
 
       {/*
        * Bot-takeover banner (Sub-AC 2 of AC 39)
@@ -1141,6 +1146,7 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
     </div>
+    </VoiceProvider>
     </GameProvider>
   );
 }
@@ -1194,6 +1200,7 @@ function PlayerRow({
    */
   onSeatClick?: (playerId: string) => void;
 }) {
+  const { getSeatState } = useVoice();
   const seatsPerTeam = Math.floor(playerCount / 2);
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
   return (
@@ -1224,6 +1231,7 @@ function PlayerRow({
             isActiveTurn={player?.playerId === myPlayerId ? indicatorActive : undefined}
             inference={playerInference}
             inferencePercent={sharePercent}
+            voiceState={player ? getSeatState(player.playerId) : null}
             // Sub-AC 28b: highlight eligible seats and wire click handler
             isHighlighted={isHl}
             onHighlightClick={

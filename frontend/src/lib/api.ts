@@ -20,6 +20,13 @@ import type {
   InviteCodeResponse,
 } from '@/types/room';
 
+export interface VoiceJoinResponse {
+  roomName: string;
+  roomUrl: string;
+  meetingToken: string;
+  expiresAt: string;
+}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 export const API_URL =
@@ -285,6 +292,26 @@ export async function getRoomByInviteCode(
   return apiFetch<InviteCodeResponse>(
     `/api/rooms/invite/${inviteCode.toUpperCase()}`,
     { method: 'GET' }
+  );
+}
+
+/**
+ * POST /api/rooms/:roomCode/voice/join
+ *
+ * Returns the Daily room URL plus a short-lived meeting token for the
+ * authenticated player in the active game.
+ */
+export async function joinRoomVoice(
+  roomCode: string,
+  bearerToken: string
+): Promise<VoiceJoinResponse> {
+  return apiFetch<VoiceJoinResponse>(
+    `/api/rooms/${roomCode.toUpperCase()}/voice/join`,
+    {
+      method: 'POST',
+      token: bearerToken,
+      body: JSON.stringify({}),
+    }
   );
 }
 

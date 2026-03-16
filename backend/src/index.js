@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
 const roomsRouter = require('./routes/rooms');
+const voiceRouter = require('./routes/voice');
 const authRouter = require('./routes/auth');
 const matchmakingRouter = require('./routes/matchmaking');
 const liveGamesRouter = require('./routes/liveGames');
@@ -69,6 +70,7 @@ app.get('/health', (_req, res) => {
 // ── API routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
 app.use('/api/rooms', roomsRouter);
+app.use('/api/rooms', voiceRouter);
 app.use('/api/matchmaking', matchmakingRouter);
 app.use('/api/live-games', liveGamesRouter);
 
