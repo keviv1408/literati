@@ -228,9 +228,31 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
     // For guests, check the in-memory map (host_user_id is null in DB).
     for (const [roomId, guestId] of guestHostMap.entries()) {
       if (guestId === hostUserId) {
+        let existingRoom = { id: roomId };
+
+        try {
+          const { data: roomRecord, error: roomLookupError } = await supabase
+            .from('rooms')
+            .select('id, code, status')
+            .eq('id', roomId)
+            .maybeSingle();
+
+          if (roomLookupError) {
+            console.error('Error looking up existing guest room:', roomLookupError);
+          } else if (roomRecord) {
+            existingRoom = {
+              id: roomRecord.id,
+              code: roomRecord.code,
+              status: roomRecord.status,
+            };
+          }
+        } catch (err) {
+          console.error('Unexpected error looking up existing guest room:', err);
+        }
+
         return res.status(409).json({
           error: 'You already have an active game room',
-          existingRoom: { id: roomId },
+          existingRoom,
         });
       }
     }

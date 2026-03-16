@@ -36,6 +36,7 @@ import {
   VARIANT_OPTIONS,
   type CardRemovalVariant,
   type Room,
+  type RoomStatus,
 } from '@/types/room';
 
 // ── Session-storage helpers ───────────────────────────────────────────────────
@@ -78,6 +79,15 @@ interface CreateRoomModalProps {
   displayName: string;
   /** Called when the modal should be hidden (cancel or post-success). */
   onClose: () => void;
+}
+
+function getExistingRoomPath(existingRoom: {
+  code: string;
+  status?: RoomStatus;
+}): string {
+  return existingRoom.status === 'in_progress'
+    ? `/game/${existingRoom.code}`
+    : `/room/${existingRoom.code}`;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -160,12 +170,15 @@ export default function CreateRoomModal({
       } catch (err) {
         if (err instanceof ApiError) {
           if (err.status === 409) {
-            // Host already has an active room — surface the existing room code
-            const existing = (err.body as { existingRoom?: { code: string } })
+            // Host already has an active room — route to lobby or game based
+            // on the current room status.
+            const existing = (err.body as {
+              existingRoom?: { code: string; status?: RoomStatus };
+            })
               ?.existingRoom;
             if (existing?.code) {
               onClose();
-              router.push(`/room/${existing.code}`);
+              router.push(getExistingRoomPath(existing));
               return;
             }
             setError('You already have an active room. Rejoin it first.');

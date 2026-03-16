@@ -240,20 +240,26 @@ export async function createRoom(
   displayName: string,
   bearerToken?: string
 ): Promise<CreateRoomResponse> {
-  // Registered users supply their own Supabase JWT; guests need a backend token.
-  const token = bearerToken ?? (await getGuestBearerToken(displayName));
-
-  try {
-    return await apiFetch<CreateRoomResponse>('/api/rooms', {
+  const submitCreateRoom = async (token: string) =>
+    apiFetch<CreateRoomResponse>('/api/rooms', {
       method: 'POST',
       token,
       body: JSON.stringify(payload),
     });
+
+  // Registered users supply their own Supabase JWT; guests need a backend token.
+  const token = bearerToken ?? (await getGuestBearerToken(displayName));
+
+  try {
+    return await submitCreateRoom(token);
   } catch (err) {
-    // 401 means the cached token was revoked server-side (e.g. server restart).
-    // Only clear the *guest* token cache — registered JWTs are managed by Supabase.
+    // Guest 401s usually mean the backend restarted and lost its in-memory
+    // session store. Clear the stale cache, mint a fresh guest token, and
+    // retry once transparently so the user does not need to refresh.
     if (err instanceof ApiError && err.status === 401 && !bearerToken) {
       clearToken();
+      const retryToken = await getGuestBearerToken(displayName);
+      return submitCreateRoom(retryToken);
     }
     throw err;
   }

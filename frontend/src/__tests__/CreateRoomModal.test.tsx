@@ -15,7 +15,6 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -63,6 +62,7 @@ import CreateRoomModal, {
   cacheCreatedRoom,
   consumeCreatedRoom,
 } from '@/components/CreateRoomModal';
+import { ApiError } from '@/lib/api';
 import type { Room } from '@/types/room';
 
 // ---------------------------------------------------------------------------
@@ -174,7 +174,7 @@ describe('CreateRoomModal — form phase', () => {
 
   it('shows error message on API failure', async () => {
     mockCreateRoom.mockRejectedValueOnce(
-      new (require('@/lib/api').ApiError)(500, 'Server error')
+      new ApiError(500, 'Server error')
     );
     renderModal();
     fireEvent.click(screen.getByText('Create Room'));
@@ -320,10 +320,11 @@ describe('CreateRoomModal — success phase (Sub-AC 2c)', () => {
 // ---------------------------------------------------------------------------
 
 describe('CreateRoomModal — 409 conflict', () => {
-  it('navigates to existing room when 409 contains existingRoom.code', async () => {
-    const { ApiError } = require('@/lib/api');
+  it('navigates to the lobby when 409 contains an existing waiting room', async () => {
     mockCreateRoom.mockRejectedValueOnce(
-      new ApiError(409, 'Conflict', { existingRoom: { code: 'EXIST1' } })
+      new ApiError(409, 'Conflict', {
+        existingRoom: { code: 'EXIST1', status: 'waiting' },
+      })
     );
     const { onClose } = renderModal();
     await act(async () => {
@@ -331,6 +332,22 @@ describe('CreateRoomModal — 409 conflict', () => {
     });
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/room/EXIST1');
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('navigates to the game when 409 contains an in-progress room', async () => {
+    mockCreateRoom.mockRejectedValueOnce(
+      new ApiError(409, 'Conflict', {
+        existingRoom: { code: 'EXIST1', status: 'in_progress' },
+      })
+    );
+    const { onClose } = renderModal();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Create Room'));
+    });
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/game/EXIST1');
       expect(onClose).toHaveBeenCalled();
     });
   });

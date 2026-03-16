@@ -30,6 +30,8 @@ describe('POST /api/rooms', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    const { _clearStore } = require('../sessions/guestSessionStore');
+    _clearStore();
   });
 
   // ── Happy path ──────────────────────────────────────────────────────────────
@@ -258,6 +260,55 @@ describe('POST /api/rooms', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('active game room');
     expect(res.body.existingRoom.code).toBe('XYZ999');
+  });
+
+  it('returns guest existing room code when a guest host already has an active room', async () => {
+    const { createGuestSession } = require('../sessions/guestSessionStore');
+    const { token, session } = createGuestSession('Guest Host');
+    const fakeGuestRoom = {
+      id: 'guest-room-id',
+      code: 'GUEST1',
+      invite_code: 'A3F2C91E7B046D52',
+      spectator_token: 'A3F2C91E7B046D52C91E7B046D52A3F2',
+      host_user_id: null,
+      player_count: 6,
+      card_removal_variant: 'remove_7s',
+      status: 'waiting',
+      created_at: '2026-03-16T00:00:00.000Z',
+      updated_at: '2026-03-16T00:00:00.000Z',
+    };
+
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: null,
+    });
+    mockSupabase._chain.single.mockResolvedValueOnce({
+      data: fakeGuestRoom,
+      error: null,
+    });
+
+    const creationRes = await request(app)
+      .post('/api/rooms')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
+
+    expect(creationRes.status).toBe(201);
+
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
+      data: { id: fakeGuestRoom.id, code: fakeGuestRoom.code, status: 'waiting' },
+      error: null,
+    });
+
+    const conflictRes = await request(app)
+      .post('/api/rooms')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
+
+    expect(conflictRes.status).toBe(409);
+    expect(conflictRes.body.existingRoom.id).toBe(fakeGuestRoom.id);
+    expect(conflictRes.body.existingRoom.code).toBe(fakeGuestRoom.code);
+    expect(conflictRes.body.existingRoom.status).toBe('waiting');
+    expect(session.displayName).toBe('Guest Host');
   });
 
   // ── All card removal variants accepted ────────────────────────────────────
