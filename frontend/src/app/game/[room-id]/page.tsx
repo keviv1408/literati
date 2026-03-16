@@ -862,7 +862,7 @@ export default function GamePage({ params }: PageProps) {
         </div>
       )}
 
-      <main className="relative z-10 flex-1 flex flex-row items-start px-3 py-3 gap-3 min-h-0 overflow-hidden">
+      <main className="relative z-10 flex-1 flex flex-row items-start px-3 py-3 gap-3 min-h-0 overflow-hidden lg:items-stretch">
 
         {/*
          * Side scoreboard panel (Sub-AC 34a).
@@ -878,7 +878,7 @@ export default function GamePage({ params }: PageProps) {
         </div>
 
         {/* ── Central game content ──────────────────────────────────────── */}
-        <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden">
+        <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden lg:self-stretch lg:justify-center lg:gap-6 xl:gap-8">
           <div className="w-full max-w-2xl" aria-label="Team 2 players" data-testid="team2-row">
             <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
             <PlayerRow

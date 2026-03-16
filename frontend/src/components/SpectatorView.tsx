@@ -428,7 +428,7 @@ export default function SpectatorView({
 
       {/* ── Main content area ─────────────────────────────────────────────── */}
       <main
-        className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden"
+        className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden lg:justify-center lg:gap-6 xl:gap-8"
         aria-label="Spectator game table"
       >
         {/* Team 2 row — inference data is passed via InferenceContext */}
