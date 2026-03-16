@@ -225,7 +225,7 @@ export default function GuestNameModal() {
                 id="guest-name-hint"
                 className="mt-1.5 text-xs text-slate-500"
               >
-                Letters, numbers, spaces, and _ - ' . only
+                Letters, numbers, spaces, and _ - &#39; . only
               </p>
             )}
           </div>
@@ -273,34 +273,11 @@ export default function GuestNameModal() {
             )}
           </button>
 
-          {/* Divider */}
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-700" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-slate-900 px-2 text-slate-500">or</span>
-            </div>
-          </div>
-
-          {/* Sign in link */}
-          <a
-            href="/auth/login"
-            className="
-              block w-full py-3 px-4 rounded-xl font-medium text-base text-center
-              border border-slate-600 text-slate-300
-              hover:border-emerald-600 hover:text-white hover:bg-slate-800
-              transition-all duration-150
-              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900
-            "
-          >
-            Sign in / Create Account
-          </a>
         </form>
 
         {/* Footer note */}
         <p className="mt-4 text-center text-xs text-slate-600">
-          Guest stats are not saved. Create an account to track your wins.
+          Guest stats are not saved.
         </p>
       </div>
     </div>
