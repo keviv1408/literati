@@ -849,7 +849,11 @@ export default function GamePage({ params }: PageProps) {
        *  The `lastResultMsg` (5-second flash) takes precedence over the
        *  persisted `gameState.lastMove` so fresh results are visible immediately.
        */}
-      <LastMoveDisplay message={lastResultMsg ?? gameState?.lastMove} />
+      <LastMoveDisplay
+        message={lastResultMsg ?? gameState?.lastMove}
+        players={players}
+        myPlayerId={myPlayerId}
+      />
 
       {/*
        * Declaration-in-progress banner (Sub-AC 21b)

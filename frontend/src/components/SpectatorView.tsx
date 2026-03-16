@@ -418,7 +418,11 @@ export default function SpectatorView({
        *  Shows only the single most-recent move (no history log per spec).
        *  Uses the shared LastMoveDisplay component.
        */}
-      <LastMoveDisplay message={displayedMove} testId="spectator-last-move" />
+      <LastMoveDisplay
+        message={displayedMove}
+        players={players}
+        testId="spectator-last-move"
+      />
 
       {/* ── Declaration-in-progress banner (Sub-AC 21b) ───────────────────
           Spectators see a live "X is declaring Low Spades (3/6)" banner

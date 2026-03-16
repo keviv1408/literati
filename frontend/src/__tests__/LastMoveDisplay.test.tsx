@@ -22,6 +22,32 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
+import type { GamePlayer } from '@/types/game';
+
+const PLAYERS: GamePlayer[] = [
+  {
+    playerId: 'p1',
+    displayName: 'Alice',
+    avatarId: null,
+    teamId: 1,
+    seatIndex: 0,
+    cardCount: 6,
+    isBot: false,
+    isGuest: true,
+    isCurrentTurn: false,
+  },
+  {
+    playerId: 'p2',
+    displayName: 'Bob',
+    avatarId: null,
+    teamId: 2,
+    seatIndex: 1,
+    cardCount: 6,
+    isBot: false,
+    isGuest: true,
+    isCurrentTurn: false,
+  },
+];
 
 describe('LastMoveDisplay', () => {
   it('renders nothing when message is null', () => {
@@ -40,13 +66,14 @@ describe('LastMoveDisplay', () => {
   });
 
   it('renders the message text when provided', () => {
-    render(<LastMoveDisplay message="Alice asked Dave for 9♠ — denied" />);
-    expect(screen.getByText('Alice asked Dave for 9♠ — denied')).toBeTruthy();
+    const msg = 'Alice asked Dave for 9♠ — denied';
+    render(<LastMoveDisplay message={msg} />);
+    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
   });
 
   it('has aria-live="polite"', () => {
     render(<LastMoveDisplay message="some move" />);
-    const el = screen.getByText('some move');
+    const el = screen.getByTestId('last-move-display');
     expect(el.getAttribute('aria-live')).toBe('polite');
   });
 
@@ -70,25 +97,25 @@ describe('LastMoveDisplay', () => {
   it('renders ask-success message: "[player] asked [player] for [card] — got it"', () => {
     const msg = 'Alice asked Dave for 9♠ — got it';
     render(<LastMoveDisplay message={msg} />);
-    expect(screen.getByText(msg)).toBeTruthy();
+    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
   });
 
   it('renders ask-denied message: "[player] asked [player] for [card] — denied"', () => {
     const msg = 'Alice asked Dave for 9♠ — denied';
     render(<LastMoveDisplay message={msg} />);
-    expect(screen.getByText(msg)).toBeTruthy();
+    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
   });
 
   it('renders correct-declaration message: "[player] declared [suit] — correct! Team N scores"', () => {
     const msg = 'Alice declared Low Spades — correct! Team 1 scores';
     render(<LastMoveDisplay message={msg} />);
-    expect(screen.getByText(msg)).toBeTruthy();
+    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
   });
 
   it('renders incorrect-declaration message: "[player] declared [suit] — incorrect! Team N scores"', () => {
     const msg = 'Charlie declared High Hearts — incorrect! Team 2 scores';
     render(<LastMoveDisplay message={msg} />);
-    expect(screen.getByText(msg)).toBeTruthy();
+    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
   });
 
   it('spectator testId "spectator-last-move" works correctly', () => {
@@ -100,11 +127,11 @@ describe('LastMoveDisplay', () => {
 
   it('updates display when message changes', () => {
     const { rerender } = render(<LastMoveDisplay message="first move" />);
-    expect(screen.getByText('first move')).toBeTruthy();
+    expect(screen.getByTestId('last-move-display').textContent).toContain('first move');
 
     rerender(<LastMoveDisplay message="second move" />);
     expect(screen.queryByText('first move')).toBeNull();
-    expect(screen.getByText('second move')).toBeTruthy();
+    expect(screen.getByTestId('last-move-display').textContent).toContain('second move');
   });
 
   it('disappears when message changes to null', () => {
@@ -113,5 +140,37 @@ describe('LastMoveDisplay', () => {
 
     rerender(<LastMoveDisplay message={null} />);
     expect(screen.queryByText('some move')).toBeNull();
+  });
+
+  it('colors my-team and opponent names for ask messages', () => {
+    render(
+      <LastMoveDisplay
+        message="Alice asked Bob for 9♠ — denied"
+        players={PLAYERS}
+        myPlayerId="p1"
+      />
+    );
+
+    expect(screen.getByText('Alice').className).toContain('text-emerald-700');
+    expect(screen.getByText('Bob').className).toContain('text-violet-700');
+  });
+
+  it('colors card tokens by suit (red for hearts/diamonds)', () => {
+    render(
+      <LastMoveDisplay
+        message="Alice asked Bob for 6♦ — got it"
+        players={PLAYERS}
+        myPlayerId="p1"
+      />
+    );
+
+    expect(screen.getByText('6♦').className).toContain('text-red-600');
+  });
+
+  it('uses a high-contrast light panel background and larger text', () => {
+    render(<LastMoveDisplay message="Alice asked Bob for 9♠ — denied" />);
+    const panel = screen.getByTestId('last-move-display');
+    expect(panel.className).toContain('bg-slate-100/95');
+    expect(panel.className).toContain('text-sm');
   });
 });
