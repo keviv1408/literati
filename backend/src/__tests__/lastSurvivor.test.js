@@ -126,12 +126,11 @@ describe('validateAsk — last survivor on team1', () => {
     expect(result.errorCode).toBe('SAME_TEAM');
   });
 
-  test('last survivor is blocked when target has no cards in the half-suit', () => {
+  test('last survivor can ask target even if target has no cards in the half-suit', () => {
     const gs = buildLastSurvivorGs();
-    // p5 holds 1_h–3_h (low_h), but p1 holds 1_s–3_s (low_s). Asking p5 for low_s card fails.
+    // p5 holds 1_h–3_h (low_h), but p1 holds 1_s–3_s (low_s). Ask is valid because asker holds a card in the half-suit.
     const result = validateAsk(gs, 'p1', 'p5', '4_s');
-    expect(result.valid).toBe(false);
-    expect(result.errorCode).toBe('TARGET_EMPTY_HALF_SUIT');
+    expect(result.valid).toBe(true);
   });
 
   test('last survivor cannot ask a player with 0 total cards', () => {
@@ -246,7 +245,7 @@ describe('applyAsk — last survivor turn handling', () => {
     // p1 asks p4 for a card p4 does NOT hold (e.g. 1_h)
     // But first give p1 a low_h card so the ask is structurally valid.
     gs.hands.get('p1').add('1_h');
-    // Also ensure p4 holds at least 1 low_h card so TARGET_EMPTY_HALF_SUIT doesn't fire.
+    // Give p4 a low_h card so the deny is meaningful (p4 doesn't hold 3_h).
     gs.hands.get('p4').add('2_h');
     const result = applyAsk(gs, 'p1', 'p4', '3_h'); // p4 doesn't hold 3_h
     expect(result.success).toBe(false);

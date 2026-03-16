@@ -31,7 +31,14 @@ function removeServiceWorker() {
 // ─── tests ──────────────────────────────────────────────────────────────────
 
 describe('ServiceWorkerRegistrar', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    process.env.NODE_ENV = 'test';
+  });
+
   afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
     jest.restoreAllMocks();
   });
 
@@ -41,7 +48,8 @@ describe('ServiceWorkerRegistrar', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('registers /sw.js with scope "/" when serviceWorker is supported', async () => {
+  it('registers /sw.js with scope "/" in production when serviceWorker is supported', async () => {
+    process.env.NODE_ENV = 'production';
     const mockRegister = jest.fn(() => Promise.resolve({ scope: '/' }));
     Object.defineProperty(navigator, 'serviceWorker', {
       value: { register: mockRegister },
@@ -58,12 +66,30 @@ describe('ServiceWorkerRegistrar', () => {
     expect(mockRegister).toHaveBeenCalledWith('/sw.js', { scope: '/' });
   });
 
+  it('does not register service worker outside production', async () => {
+    const mockRegister = jest.fn(() => Promise.resolve({ scope: '/' }));
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        register: mockRegister,
+        getRegistrations: jest.fn(() => Promise.resolve([])),
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    render(<ServiceWorkerRegistrar />);
+    await Promise.resolve();
+
+    expect(mockRegister).not.toHaveBeenCalled();
+  });
+
   it('does not throw when serviceWorker is not in navigator', () => {
     removeServiceWorker();
     expect(() => render(<ServiceWorkerRegistrar />)).not.toThrow();
   });
 
   it('handles registration failure without throwing', async () => {
+    process.env.NODE_ENV = 'production';
     const consoleWarnSpy = jest
       .spyOn(console, 'warn')
       .mockImplementation(() => {});

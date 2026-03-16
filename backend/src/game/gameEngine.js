@@ -111,18 +111,6 @@ function validateAsk(gs, askerId, targetId, cardId) {
     };
   }
 
-  // 11. Target must hold ≥1 card in the requested half-suit.
-  //     Per-half-suit counts are public information; targeting a player with
-  //     zero cards in a half-suit is an illegal move — the server enforces
-  //     this independently of client state.
-  if (getHalfSuitCardCount(gs, targetId, halfSuitId) === 0) {
-    return {
-      valid: false,
-      error: `${_playerName(gs, targetId)} has no cards in that half-suit`,
-      errorCode: 'TARGET_EMPTY_HALF_SUIT',
-    };
-  }
-
   return { valid: true };
 }
 

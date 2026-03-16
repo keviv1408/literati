@@ -146,12 +146,11 @@ describe('validateAsk', () => {
     expect(result.errorCode).toBe('TARGET_EMPTY');
   });
 
-  it('error: target p4 has cards but none in the requested half-suit (low_s) → TARGET_EMPTY_HALF_SUIT', () => {
+  it('valid: target p4 has no cards in the requested half-suit (low_s) — ask is still allowed', () => {
     // p1 holds low_s cards. p4 holds only high_s cards (11_s,12_s,13_s).
-    // p4 has 0 low_s cards, so asking p4 for a low_s card is illegal.
+    // The asker only needs to hold a card in the half-suit; the target does not.
     const result = validateAsk(gs, 'p1', 'p4', '4_s');
-    expect(result.valid).toBe(false);
-    expect(result.errorCode).toBe('TARGET_EMPTY_HALF_SUIT');
+    expect(result.valid).toBe(true);
   });
 
   it('error: p1 asks for 7_s which is not in the deck (remove_7s) → INVALID_CARD', () => {
