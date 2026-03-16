@@ -23,6 +23,30 @@ interface PlayingCardProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
+const CARD_SVG_BASE_PATH = '/cards/svg';
+
+const SUIT_FILE_NAMES = {
+  s: 'spades',
+  h: 'hearts',
+  d: 'diamonds',
+  c: 'clubs',
+} as const;
+
+const ILLUSTRATED_VARIANT_RANKS = new Set([11, 12, 13]);
+
+function cardSvgPath(cardId: CardId): string {
+  const { rank, suit } = parseCard(cardId);
+  const rankFileName =
+    rank === 1 ? 'ace'
+      : rank === 11 ? 'jack'
+        : rank === 12 ? 'queen'
+          : rank === 13 ? 'king'
+            : String(rank);
+  const variantSuffix = ILLUSTRATED_VARIANT_RANKS.has(rank) ? '2' : '';
+
+  return `${CARD_SVG_BASE_PATH}/${rankFileName}_of_${SUIT_FILE_NAMES[suit]}${variantSuffix}.svg`;
+}
+
 export default function PlayingCard({
   cardId,
   faceDown = false,
@@ -94,6 +118,7 @@ export default function PlayingCard({
   const rankStr  = cardRankLabel(rank);
   const suitSymbol = SUIT_SYMBOLS[suit];
   const colorClass = SUIT_COLORS[suit];
+  const svgPath = cardSvgPath(cardId);
 
   return (
     <div
@@ -110,7 +135,7 @@ export default function PlayingCard({
         }
       }}
     >
-      {/* Subtle printed-card inner frame */}
+      {/* Keep a minimal fallback card under the SVG in case the asset fails to load. */}
       <div className="absolute inset-[2px] rounded-[7px] border border-slate-200/85 pointer-events-none" />
 
       {/* Top-left rank+suit */}
@@ -129,6 +154,14 @@ export default function PlayingCard({
         <span className={`font-black ${CORNER_RANK_CLASSES[size]}`}>{rankStr}</span>
         <span className={CORNER_SUIT_CLASSES[size]}>{suitSymbol}</span>
       </div>
+
+      <img
+        src={svgPath}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        className="absolute inset-0 z-20 h-full w-full rounded-[10px] object-fill pointer-events-none"
+      />
     </div>
   );
 }
