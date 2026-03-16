@@ -96,6 +96,7 @@ const {
   _startReconnectWindow,
   _executeReclaim,
   RECONNECT_WINDOW_MS,
+  BOT_TURN_DELAY_MS,
   _reconnectWindows,
 } = require('../game/gameSocketServer');
 
@@ -497,7 +498,7 @@ describe('scheduleBotTurnIfNeeded — reclaim queue integration', () => {
     scheduleBotTurnIfNeeded(gs);
 
     // After BOT_TURN_DELAY_MS, the bot turn should fire
-    jest.advanceTimersByTime(2_000);
+    jest.advanceTimersByTime(BOT_TURN_DELAY_MS + 100);
     expect(mockDecideBotMove).toHaveBeenCalled();
 
     removeConnection(ROOM, 'p1');

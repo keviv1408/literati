@@ -218,8 +218,8 @@ function _getRoomSocketServer() {
 // Turn timer configuration
 // ---------------------------------------------------------------------------
 
-/** Delay before a bot takes its turn (ms) — gives human UI time to show the previous move */
-const BOT_TURN_DELAY_MS = 1500;
+/** Delay before a bot takes its turn (ms) — gives human UI time to track the previous move */
+const BOT_TURN_DELAY_MS = 5_000;
 
 /** Time a human player has to act before the server auto-moves for them (ms) */
 const HUMAN_TURN_TIMEOUT_MS = 120_000;
@@ -3398,6 +3398,7 @@ module.exports = {
   _reconnectWindows,
   _reconnectTimers,
   _turnTimers,
+  BOT_TURN_DELAY_MS,
   RECONNECT_WINDOW_MS,
   TIMER_TICK_INTERVAL_MS,
   DECLARATION_PHASE_TIMEOUT_MS,

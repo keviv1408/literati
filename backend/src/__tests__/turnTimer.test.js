@@ -38,6 +38,7 @@ const {
   scheduleTurnTimerIfNeeded,
   cancelTurnTimer,
   scheduleBotTurnIfNeeded,
+  BOT_TURN_DELAY_MS,
   broadcastStateUpdate,
   sendGameInit,
   _handleRematchTimeout,
@@ -353,8 +354,8 @@ describe('scheduleBotTurnIfNeeded', () => {
 
     scheduleBotTurnIfNeeded(gs);
 
-    // Bot turn delay is 1500ms
-    jest.advanceTimersByTime(1600);
+    // Bot turn delay is BOT_TURN_DELAY_MS
+    jest.advanceTimersByTime(BOT_TURN_DELAY_MS + 100);
 
     expect(mockDecideBotMove).toHaveBeenCalled();
 
@@ -367,7 +368,7 @@ describe('scheduleBotTurnIfNeeded', () => {
 
     scheduleBotTurnIfNeeded(gs);
 
-    jest.advanceTimersByTime(2000);
+    jest.advanceTimersByTime(BOT_TURN_DELAY_MS + 100);
 
     // decideBotMove should NOT have been called for a human turn
     expect(mockDecideBotMove).not.toHaveBeenCalled();

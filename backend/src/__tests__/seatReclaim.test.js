@@ -28,6 +28,7 @@ const {
   broadcastStateUpdate,
   _reconnectWindows,
   RECONNECT_WINDOW_MS,
+  BOT_TURN_DELAY_MS,
 } = require('../game/gameSocketServer');
 
 const { setGame, getGame, registerConnection, removeConnection, _clearAll } = require('../game/gameStore');
@@ -212,9 +213,9 @@ describe('_startReconnectWindow', () => {
     const player = gs.players.find((p) => p.playerId === 'p1');
     _startReconnectWindow(gs, player);
 
-    // Advance 1.5s (BOT_TURN_DELAY_MS) — bot turn fires
+    // Advance by BOT_TURN_DELAY_MS — bot turn fires
     // (decideBotMove mock returns { action: 'pass' }, so no actual move)
-    jest.advanceTimersByTime(1500);
+    jest.advanceTimersByTime(BOT_TURN_DELAY_MS);
 
     // We verify that the bot flag was set AND bot scheduling was triggered.
     // Since the mock bot returns 'pass', the turn doesn't advance, but we can
@@ -234,7 +235,7 @@ describe('_startReconnectWindow', () => {
     _startReconnectWindow(gs, player);
 
     // p1 is now bot-controlled, but it's not their turn — no bot timer fires
-    jest.advanceTimersByTime(1500);
+    jest.advanceTimersByTime(BOT_TURN_DELAY_MS);
 
     // p2 should still be the active turn player (human, no bot turn scheduled for p2)
     expect(gs.currentTurnPlayerId).toBe('p2');
