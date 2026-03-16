@@ -280,7 +280,7 @@ describe('SpectatorView', () => {
   });
 
   describe('declared suits', () => {
-    it('renders the HalfSuitGrid with correct team coloring when suits have been declared', () => {
+    it('does not render the in-game half-suit grid even when suits have been declared', () => {
       render(
         <SpectatorView
           {...buildProps({
@@ -293,14 +293,12 @@ describe('SpectatorView', () => {
           })}
         />,
       );
-      // HalfSuitGrid renders all 8 slots; declared ones carry team data-team attributes
-      expect(screen.getByTestId('half-suit-slot-low_s')).toHaveAttribute('data-team', '1');
-      expect(screen.getByTestId('half-suit-slot-high_h')).toHaveAttribute('data-team', '2');
-      // Undeclared slot stays neutral
-      expect(screen.getByTestId('half-suit-slot-low_h')).toHaveAttribute('data-team', 'none');
+      expect(screen.queryByTestId('spectator-declared-suits')).toBeNull();
+      expect(screen.queryByTestId('half-suit-slot-low_s')).toBeNull();
+      expect(screen.queryByRole('grid', { name: /half-suit scoreboard/i })).toBeNull();
     });
 
-    it('renders the HalfSuitGrid (all 8 slots) even when no suits are declared', () => {
+    it('keeps the spectator layout clear when no suits have been declared', () => {
       render(
         <SpectatorView
           {...buildProps({
@@ -308,9 +306,8 @@ describe('SpectatorView', () => {
           })}
         />,
       );
-      // Grid is always rendered — 8 neutral slots
-      expect(screen.getByTestId('spectator-declared-suits')).toBeInTheDocument();
-      expect(screen.getAllByRole('gridcell')).toHaveLength(8);
+      expect(screen.queryByTestId('spectator-declared-suits')).toBeNull();
+      expect(screen.queryAllByRole('gridcell')).toHaveLength(0);
     });
   });
 

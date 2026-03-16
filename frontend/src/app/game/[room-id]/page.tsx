@@ -18,7 +18,7 @@
  *   a spectator if the playerId is not in the game's player list.
  */
 
-import { useEffect, useState, useCallback, useRef, type JSX } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoomByCode, getGuestBearerToken, ApiError } from '@/lib/api';
 import { getCachedToken } from '@/lib/backendSession';
@@ -46,13 +46,11 @@ import CardFlightAnimation from '@/components/CardFlightAnimation';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
-import HalfSuitGrid from '@/components/HalfSuitGrid';
 import { ConnectedScoreboardPanel } from '@/components/ScoreboardPanel';
 import MuteToggle from '@/components/MuteToggle';
 import type { Room } from '@/types/room';
-import type { CardId, HalfSuitId, GameOverPayload, RematchStartPayload, RoomDissolvedPayload } from '@/types/game';
+import type { CardId, HalfSuitId, GameOverPayload, RematchStartPayload } from '@/types/game';
 import type { PlayerInference } from '@/hooks/useCardInference';
-import { halfSuitLabel, SUIT_SYMBOLS } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -854,17 +852,6 @@ export default function GamePage({ params }: PageProps) {
         myPlayerId={myPlayerId}
       />
 
-      {/*
-       * Declaration-in-progress banner (Sub-AC 21b)
-       *
-       * Shown to all players (and spectators) EXCEPT the declarant themselves,
-       * who is already viewing the DeclareModal.  Receives real-time updates via
-       * `declare_progress` WebSocket broadcasts as the declarant assigns cards.
-       *
-       * Hidden when:
-       *   - `declareProgress` is null (no active declaration or was cleared)
-       *   - The current client IS the declarant (they're filling out the modal)
-       */}
       {declareProgress && declareProgress.halfSuitId && declareProgress.declarerId !== myPlayerId && (
         <div className="relative z-10 px-4 py-2 border-b border-amber-800/40">
           <DeclarationProgressBanner
@@ -892,23 +879,6 @@ export default function GamePage({ params }: PageProps) {
 
         {/* ── Central game content ──────────────────────────────────────── */}
         <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden">
-          {/*
-           * Half-suit scoreboard grid (Sub-AC 34b).
-           *
-           * Always rendered (even when 0 suits are declared) so players can
-           * see all 8 slots and track progress throughout the game.
-           * Declared slots light up in the winning team's color; unclaimed
-           * slots remain neutral.
-           */}
-          {gameState && (
-            <div className="w-full max-w-2xl" aria-label="Half-suit scoreboard" data-testid="half-suit-scoreboard-panel">
-              <HalfSuitGrid
-                declaredSuits={gameState.declaredSuits}
-                className="justify-items-center"
-              />
-            </div>
-          )}
-
           <div className="w-full max-w-2xl" aria-label="Team 2 players" data-testid="team2-row">
             <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
             <PlayerRow

@@ -53,7 +53,7 @@
  * />
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import { useCardInference } from '@/hooks/useCardInference';
 import { InferenceProvider, useInferenceContext } from '@/contexts/InferenceContext';
@@ -68,9 +68,7 @@ import type {
   DeclarationFailedPayload,
   DeclareProgressPayload,
 } from '@/types/game';
-import { halfSuitLabel, SUIT_SYMBOLS } from '@/types/game';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
-import HalfSuitGrid from '@/components/HalfSuitGrid';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CountdownTimer from '@/components/CountdownTimer';
 
@@ -115,8 +113,6 @@ export interface SpectatorViewProps {
   gamePlayerCount: 6 | 8;
   /**
    * Live declaration progress from the active player's DeclareModal.
-   * When non-null and halfSuitId is set, a progress banner is shown.
-   * Received via `declare_progress` WebSocket broadcast (Sub-AC 21b).
    */
   declareProgress?: DeclareProgressPayload | null;
   /**
@@ -166,15 +162,11 @@ export default function SpectatorView({
   onGoHome,
 }: SpectatorViewProps) {
   // ── Failed Declaration Reveal dismiss state (Sub-AC 26b) ───────────────────
-  const [failedRevealDismissed, setFailedRevealDismissed] = React.useState(false);
-  const showFailedReveal = Boolean(declarationFailed && !failedRevealDismissed);
-
-  // Reset dismiss flag when a new `declarationFailed` payload arrives
-  const prevDeclarationFailedRef = React.useRef(declarationFailed);
-  if (prevDeclarationFailedRef.current !== declarationFailed) {
-    prevDeclarationFailedRef.current = declarationFailed;
-    if (declarationFailed) setFailedRevealDismissed(false);
-  }
+  const [dismissedDeclarationFailed, setDismissedDeclarationFailed] =
+    React.useState<DeclarationFailedPayload | null>(null);
+  const showFailedReveal = Boolean(
+    declarationFailed && declarationFailed !== dismissedDeclarationFailed
+  );
 
   // ── Card inference ─────────────────────────────────────────────────────────
   // Spectators derive card-location knowledge from public ask/declare events.
@@ -190,21 +182,22 @@ export default function SpectatorView({
   // ── Last-move display (transient 5-second flash) ───────────────────────────
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showTransientLastResult = useEffectEvent((msg: string) => {
+    setLastResultMsg(msg);
+    if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
+    lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5_000);
+  });
 
   useEffect(() => {
     const msg = lastAskResult?.lastMove ?? null;
     if (!msg) return;
-    setLastResultMsg(msg);
-    if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
-    lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5_000);
+    showTransientLastResult(msg);
   }, [lastAskResult]);
 
   useEffect(() => {
     const msg = lastDeclareResult?.lastMove ?? null;
     if (!msg) return;
-    setLastResultMsg(msg);
-    if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
-    lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5_000);
+    showTransientLastResult(msg);
   }, [lastDeclareResult]);
 
   // ── Derived values ─────────────────────────────────────────────────────────
@@ -424,11 +417,6 @@ export default function SpectatorView({
         testId="spectator-last-move"
       />
 
-      {/* ── Declaration-in-progress banner (Sub-AC 21b) ───────────────────
-          Spectators see a live "X is declaring Low Spades (3/6)" banner
-          while the active player is filling out the DeclareModal.  Cleared
-          automatically when declaration_result or a cancel signal arrives.
-      */}
       {declareProgress && declareProgress.halfSuitId && (
         <div className="relative z-10 px-4 py-2 border-b border-amber-800/40">
           <DeclarationProgressBanner
@@ -443,21 +431,6 @@ export default function SpectatorView({
         className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden"
         aria-label="Spectator game table"
       >
-        {/*
-         * Half-suit scoreboard grid (Sub-AC 34b).
-         *
-         * Always rendered for spectators so they can track all 8 slots.
-         * Declared slots show the winning team's color; unclaimed slots stay neutral.
-         */}
-        {gameState && (
-          <div className="w-full max-w-2xl" data-testid="spectator-declared-suits">
-            <HalfSuitGrid
-              declaredSuits={gameState.declaredSuits}
-              className="justify-items-center"
-            />
-          </div>
-        )}
-
         {/* Team 2 row — inference data is passed via InferenceContext */}
         <div
           className="w-full max-w-2xl"
@@ -534,7 +507,7 @@ export default function SpectatorView({
           payload={declarationFailed}
           players={players}
           variant={effectiveVariant}
-          onDismiss={() => setFailedRevealDismissed(true)}
+          onDismiss={() => setDismissedDeclarationFailed(declarationFailed)}
         />
       )}
     </div>
