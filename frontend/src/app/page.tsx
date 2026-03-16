@@ -173,16 +173,6 @@ export default function Home() {
           </ul>
         </div>
 
-        {/* Tips to Win */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
-          <h3 className="text-lg font-semibold text-emerald-300 mb-3">Tips to Win</h3>
-          <ul className="space-y-2 text-sm text-slate-300">
-            <li><span className="text-emerald-400 font-medium">Signal your teammates:</span> Ask for cards you already have to secretly tell your teammates what you&apos;re holding &mdash; without the opponents knowing why.</li>
-            <li><span className="text-emerald-400 font-medium">Block opponents:</span> If you suspect an opponent is close to declaring, ask them for a card in that half-suit to disrupt their collection.</li>
-            <li><span className="text-emerald-400 font-medium">Track asks:</span> Every ask reveals information. Pay attention to what people ask for and who denies what &mdash; you can deduce where cards are.</li>
-            <li><span className="text-emerald-400 font-medium">Declare early when sure:</span> Don&apos;t wait too long. If your team has all 6 cards of a half-suit, declare before the opponents can steal one.</li>
-          </ul>
-        </div>
       </section>
 
       {/* Create Room modal — shown after guest name is confirmed */}
