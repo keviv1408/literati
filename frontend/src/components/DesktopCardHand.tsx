@@ -174,62 +174,65 @@ export default function DesktopCardHand({
     >
       {/* Scrollable row — allows very large hands to scroll horizontally */}
       <div
-        className="flex items-end gap-3 overflow-x-auto pb-2 px-1"
+        className="overflow-x-auto pb-2 px-1"
         style={{ scrollbarWidth: 'thin' }}
-        role="group"
-        aria-label="Card hand groups"
       >
-        {groups.map((group, groupIdx) => (
-          <div
-            key={group.suit}
-            className="flex-shrink-0 flex flex-col items-center gap-1"
-            data-testid={`suit-group-${group.suit}`}
-            role="group"
-            aria-label={`${SUIT_NAMES[group.suit as 's' | 'h' | 'd' | 'c']} — ${group.cards.length} card${group.cards.length !== 1 ? 's' : ''}`}
-          >
-            {/* Suit label above the group */}
-            <span
-              className={`text-xs font-semibold tracking-wide select-none ${SUIT_LABEL_COLORS[group.suit]}`}
-              aria-hidden="true"
-              data-testid={`suit-label-${group.suit}`}
+        <div
+          className="flex w-max min-w-full items-end justify-center gap-3 mx-auto"
+          role="group"
+          aria-label="Card hand groups"
+        >
+          {groups.map((group) => (
+            <div
+              key={group.suit}
+              className="flex-shrink-0 flex flex-col items-center gap-1"
+              data-testid={`suit-group-${group.suit}`}
+              role="group"
+              aria-label={`${SUIT_NAMES[group.suit as 's' | 'h' | 'd' | 'c']} — ${group.cards.length} card${group.cards.length !== 1 ? 's' : ''}`}
             >
-              {SUIT_SYMBOLS[group.suit as 's' | 'h' | 'd' | 'c']}
-            </span>
+              {/* Suit label above the group */}
+              <span
+                className={`text-xs font-semibold tracking-wide select-none ${SUIT_LABEL_COLORS[group.suit]}`}
+                aria-hidden="true"
+                data-testid={`suit-label-${group.suit}`}
+              >
+                {SUIT_SYMBOLS[group.suit as 's' | 'h' | 'd' | 'c']}
+              </span>
 
-            {/* Cards in a row with slight overlap + half-suit boundary notch */}
-            <div className="flex items-end relative" role="list">
-              {group.cards.map((cardId, cardIdx) => {
-                const isSelected = cardId === selectedCard;
-                const isBeforeBoundary =
-                  group.halfSuitSplitAfter > 0 &&
-                  cardIdx === group.halfSuitSplitAfter - 1 &&
-                  group.halfSuitSplitAfter < group.cards.length;
+              {/* Cards in a row with slight overlap + half-suit boundary notch */}
+              <div className="flex items-end relative" role="list">
+                {group.cards.map((cardId, cardIdx) => {
+                  const isSelected = cardId === selectedCard;
+                  const isBeforeBoundary =
+                    group.halfSuitSplitAfter > 0 &&
+                    cardIdx === group.halfSuitSplitAfter - 1 &&
+                    group.halfSuitSplitAfter < group.cards.length;
 
-                return (
-                  <div
-                    key={cardId}
-                    role="listitem"
-                    className="relative"
-                    style={{
-                      // Slight negative overlap for dense hands
-                      marginLeft: cardIdx === 0 ? 0 : totalCards > 16 ? '-10px' : '-4px',
-                      zIndex: isSelected ? 50 : cardIdx + 1,
-                      // Lift selected cards, apply subtle arc otherwise
-                      transform: isSelected
-                        ? 'translateY(-14px)'
-                        : undefined,
-                      transition: 'transform 0.12s ease, z-index 0s',
-                    }}
-                    data-testid={`card-wrapper-${cardId}`}
-                  >
-                    {/* Flip animation for newly-arrived cards (Sub-AC 2 of AC 33) */}
-                    {!faceDown && cardId === newlyArrivedCardId ? (
+                  return (
+                    <div
+                      key={cardId}
+                      role="listitem"
+                      className="relative"
+                      style={{
+                        // Slight negative overlap for dense hands
+                        marginLeft: cardIdx === 0 ? 0 : totalCards > 16 ? '-10px' : '-4px',
+                        zIndex: isSelected ? 50 : cardIdx + 1,
+                        // Lift selected cards, apply subtle arc otherwise
+                        transform: isSelected
+                          ? 'translateY(-14px)'
+                          : undefined,
+                        transition: 'transform 0.12s ease, z-index 0s',
+                      }}
+                      data-testid={`card-wrapper-${cardId}`}
+                    >
+                      {/* Flip animation for newly-arrived cards (Sub-AC 2 of AC 33) */}
+                      {!faceDown && cardId === newlyArrivedCardId ? (
                       <CardFlipWrapper
                         cardId={cardId}
                         selected={isSelected}
                         disabled={!canInteract}
                         onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
-                        size="md"
+                        size="xl"
                       />
                     ) : (
                       <PlayingCard
@@ -238,31 +241,32 @@ export default function DesktopCardHand({
                         selected={isSelected}
                         disabled={!canInteract}
                         onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
-                        size="md"
+                        size="xl"
                       />
                     )}
-                    {/* Half-suit boundary notch: rendered as a thin right border */}
-                    {isBeforeBoundary && (
-                      <span
-                        className="absolute -right-px top-0 bottom-0 w-0.5 bg-slate-500/60 rounded-full pointer-events-none"
-                        aria-hidden="true"
-                        data-testid={`half-suit-boundary-${group.suit}`}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                      {/* Half-suit boundary notch: rendered as a thin right border */}
+                      {isBeforeBoundary && (
+                        <span
+                          className="absolute -right-px top-0 bottom-0 w-0.5 bg-slate-500/60 rounded-full pointer-events-none"
+                          aria-hidden="true"
+                          data-testid={`half-suit-boundary-${group.suit}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        {/* Suit-group separator lines between groups (visual only) */}
-        {groups.length > 1 && (
-          <div
-            className="sr-only"
-            aria-label={`${groups.length} suit groups`}
-          />
-        )}
+          {/* Suit-group separator lines between groups (visual only) */}
+          {groups.length > 1 && (
+            <div
+              className="sr-only"
+              aria-label={`${groups.length} suit groups`}
+            />
+          )}
+        </div>
       </div>
 
       {/* Card count — shown when hand has many cards */}

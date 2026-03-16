@@ -42,7 +42,7 @@ export interface CardFlipWrapperProps {
   /** Forward click handler to the face-up card (optional). */
   onClick?: () => void;
   /** Card size — forwarded to both face and back PlayingCard instances. */
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   /** Extra className applied to the perspective-container wrapper. */
   className?: string;
 }

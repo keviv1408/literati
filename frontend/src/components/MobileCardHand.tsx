@@ -99,7 +99,7 @@ const SELECTED_LIFT_PX = 22;
  * How many pixels each card overlaps the previous card in the mobile
  * horizontal-scroll row.  Larger overlap = more cards visible at once.
  */
-const MOBILE_CARD_OVERLAP_PX = 26;
+const MOBILE_CARD_OVERLAP_PX = 32;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -286,11 +286,11 @@ export default function MobileCardHand({
               >
                 {/*
                  * Enlarged tap-target wrapper.
-                 * PlayingCard `md` size is 48×72 px (w-12 h-18).
+                 * PlayingCard `xl` size is 72×108 px.
                  * Adding 4px vertical padding achieves ≥44 px min tap height.
                  * The horizontal overlap handles width — each exposed slice is
-                 * at least 22 px wide; users typically swipe/tap the top portion
-                 * which is 48 px wide (full card width visible at the top).
+                 * about 40 px wide; users typically swipe/tap the top portion
+                 * where the full 72 px card width is visible.
                  */}
                 <div
                   style={{ paddingTop: '4px', paddingBottom: '4px' }}
@@ -303,7 +303,7 @@ export default function MobileCardHand({
                       selected={isSelected}
                       disabled={!canInteract}
                       onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
-                      size="md"
+                      size="xl"
                     />
                   ) : (
                     <PlayingCard
@@ -312,7 +312,7 @@ export default function MobileCardHand({
                       selected={isSelected}
                       disabled={!canInteract}
                       onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
-                      size="md"
+                      size="xl"
                     />
                   )}
                 </div>
@@ -334,7 +334,7 @@ export default function MobileCardHand({
        */}
       <div
         className="hidden sm:flex items-end justify-center overflow-visible"
-        style={{ minHeight: '110px', paddingBottom: '8px' }}
+        style={{ minHeight: '140px', paddingBottom: '8px' }}
         role="list"
         aria-label={`Your hand: ${count} cards`}
         data-testid="desktop-hand-fan"
@@ -373,7 +373,7 @@ export default function MobileCardHand({
                   selected={isSelected}
                   disabled={!canInteract}
                   onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
-                  size="md"
+                  size="xl"
                 />
               ) : (
                 <PlayingCard
@@ -382,7 +382,7 @@ export default function MobileCardHand({
                   selected={isSelected}
                   disabled={!canInteract}
                   onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
-                  size="md"
+                  size="xl"
                 />
               )}
             </div>
