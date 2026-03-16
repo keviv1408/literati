@@ -159,13 +159,11 @@ export interface GamePlayerSeatProps {
 
 const TEAM_STYLES = {
   1: {
-    dot: 'bg-emerald-500',
     border: 'border-emerald-600/50',
     bg: 'bg-emerald-900/30',
     ring: 'ring-emerald-500/30',
   },
   2: {
-    dot: 'bg-violet-500',
     border: 'border-violet-600/50',
     bg: 'bg-violet-900/30',
     ring: 'ring-violet-500/30',
@@ -196,8 +194,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
     return (
       <div
         className={[
-          'w-[6.5rem] flex flex-col items-center gap-1',
-          'py-2 px-2 rounded-xl',
+          'w-[6.5rem] lg:w-[8rem] xl:w-[8.75rem] flex flex-col items-center gap-1 lg:gap-1.5',
+          'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl',
           'border border-dashed',
           'border-slate-700/60 bg-slate-900/60',
           className,
@@ -250,8 +248,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   return (
     <div
       className={[
-        'relative w-[6.5rem] flex flex-col items-center gap-1',
-        'py-2 px-2 rounded-xl border',
+        'relative w-[6.5rem] lg:w-[8rem] xl:w-[8.75rem] flex flex-col items-center gap-1 lg:gap-1.5',
+        'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl border',
         'transition-transform duration-100',
         // Eliminated players are visually dimmed and cannot act
         isEliminated ? 'opacity-50 grayscale pointer-events-none' : '',
@@ -340,6 +338,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           displayName={displayName}
           imageUrl={avatarId ?? undefined}
           size={avatarSize}
+          className="lg:w-11 lg:h-11 xl:w-12 xl:h-12"
           aria-label={undefined}
         />
 
@@ -347,8 +346,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         <span
           className={[
             'absolute -bottom-1 -right-1',
-            'w-4 h-4 rounded-full flex items-center justify-center',
-            'text-[9px] font-bold leading-none select-none',
+            'w-4 h-4 lg:w-[1.15rem] lg:h-[1.15rem] rounded-full flex items-center justify-center',
+            'text-[9px] lg:text-[10px] font-bold leading-none select-none',
             'border border-slate-700',
             cardCount === 0 ? 'bg-slate-800 text-slate-500' : 'bg-slate-900 text-slate-200',
           ].join(' ')}
@@ -363,14 +362,14 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       {isBot ? (
         <BotBadge
           displayName={displayName}
-          size="xs"
+          size="md"
           showName={true}
           className="max-w-full"
         />
       ) : (
         <span
           className={[
-            'text-[0.65rem] font-medium truncate w-full text-center',
+            'text-[0.65rem] lg:text-[0.92rem] xl:text-[1rem] font-semibold truncate w-full text-center leading-tight',
             isMe ? 'text-emerald-300' : 'text-slate-300',
           ].join(' ')}
           title={displayName}
@@ -380,17 +379,12 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         </span>
       )}
 
-      {/* ── Team dot + "You" pill ─────────────────────────────────── */}
-      <div className="flex items-center gap-1 flex-wrap justify-center min-h-[1rem]">
-        <span
-          className={['w-1.5 h-1.5 rounded-full flex-shrink-0', style.dot].join(' ')}
-          aria-hidden="true"
-          data-testid="team-dot"
-        />
-        {isMe && (
+      {/* ── "You" pill ────────────────────────────────────────────── */}
+      {isMe && (
+        <div className="flex items-center justify-center min-h-[1rem]">
           <span
             className="
-              text-[0.55rem] font-semibold uppercase tracking-wider
+              text-[0.55rem] lg:text-[0.72rem] font-semibold uppercase tracking-wider
               bg-emerald-600/40 text-emerald-300
               px-1 py-0.5 rounded-full leading-none
             "
@@ -399,8 +393,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           >
             You
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Inference indicator (confirmed / excluded counts + uniform % badge) ── */}
       {(hasInference || (inferencePercent !== undefined && inferencePercent > 0)) && (

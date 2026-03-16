@@ -878,8 +878,8 @@ export default function GamePage({ params }: PageProps) {
         </div>
 
         {/* ── Central game content ──────────────────────────────────────── */}
-        <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden lg:self-stretch lg:justify-center lg:gap-6 xl:gap-8">
-          <div className="w-full max-w-2xl" aria-label="Team 2 players" data-testid="team2-row">
+        <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden lg:self-stretch lg:justify-center lg:gap-8 xl:gap-10">
+          <div className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl" aria-label="Team 2 players" data-testid="team2-row">
             <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
             <PlayerRow
               players={team2Players}
@@ -895,13 +895,13 @@ export default function GamePage({ params }: PageProps) {
             />
           </div>
 
-          <div className="relative flex items-center justify-center w-full max-w-xs" aria-hidden="true" data-testid="game-table-center">
+          <div className="relative flex items-center justify-center w-full max-w-xs lg:max-w-md xl:max-w-lg" aria-hidden="true" data-testid="game-table-center">
             <div className="w-full aspect-[2/1] rounded-full border-2 border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center shadow-inner shadow-black/40">
               <div className="text-center"><div className="text-2xl mb-0.5">🃏</div><p className="text-[10px] text-slate-500">{effectivePlayerCount === 6 ? '3v3' : '4v4'}</p></div>
             </div>
           </div>
 
-          <div className="w-full max-w-2xl" aria-label="Team 1 players" data-testid="team1-row">
+          <div className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl" aria-label="Team 1 players" data-testid="team1-row">
             <PlayerRow
               players={team1Players}
               myPlayerId={myPlayerId}
@@ -1197,7 +1197,7 @@ function PlayerRow({
   const seatsPerTeam = Math.floor(playerCount / 2);
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
   return (
-    <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+    <div className="flex items-center justify-center gap-2 sm:gap-3 lg:gap-5 xl:gap-6 flex-wrap">
       {seats.map((player, i) => {
         // Per-player inference data — only passed when inference mode is active
         const playerInference = (inferenceActive && player)

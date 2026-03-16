@@ -613,7 +613,7 @@ describe('GamePlayerSeat — team colour', () => {
     expect(el.getAttribute('data-team')).toBe('2');
   });
 
-  it('renders the team dot element', () => {
+  it('does not render a team dot element', () => {
     const { container } = render(
       <GamePlayerSeat
         seatIndex={0}
@@ -622,7 +622,7 @@ describe('GamePlayerSeat — team colour', () => {
         currentTurnPlayerId={null}
       />,
     );
-    expect(container.querySelector('[data-testid="team-dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="team-dot"]')).toBeNull();
   });
 });
 

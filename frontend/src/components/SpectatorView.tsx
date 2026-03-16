@@ -428,12 +428,12 @@ export default function SpectatorView({
 
       {/* ── Main content area ─────────────────────────────────────────────── */}
       <main
-        className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden lg:justify-center lg:gap-6 xl:gap-8"
+        className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden lg:justify-center lg:gap-8 xl:gap-10"
         aria-label="Spectator game table"
       >
         {/* Team 2 row — inference data is passed via InferenceContext */}
         <div
-          className="w-full max-w-2xl"
+          className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl"
           aria-label="Team 2 players"
           data-testid="spectator-team2-row"
         >
@@ -449,7 +449,7 @@ export default function SpectatorView({
 
         {/* Centre table */}
         <div
-          className="relative flex items-center justify-center w-full max-w-xs"
+          className="relative flex items-center justify-center w-full max-w-xs lg:max-w-md xl:max-w-lg"
           aria-hidden="true"
           data-testid="spectator-table-center"
         >
@@ -465,7 +465,7 @@ export default function SpectatorView({
 
         {/* Team 1 row — inference data is passed via InferenceContext */}
         <div
-          className="w-full max-w-2xl"
+          className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl"
           aria-label="Team 1 players"
           data-testid="spectator-team1-row"
         >
@@ -653,7 +653,7 @@ function SpectatorPlayerRow({
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
 
   return (
-    <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+    <div className="flex items-center justify-center gap-2 sm:gap-3 lg:gap-5 xl:gap-6 flex-wrap">
       {seats.map((player, i) => (
         <GamePlayerSeat
           key={player ? player.playerId : `empty-${i}`}
