@@ -1216,8 +1216,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
             <button
               type="button"
               onClick={() => {
-                setIsStarting(true);
-                startGame();
+                const sent = startGame();
+                if (sent) setIsStarting(true);
               }}
               disabled={isStarting || lobbyStarting}
               aria-label="Start Game"

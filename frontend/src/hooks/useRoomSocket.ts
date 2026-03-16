@@ -185,7 +185,7 @@ export interface UseRoomSocketResult {
    * 'in_progress', and broadcasts 'lobby-starting' to all connected clients.
    * No-ops silently when the socket is not OPEN.
    */
-  startGame: () => void;
+  startGame: () => boolean;
   /**
    * Countdown timer state set when the server broadcasts 'lobby-timer-started'.
    * Null until the first player joins; cleared when the game starts.
@@ -253,8 +253,11 @@ export function useRoomSocket({
   });
 
   useEffect(() => {
-    // Don't connect until we have both a room code and a session ID.
-    if (!roomCode || !sessionId) {
+    // Don't connect until we have a room code, session ID, and bearer token.
+    // bearerToken is set one render after sessionId (via a useEffect in the
+    // page component), so guarding on it prevents a wasted WS attempt that
+    // the backend would reject with 4001 (Unauthorized).
+    if (!roomCode || !sessionId || !bearerToken) {
       setWsStatus('idle');
       return;
     }
@@ -549,11 +552,13 @@ export function useRoomSocket({
    * with the final seat list to all connected clients.
    * No-ops silently when the socket is not OPEN.
    */
-  const startGame = useCallback((): void => {
+  const startGame = useCallback((): boolean => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'start_game' }));
+      return true;
     }
+    return false;
   }, []);
 
   return {
