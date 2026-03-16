@@ -48,6 +48,15 @@ export interface MuteToggleProps {
    * @default ''
    */
   className?: string;
+  /**
+   * Optional controlled muted state. When omitted, the component manages mute
+   * state through `useAudio()` as before.
+   */
+  muted?: boolean;
+  /**
+   * Optional controlled toggle handler paired with `muted`.
+   */
+  onToggle?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -56,13 +65,19 @@ export interface MuteToggleProps {
  * Self-contained mute/unmute toggle button.
  * Reads and persists preference via `localStorage` through `useAudio`.
  */
-const MuteToggle: React.FC<MuteToggleProps> = ({ className = '' }) => {
-  const { muted, toggleMute } = useAudio();
+const MuteToggle: React.FC<MuteToggleProps> = ({
+  className = '',
+  muted: controlledMuted,
+  onToggle,
+}) => {
+  const { muted: hookMuted, toggleMute } = useAudio();
+  const muted = controlledMuted ?? hookMuted;
+  const handleToggle = onToggle ?? toggleMute;
 
   return (
     <button
       type="button"
-      onClick={toggleMute}
+      onClick={handleToggle}
       aria-label={muted ? 'Unmute game sounds' : 'Mute game sounds'}
       aria-pressed={muted}
       title={muted ? 'Unmute sounds' : 'Mute sounds'}

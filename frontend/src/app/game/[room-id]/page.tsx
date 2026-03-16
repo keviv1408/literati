@@ -21,10 +21,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoomByCode, getGuestBearerToken, ApiError } from '@/lib/api';
+import { unlockGameAudio } from '@/lib/audio';
 import { getCachedToken } from '@/lib/backendSession';
 import { useGuest } from '@/contexts/GuestContext';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
+import { useMoveAnnouncements } from '@/hooks/useMoveAnnouncements';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
 import { useCardInference } from '@/hooks/useCardInference';
 import { useInference } from '@/hooks/useInference';
@@ -239,6 +241,9 @@ export default function GamePage({ params }: PageProps) {
   // Called here (before the game-event effects below) so the callbacks are
   // in scope when the effects' dep arrays are evaluated.
   const {
+    muted,
+    toggleMute,
+    preload,
     playDealSound,
     playAskSuccess,
     playAskFail,
@@ -452,6 +457,32 @@ export default function GamePage({ params }: PageProps) {
     : null;
   const team1Players = players.filter((p) => p.teamId === 1);
   const team2Players = players.filter((p) => p.teamId === 2);
+  const currentLastMoveMessage = lastResultMsg ?? gameState?.lastMove;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const unlockAudio = () => {
+      unlockGameAudio();
+      preload();
+    };
+
+    const options: AddEventListenerOptions = { once: true, passive: true };
+    window.addEventListener('pointerdown', unlockAudio, options);
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, options);
+
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+  }, [preload]);
+
+  useMoveAnnouncements({
+    message: currentLastMoveMessage,
+    enabled: !muted,
+  });
 
   // ── Sub-AC 28b: Post-declaration seat highlight ───────────────────────────
   //
@@ -740,7 +771,7 @@ export default function GamePage({ params }: PageProps) {
             🔍
           </button>
           {/* Mute toggle — persists across page refreshes via localStorage */}
-          <MuteToggle />
+          <MuteToggle muted={muted} onToggle={toggleMute} />
           <div className="flex items-center gap-1.5" title={`Connection: ${wsStatus}`} data-testid="ws-status-indicator">
             <span className={['w-2 h-2 rounded-full', wsStatus === 'connected' ? 'bg-emerald-400' : wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : wsStatus === 'error' ? 'bg-red-500' : 'bg-slate-600'].join(' ')} />
           </div>
@@ -852,7 +883,7 @@ export default function GamePage({ params }: PageProps) {
        *  persisted `gameState.lastMove` so fresh results are visible immediately.
        */}
       <LastMoveDisplay
-        message={lastResultMsg ?? gameState?.lastMove}
+        message={currentLastMoveMessage}
         players={players}
         myPlayerId={myPlayerId}
       />

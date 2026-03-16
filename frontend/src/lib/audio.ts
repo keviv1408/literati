@@ -33,6 +33,9 @@
 /** localStorage key used to persist the mute preference. */
 export const MUTE_STORAGE_KEY = 'literati:muted';
 
+/** Whether a real user gesture has unlocked Web Audio for this page session. */
+let _audioUnlocked = false;
+
 // ---------------------------------------------------------------------------
 // Mute preference helpers
 // ---------------------------------------------------------------------------
@@ -68,6 +71,28 @@ export function toggleMuted(): boolean {
   const next = !isMuted();
   setMuted(next);
   return next;
+}
+
+/**
+ * Mark the current page session as user-activated for Web Audio.
+ *
+ * Call this from a trusted user gesture (click, pointerdown, keydown) before
+ * attempting to play synthesized game sounds. This prevents Chrome autoplay
+ * warnings caused by creating AudioContexts before the page is activated.
+ */
+export function unlockGameAudio(): void {
+  _audioUnlocked = true;
+}
+
+function hasUserActivatedAudio(): boolean {
+  if (_audioUnlocked) return true;
+  if (typeof navigator === 'undefined') return false;
+
+  const nav = navigator as Navigator & {
+    userActivation?: { hasBeenActive?: boolean; isActive?: boolean };
+  };
+
+  return Boolean(nav.userActivation?.hasBeenActive || nav.userActivation?.isActive);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +131,8 @@ function getAudioContextConstructor(): (new () => AudioContext) | null {
 function _playTones(
   tones: Array<{ freq: number; delay: number; duration: number; peak?: number }>,
 ): void {
+  if (!hasUserActivatedAudio()) return;
+
   const AudioCtx = getAudioContextConstructor();
   if (!AudioCtx) return;
 

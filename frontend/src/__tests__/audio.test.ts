@@ -29,6 +29,7 @@ import {
   playDeclarationSuccess,
   playDeclarationFail,
   MUTE_STORAGE_KEY,
+  unlockGameAudio,
 } from '@/lib/audio';
 
 // ---------------------------------------------------------------------------
@@ -59,7 +60,16 @@ beforeEach(() => {
     writable: true,
     configurable: true,
   });
+  Object.defineProperty(window, 'navigator', {
+    value: {
+      ...window.navigator,
+      userActivation: { hasBeenActive: true, isActive: true },
+    },
+    writable: true,
+    configurable: true,
+  });
   jest.clearAllMocks();
+  unlockGameAudio();
 });
 
 // ---------------------------------------------------------------------------
@@ -194,6 +204,29 @@ describe('toggleMuted()', () => {
 // ---------------------------------------------------------------------------
 
 describe('playTurnChime()', () => {
+  it('does NOT create AudioContext before the page has been user-activated', () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    Object.defineProperty(window, 'navigator', {
+      value: {
+        ...window.navigator,
+        userActivation: { hasBeenActive: false, isActive: false },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    jest.resetModules();
+    // Re-import a fresh module so the unlocked flag is reset for this test.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const freshAudio = require('@/lib/audio') as typeof import('@/lib/audio');
+
+    localStorageMock.getItem.mockReturnValue(null as unknown as string);
+    freshAudio.playTurnChime();
+
+    expect(win().AudioContext).not.toHaveBeenCalled();
+  });
+
   it('creates AudioContext and plays two tones when unmuted', () => {
     const ctx = buildMockAudioContext();
     installAudioContext(ctx);
