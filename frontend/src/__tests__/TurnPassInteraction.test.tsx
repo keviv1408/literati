@@ -60,10 +60,6 @@ jest.mock('@/contexts/GuestContext', () => ({
   useGuest: () => ({ guestSession: mockGuestSession }),
 }));
 
-jest.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ session: null, user: null }),
-}));
-
 // Track WS instances so tests can inject messages
 let lastMockWsInstance: MockWebSocket | null = null;
 const sentMessages: string[] = [];

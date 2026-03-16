@@ -413,28 +413,11 @@ function Step3Opponent({
     (p) => p.teamId !== myTeamId && p.cardCount > 0,
   );
 
-  /**
-   * Return true when the server-reported halfSuitCounts shows the opponent
-   * holds ≥1 card in the selected half-suit.
-   * Falls back to true when halfSuitCounts is absent (older snapshot) so
-   * we never incorrectly disable an opponent.
-   */
-  function opponentHasCardsInSuit(player: GamePlayer): boolean {
-    if (!player.halfSuitCounts) return true;
-    return (player.halfSuitCounts[halfSuitId] ?? 0) > 0;
-  }
-
-  // Selectable targets: opponents with ≥1 card in the chosen half-suit.
-  const activatableTargets = allOpponents.filter(opponentHasCardsInSuit);
-
-  // The currently selected target may have become greyed-out (0 in this suit)
-  // due to a real-time state update; treat as unselectable for the confirm button.
+  // All opponents with cards are valid targets — we don't reveal which
+  // opponents hold cards in a specific half-suit (that would leak information).
   const selectedPlayerCanBeAsked =
     selectedTarget != null &&
-    opponentHasCardsInSuit(
-      allOpponents.find((p) => p.playerId === selectedTarget) ??
-        ({ halfSuitCounts: {} } as GamePlayer),
-    );
+    allOpponents.some((p) => p.playerId === selectedTarget);
 
   const cardProbs = getCardProbabilities ? getCardProbabilities(selectedCard) : null;
 
@@ -468,46 +451,33 @@ function Step3Opponent({
           >
             {allOpponents.map((player) => {
               const isSelected = selectedTarget === player.playerId;
-              const hasCardsInSuit = opponentHasCardsInSuit(player);
-              // Grey out when server says 0 cards in this half-suit.
-              const isDisabled = !hasCardsInSuit;
-              const halfSuitCount = player.halfSuitCounts?.[halfSuitId] ?? null;
-              const pct = cardProbs && !isDisabled ? (cardProbs[player.playerId] ?? 0) : null;
+              const pct = cardProbs ? (cardProbs[player.playerId] ?? 0) : null;
               return (
                 <button
                   key={player.playerId}
                   onClick={() => {
-                    if (!isDisabled && !isLoading) onSelect(player.playerId);
+                    if (!isLoading) onSelect(player.playerId);
                   }}
                   role="option"
-                  aria-selected={isSelected && !isDisabled}
-                  aria-disabled={isDisabled}
-                  aria-label={
-                    isDisabled
-                      ? `${player.displayName} — no cards in this half-suit`
-                      : `Ask ${player.displayName} (Team ${player.teamId}, ${player.cardCount} cards${pct !== null && pct > 0 ? `, ~${pct}% likely` : ''})`
-                  }
+                  aria-selected={isSelected}
+                  aria-label={`Ask ${player.displayName} (Team ${player.teamId}, ${player.cardCount} cards${pct !== null && pct > 0 ? `, ~${pct}% likely` : ''})`}
                   data-testid={`opponent-option-${player.playerId}`}
-                  disabled={isDisabled || isLoading}
+                  disabled={isLoading}
                   className={[
                     'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-100',
                     'text-left focus:outline-none focus:ring-2 focus:ring-emerald-400',
-                    isDisabled
-                      ? 'border-slate-700/30 bg-slate-800/20 text-slate-500 opacity-45 cursor-not-allowed'
-                      : isSelected
-                        ? 'border-emerald-500 bg-emerald-900/30 text-white'
-                        : 'border-slate-600/50 bg-slate-700/30 text-slate-300 hover:border-slate-500 hover:bg-slate-700/50',
+                    isSelected
+                      ? 'border-emerald-500 bg-emerald-900/30 text-white'
+                      : 'border-slate-600/50 bg-slate-700/30 text-slate-300 hover:border-slate-500 hover:bg-slate-700/50',
                   ].join(' ')}
                 >
                   {/* Avatar */}
                   <div
                     className={[
                       'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                      isDisabled
-                        ? 'bg-slate-700 text-slate-500'
-                        : player.teamId === 2
-                          ? 'bg-violet-700 text-violet-100'
-                          : 'bg-blue-700 text-blue-100',
+                      player.teamId === 2
+                        ? 'bg-violet-700 text-violet-100'
+                        : 'bg-blue-700 text-blue-100',
                     ].join(' ')}
                     aria-hidden="true"
                   >
@@ -520,15 +490,7 @@ function Step3Opponent({
                     <p className="text-xs text-slate-500">
                       Team {player.teamId} &bull; {player.cardCount} card{player.cardCount !== 1 ? 's' : ''}
                     </p>
-                    {isDisabled && halfSuitCount !== null && (
-                      <p
-                        className="text-[0.65rem] text-slate-500 font-medium mt-0.5"
-                        data-testid={`opponent-no-cards-in-suit-${player.playerId}`}
-                      >
-                        0 cards in this half-suit
-                      </p>
-                    )}
-                    {!isDisabled && pct !== null && pct > 0 && (
+                    {pct !== null && pct > 0 && (
                       <p
                         className="text-[0.65rem] text-cyan-400 font-semibold mt-0.5"
                         data-testid="inference-pct-hint"
@@ -538,18 +500,16 @@ function Step3Opponent({
                     )}
                   </div>
 
-                  {/* Radio indicator — only shown when selectable */}
-                  {!isDisabled && (
-                    <div
-                      className={[
-                        'w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0',
-                        isSelected ? 'border-emerald-400 bg-emerald-400' : 'border-slate-500',
-                      ].join(' ')}
-                      aria-hidden="true"
-                    >
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
-                  )}
+                  {/* Radio indicator */}
+                  <div
+                    className={[
+                      'w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0',
+                      isSelected ? 'border-emerald-400 bg-emerald-400' : 'border-slate-500',
+                    ].join(' ')}
+                    aria-hidden="true"
+                  >
+                    {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
                 </button>
               );
             })}
@@ -568,11 +528,11 @@ function Step3Opponent({
         </button>
         <button
           onClick={onConfirm}
-          disabled={!selectedTarget || !selectedPlayerCanBeAsked || isLoading || activatableTargets.length === 0}
+          disabled={!selectedTarget || !selectedPlayerCanBeAsked || isLoading || allOpponents.length === 0}
           className="flex-1 py-3 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed"
           aria-label={
-            selectedTarget && selectedPlayerCanBeAsked && activatableTargets.find((p) => p.playerId === selectedTarget)
-              ? `Ask ${activatableTargets.find((p) => p.playerId === selectedTarget)!.displayName} for ${cardLabel(selectedCard)}`
+            selectedTarget && selectedPlayerCanBeAsked && allOpponents.find((p) => p.playerId === selectedTarget)
+              ? `Ask ${allOpponents.find((p) => p.playerId === selectedTarget)!.displayName} for ${cardLabel(selectedCard)}`
               : 'Ask'
           }
           data-testid="wizard-confirm-ask"
@@ -623,19 +583,11 @@ export default function CardRequestWizard({
   );
   const [selectedCard, setSelectedCard] = useState<CardId | null>(initialCard ?? null);
   // Auto-select opponent when only one valid target exists.
-  // When the wizard already knows the half-suit (initialCard path), filter by
-  // halfSuitCounts so we only auto-select opponents who can actually hold the card.
   const myPlayer = players.find((p) => p.playerId === myPlayerId);
   const initialValidTargets = useMemo(() => {
-    const opponents = players.filter(
+    return players.filter(
       (p) => p.teamId !== myPlayer?.teamId && p.cardCount > 0,
     );
-    if (!derivedInitialHalfSuit) return opponents;
-    // If half-suit is known at mount time, prefer targets with cards in that suit.
-    const withCards = opponents.filter(
-      (p) => !p.halfSuitCounts || (p.halfSuitCounts[derivedInitialHalfSuit] ?? 0) > 0,
-    );
-    return withCards.length > 0 ? withCards : opponents;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedTarget, setSelectedTarget] = useState<string | null>(
     initialValidTargets.length === 1 ? initialValidTargets[0].playerId : null,

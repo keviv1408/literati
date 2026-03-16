@@ -66,11 +66,6 @@ jest.mock('@/contexts/GuestContext', () => ({
   useGuest: () => ({ guestSession: mockGuestSession }),
 }));
 
-// Mock AuthContext
-jest.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ session: null, user: null }),
-}));
-
 // Mock WebSocket globally — tracks the most recently created instance so tests
 // can simulate incoming messages (game_init, etc.) by calling onmessage.
 let lastMockWsInstance: MockWebSocket | null = null;

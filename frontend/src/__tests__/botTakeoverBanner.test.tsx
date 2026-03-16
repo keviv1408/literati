@@ -61,10 +61,6 @@ jest.mock('@/contexts/GuestContext', () => ({
   useGuest: () => ({ guestSession: mockGuestSession }),
 }));
 
-jest.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ session: null, user: null }),
-}));
-
 // ---------------------------------------------------------------------------
 // Mock WebSocket
 // ---------------------------------------------------------------------------

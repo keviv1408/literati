@@ -47,7 +47,6 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useGuest } from '@/contexts/GuestContext';
 import { clearToken, getCachedToken } from '@/lib/backendSession';
 import { getGuestBearerToken, validateSession, ApiError } from '@/lib/api';
@@ -100,7 +99,6 @@ export interface ReconnectResult {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useReconnect(): ReconnectResult {
-  const { user, session, loading: authLoading } = useAuth();
   const { guestSession } = useGuest();
 
   const [status, setStatus] = useState<ReconnectStatus>('loading');
@@ -120,67 +118,7 @@ export function useReconnect(): ReconnectResult {
   }, []);
 
   useEffect(() => {
-    // ── Wait for the Supabase session to hydrate ─────────────────────────────
-    // AuthContext calls getSession() on mount; this is async and takes ~100ms.
-    // Supabase automatically refreshes the access token if it is near expiry.
-    if (authLoading) {
-      setStatus('loading');
-      return;
-    }
-
     let cancelled = false;
-
-    // ── Registered-user path ──────────────────────────────────────────────────
-    // `session` and `user` are both non-null when Supabase has a valid session.
-    // By this point Supabase has already auto-refreshed the access token if
-    // it was near expiry, so session.access_token should be fresh.
-    if (session && user) {
-      setStatus('reconnecting');
-
-      const validateRegistered = async () => {
-        try {
-          const me = await validateSession(session.access_token);
-          if (cancelled) return;
-
-          setSessionId(me.id ?? user.id);
-          setBearerToken(session.access_token);
-          setIsGuest(false);
-          setDisplayName(me.displayName || user.email || null);
-          setErrorMessage(null);
-          setStatus('ready');
-        } catch (err) {
-          if (cancelled) return;
-
-          if (err instanceof ApiError && err.status === 401) {
-            // Backend rejected the token.  Since Supabase already handled
-            // session refresh in AuthContext (getSession auto-refreshes),
-            // a 401 here means both access and refresh tokens are truly
-            // expired — the user must sign in again.
-            setSessionId(null);
-            setBearerToken(null);
-            setIsGuest(false);
-            setDisplayName(null);
-            setStatus('session_expired');
-            setErrorMessage(
-              'Your session has expired. Please sign in again to continue.'
-            );
-          } else {
-            // Network error or unexpected server error.
-            setSessionId(null);
-            setBearerToken(null);
-            setStatus('error');
-            setErrorMessage(
-              'Could not reach the server. Please check your connection and try again.'
-            );
-          }
-        }
-      };
-
-      validateRegistered();
-      return () => {
-        cancelled = true;
-      };
-    }
 
     // ── Guest path ────────────────────────────────────────────────────────────
     // GuestContext loads the display name from localStorage on mount (sync).
@@ -275,7 +213,7 @@ export function useReconnect(): ReconnectResult {
     setErrorMessage(null);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, session, user, guestSession, retryCounter]);
+  }, [guestSession, retryCounter]);
 
   return {
     status,

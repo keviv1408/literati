@@ -9,9 +9,7 @@ const rateLimit = require('express-rate-limit');
 const roomsRouter = require('./routes/rooms');
 const authRouter = require('./routes/auth');
 const matchmakingRouter = require('./routes/matchmaking');
-const statsRouter = require('./routes/stats');
 const liveGamesRouter = require('./routes/liveGames');
-const profileRouter = require('./routes/profile');
 const { startCleanupTimer, stopCleanupTimer } = require('./sessions/guestSessionStore');
 const {
   startQueueCleanupTimer,
@@ -72,9 +70,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/matchmaking', matchmakingRouter);
-app.use('/api/stats', statsRouter);
 app.use('/api/live-games', liveGamesRouter);
-app.use('/api/profile', profileRouter);
 
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {

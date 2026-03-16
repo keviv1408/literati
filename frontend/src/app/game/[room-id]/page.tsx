@@ -23,7 +23,6 @@ import { useRouter } from 'next/navigation';
 import { getRoomByCode, getGuestBearerToken, ApiError } from '@/lib/api';
 import { getCachedToken } from '@/lib/backendSession';
 import { useGuest } from '@/contexts/GuestContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
@@ -70,7 +69,6 @@ interface PageProps {
 export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const { guestSession } = useGuest();
-  const { session: authSession } = useAuth();
 
   const [roomCode, setRoomCode]           = useState<string | null>(null);
   const [room, setRoom]                   = useState<Room | null>(null);
@@ -158,13 +156,12 @@ export default function GamePage({ params }: PageProps) {
 
   useEffect(() => {
     if (!roomCode) return;
-    if (authSession?.access_token) { setBearerToken(authSession.access_token); return; }
     if (guestSession?.displayName) {
       const cached = getCachedToken(guestSession.displayName);
       if (cached) { setBearerToken(cached); return; }
       getGuestBearerToken(guestSession.displayName).then(setBearerToken).catch(() => {});
     }
-  }, [roomCode, authSession, guestSession]);
+  }, [roomCode, guestSession]);
 
   useEffect(() => {
     if (roomCode === null) return;
@@ -227,11 +224,8 @@ export default function GamePage({ params }: PageProps) {
   //   2. The room is NOT a matchmaking room (private rooms only).
   //
   // This flag gates the "🔄 Rematch" button shown only at game-end.
-  const isHostOfPrivateRoom =
-    !!(authSession?.user?.id &&
-       room &&
-       authSession.user.id === room.host_user_id &&
-       !room.is_matchmaking);
+  // Guest-only mode: host detection not applicable (no Supabase user ID).
+  const isHostOfPrivateRoom = false;
 
   // ── Failed Declaration Reveal visibility guard (Sub-AC 26b) ───────────────
   // Computed here — after useGameSocket — because it depends on `declarationFailed`

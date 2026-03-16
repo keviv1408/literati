@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { GuestProvider } from '@/contexts/GuestContext';
-import { AuthProvider } from '@/contexts/AuthContext';
 import GuestNameModal from '@/components/GuestNameModal';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
 
@@ -52,15 +51,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <GuestProvider>
-            {children}
-            {/* Global guest name entry modal — rendered above all content */}
-            <GuestNameModal />
-            {/* PWA service worker registration */}
-            <ServiceWorkerRegistrar />
-          </GuestProvider>
-        </AuthProvider>
+        <GuestProvider>
+          {children}
+          {/* Global guest name entry modal — rendered above all content */}
+          <GuestNameModal />
+          {/* PWA service worker registration */}
+          <ServiceWorkerRegistrar />
+        </GuestProvider>
       </body>
     </html>
   );

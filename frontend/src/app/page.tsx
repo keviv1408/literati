@@ -119,29 +119,8 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Auth links */}
-        <div className="text-sm text-slate-500 space-x-3">
-          <a
-            href="/auth/login"
-            className="hover:text-emerald-400 transition-colors focus:outline-none focus:underline"
-          >
-            Sign In
-          </a>
-          <span aria-hidden="true">·</span>
-          <a
-            href="/auth/register"
-            className="hover:text-emerald-400 transition-colors focus:outline-none focus:underline"
-          >
-            Create Account
-          </a>
-          <span aria-hidden="true">·</span>
-          <a
-            href="/leaderboard"
-            className="hover:text-emerald-400 transition-colors focus:outline-none focus:underline"
-          >
-            Leaderboard
-          </a>
-          <span aria-hidden="true">·</span>
+        {/* Links */}
+        <div className="text-sm text-slate-500">
           <a
             href="/live-games"
             className="hover:text-emerald-400 transition-colors focus:outline-none focus:underline"
