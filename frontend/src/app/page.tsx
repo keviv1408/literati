@@ -157,7 +157,7 @@ export default function Home() {
           <h3 className="text-lg font-semibold text-emerald-300 mb-3">The Basics</h3>
           <ul className="space-y-2 text-sm text-slate-300">
             <li><span className="text-emerald-400 font-medium">Teams:</span> 6 players split into two teams of 3 (or 8 players, 4v4).</li>
-            <li><span className="text-emerald-400 font-medium">Cards:</span> A standard deck with 8s removed, leaving 48 cards. Each suit is split into a <span className="text-white font-medium">low half</span> (A-6) and a <span className="text-white font-medium">high half</span> (9-K) &mdash; these are called <span className="text-white font-medium">half-suits</span>.</li>
+            <li><span className="text-emerald-400 font-medium">Cards:</span> A standard deck with 7s removed, leaving 48 cards. Each suit is split into a <span className="text-white font-medium">low half</span> (A-6) and a <span className="text-white font-medium">high half</span> (8-K) &mdash; these are called <span className="text-white font-medium">half-suits</span>.</li>
             <li><span className="text-emerald-400 font-medium">Goal:</span> Collect all 6 cards of a half-suit across your team and <span className="text-white font-medium">declare</span> it to score a point. First team to score 5 (of 8) half-suits wins.</li>
           </ul>
         </div>
@@ -166,10 +166,11 @@ export default function Home() {
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 mb-4">
           <h3 className="text-lg font-semibold text-emerald-300 mb-3">On Your Turn</h3>
           <ul className="space-y-2 text-sm text-slate-300">
-            <li><span className="text-emerald-400 font-medium">Ask:</span> Pick an opponent and ask for a specific card. You must hold at least one card from that half-suit to ask.</li>
+            <li><span className="text-emerald-400 font-medium">Ask:</span> Pick an opponent and ask for a specific card. You must hold at least one card from that half-suit before asking for another card from it.</li>
             <li><span className="text-emerald-400 font-medium">If they have it:</span> They hand it over and you go again.</li>
             <li><span className="text-emerald-400 font-medium">If they don&apos;t:</span> Your turn ends and the turn passes to them.</li>
-            <li><span className="text-emerald-400 font-medium">Declare:</span> Instead of asking, you can declare a half-suit by stating which teammate holds each of the 6 cards. If correct, your team scores. If wrong, the other team scores.</li>
+            <li><span className="text-emerald-400 font-medium">Declare:</span> You can declare a half-suit by stating which teammate holds each of the six cards. If correct, your team scores; if wrong, the other team scores.</li>
+            <li><span className="text-emerald-400 font-medium">Pass the chance:</span> After finishing a set, you can give the next turn to a teammate who is being blocked or who has a better read on the opponents&apos; cards so they can keep collecting and complete another half-suit.</li>
           </ul>
         </div>
 
