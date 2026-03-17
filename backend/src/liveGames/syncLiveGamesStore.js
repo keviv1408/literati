@@ -2,6 +2,10 @@
 
 const liveGamesStore = require('./liveGamesStore');
 
+function buildSpectatorUrl(roomCode, spectatorToken) {
+  return `/game/${roomCode}?spectatorToken=${encodeURIComponent(spectatorToken)}`;
+}
+
 /**
  * Rehydrate the in-memory live-games registry from Supabase.
  *
@@ -16,7 +20,7 @@ const liveGamesStore = require('./liveGamesStore');
 async function syncInProgressRoomsToLiveGamesStore(supabase) {
   const { data: rooms, error } = await supabase
     .from('rooms')
-    .select('code, player_count, card_removal_variant, status, created_at, updated_at, game_state')
+    .select('code, player_count, card_removal_variant, status, created_at, updated_at, game_state, spectator_token')
     .eq('status', 'in_progress');
 
   if (error) {
@@ -35,11 +39,16 @@ async function syncInProgressRoomsToLiveGamesStore(supabase) {
       ? players.filter((player) => !player.isBot).length
       : room.player_count;
 
+    if (!room.spectator_token) {
+      continue;
+    }
+
     const payload = {
       roomCode:       room.code,
       playerCount:    room.player_count,
       currentPlayers,
       cardVariant:    snapshot.variant ?? room.card_removal_variant,
+      spectatorUrl:   buildSpectatorUrl(room.code, room.spectator_token),
       scores,
       status:         'in_progress',
       createdAt,

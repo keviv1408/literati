@@ -164,7 +164,7 @@ function GameRow({ game }: { game: LiveGame }) {
       {/* Right: spectate button */}
       <div className="flex-shrink-0">
         <button
-          onClick={() => router.push(`/game/${game.roomCode}`)}
+          onClick={() => router.push(game.spectatorUrl ?? `/game/${game.roomCode}`)}
           className="
             w-full sm:w-auto py-2 px-5 rounded-xl font-semibold text-sm
             bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700

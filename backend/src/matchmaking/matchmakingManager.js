@@ -320,6 +320,7 @@ async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant, in
       playerCount:    requiredCount,
       currentPlayers: matchedPlayers.length,
       cardVariant:    cardRemovalVariant,
+      spectatorUrl:   `/game/${room.code}?spectatorToken=${encodeURIComponent(room.spectator_token)}`,
       scores:         { team1: 0, team2: 0 },
       status:         'waiting',
       createdAt:      Date.now(),

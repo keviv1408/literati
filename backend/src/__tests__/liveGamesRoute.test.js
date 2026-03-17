@@ -79,6 +79,7 @@ describe('GET /api/live-games', () => {
       playerCount:    6,
       currentPlayers: 4,
       cardVariant:    'remove_7s',
+      spectatorUrl:   '/game/ABCD12?spectatorToken=token-abcd12',
       scores:         { team1: 1, team2: 0 },
       status:         'in_progress',
       createdAt:      Date.now() - 60_000,
@@ -89,6 +90,7 @@ describe('GET /api/live-games', () => {
       playerCount:    8,
       currentPlayers: 2,
       cardVariant:    'remove_2s',
+      spectatorUrl:   '/game/XY9876?spectatorToken=token-xy9876',
       status:         'waiting',
       createdAt:      Date.now() - 10_000,
       startedAt:      null,
@@ -104,12 +106,14 @@ describe('GET /api/live-games', () => {
     expect(abcd.playerCount).toBe(6);
     expect(abcd.currentPlayers).toBe(4);
     expect(abcd.cardVariant).toBe('remove_7s');
+    expect(abcd.spectatorUrl).toBe('/game/ABCD12?spectatorToken=token-abcd12');
     expect(abcd.scores).toEqual({ team1: 1, team2: 0 });
     expect(abcd.status).toBe('in_progress');
     expect(abcd.elapsedMs).toBeGreaterThanOrEqual(30_000);
 
     const xy = res.body.games.find((g) => g.roomCode === 'XY9876');
     expect(xy).toBeDefined();
+    expect(xy.spectatorUrl).toBe('/game/XY9876?spectatorToken=token-xy9876');
     expect(xy.status).toBe('waiting');
     expect(xy.elapsedMs).toBeGreaterThanOrEqual(10_000);
   });
@@ -125,6 +129,7 @@ describe('GET /api/live-games', () => {
       playerCount: 6,
       currentPlayers: 6,
       cardVariant: 'remove_8s',
+      spectatorUrl: '/game/DONE01?spectatorToken=token-done01',
     });
     liveGamesStore.removeGame('DONE01');
 
@@ -141,6 +146,7 @@ describe('GET /api/live-games', () => {
         player_count: 6,
         card_removal_variant: 'remove_7s',
         status: 'in_progress',
+        spectator_token: 'spectator-yt66qt',
         created_at: '2026-03-17T10:00:00.000Z',
         updated_at: '2026-03-17T10:10:00.000Z',
         game_state: {
@@ -166,6 +172,7 @@ describe('GET /api/live-games', () => {
       currentPlayers: 2,
       cardVariant: 'remove_7s',
       status: 'in_progress',
+      spectatorUrl: '/game/YT66QT?spectatorToken=spectator-yt66qt',
       scores: { team1: 1, team2: 0 },
     });
   });

@@ -43,14 +43,18 @@ import { sortHandByHalfSuit, type CardVariant } from '@/utils/cardSort';
 
 export type GameWsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
 
-function toWsUrl(roomCode: string, token: string): string {
+function toWsUrl(roomCode: string, token: string | null, spectatorToken: string | null): string {
   const wsBase = API_URL.replace(/^https?/, (p) => (p === 'https' ? 'wss' : 'ws'));
-  return `${wsBase}/ws/game/${roomCode}?token=${encodeURIComponent(token)}`;
+  const params = new URLSearchParams();
+  if (token) params.set('token', token);
+  if (spectatorToken) params.set('spectatorToken', spectatorToken);
+  return `${wsBase}/ws/game/${roomCode}?${params.toString()}`;
 }
 
 interface UseGameSocketOptions {
   roomCode: string | null;
   bearerToken: string | null;
+  spectatorToken?: string | null;
   onGameOver?: (payload: GameOverPayload) => void;
   onRematchStart?: (payload: RematchStartPayload) => void;
   /** Sub-AC 46c: called when a new game is spun up in-place after a rematch vote. */
@@ -354,6 +358,7 @@ export interface PostDeclarationHighlight {
 export function useGameSocket({
   roomCode,
   bearerToken,
+  spectatorToken = null,
   onGameOver,
   onRematchStart,
   onRematchStarting,
@@ -404,11 +409,11 @@ export function useGameSocket({
 
   // ── Connect / reconnect when roomCode and token are ready ─────────────────
   useEffect(() => {
-    if (!roomCode || !bearerToken) return;
+    if (!roomCode || (!bearerToken && !spectatorToken)) return;
 
     let ws: WebSocket;
     try {
-      ws = new WebSocket(toWsUrl(roomCode, bearerToken));
+      ws = new WebSocket(toWsUrl(roomCode, bearerToken, spectatorToken));
     } catch {
       setStatus('error');
       setError('Failed to create WebSocket connection');
@@ -805,7 +810,7 @@ export function useGameSocket({
       ws.close(1000, 'unmount');
       wsRef.current = null;
     };
-  }, [roomCode, bearerToken]);
+  }, [roomCode, bearerToken, spectatorToken]);
 
   // ── Send helpers ──────────────────────────────────────────────────────────
 

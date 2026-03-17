@@ -2826,6 +2826,7 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
  *   roomId:      string,
  *   variant:     string,
  *   playerCount: number,
+ *   spectatorUrl?: string,
  *   seats:       Array<Object>,
  * }} options
  * @returns {Object} The created GameState
@@ -2845,6 +2846,7 @@ function createGame(options) {
       playerCount:    options.playerCount,
       currentPlayers: humanSeats,
       cardVariant:    options.variant,
+      spectatorUrl:   options.spectatorUrl ?? `/game/${options.roomCode}`,
       scores:         { team1: 0, team2: 0 },
       status:         'in_progress',
       createdAt:      Date.now(),
@@ -2867,6 +2869,7 @@ function syncRecoveredGameToLiveGamesStore(gs) {
       playerCount:    gs.playerCount,
       currentPlayers: humanPlayers,
       cardVariant:    gs.variant,
+      spectatorUrl:   liveGamesStore.get(gs.roomCode)?.spectatorUrl ?? `/game/${gs.roomCode}`,
       scores:         { ...gs.scores },
       status:         'in_progress',
       createdAt:      Date.now(),

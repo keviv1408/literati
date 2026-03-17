@@ -30,6 +30,7 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useSearchParams: () => ({ get: () => null }),
 }));
 
 // Mock the API module

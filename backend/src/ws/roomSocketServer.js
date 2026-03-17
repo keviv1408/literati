@@ -589,7 +589,8 @@ async function fetchRoomMeta(roomCode) {
  *   host_user_id: string,
  *   status: string,
  *   player_count: number,
- *   card_removal_variant: string
+ *   card_removal_variant: string,
+ *   spectator_token: string,
  * }|null>}
  */
 async function fetchRoomMetaFull(roomCode) {
@@ -597,7 +598,7 @@ async function fetchRoomMetaFull(roomCode) {
     const supabase = getSupabase();
     const { data: room, error } = await supabase
       .from('rooms')
-      .select('id, host_user_id, status, player_count, card_removal_variant')
+      .select('id, host_user_id, status, player_count, card_removal_variant, spectator_token')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -1158,6 +1159,9 @@ async function handleStartGame(ctx) {
         roomId,
         variant,
         playerCount,
+        spectatorUrl: dbRoom?.spectator_token
+          ? `/game/${roomCode}?spectatorToken=${encodeURIComponent(dbRoom.spectator_token)}`
+          : undefined,
         seats: allSeats,
       });
     } catch (err) {
@@ -1270,7 +1274,16 @@ async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
   let gameState = null;
   try {
     const gameServer = _getGameServer();
-    gameState = gameServer.createGame({ roomCode, roomId, variant, playerCount: count, seats: allSeats });
+    gameState = gameServer.createGame({
+      roomCode,
+      roomId,
+      variant,
+      playerCount: count,
+      spectatorUrl: dbRoom?.spectator_token
+        ? `/game/${roomCode}?spectatorToken=${encodeURIComponent(dbRoom.spectator_token)}`
+        : undefined,
+      seats: allSeats,
+    });
   } catch (err) {
     console.error('[RoomWS] handleAutoStartMatchmaking: createGame failed for room', roomCode, ':', err);
     // Broadcast an error to all clients so they can retry or navigate home
@@ -1532,6 +1545,9 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
         roomId,
         variant,
         playerCount,
+        spectatorUrl: dbRoom.spectator_token
+          ? `/game/${code}?spectatorToken=${encodeURIComponent(dbRoom.spectator_token)}`
+          : undefined,
         seats:       allSeats,
         inferenceMode,
       });

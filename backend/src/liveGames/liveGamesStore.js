@@ -20,6 +20,7 @@
  *   playerCount:    number,                      // max capacity (6 or 8)
  *   currentPlayers: number,                      // players currently connected
  *   cardVariant:    string,                      // 'remove_2s' | 'remove_7s' | 'remove_8s'
+ *   spectatorUrl:   string,                      // frontend path used to spectate
  *   scores:         { team1: number, team2: number },
  *   status:         'waiting' | 'in_progress',
  *   createdAt:      number,                      // epoch ms — when the room was created
@@ -49,6 +50,7 @@ class LiveGamesStore extends EventEmitter {
    *   playerCount:    number,
    *   currentPlayers: number,
    *   cardVariant:    string,
+   *   spectatorUrl:   string,
    *   scores?:        { team1: number, team2: number },
    *   status?:        'waiting' | 'in_progress',
    *   createdAt?:     number,
@@ -63,6 +65,7 @@ class LiveGamesStore extends EventEmitter {
       playerCount:    data.playerCount,
       currentPlayers: data.currentPlayers ?? 0,
       cardVariant:    data.cardVariant,
+      spectatorUrl:   data.spectatorUrl,
       scores:         data.scores ?? { team1: 0, team2: 0 },
       status:         data.status ?? 'waiting',
       createdAt:      data.createdAt ?? Date.now(),

@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGuestBearerToken, ApiError } from '@/lib/api';
 import { unlockGameAudio } from '@/lib/audio';
 import { getCachedToken } from '@/lib/backendSession';
@@ -71,6 +71,7 @@ interface PageProps {
 
 export default function GamePage({ params }: PageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { guestSession } = useGuest();
 
   const [roomCode, setRoomCode]           = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function GamePage({ params }: PageProps) {
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
   const [bearerToken, setBearerToken]     = useState<string | null>(null);
+  const spectatorToken                    = searchParams.get('spectatorToken');
 
   const [showDeclare, setShowDeclare]     = useState(false);
   const [showAskInline, setShowAskInline] = useState(false);
@@ -203,6 +205,7 @@ export default function GamePage({ params }: PageProps) {
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
     bearerToken,
+    spectatorToken,
     onGameOver: (payload) => {
       setGameOver(payload);
       setVoteStartedAt(Date.now());

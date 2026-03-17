@@ -42,6 +42,7 @@ const { syncInProgressRoomsToLiveGamesStore } = require('../liveGames/syncLiveGa
  *         playerCount:    number,
  *         currentPlayers: number,
  *         cardVariant:    string,
+ *         spectatorUrl:   string,
  *         scores:         { team1: number, team2: number },
  *         status:         'waiting' | 'in_progress',
  *         createdAt:      number,

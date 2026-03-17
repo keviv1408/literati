@@ -495,6 +495,8 @@ export interface LiveGame {
   currentPlayers: number;
   /** 'remove_2s' | 'remove_7s' | 'remove_8s' */
   cardVariant: string;
+  /** Frontend path to open this game in spectator mode. */
+  spectatorUrl?: string;
   scores: { team1: number; team2: number };
   /** 'waiting' | 'in_progress' */
   status: string;

@@ -217,7 +217,7 @@ async function _handleGameStart(roomCode, playerCount) {
     const supabase = getSupabaseClient();
     const { data: roomData } = await supabase
       .from('rooms')
-      .select('id, card_removal_variant')
+      .select('id, card_removal_variant, spectator_token')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -238,6 +238,9 @@ async function _handleGameStart(roomCode, playerCount) {
       roomId:      roomId ?? roomCode, // fallback if DB fetch failed
       variant,
       playerCount,
+      spectatorUrl: roomData?.spectator_token
+        ? `/game/${roomCode}?spectatorToken=${encodeURIComponent(roomData.spectator_token)}`
+        : undefined,
       seats:       snapshotSeats,
     });
   } catch (err) {

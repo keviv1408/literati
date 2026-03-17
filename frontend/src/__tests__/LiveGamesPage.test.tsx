@@ -9,7 +9,7 @@
  *   - Renders a row for each active game
  *   - Each row shows player count, variant, room code
  *   - Each row shows scores (team1 vs team2)
- *   - Each row has a Spectate button that navigates to /game/<code>
+ *   - Each row has a Spectate button that navigates to the provided spectator URL
  *   - Renders a live "In Progress" badge for in_progress games
  *   - Renders "Starting Soon" badge for waiting games
  *   - Game disappears when game_removed message arrives
@@ -25,6 +25,7 @@ import LiveGamesPage from '@/app/live-games/page';
 const mockPush = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => ({ get: () => null }),
 }));
 
 // ── Mock WebSocket ─────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ const GAME_1 = {
   playerCount: 6,
   currentPlayers: 6,
   cardVariant: 'remove_7s',
+  spectatorUrl: '/game/ABCD12?spectatorToken=token-abcd12',
   scores: { team1: 3, team2: 2 },
   status: 'in_progress',
   createdAt: Date.now() - 900_000,
@@ -95,6 +97,7 @@ const GAME_2 = {
   playerCount: 8,
   currentPlayers: 4,
   cardVariant: 'remove_2s',
+  spectatorUrl: '/game/XYZ789?spectatorToken=token-xyz789',
   scores: { team1: 0, team2: 0 },
   status: 'waiting',
   createdAt: Date.now() - 60_000,
@@ -213,7 +216,7 @@ describe('LiveGamesPage', () => {
     expect(screen.getByText('Starting Soon')).toBeDefined();
   });
 
-  it('has a Spectate button that navigates to /game/<roomCode>', () => {
+  it('has a Spectate button that navigates to the game spectator URL', () => {
     render(<LiveGamesPage />);
     act(() => {
       latestWs().onopen?.();
@@ -222,7 +225,7 @@ describe('LiveGamesPage', () => {
     const btn = screen.getByRole('button', { name: /Spectate game ABCD12/i });
     expect(btn).toBeDefined();
     fireEvent.click(btn);
-    expect(mockPush).toHaveBeenCalledWith('/game/ABCD12');
+    expect(mockPush).toHaveBeenCalledWith('/game/ABCD12?spectatorToken=token-abcd12');
   });
 
   it('removes a game row when live_game_removed arrives', () => {
