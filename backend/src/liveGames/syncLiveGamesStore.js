@@ -28,6 +28,16 @@ async function syncInProgressRoomsToLiveGamesStore(supabase) {
   }
 
   const activeRooms = Array.isArray(rooms) ? rooms : [];
+  const activeRoomCodes = new Set(activeRooms.map((room) => room.code.toUpperCase()));
+
+  // Evict stale in-progress entries that no longer exist in the DB snapshot.
+  // This covers cases where the in-memory store missed a completion/removal
+  // event and would otherwise keep serving a finished game forever.
+  for (const game of liveGamesStore.getAll()) {
+    if (game.status === 'in_progress' && !activeRoomCodes.has(game.roomCode.toUpperCase())) {
+      liveGamesStore.removeGame(game.roomCode);
+    }
+  }
 
   for (const room of activeRooms) {
     const snapshot = room.game_state ?? {};

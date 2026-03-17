@@ -96,6 +96,29 @@ describe('GET /api/live-games', () => {
       startedAt:      null,
     });
 
+    mockSupabase._roomsEq.mockResolvedValueOnce({
+      data: [{
+        code: 'ABCD12',
+        player_count: 6,
+        card_removal_variant: 'remove_7s',
+        status: 'in_progress',
+        spectator_token: 'token-abcd12',
+        created_at: new Date(Date.now() - 60_000).toISOString(),
+        updated_at: new Date(Date.now() - 30_000).toISOString(),
+        game_state: {
+          variant: 'remove_7s',
+          scores: { team1: 1, team2: 0 },
+          players: [
+            { playerId: 'h1', isBot: false },
+            { playerId: 'h2', isBot: false },
+            { playerId: 'h3', isBot: false },
+            { playerId: 'h4', isBot: false },
+          ],
+        },
+      }],
+      error: null,
+    });
+
     const res = await request(app).get('/api/live-games');
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(2);
@@ -175,5 +198,38 @@ describe('GET /api/live-games', () => {
       spectatorUrl: '/game/YT66QT?spectatorToken=spectator-yt66qt',
       scores: { team1: 1, team2: 0 },
     });
+  });
+
+  it('removes stale in-progress games that are no longer in the DB snapshot', async () => {
+    liveGamesStore.addGame({
+      roomCode: 'STALE1',
+      playerCount: 6,
+      currentPlayers: 6,
+      cardVariant: 'remove_7s',
+      spectatorUrl: '/game/STALE1?spectatorToken=token-stale1',
+      status: 'in_progress',
+      scores: { team1: 3, team2: 4 },
+      createdAt: Date.now() - 20_000,
+      startedAt: Date.now() - 10_000,
+    });
+
+    liveGamesStore.addGame({
+      roomCode: 'WAIT01',
+      playerCount: 8,
+      currentPlayers: 3,
+      cardVariant: 'remove_2s',
+      spectatorUrl: '/game/WAIT01?spectatorToken=token-wait01',
+      status: 'waiting',
+      createdAt: Date.now() - 20_000,
+      startedAt: null,
+    });
+
+    mockSupabase._roomsEq.mockResolvedValueOnce({ data: [], error: null });
+
+    const res = await request(app).get('/api/live-games');
+
+    expect(res.status).toBe(200);
+    expect(res.body.games.find((g) => g.roomCode === 'STALE1')).toBeUndefined();
+    expect(res.body.games.find((g) => g.roomCode === 'WAIT01')).toBeDefined();
   });
 });
