@@ -15,16 +15,25 @@
  *   6. "Cancel" button sends 'leave-queue' and resets to filter form.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import {
   useMatchmakingSocket,
   type MatchmakingFilter,
 } from '@/hooks/useMatchmakingSocket';
-import { getGuestBearerToken } from '@/lib/api';
+import { getGuestBearerToken, getLiveGames, getMatchmakingQueues } from '@/lib/api';
 import { VARIANT_OPTIONS } from '@/types/room';
 import type { CardRemovalVariant } from '@/types/room';
+
+const ACTIVITY_REFRESH_MS = 15_000;
+
+interface MatchmakingActivitySummary {
+  totalOnline: number;
+  totalWaiting: number;
+  livePlayers: number;
+  activeGames: number;
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -43,9 +52,10 @@ export default function MatchmakingPage() {
   const [autoJoinFilter, setAutoJoinFilter] = useState<MatchmakingFilter | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [activitySummary, setActivitySummary] = useState<MatchmakingActivitySummary | null>(null);
 
   // ── WebSocket matchmaking hook ───────────────────────────────────────────────
-  const { status, queueSize, joinQueue, leaveQueue } = useMatchmakingSocket({
+  const { status, queueSize, leaveQueue } = useMatchmakingSocket({
     sessionId,
     bearerToken,
     autoJoinFilter,
@@ -56,6 +66,45 @@ export default function MatchmakingPage() {
       [router]
     ),
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActivitySummary() {
+      try {
+        const [queuesRes, liveGamesRes] = await Promise.all([
+          getMatchmakingQueues(),
+          getLiveGames(),
+        ]);
+
+        if (cancelled) return;
+
+        const livePlayers = liveGamesRes.games.reduce(
+          (sum, game) => sum + game.currentPlayers,
+          0
+        );
+
+        setActivitySummary({
+          totalOnline: queuesRes.totalWaiting + livePlayers,
+          totalWaiting: queuesRes.totalWaiting,
+          livePlayers,
+          activeGames: liveGamesRes.total,
+        });
+      } catch {
+        if (!cancelled) {
+          setActivitySummary(null);
+        }
+      }
+    }
+
+    loadActivitySummary();
+    const intervalId = window.setInterval(loadActivitySummary, ACTIVITY_REFRESH_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   // ── "Find Game" handler ─────────────────────────────────────────────────────
 
@@ -153,6 +202,25 @@ export default function MatchmakingPage() {
             <span aria-hidden="true">👤</span>
             Playing as{' '}
             <span className="font-semibold">{guestSession.displayName}</span>
+          </div>
+        )}
+
+        {activitySummary && (
+          <div
+            className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-4 text-left"
+            aria-live="polite"
+            data-testid="matchmaking-activity-summary"
+          >
+            <p className="text-white font-semibold text-sm">
+              {activitySummary.totalOnline} player
+              {activitySummary.totalOnline === 1 ? '' : 's'} online now
+            </p>
+            <p className="mt-1 text-slate-300 text-xs">
+              {activitySummary.totalWaiting} waiting for a public match
+              {' '}·{' '}
+              {activitySummary.livePlayers} in {activitySummary.activeGames} live public game
+              {activitySummary.activeGames === 1 ? '' : 's'}
+            </p>
           </div>
         )}
 
