@@ -20,7 +20,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -616,6 +616,30 @@ describe('GamePage — Sub-AC 9.2: game controls always available', () => {
       await waitFor(() => {
         expect(screen.getByTestId('ask-prompt')).toBeTruthy();
       });
+    });
+
+    it('submits an ask when the player picks an inline ask card and taps an opponent seat', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      const sendSpy = jest.spyOn(lastMockWsInstance as MockWebSocket, 'send');
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-button')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('ask-button'));
+      fireEvent.click(screen.getByTestId('inline-ask-halfsuit-low_h'));
+      fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
+
+      const carolSeat = document.querySelector('[data-player-id="p4"]') as HTMLElement;
+      expect(carolSeat).toBeTruthy();
+      fireEvent.click(carolSeat);
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ask_card', targetPlayerId: 'p4', cardId: '1_h' }),
+      );
     });
 
     it('does NOT show Declare button when it is NOT the player\'s turn', async () => {

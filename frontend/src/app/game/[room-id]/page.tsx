@@ -33,8 +33,7 @@ import { useInference } from '@/hooks/useInference';
 import { GameProvider } from '@/contexts/GameContext';
 import { VoiceProvider, useVoice } from '@/contexts/VoiceContext';
 import CardHand from '@/components/CardHand';
-import AskCardModal from '@/components/AskCardModal';
-import CardRequestWizard from '@/components/CardRequestWizard';
+import InlineAskTray, { getAvailableAskHalfSuits } from '@/components/InlineAskTray';
 import DeclareModal from '@/components/DeclareModal';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import EliminationModal from '@/components/EliminationModal';
@@ -54,6 +53,7 @@ import MuteToggle from '@/components/MuteToggle';
 import VoiceControls from '@/components/VoiceControls';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import type { Room } from '@/types/room';
+import { cardLabel, getCardHalfSuit } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload } from '@/types/game';
 import type { PlayerInference } from '@/hooks/useCardInference';
 
@@ -80,10 +80,10 @@ export default function GamePage({ params }: PageProps) {
   const [notFound, setNotFound]           = useState(false);
   const [bearerToken, setBearerToken]     = useState<string | null>(null);
 
-  const [selectedCard, setSelectedCard]   = useState<CardId | null>(null);
   const [showDeclare, setShowDeclare]     = useState(false);
-  const [showAskWizard, setShowAskWizard] = useState(false);
-  const [wizardInitialCard, setWizardInitialCard] = useState<CardId | null>(null);
+  const [showAskInline, setShowAskInline] = useState(false);
+  const [selectedAskHalfSuit, setSelectedAskHalfSuit] = useState<HalfSuitId | null>(null);
+  const [selectedAskCard, setSelectedAskCard] = useState<CardId | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [gameOver, setGameOver]           = useState<GameOverPayload | null>(null);
   const [rematchStarted, setRematchStarted] = useState(false);
@@ -303,9 +303,9 @@ export default function GamePage({ params }: PageProps) {
       if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
       lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5000);
       setActionLoading(false);
-      setSelectedCard(null);
-      setShowAskWizard(false);
-      setWizardInitialCard(null);
+      setSelectedAskCard(null);
+      setSelectedAskHalfSuit(null);
+      setShowAskInline(false);
     }
   }, [lastAskResult, myPlayerId, playAskSuccess, playAskFail]);
 
@@ -337,7 +337,9 @@ export default function GamePage({ params }: PageProps) {
 
       setActionLoading(false);
       setShowDeclare(false);
-      setSelectedCard(null);
+      setSelectedAskCard(null);
+      setSelectedAskHalfSuit(null);
+      setShowAskInline(false);
     }
   }, [lastDeclareResult, playDeclarationSuccess, playDeclarationFail]);
 
@@ -398,10 +400,10 @@ export default function GamePage({ params }: PageProps) {
     const remaining = Math.max(0, turnTimer.expiresAt - Date.now());
 
     const t = setTimeout(() => {
-      setSelectedCard(null);
+      setSelectedAskCard(null);
+      setSelectedAskHalfSuit(null);
       setShowDeclare(false);
-      setShowAskWizard(false);
-      setWizardInitialCard(null);
+      setShowAskInline(false);
       setActionLoading(false);
     }, remaining);
 
@@ -460,6 +462,40 @@ export default function GamePage({ params }: PageProps) {
   const team1Players = players.filter((p) => p.teamId === 1);
   const team2Players = players.filter((p) => p.teamId === 2);
   const currentLastMoveMessage = lastResultMsg ?? gameState?.lastMove;
+  const resolvedVariant = variant ?? room?.card_removal_variant ?? 'remove_7s';
+  const declaredSuits = gameState?.declaredSuits ?? [];
+  const availableAskHalfSuits = getAvailableAskHalfSuits(myHand, declaredSuits, resolvedVariant);
+  const validAskTargetIds = new Set(
+    players
+      .filter((player) => player.teamId !== myTeamId && player.cardCount > 0 && !player.isEliminated)
+      .map((player) => player.playerId),
+  );
+
+  const resetAskMode = useCallback(() => {
+    setShowAskInline(false);
+    setSelectedAskHalfSuit(null);
+    setSelectedAskCard(null);
+  }, []);
+
+  const handleAskHalfSuitSelect = useCallback((halfSuitId: HalfSuitId) => {
+    setShowAskInline(true);
+    setSelectedAskHalfSuit(halfSuitId);
+    setSelectedAskCard(null);
+    setShowDeclare(false);
+    sendPartialSelection({ flow: 'ask', halfSuitId });
+  }, [sendPartialSelection]);
+
+  const handleAskHandCardSelect = useCallback((cardId: CardId) => {
+    const halfSuitId = getCardHalfSuit(cardId, resolvedVariant);
+    if (!halfSuitId) return;
+    handleAskHalfSuitSelect(halfSuitId);
+  }, [resolvedVariant, handleAskHalfSuitSelect]);
+
+  const handleAskCardSelect = useCallback((cardId: CardId) => {
+    if (!selectedAskHalfSuit) return;
+    setSelectedAskCard(cardId);
+    sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit, cardId });
+  }, [selectedAskHalfSuit, sendPartialSelection]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -538,6 +574,13 @@ export default function GamePage({ params }: PageProps) {
     clearIndicator();
     sendAsk(targetId, cardId);
   }
+
+  const handleAskTargetSeat = useCallback((targetPlayerId: string) => {
+    if (!selectedAskCard || actionLoading) return;
+    resetAskMode();
+    handleAsk(targetPlayerId, selectedAskCard);
+  }, [actionLoading, handleAsk, resetAskMode, selectedAskCard]);
+
   function handleDeclare(halfSuitId: HalfSuitId, assignment: Record<CardId, string>) {
     setActionLoading(true);
     clearIndicator();
@@ -698,7 +741,7 @@ export default function GamePage({ params }: PageProps) {
     );
   }
 
-  const effectiveVariant = variant ?? room.card_removal_variant;
+  const effectiveVariant = resolvedVariant;
   const effectivePlayerCount = playerCount ?? room.player_count;
 
   return (
@@ -930,6 +973,8 @@ export default function GamePage({ params }: PageProps) {
               getPlayerSharePercent={getPlayerSharePercent}
               highlightedPlayerIds={highlightedPlayerIds}
               onSeatClick={seatClickHandler}
+              askTargetPlayerIds={selectedAskCard ? validAskTargetIds : undefined}
+              onAskTargetClick={selectedAskCard ? handleAskTargetSeat : undefined}
             />
           </div>
 
@@ -951,6 +996,8 @@ export default function GamePage({ params }: PageProps) {
               getPlayerSharePercent={getPlayerSharePercent}
               highlightedPlayerIds={highlightedPlayerIds}
               onSeatClick={seatClickHandler}
+              askTargetPlayerIds={selectedAskCard ? validAskTargetIds : undefined}
+              onAskTargetClick={selectedAskCard ? handleAskTargetSeat : undefined}
             />
             <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
           </div>
@@ -979,20 +1026,27 @@ export default function GamePage({ params }: PageProps) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      setShowAskWizard(true);
-                      setWizardInitialCard(null);
-                      setSelectedCard(null);
+                      if (showAskInline) {
+                        resetAskMode();
+                      } else {
+                        setShowAskInline(true);
+                        setSelectedAskHalfSuit(null);
+                        setSelectedAskCard(null);
+                      }
                       setShowDeclare(false);
                     }}
-                    disabled={actionLoading}
+                    disabled={actionLoading || (!showAskInline && availableAskHalfSuits.length === 0)}
                     className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-50"
                     aria-label="Ask an opponent for a card"
                     data-testid="ask-button"
                   >
-                    Ask
+                    {showAskInline ? 'Cancel Ask' : 'Ask'}
                   </button>
                   <button
-                    onClick={() => { setShowDeclare(true); setSelectedCard(null); setShowAskWizard(false); }}
+                    onClick={() => {
+                      resetAskMode();
+                      setShowDeclare(true);
+                    }}
                     disabled={actionLoading}
                     className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-violet-700 hover:bg-violet-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:opacity-50"
                     aria-label="Declare a half-suit"
@@ -1014,23 +1068,41 @@ export default function GamePage({ params }: PageProps) {
                 </span>
               )}
             </div>
-            <CardHand
-              hand={myHand}
-              selectedCard={selectedCard}
-              onSelectCard={isMyTurn && !isTurnPassMode ? (card) => {
-                // Open the wizard at step 2 with the tapped card pre-selected
-                setWizardInitialCard(card);
-                setShowAskWizard(true);
-                setSelectedCard(card);
-                setShowDeclare(false);
-              } : undefined}
-              isMyTurn={isMyTurn}
-              disabled={actionLoading || !isMyTurn || isTurnPassMode}
-              variant={effectiveVariant}
-              newlyArrivedCardId={newlyArrivedCardId}
-            />
-            {isMyTurn && !isTurnPassMode && !showAskWizard && !showDeclare && myHand.length > 0 && (
+            {showAskInline && isMyTurn && !isTurnPassMode && (
+              <InlineAskTray
+                myHand={myHand}
+                variant={effectiveVariant}
+                declaredSuits={declaredSuits}
+                selectedHalfSuit={selectedAskHalfSuit}
+                selectedCardId={selectedAskCard}
+                onSelectHalfSuit={handleAskHalfSuitSelect}
+                onSelectCard={handleAskCardSelect}
+                onBack={() => {
+                  setSelectedAskHalfSuit(null);
+                  setSelectedAskCard(null);
+                }}
+                onCancel={resetAskMode}
+                isLoading={actionLoading}
+              />
+            )}
+            <div className={showAskInline ? 'transition-opacity opacity-45' : 'transition-opacity opacity-100'}>
+              <CardHand
+                hand={myHand}
+                selectedCard={null}
+                onSelectCard={isMyTurn && !isTurnPassMode ? handleAskHandCardSelect : undefined}
+                isMyTurn={isMyTurn}
+                disabled={actionLoading || !isMyTurn || isTurnPassMode}
+                variant={effectiveVariant}
+                newlyArrivedCardId={newlyArrivedCardId}
+              />
+            </div>
+            {isMyTurn && !isTurnPassMode && !showAskInline && !showDeclare && myHand.length > 0 && (
               <p className="text-xs text-slate-500 text-center animate-pulse" data-testid="ask-prompt">Tap a card or click Ask ↑ to ask, or click Declare ↑</p>
+            )}
+            {isMyTurn && !isTurnPassMode && showAskInline && selectedAskCard && (
+              <p className="text-xs text-emerald-300 text-center" data-testid="ask-seat-prompt">
+                Tap an opponent avatar above for {cardLabel(selectedAskCard)}.
+              </p>
             )}
           </div>
         ) : (
@@ -1053,42 +1125,6 @@ export default function GamePage({ params }: PageProps) {
           </div>
         )}
       </footer>
-
-      {/* 3-step card request wizard — visible only to the active player (not during turn-pass) */}
-      {showAskWizard && isMyTurn && !isTurnPassMode && (
-        <CardRequestWizard
-          myPlayerId={myPlayerId!}
-          myHand={myHand}
-          players={players}
-          variant={effectiveVariant}
-          declaredSuits={gameState?.declaredSuits ?? []}
-          onConfirm={handleAsk}
-          onCancel={() => {
-            setShowAskWizard(false);
-            setWizardInitialCard(null);
-            setSelectedCard(null);
-          }}
-          isLoading={actionLoading}
-          initialCard={wizardInitialCard ?? undefined}
-          getCardProbabilities={inferenceMode ? getCardProbabilities : undefined}
-          turnTimer={turnTimer}
-          onPartialSelection={sendPartialSelection}
-        />
-      )}
-      {/* Legacy single-step modal kept for backward-compat test coverage */}
-      {selectedCard && !showAskWizard && isMyTurn && (
-        <AskCardModal
-          selectedCard={selectedCard}
-          myPlayerId={myPlayerId!}
-          players={players}
-          variant={effectiveVariant}
-          onConfirm={handleAsk}
-          onCancel={() => setSelectedCard(null)}
-          isLoading={actionLoading}
-          getCardProbabilities={inferenceMode ? getCardProbabilities : undefined}
-          turnTimer={turnTimer}
-        />
-      )}
       {showDeclare && isMyTurn && (
         <DeclareModal
           myPlayerId={myPlayerId!}
@@ -1208,6 +1244,8 @@ function PlayerRow({
   getPlayerSharePercent,
   highlightedPlayerIds,
   onSeatClick,
+  askTargetPlayerIds,
+  onAskTargetClick,
 }: {
   players: import('@/types/game').GamePlayer[];
   myPlayerId: string | null;
@@ -1233,6 +1271,15 @@ function PlayerRow({
    * current turn player (the declarant); other players pass undefined.
    */
   onSeatClick?: (playerId: string) => void;
+  /**
+   * Opponent player IDs whose seats are eligible ask targets for the
+   * currently selected ask card.
+   */
+  askTargetPlayerIds?: Set<string>;
+  /**
+   * Called when the local player taps a highlighted ask-target seat.
+   */
+  onAskTargetClick?: (playerId: string) => void;
 }) {
   const { getSeatState } = useVoice();
   const seatsPerTeam = Math.floor(playerCount / 2);
@@ -1251,6 +1298,7 @@ function PlayerRow({
 
         // Sub-AC 28b: determine whether this seat should glow cyan
         const isHl = Boolean(player && highlightedPlayerIds?.has(player.playerId));
+        const isAskTarget = Boolean(player && askTargetPlayerIds?.has(player.playerId));
 
         return (
           <GamePlayerSeat
@@ -1271,6 +1319,12 @@ function PlayerRow({
             onHighlightClick={
               isHl && onSeatClick && player
                 ? () => onSeatClick(player.playerId)
+                : undefined
+            }
+            isAskTargetable={isAskTarget}
+            onAskTargetClick={
+              isAskTarget && onAskTargetClick && player
+                ? () => onAskTargetClick(player.playerId)
                 : undefined
             }
           />

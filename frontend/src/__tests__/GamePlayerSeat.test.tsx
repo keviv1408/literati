@@ -19,7 +19,7 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import type { GamePlayer } from '@/types/game';
 
@@ -1288,5 +1288,29 @@ describe('GamePlayerSeat — AC 55 mobile tap-target enlargement', () => {
     );
     expect(screen.getByTestId('game-player-seat').className).not.toContain('min-h-[2.75rem]');
     expect(screen.getByTestId('game-player-seat').getAttribute('data-mobile-tap-target')).toBeNull();
+  });
+});
+
+describe('GamePlayerSeat — inline ask target mode', () => {
+  it('renders ask-target affordances and fires onAskTargetClick when tapped', () => {
+    const onAskTargetClick = jest.fn();
+
+    render(
+      <GamePlayerSeat
+        seatIndex={1}
+        player={makePlayer({ playerId: 'p4', displayName: 'Carol', teamId: 2 })}
+        myPlayerId="p1"
+        currentTurnPlayerId="p1"
+        isAskTargetable={true}
+        onAskTargetClick={onAskTargetClick}
+      />,
+    );
+
+    const seat = screen.getByRole('button', { name: /Carol.*ask target/i });
+    expect(seat.getAttribute('data-ask-targetable')).toBe('true');
+    expect(screen.getByTestId('ask-target-ring')).toBeTruthy();
+
+    fireEvent.click(seat);
+    expect(onAskTargetClick).toHaveBeenCalledTimes(1);
   });
 });

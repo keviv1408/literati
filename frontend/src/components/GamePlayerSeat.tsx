@@ -152,6 +152,19 @@ export interface GamePlayerSeatProps {
    */
   onHighlightClick?: () => void;
 
+  /**
+   * When true, this seat is an eligible ask target for the currently selected
+   * ask-card flow and should render an emerald highlight ring.
+   */
+  isAskTargetable?: boolean;
+
+  /**
+   * Called when the local player taps/clicks this seat as the ask target.
+   * Only provided when the ask flow has a selected card and the seat belongs
+   * to an eligible opponent with cards remaining.
+   */
+  onAskTargetClick?: () => void;
+
   /** Extra Tailwind classes forwarded to the outermost element. */
   className?: string;
 
@@ -191,6 +204,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   inferencePercent,
   isHighlighted = false,
   onHighlightClick,
+  isAskTargetable = false,
+  onAskTargetClick,
   className = '',
   voiceState = null,
 }) => {
@@ -251,8 +266,11 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         .join(', ')
     : null;
 
-  // Sub-AC 28b: clickable only when highlighted AND a handler is provided
-  const isClickable = isHighlighted && Boolean(onHighlightClick) && !isEliminated;
+  // Clickable when the seat is either a post-declaration target or an ask target.
+  const isHighlightClickable = isHighlighted && Boolean(onHighlightClick) && !isEliminated;
+  const isAskClickable = isAskTargetable && Boolean(onAskTargetClick) && !isEliminated;
+  const isClickable = isHighlightClickable || isAskClickable;
+  const handleClick = isAskClickable ? onAskTargetClick : onHighlightClick;
 
   // AC 55: on mobile, avatar upgrades to 'md' (40 px) so the seat card itself
   // comfortably clears the 44 px minimum tap-target height.  On desktop the
@@ -276,6 +294,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         !isEliminated && isTurn ? 'animate-seat-glow' : '',
         // Sub-AC 28b: eligible-for-turn highlight (cyan ring, raised z-index)
         isHighlighted && !isEliminated ? 'ring-2 ring-cyan-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
+        // Ask flow target highlight uses emerald to match the ask action.
+        isAskTargetable && !isEliminated ? 'ring-2 ring-emerald-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
         // Sub-AC 28b + AC 55: clickable seats get pointer cursor, hover scale,
         // and mobile tap-target enlargement (≥44 px min-height + scale-110).
         // On mobile the seat is statically enlarged so a thumb can hit it
@@ -295,11 +315,11 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       ]
         .filter(Boolean)
         .join(' ')}
-      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}${isHighlighted && !isEliminated ? ', eligible for next turn' : ''}${voiceAria ? `, ${voiceAria}` : ''}`}
+      aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}${isHighlighted && !isEliminated ? ', eligible for next turn' : ''}${isAskTargetable && !isEliminated ? ', ask target' : ''}${voiceAria ? `, ${voiceAria}` : ''}`}
       role={isClickable ? 'button' : 'listitem'}
       tabIndex={isClickable ? 0 : undefined}
-      onClick={isClickable ? onHighlightClick : undefined}
-      onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onHighlightClick?.(); } } : undefined}
+      onClick={isClickable ? handleClick : undefined}
+      onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick?.(); } } : undefined}
       data-testid="game-player-seat"
       data-seat-index={seatIndex}
       data-player-id={playerId}
@@ -307,6 +327,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       data-active-turn={isTurn ? 'true' : undefined}
       data-eliminated={isEliminated ? 'true' : undefined}
       data-highlighted={isHighlighted && !isEliminated ? 'true' : undefined}
+      data-ask-targetable={isAskTargetable && !isEliminated ? 'true' : undefined}
       data-mobile-tap-target={isClickable ? 'true' : undefined}
     >
       {/* ── Current-turn pulsing ring ─────────────────────────────── */}
@@ -327,6 +348,14 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           className="absolute inset-0 rounded-xl border-2 border-cyan-400/80 animate-pulse pointer-events-none"
           aria-hidden="true"
           data-testid="highlight-ring"
+        />
+      )}
+
+      {isAskTargetable && !isEliminated && (
+        <span
+          className="absolute inset-0 rounded-xl border-2 border-emerald-400/80 animate-pulse pointer-events-none"
+          aria-hidden="true"
+          data-testid="ask-target-ring"
         />
       )}
 
