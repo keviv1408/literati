@@ -84,7 +84,12 @@ export default function Home() {
               focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
             "
           >
-            🎮 Play Now
+            <span className="flex flex-col items-center leading-tight">
+              <span>🎮 Find Online Match</span>
+              <span className="text-xs font-medium text-emerald-100/90 mt-1">
+                Join public matchmaking
+              </span>
+            </span>
           </button>
           <button
             onClick={handlePrivateRoom}
@@ -97,7 +102,12 @@ export default function Home() {
               focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
             "
           >
-            🔒 Private Room
+            <span className="flex flex-col items-center leading-tight">
+              <span>🔒 Private Room</span>
+              <span className="text-xs font-medium text-emerald-200/90 mt-1">
+                Play with friends in your own room
+              </span>
+            </span>
           </button>
         </div>
 
