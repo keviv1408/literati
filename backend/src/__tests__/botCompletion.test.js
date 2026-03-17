@@ -345,6 +345,30 @@ describe('completeBotFromPartial — ask, step 3 (half-suit + card)', () => {
     // Should pick p4 first since we know they have it
     expect(result.targetId).toBe('p4');
   });
+
+  it('avoids an opponent known not to have the selected card when another target is still possible', () => {
+    const gs = buildGame({
+      currentTurnPlayerId: 'p1',
+      handOverrides: {
+        p1: new Set(['1_s', '2_s', '3_s', '5_s', '6_s']),
+        p2: new Set(['8_s']),
+        p3: new Set(['8_h']),
+        p4: new Set(['9_h']),
+        p5: new Set(['10_h']),
+        p6: new Set(),
+      },
+    });
+
+    updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
+
+    const result = completeBotFromPartial(gs, 'p1', {
+      flow: 'ask',
+      halfSuitId: 'low_s',
+      cardId: '4_s',
+    });
+
+    expect(result).toEqual({ action: 'ask', targetId: 'p5', cardId: '4_s' });
+  });
 });
 
 // ---------------------------------------------------------------------------

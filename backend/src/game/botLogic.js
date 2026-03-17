@@ -80,6 +80,44 @@ function _getKnown(gs, playerId, cardId) {
   return val === undefined ? null : val;
 }
 
+function _isKnownMissing(gs, playerId, cardId) {
+  return _getKnown(gs, playerId, cardId) === false;
+}
+
+function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
+  const shuffledCards = _shuffle([...candidateCards]);
+  const shuffledOpps  = _shuffle([...validOpponents]);
+
+  for (const card of shuffledCards) {
+    for (const opp of shuffledOpps) {
+      if (_getKnown(gs, opp.playerId, card) !== true) continue;
+      const askVal = validateAsk(gs, askerId, opp.playerId, card);
+      if (askVal.valid) {
+        return { action: 'ask', targetId: opp.playerId, cardId: card };
+      }
+    }
+  }
+
+  return null;
+}
+
+function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
+  const shuffledCards = _shuffle([...candidateCards]);
+  const shuffledOpps  = _shuffle([...validOpponents]);
+
+  for (const card of shuffledCards) {
+    for (const opp of shuffledOpps) {
+      if (_isKnownMissing(gs, opp.playerId, card)) continue;
+      const askVal = validateAsk(gs, askerId, opp.playerId, card);
+      if (askVal.valid) {
+        return { action: 'ask', targetId: opp.playerId, cardId: card };
+      }
+    }
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Bot decision
 // ---------------------------------------------------------------------------
@@ -135,19 +173,9 @@ function decideBotMove(gs, botId) {
     // For each half-suit the bot can ask from, look for known opponent cards
     for (const halfSuitId of botHalfSuits) {
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
-      for (const card of cards) {
-        if (botHand.has(card)) continue; // bot already has it
-
-        // Check if we KNOW any opponent has this card
-        for (const opponent of validOpponents) {
-          if (_getKnown(gs, opponent.playerId, card) === true) {
-            const askVal = validateAsk(gs, botId, opponent.playerId, card);
-            if (askVal.valid) {
-              return { action: 'ask', targetId: opponent.playerId, cardId: card };
-            }
-          }
-        }
-      }
+      const neededCards = cards.filter((card) => !botHand.has(card));
+      const knownAsk = _findKnownHolderAsk(gs, botId, validOpponents, neededCards);
+      if (knownAsk) return knownAsk;
     }
 
     // ── Priority 3: Random ask in a half-suit the bot has cards from ──────────
@@ -175,18 +203,10 @@ function decideBotMove(gs, botId) {
     halfSuitScores.sort((a, b) => b.teamCount - a.teamCount);
 
     for (const { halfSuitId, askableCards } of halfSuitScores) {
-      // Try a random card from this suit from a random opponent
-      const shuffledCards = _shuffle([...askableCards]);
-      const shuffledOpps  = _shuffle([...validOpponents]);
-
-      for (const card of shuffledCards) {
-        for (const opp of shuffledOpps) {
-          const askVal = validateAsk(gs, botId, opp.playerId, card);
-          if (askVal.valid) {
-            return { action: 'ask', targetId: opp.playerId, cardId: card };
-          }
-        }
-      }
+      // Keep random fallback from repeating asks that public information has
+      // already ruled out for that target/card combination.
+      const unknownAsk = _findUnknownAsk(gs, botId, validOpponents, askableCards);
+      if (unknownAsk) return unknownAsk;
     }
   }
 
@@ -374,25 +394,11 @@ function _completeAsk(gs, playerId, partial, halfSuitsMap) {
 
   // ── Step 3: card already chosen — just need a valid opponent ──────────────
   if (partialCardId) {
-    const shuffledOpps = _shuffle([...validOpponents]);
+    const knownAsk = _findKnownHolderAsk(gs, playerId, validOpponents, [partialCardId]);
+    if (knownAsk) return knownAsk;
 
-    // Prefer an opponent we KNOW holds the card (inference)
-    for (const opp of shuffledOpps) {
-      if (_getKnown(gs, opp.playerId, partialCardId) === true) {
-        const v = validateAsk(gs, playerId, opp.playerId, partialCardId);
-        if (v.valid) {
-          return { action: 'ask', targetId: opp.playerId, cardId: partialCardId };
-        }
-      }
-    }
-
-    // Any valid opponent
-    for (const opp of shuffledOpps) {
-      const v = validateAsk(gs, playerId, opp.playerId, partialCardId);
-      if (v.valid) {
-        return { action: 'ask', targetId: opp.playerId, cardId: partialCardId };
-      }
-    }
+    const unknownAsk = _findUnknownAsk(gs, playerId, validOpponents, [partialCardId]);
+    if (unknownAsk) return unknownAsk;
 
     // Chosen card is no longer askable (e.g. game state changed) — full fallback
     return decideBotMove(gs, playerId);
@@ -407,30 +413,11 @@ function _completeAsk(gs, playerId, partial, halfSuitsMap) {
     return decideBotMove(gs, playerId);
   }
 
-  const shuffledCards = _shuffle([...askable]);
-  const shuffledOpps  = _shuffle([...validOpponents]);
+  const knownAsk = _findKnownHolderAsk(gs, playerId, validOpponents, askable);
+  if (knownAsk) return knownAsk;
 
-  // Priority: ask an opponent we KNOW has the card (inference-based)
-  for (const card of shuffledCards) {
-    for (const opp of shuffledOpps) {
-      if (_getKnown(gs, opp.playerId, card) === true) {
-        const v = validateAsk(gs, playerId, opp.playerId, card);
-        if (v.valid) {
-          return { action: 'ask', targetId: opp.playerId, cardId: card };
-        }
-      }
-    }
-  }
-
-  // Random valid ask within the chosen half-suit
-  for (const card of shuffledCards) {
-    for (const opp of shuffledOpps) {
-      const v = validateAsk(gs, playerId, opp.playerId, card);
-      if (v.valid) {
-        return { action: 'ask', targetId: opp.playerId, cardId: card };
-      }
-    }
-  }
+  const unknownAsk = _findUnknownAsk(gs, playerId, validOpponents, askable);
+  if (unknownAsk) return unknownAsk;
 
   return decideBotMove(gs, playerId);
 }

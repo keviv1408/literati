@@ -174,6 +174,41 @@ describe('decideBotMove — asks for a known card', () => {
     expect(move.cardId).toBe('4_s');
   });
 
+  it('avoids re-asking an opponent for a card they are known not to have when another opponent remains possible', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s', '5_s', '6_s'])],
+      ['p2', new Set(['8_s'])],
+      ['p3', new Set(['8_h'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set()],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p5', cardId: '4_s' });
+  });
+
+  it('can ask the same opponent for that card again once knowledge says they gained it', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s', '5_s', '6_s'])],
+      ['p2', new Set(['8_s'])],
+      ['p3', new Set(['8_h'])],
+      ['p4', new Set(['4_s', '9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set()],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
+    updateKnowledgeAfterAsk(gs, 'p4', 'p5', '4_s', true);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
+  });
+
   it('when asking, targetId is an opponent (not a teammate)', () => {
     const gs = buildBotTestGame();
     const move = decideBotMove(gs, 'p1');
@@ -277,6 +312,14 @@ describe('updateKnowledgeAfterAsk', () => {
     updateKnowledgeAfterAsk(gs, 'p1', 'p5', '1_h', false);
     expect(gs.botKnowledge.get('p4').get('4_s')).toBe(false);
     expect(gs.botKnowledge.get('p5').get('1_h')).toBe(false);
+  });
+
+  it('successful ask overrides earlier failed knowledge for the new holder', () => {
+    updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
+    updateKnowledgeAfterAsk(gs, 'p4', 'p5', '4_s', true);
+
+    expect(gs.botKnowledge.get('p4').get('4_s')).toBe(true);
+    expect(gs.botKnowledge.get('p5').get('4_s')).toBe(false);
   });
 });
 
