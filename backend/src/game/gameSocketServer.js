@@ -92,7 +92,7 @@
  * cancels the running reconnect window.
  * { type: 'reconnect_timer', playerId: string,
  * durationMs: number, expiresAt: number }
- * — broadcast to ALL when the 60-second reconnect window starts. Clients
+ * — broadcast to ALL when the reconnect window starts. Clients
  * use expiresAt to render a countdown indicator for the absent player.
  * { type: 'reconnect_tick', playerId: string,
  * remainingMs: number, expiresAt: number }
@@ -100,11 +100,11 @@
  * so clients can resync their countdown without relying solely on local
  * clock drift correction.
  * { type: 'reconnect_expired', playerId: string }
- * — broadcast to ALL when the 60-second reconnect window closes without the
+ * — broadcast to ALL when the reconnect window closes without the
  * player returning. The bot now holds the seat permanently.
  * { type: 'seat_reclaimed', playerId: string, displayName: string }
  * — broadcast to ALL when the original human player reconnects AFTER the
- * 60-second window expired and regains control of their seat at the next
+ * reconnect window expired and regains control of their seat at the next
  * turn boundary.
  *
  * ── Seat reclaim — targeted to the reconnecting player ──────────
@@ -262,7 +262,7 @@ const BOT_DECLARATION_TAKEOVER_MS = 30_000;
  * them as permanently gone. Runs concurrently with the turn timer when the
  * disconnected player holds the active turn.
  */
-const RECONNECT_WINDOW_MS = 60_000;
+const RECONNECT_WINDOW_MS = 180_000;
 
 /**
  * How often tick events are emitted for both the turn timer and the reconnect
@@ -623,7 +623,7 @@ function scheduleBotTurnIfNeeded(gs) {
   if (!currentPlayer || !currentPlayer.isBot) return;
 
   // ── Seat reclaim at turn boundary ───────────────────────────────
-  // If the original human player reconnected after the 60s grace period expired,
+  // If the original human player reconnected after the reconnect window expired,
   // they are in the reclaim queue. Execute the reclaim now (at this turn boundary)
   // instead of scheduling a bot turn. After _executeReclaim returns:
   // - player.isBot === false
@@ -1209,7 +1209,7 @@ function _executeReclaim(gs, playerId) {
 }
 
 /**
- * Start the 60-second reconnect window for a disconnected human player.
+ * Start the reconnect window for a disconnected human player.
  *
  * Immediately marks the player's game slot as bot-controlled so the game can
  * continue. Broadcasts `player_disconnected` to all remaining connections.
@@ -1236,11 +1236,11 @@ function _startReconnectWindow(gs, player) {
 
   const expiresAt = Date.now() + RECONNECT_WINDOW_MS;
 
-  // ── 60-second turn timer (concurrent) ────────────────────────────────────
+  // ── Human turn timer (concurrent) ────────────────────────────────────────
   // Start the turn timer BEFORE marking the player as bot so that
   // scheduleTurnTimerIfNeeded sees isBot === false and sets the 30-second
   // timer (rather than skipping it). This timer runs concurrently with
-  // the 60-second reconnect window below.
+  // the reconnect window below.
   if (gs.currentTurnPlayerId === playerId) {
     scheduleTurnTimerIfNeeded(gs);
   }
@@ -1349,7 +1349,7 @@ function _startReconnectWindow(gs, player) {
 // ---------------------------------------------------------------------------
 
 /**
- * Start the 60-second reconnect window (tick-emitting) for a disconnected player.
+ * Start the reconnect window (tick-emitting) for a disconnected player.
  *
  * This is a lightweight public API that emits events via _reconnectTimers (as
  * opposed to the full-featured _startReconnectWindow which also manages player
@@ -1445,7 +1445,7 @@ function cancelReconnectWindow(roomCode, playerId) {
  *
  * Orchestrates the concurrent timer sequence:
  * 1. Broadcasts `player_disconnected` to all OTHER connected clients.
- * 2. If the game is active: starts the 60-second reconnect window
+ * 2. If the game is active: starts the reconnect window
  * (`reconnect_timer` → `reconnect_tick` → `reconnect_expired`).
  * 3. If the disconnected player holds the active turn: ALSO starts the
  * 60-second turn timer concurrently (`turn_timer` → `turn_timer_tick`
@@ -1508,7 +1508,7 @@ function handlePlayerDisconnect(roomCode, playerId, isSpectator) {
   }
 
   // ── Concurrent timers ──────────────────────────────────────────────────────
-  // 1. Always start the 60-second reconnect window for any human player
+  // 1. Always start the reconnect window for any human player
   startReconnectWindow(roomCode, playerId);
 
   // 2. If this player holds the active turn, also start the 60-second turn timer
@@ -3435,7 +3435,7 @@ function attachGameSocketServer(httpServer) {
         if (currentGs && currentGs.status === 'active') {
           const player = currentGs.players.find((p) => p.playerId === playerId);
           if (player && !player.isBot) {
-            // Start the concurrent timer sequence: 60s turn timer + 60s reconnect window.
+            // Start the concurrent timer sequence: 60s turn timer + 180s reconnect window.
             // _startReconnectWindow handles both — it starts the turn timer BEFORE
             // marking the seat as bot, ensuring both timers run simultaneously.
             _startReconnectWindow(currentGs, player);

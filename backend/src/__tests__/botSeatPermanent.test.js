@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Tests for Permanent bot seat assignment after 60s with mid-game reclaim.
+ * Tests for permanent bot seat assignment after 180s with mid-game reclaim.
  *
  * Covers:
  * disconnectStore (unit tests):
@@ -535,11 +535,11 @@ describe('scheduleBotTurnIfNeeded — reclaim queue integration', () => {
 // ===========================================================================
 
 describe('DISCONNECT_GRACE_MS constant', () => {
-  it('disconnectStore DISCONNECT_GRACE_MS equals 60 seconds', () => {
-    expect(DISCONNECT_GRACE_MS).toBe(60_000);
+  it('disconnectStore DISCONNECT_GRACE_MS equals 180 seconds', () => {
+    expect(DISCONNECT_GRACE_MS).toBe(180_000);
   });
 
-  it('gameSocketServer RECONNECT_WINDOW_MS equals 60 seconds', () => {
-    expect(RECONNECT_WINDOW_MS).toBe(60_000);
+  it('gameSocketServer RECONNECT_WINDOW_MS equals 180 seconds', () => {
+    expect(RECONNECT_WINDOW_MS).toBe(180_000);
   });
 });

@@ -6,9 +6,9 @@
  * Manages two concerns for mid-game player disconnection:
  *
  * 1. DISCONNECT GRACE TIMERS
- * When a human player disconnects from an active game, a 60-second grace
+ * When a human player disconnects from an active game, a 180-second grace
  * timer starts. If they reconnect within that window, the timer is
- * cancelled and the game continues normally. If the 60s window expires
+ * cancelled and the game continues normally. If the 180s window expires
  * without reconnection, `makeBotPermanent` is invoked to mark the seat as
  * permanently bot-controlled for the rest of the game.
  *
@@ -21,21 +21,21 @@
  *
  * Key format for all maps: `"${ROOMCODE}:${playerId}"` (roomCode uppercased).
  *
- * Permanent bot seat assignment after 60s with mid-game reclaim.
+ * Permanent bot seat assignment after 180s with mid-game reclaim.
  */
 
 /** Grace period before a disconnected player's seat is permanently given to a bot (ms). */
-const DISCONNECT_GRACE_MS = 60_000;
+const DISCONNECT_GRACE_MS = 180_000;
 
 /**
- * Pending 60-second grace timers.
+ * Pending 180-second grace timers.
  * @type {Map<string, NodeJS.Timeout>} key: "ROOMCODE:playerId"
  */
 const _disconnectTimers = new Map();
 
 /**
  * Players waiting to reclaim their seat at the next turn boundary.
- * They reconnected after their 60s grace expired and their seat was
+ * They reconnected after their 180s grace expired and their seat was
  * permanently replaced by a bot.
  * @type {Map<string, { since: number }>} key: "ROOMCODE:playerId"
  */
@@ -60,7 +60,7 @@ function _key(roomCode, playerId) {
 // ---------------------------------------------------------------------------
 
 /**
- * Start (or reset) the 60-second grace timer for a disconnected player.
+ * Start (or reset) the 180-second grace timer for a disconnected player.
  *
  * If a timer is already running for this player, it is cancelled and replaced
  * so that reconnect-then-disconnect cycles restart the full grace window.
@@ -68,7 +68,7 @@ function _key(roomCode, playerId) {
  * @param {string} roomCode
  * @param {string} playerId
  * @param {Function} onExpire - Called when the grace period expires with no reconnect.
- * @param {number} [delayMs] - Grace period in ms (default DISCONNECT_GRACE_MS = 60s).
+ * @param {number} [delayMs] - Grace period in ms (default DISCONNECT_GRACE_MS = 180s).
  */
 function startDisconnectTimer(roomCode, playerId, onExpire, delayMs = DISCONNECT_GRACE_MS) {
   const k = _key(roomCode, playerId);
@@ -120,7 +120,7 @@ function hasDisconnectTimer(roomCode, playerId) {
 /**
  * Add a player to the reclaim queue.
  *
- * Called when the original human player reconnects after their 60s grace
+ * Called when the original human player reconnects after their 180s grace
  * expired and a bot has permanently taken over their seat. They will regain
  * control at the next turn boundary when `scheduleBotTurnIfNeeded` detects
  * them in this queue.

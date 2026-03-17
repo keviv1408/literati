@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * Unit tests for seat reclaim within 60-second reconnect window.
+ * Unit tests for seat reclaim within the reconnect window.
  *
  * When a human player disconnects during an active game:
- * 1. A 60-second reconnect window starts immediately.
+ * 1. A reconnect window starts immediately.
  * 2. The player's slot is temporarily bot-controlled (isBot: true).
  * 3. `player_disconnected` is broadcast to all remaining connections.
  * 4. If it's the disconnected player's turn, a bot turn is scheduled.
@@ -339,8 +339,8 @@ describe('_cancelReconnectWindow', () => {
 // ---------------------------------------------------------------------------
 
 describe('RECONNECT_WINDOW_MS', () => {
-  it('is 60 seconds', () => {
-    expect(RECONNECT_WINDOW_MS).toBe(60_000);
+  it('is 180 seconds', () => {
+    expect(RECONNECT_WINDOW_MS).toBe(180_000);
   });
 });
 

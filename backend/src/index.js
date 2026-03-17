@@ -128,7 +128,7 @@ if (require.main === module) {
     // AC 52: On startup, sweep any rooms left in 'in_progress' from a previous
     // server instance (crash / restart) and mark them 'abandoned' in Supabase.
     // Only rooms idle for ≥ 2 hours are touched — fresher rooms may have
-    // players who are still in their 60-second reconnect window.
+    // players who are still in their 180-second reconnect window.
     const supabase = getSupabaseClient();
     markStaleGamesAbandoned(supabase)
       .catch((err) => {

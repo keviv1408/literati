@@ -5,7 +5,7 @@
  *
  * Verifies that on player disconnect the server:
  * 1. Starts a 60-second turn timer (via scheduleTurnTimerIfNeeded) and a
- * 60-second reconnect window simultaneously when the disconnected player
+ * 180-second reconnect window simultaneously when the disconnected player
  * holds the active turn.
  * 2. Starts ONLY the reconnect window (no turn timer) when the disconnected
  * player does NOT hold the active turn.
@@ -193,8 +193,8 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('Timer constants', () => {
-  it('RECONNECT_WINDOW_MS is 60_000', () => {
-    expect(RECONNECT_WINDOW_MS).toBe(60_000);
+  it('RECONNECT_WINDOW_MS is 180_000', () => {
+    expect(RECONNECT_WINDOW_MS).toBe(180_000);
   });
 
   it('TIMER_TICK_INTERVAL_MS is 5_000', () => {
@@ -444,7 +444,7 @@ describe('handlePlayerDisconnect', () => {
     cleanupRoom();
   });
 
-  it('1. starts 60-second reconnect window when active player disconnects', () => {
+  it('1. starts 180-second reconnect window when active player disconnects', () => {
     const { sockets } = setupRoom(['p1', 'p2', 'p3'], 'p1');
     handlePlayerDisconnect(ROOM, 'p1', false);
 
@@ -453,7 +453,7 @@ describe('handlePlayerDisconnect', () => {
     cleanupRoom();
   });
 
-  it('1. starts 60-second reconnect window when NON-active player disconnects', () => {
+  it('1. starts 180-second reconnect window when NON-active player disconnects', () => {
     const { sockets } = setupRoom(['p1', 'p2', 'p3'], 'p2'); // p2 has the turn
     handlePlayerDisconnect(ROOM, 'p1', false); // p1 disconnects (not their turn)
 
@@ -494,7 +494,7 @@ describe('handlePlayerDisconnect', () => {
     handlePlayerDisconnect(ROOM, 'p1', false);
 
     // Both timer entries should exist
-    expect(_reconnectTimers.has(`${ROOM}:p1`)).toBe(true); // 60s reconnect
+    expect(_reconnectTimers.has(`${ROOM}:p1`)).toBe(true); // reconnect window
     expect(_turnTimers.has(ROOM)).toBe(true);               // 60s turn timer
     cleanupRoom();
   });
@@ -506,7 +506,7 @@ describe('handlePlayerDisconnect', () => {
     handlePlayerDisconnect(ROOM, 'p1', false);
 
     // Advance 60 seconds — turn timer fires
-    jest.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(RECONNECT_WINDOW_MS);
 
     const takeover = sockets.p2._messages.find((m) => m.type === 'bot_takeover');
     expect(takeover).toBeDefined();
@@ -595,7 +595,7 @@ describe('scheduleTurnTimerIfNeeded — tick events', () => {
     expect(tick.playerId).toBe('p1');
     expect(typeof tick.remainingMs).toBe('number');
     expect(tick.remainingMs).toBeGreaterThan(0);
-    expect(tick.remainingMs).toBeLessThanOrEqual(60_000);
+    expect(tick.remainingMs).toBeLessThanOrEqual(RECONNECT_WINDOW_MS);
     expect(typeof tick.expiresAt).toBe('number');
 
     removeConnection(ROOM, 'p1');
