@@ -191,7 +191,7 @@ export default function GamePage({ params }: PageProps) {
   const isGameActive = room?.status === 'in_progress' || room?.status === 'starting' || room?.status === 'completed';
 
   const {
-    wsStatus, myPlayerId, myHand, players, gameState, variant, playerCount,
+    wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, players, gameState, variant, playerCount,
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
     botTakeover, rematchVote, rematchDeclined, roomDissolved,
     inferenceMode, sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate, sendToggleInference,
@@ -726,6 +726,8 @@ export default function GamePage({ params }: PageProps) {
       <SpectatorView
         wsStatus={wsStatus}
         players={players}
+        spectatorHands={spectatorHands}
+        spectatorMoveHistory={spectatorMoveHistory}
         gameState={gameState}
         variant={variant}
         playerCount={playerCount}

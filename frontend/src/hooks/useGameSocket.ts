@@ -21,6 +21,8 @@ import type {
   GamePlayer,
   PublicGameState,
   HalfSuitId,
+  SpectatorHands,
+  SpectatorMoveEntry,
   AskResultPayload,
   DeclarationResultPayload,
   DeclarationFailedPayload,
@@ -118,6 +120,8 @@ export interface UseGameSocketReturn {
   wsStatus: GameWsStatus;
   myPlayerId: string | null;
   myHand: CardId[];
+  spectatorHands: SpectatorHands;
+  spectatorMoveHistory: SpectatorMoveEntry[];
   players: GamePlayer[];
   gameState: PublicGameState | null;
   variant: 'remove_2s' | 'remove_7s' | 'remove_8s' | null;
@@ -355,6 +359,20 @@ export interface PostDeclarationHighlight {
   eligibleSameTeamIds: string[];
 }
 
+function sortSpectatorHands(
+  hands: SpectatorHands | null | undefined,
+  variant: CardVariant | null,
+): SpectatorHands {
+  if (!hands) return {};
+
+  return Object.fromEntries(
+    Object.entries(hands).map(([playerId, hand]) => [
+      playerId,
+      variant ? sortHandByHalfSuit(hand, variant) : hand,
+    ]),
+  );
+}
+
 export function useGameSocket({
   roomCode,
   bearerToken,
@@ -366,6 +384,8 @@ export function useGameSocket({
   const [wsStatus, setWsStatus]         = useState<GameWsStatus>('idle');
   const [myPlayerId, setMyPlayerId]      = useState<string | null>(null);
   const [myHand, setMyHand]              = useState<CardId[]>([]);
+  const [spectatorHands, setSpectatorHands] = useState<SpectatorHands>({});
+  const [spectatorMoveHistory, setSpectatorMoveHistory] = useState<SpectatorMoveEntry[]>([]);
   const [players, setPlayers]            = useState<GamePlayer[]>([]);
   const [gameState, setGameState]        = useState<PublicGameState | null>(null);
   const [variant, setVariant]            = useState<'remove_2s' | 'remove_7s' | 'remove_8s' | null>(null);
@@ -466,6 +486,8 @@ export function useGameSocket({
           // Auto-sort hand by half-suit on initial deal
           const initHand = payload.myHand ?? [];
           setMyHand(initVariant ? sortHandByHalfSuit(initHand, initVariant) : initHand);
+          setSpectatorHands({});
+          setSpectatorMoveHistory([]);
           setPlayers(payload.players ?? []);
           setGameState(payload.gameState ?? null);
           setVariant(initVariant);
@@ -481,13 +503,21 @@ export function useGameSocket({
         case 'spectator_init': {
           const payload = msg as unknown as {
             players: GamePlayer[];
+            hands: SpectatorHands;
+            moveHistory: SpectatorMoveEntry[];
             gameState: PublicGameState;
             variant: 'remove_2s' | 'remove_7s' | 'remove_8s';
             playerCount: 6 | 8;
           };
+          const spectatorVariant = payload.variant ?? null;
+          variantRef.current = spectatorVariant;
+          setMyPlayerId(null);
+          setMyHand([]);
           setPlayers(payload.players ?? []);
+          setSpectatorHands(sortSpectatorHands(payload.hands, spectatorVariant));
+          setSpectatorMoveHistory(payload.moveHistory ?? []);
           setGameState(payload.gameState ?? null);
-          setVariant(payload.variant ?? null);
+          setVariant(spectatorVariant);
           setPlayerCount(payload.playerCount ?? null);
           // Spectators should not carry over a player's previous turn timer.
           setTurnTimer(null);
@@ -509,6 +539,16 @@ export function useGameSocket({
         case 'game_players': {
           const { players: pl } = msg as { players: GamePlayer[] };
           if (Array.isArray(pl)) setPlayers(pl);
+          break;
+        }
+
+        case 'spectator_hands': {
+          const { hands, moveHistory } = msg as {
+            hands: SpectatorHands;
+            moveHistory?: SpectatorMoveEntry[];
+          };
+          setSpectatorHands(sortSpectatorHands(hands, variantRef.current));
+          if (Array.isArray(moveHistory)) setSpectatorMoveHistory(moveHistory);
           break;
         }
 
@@ -956,6 +996,8 @@ export function useGameSocket({
     wsStatus,
     myPlayerId,
     myHand,
+    spectatorHands,
+    spectatorMoveHistory,
     players,
     gameState,
     variant,

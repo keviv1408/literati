@@ -142,6 +142,8 @@ const {
   serializePublicState,
   serializePlayers,
   serializeForPlayer,
+  serializeSpectatorHands,
+  serializeSpectatorMoveHistory,
   persistGameState,
   restoreGameState,
   getPlayerTeam,
@@ -517,8 +519,9 @@ function sendGameInit(gs, playerId, ws) {
 }
 
 /**
- * Broadcast updated public game state and player list to all connected players.
- * Also sends personalized `hand_update` to each player whose hand changed.
+ * Broadcast updated public game state and player list to all connections.
+ * Also sends personalized `hand_update` to each player whose hand changed and
+ * spectator-only `spectator_hands` payloads to God-mode spectators.
  * @param {Object} gs
  * @param {Set<string>} [changedHands] - Player IDs whose hands changed
  */
@@ -527,11 +530,23 @@ function broadcastStateUpdate(gs, changedHands = new Set()) {
   const connections = getRoomConnections(roomCode);
   const publicState = serializePublicState(gs);
   const players     = serializePlayers(gs);
+  const spectatorHands = serializeSpectatorHands(gs);
+  const spectatorMoveHistory = serializeSpectatorMoveHistory(gs);
 
   for (const [pid, ws] of connections) {
     // Send public state update
     sendJson(ws, { type: 'game_state', state: publicState });
     sendJson(ws, { type: 'game_players', players });
+
+    // God-mode spectators receive the full hand map on every state update.
+    if (!gs.players.find((player) => player.playerId === pid)) {
+      sendJson(ws, {
+        type: 'spectator_hands',
+        hands: spectatorHands,
+        moveHistory: spectatorMoveHistory,
+      });
+      continue;
+    }
 
     // Send personalized hand update if this player's hand changed
     if (changedHands.has(pid)) {
@@ -2782,6 +2797,8 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
             variant:       newGs.variant,
             playerCount:   newGs.playerCount,
             players:       serializePlayers(newGs),
+            hands:         serializeSpectatorHands(newGs),
+            moveHistory:   serializeSpectatorMoveHistory(newGs),
             gameState:     serializePublicState(newGs),
             inferenceMode: newGs.inferenceMode ?? false,
           });
@@ -3111,8 +3128,8 @@ function attachGameSocketServer(httpServer) {
 
     // Send game init to this player
     if (isSpectator) {
-      // Spectators receive only the current public snapshot — no player hands,
-      // no full move history. serializePublicState() includes only:
+      // Spectators receive the current public snapshot plus the full hand map
+      // for God mode. serializePublicState() still includes only:
       //   status, currentTurnPlayerId, scores, lastMove, winner,
       //   tiebreakerWinner, declaredSuits.
       // moveHistory is intentionally excluded.
@@ -3122,6 +3139,8 @@ function attachGameSocketServer(httpServer) {
         variant:       gs.variant,
         playerCount:   gs.playerCount,
         players:       serializePlayers(gs),
+        hands:         serializeSpectatorHands(gs),
+        moveHistory:   serializeSpectatorMoveHistory(gs),
         gameState:     serializePublicState(gs),
         inferenceMode: gs.inferenceMode ?? false,
       });

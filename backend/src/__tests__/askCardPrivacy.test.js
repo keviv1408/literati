@@ -660,7 +660,7 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 5. SPECTATOR_INIT CONTAINS NO PRIVATE DATA
+  // 5. SPECTATOR_INIT EXCLUDES PRIVATE STATE BUT INCLUDES GOD-MODE HAND MAP
   // ─────────────────────────────────────────────────────────────────────────
 
   it('spectator_init.gameState contains no player hands, no move history, no selection state', async () => {
@@ -712,6 +712,43 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
         expect(player.hand).toBeUndefined();
         expect(player.cards).toBeUndefined();
         expect(player.handData).toBeUndefined();
+      }
+    } finally {
+      spectWs.close();
+    }
+  });
+
+  it('spectator_init includes a spectator-only hand map for God mode', async () => {
+    const { ws: spectWs, initMsg } = await waitForInit(
+      `spectatorToken=${SPECTATOR_HEX}`,
+      'spectator_init',
+    );
+
+    try {
+      expect(initMsg.hands).toBeDefined();
+      expect(typeof initMsg.hands).toBe('object');
+
+      for (const player of initMsg.players) {
+        expect(Array.isArray(initMsg.hands[player.playerId])).toBe(true);
+        expect(initMsg.hands[player.playerId].length).toBe(player.cardCount);
+      }
+    } finally {
+      spectWs.close();
+    }
+  });
+
+  it('spectator_init includes a spectator-only formatted move log for God mode', async () => {
+    const { ws: spectWs, initMsg } = await waitForInit(
+      `spectatorToken=${SPECTATOR_HEX}`,
+      'spectator_init',
+    );
+
+    try {
+      expect(Array.isArray(initMsg.moveHistory)).toBe(true);
+      for (const move of initMsg.moveHistory) {
+        expect(typeof move.type).toBe('string');
+        expect(typeof move.ts).toBe('number');
+        expect(typeof move.message).toBe('string');
       }
     } finally {
       spectWs.close();

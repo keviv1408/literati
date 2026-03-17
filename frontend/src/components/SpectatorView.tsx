@@ -55,14 +55,18 @@
 
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
+import CardHand from '@/components/CardHand';
 import { useCardInference } from '@/hooks/useCardInference';
 import { InferenceProvider, useInferenceContext } from '@/contexts/InferenceContext';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import type {
+  CardId,
   GamePlayer,
   PublicGameState,
+  SpectatorHands,
+  SpectatorMoveEntry,
   AskResultPayload,
   DeclarationResultPayload,
   DeclarationFailedPayload,
@@ -87,6 +91,10 @@ export interface SpectatorViewProps {
   wsStatus: GameWsStatus;
   /** All players in the game, from the WebSocket `spectator_init` / `game_players` messages. */
   players: GamePlayer[];
+  /** God-mode spectator hand map keyed by playerId. */
+  spectatorHands: SpectatorHands;
+  /** Full formatted move log for God-mode spectators. */
+  spectatorMoveHistory: SpectatorMoveEntry[];
   /** Public game state broadcast to all clients (scores, turn, declared suits, etc.). */
   gameState: PublicGameState | null;
   /** Card-removal variant from the socket (`spectator_init`); falls back to `cardRemovalVariant`. */
@@ -146,6 +154,8 @@ export interface SpectatorViewProps {
 export default function SpectatorView({
   wsStatus,
   players,
+  spectatorHands,
+  spectatorMoveHistory,
   gameState,
   variant,
   playerCount,
@@ -167,6 +177,8 @@ export default function SpectatorView({
   const showFailedReveal = Boolean(
     declarationFailed && declarationFailed !== dismissedDeclarationFailed
   );
+  const [godModeEnabled, setGodModeEnabled] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
   // ── Card inference ─────────────────────────────────────────────────────────
   // Spectators derive card-location knowledge from public ask/declare events.
@@ -213,6 +225,25 @@ export default function SpectatorView({
     : null;
 
   const displayedMove = lastResultMsg ?? gameState?.lastMove ?? null;
+  const selectedPlayer = selectedPlayerId
+    ? players.find((player) => player.playerId === selectedPlayerId) ?? null
+    : null;
+  const selectedPlayerHand: CardId[] = selectedPlayer
+    ? (spectatorHands[selectedPlayer.playerId] ?? [])
+    : [];
+
+  useEffect(() => {
+    if (!selectedPlayerId) return;
+    if (!players.some((player) => player.playerId === selectedPlayerId)) {
+      setSelectedPlayerId(null);
+    }
+  }, [players, selectedPlayerId]);
+
+  useEffect(() => {
+    if (!godModeEnabled) {
+      setSelectedPlayerId(null);
+    }
+  }, [godModeEnabled]);
 
   // ── Connecting state ───────────────────────────────────────────────────────
   if (wsStatus === 'connecting' || wsStatus === 'idle') {
@@ -444,6 +475,9 @@ export default function SpectatorView({
             players={team2Players}
             currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
             seatsPerTeam={seatsPerTeam}
+            godModeEnabled={godModeEnabled}
+            selectedPlayerId={selectedPlayerId}
+            onSelectPlayer={setSelectedPlayerId}
           />
         </div>
 
@@ -473,6 +507,9 @@ export default function SpectatorView({
             players={team1Players}
             currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
             seatsPerTeam={seatsPerTeam}
+            godModeEnabled={godModeEnabled}
+            selectedPlayerId={selectedPlayerId}
+            onSelectPlayer={setSelectedPlayerId}
           />
           <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">
             Team 1
@@ -480,22 +517,142 @@ export default function SpectatorView({
         </div>
       </main>
 
-      {/* ── Spectator footer ─────────────────────────────────────────────────
-       *  Intentionally shows NO card hand or action buttons.
-       *  Only a reminder that this is a read-only view.
-       */}
+      {/* ── Spectator footer ───────────────────────────────────────────────── */}
       <footer
         className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 backdrop-blur-sm px-3 py-3"
         data-testid="spectator-footer"
       >
-        <p
-          className="text-center text-xs text-amber-400/70 font-medium"
-          role="note"
-          aria-label="Spectator mode — actions disabled"
-          data-testid="spectator-readonly-note"
-        >
-          👁 You are spectating · No actions available
-        </p>
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <p
+              className="text-xs text-amber-400/70 font-medium"
+              role="note"
+              aria-label="Spectator mode — actions disabled"
+              data-testid="spectator-readonly-note"
+            >
+              👁 You are spectating · No actions available
+            </p>
+            <button
+              type="button"
+              onClick={() => setGodModeEnabled((enabled) => !enabled)}
+              aria-pressed={godModeEnabled}
+              className={[
+                'rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.2em] transition-colors',
+                godModeEnabled
+                  ? 'border-amber-400/70 bg-amber-400/10 text-amber-200'
+                  : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200',
+              ].join(' ')}
+              data-testid="spectator-god-mode-toggle"
+            >
+              {godModeEnabled ? 'Disable God mode' : 'Enable God mode'}
+            </button>
+          </div>
+
+          {godModeEnabled ? (
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              {selectedPlayer ? (
+                <section
+                  className="rounded-2xl border border-slate-700/60 bg-slate-950/70 px-3 py-3"
+                  aria-label={`${selectedPlayer.displayName}'s hand`}
+                  data-testid="spectator-hand-panel"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        {selectedPlayer.displayName}
+                        {selectedPlayer.isBot ? ' 🤖' : ''}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {selectedPlayerHand.length} card{selectedPlayerHand.length !== 1 ? 's' : ''} visible
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlayerId(null)}
+                      className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <CardHand
+                    hand={selectedPlayerHand}
+                    isMyTurn={false}
+                    disabled={true}
+                    variant={effectiveVariant}
+                  />
+                </section>
+              ) : (
+                <div
+                  className="rounded-2xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-4 text-center"
+                  data-testid="spectator-hand-placeholder"
+                >
+                  <p className="text-sm font-medium text-slate-200">
+                    Tap a player to inspect their hand
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    God mode reveals cards at the bottom of the table.
+                  </p>
+                </div>
+              )}
+
+              <section
+                className="rounded-2xl border border-slate-700/60 bg-slate-950/70 px-3 py-3"
+                aria-label="Move log"
+                data-testid="spectator-move-log"
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Move log</p>
+                    <p className="text-xs text-slate-400">
+                      {spectatorMoveHistory.length} move{spectatorMoveHistory.length !== 1 ? 's' : ''} so far
+                    </p>
+                  </div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-slate-500">
+                    Full history
+                  </p>
+                </div>
+
+                {spectatorMoveHistory.length > 0 ? (
+                  <ol className="max-h-56 space-y-2 overflow-y-auto pr-1" data-testid="spectator-move-log-list">
+                    {[...spectatorMoveHistory].reverse().map((move, index) => (
+                      <li
+                        key={`${move.ts}-${index}`}
+                        className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2"
+                      >
+                        <p className="text-[0.65rem] uppercase tracking-[0.2em] text-slate-500">
+                          Move {spectatorMoveHistory.length - index}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-100">
+                          {move.message}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div
+                    className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-sm text-slate-500"
+                    data-testid="spectator-move-log-empty"
+                  >
+                    No moves yet.
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : (
+            <div
+              className="rounded-2xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-4 text-center"
+              data-testid="spectator-god-mode-disabled"
+            >
+              <p className="text-sm font-medium text-slate-200">
+                Enable God mode to inspect hands and view the full move log
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Spectator mode stays read-only either way.
+              </p>
+            </div>
+          )}
+        </div>
       </footer>
 
       {/* ── Failed Declaration Reveal overlay (Sub-AC 26b) ──────────────────
@@ -644,29 +801,73 @@ function SpectatorPlayerRow({
   players,
   currentTurnPlayerId,
   seatsPerTeam,
+  godModeEnabled,
+  selectedPlayerId,
+  onSelectPlayer,
 }: {
   players: GamePlayer[];
   currentTurnPlayerId: string | null;
   seatsPerTeam: number;
+  godModeEnabled: boolean;
+  selectedPlayerId: string | null;
+  onSelectPlayer: (playerId: string) => void;
 }) {
   const { inferenceMode, cardInferences } = useInferenceContext();
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
 
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-3 lg:gap-5 xl:gap-6 flex-wrap">
-      {seats.map((player, i) => (
-        <GamePlayerSeat
-          key={player ? player.playerId : `empty-${i}`}
-          seatIndex={player ? player.seatIndex : i}
-          player={player}
-          myPlayerId={null}
-          currentTurnPlayerId={currentTurnPlayerId}
-          // Pass inference data for each occupied seat when inference mode is on.
-          // InferenceIndicator inside GamePlayerSeat only renders when the map
-          // is non-empty, so passing an empty object {} is safe.
-          inference={inferenceMode && player ? (cardInferences[player.playerId] ?? {}) : undefined}
-        />
-      ))}
+      {seats.map((player, i) => {
+        if (!player) {
+          return (
+            <GamePlayerSeat
+              key={`empty-${i}`}
+              seatIndex={i}
+              player={null}
+              myPlayerId={null}
+              currentTurnPlayerId={currentTurnPlayerId}
+            />
+          );
+        }
+
+        const isSelected = selectedPlayerId === player.playerId;
+
+        return (
+          <button
+            key={player.playerId}
+            type="button"
+            onClick={() => {
+              if (!godModeEnabled) return;
+              onSelectPlayer(player.playerId);
+            }}
+            disabled={!godModeEnabled}
+            className={[
+              'rounded-2xl transition-transform focus:outline-none focus:ring-2 focus:ring-amber-300/80 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:cursor-default disabled:opacity-85',
+              godModeEnabled
+                ? (isSelected ? 'scale-105 ring-2 ring-amber-300/70 ring-offset-2 ring-offset-slate-950' : 'hover:scale-[1.02]')
+                : '',
+            ].join(' ')}
+            aria-pressed={godModeEnabled ? isSelected : undefined}
+            aria-label={
+              godModeEnabled
+                ? `${isSelected ? 'Selected' : 'Inspect'} ${player.displayName}'s hand`
+                : `${player.displayName} seat`
+            }
+            data-testid={`spectator-player-button-${player.playerId}`}
+          >
+            <GamePlayerSeat
+              seatIndex={player.seatIndex}
+              player={player}
+              myPlayerId={null}
+              currentTurnPlayerId={currentTurnPlayerId}
+              // Pass inference data for each occupied seat when inference mode is on.
+              // InferenceIndicator inside GamePlayerSeat only renders when the map
+              // is non-empty, so passing an empty object {} is safe.
+              inference={inferenceMode ? (cardInferences[player.playerId] ?? {}) : undefined}
+            />
+          </button>
+        );
+      })}
     </div>
   );
 }

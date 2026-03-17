@@ -45,8 +45,8 @@
  * }
  */
 
-const { buildDeck, shuffleDeck, dealCards } = require('./deck');
-const { buildHalfSuitMap, buildCardToHalfSuitMap, allHalfSuitIds } = require('./halfSuits');
+const { buildDeck, shuffleDeck, dealCards, cardLabel } = require('./deck');
+const { buildHalfSuitMap, buildCardToHalfSuitMap, allHalfSuitIds, halfSuitLabel } = require('./halfSuits');
 
 // Memoized half-suit maps per variant to avoid rebuilding on every serialization.
 const _halfSuitMapCache = {};
@@ -339,6 +339,70 @@ function serializeForPlayer(gs, playerId) {
 }
 
 /**
+ * Build the full hand map for God-mode spectators.
+ *
+ * Unlike `serializePlayers()`, this includes every player's exact cards and is
+ * intended ONLY for spectator-targeted payloads (`spectator_init`,
+ * `spectator_hands`). Never include this in shared player broadcasts.
+ *
+ * @param {Object} gs
+ * @returns {Record<string, string[]>}
+ */
+function serializeSpectatorHands(gs) {
+  return Object.fromEntries(
+    gs.players.map((player) => [
+      player.playerId,
+      Array.from(getHand(gs, player.playerId)),
+    ])
+  );
+}
+
+/**
+ * Build a spectator-facing move log with preformatted messages.
+ *
+ * Uses the authoritative server move history but converts records into the
+ * same human-friendly strings spectators already see in `lastMove`.
+ *
+ * @param {Object} gs
+ * @returns {Array<{ type: string, ts: number, message: string }>}
+ */
+function serializeSpectatorMoveHistory(gs) {
+  const playerName = (playerId) => {
+    const player = gs.players.find((entry) => entry.playerId === playerId);
+    return player?.displayName ?? 'Unknown player';
+  };
+
+  return (gs.moveHistory ?? []).map((move) => {
+    if (move.type === 'ask') {
+      return {
+        type: move.type,
+        ts: move.ts,
+        message: `${playerName(move.askerId)} asked ${playerName(move.targetId)} for ${cardLabel(move.cardId)} — ${move.success ? 'got it' : 'denied'}`,
+      };
+    }
+
+    if (move.type === 'declaration') {
+      const teamScore = `Team ${move.winningTeam} scores`;
+      const suitName = halfSuitLabel(move.halfSuitId);
+
+      return {
+        type: move.type,
+        ts: move.ts,
+        message: move.timedOut
+          ? `${playerName(move.declarerId)} ran out of time declaring ${suitName} — ${teamScore}`
+          : `${playerName(move.declarerId)} declared ${suitName} — ${move.correct ? 'correct!' : 'incorrect!'} ${teamScore}`,
+      };
+    }
+
+    return {
+      type: move.type ?? 'unknown',
+      ts: move.ts ?? Date.now(),
+      message: 'Unknown move',
+    };
+  });
+}
+
+/**
  * Persist the game state snapshot to Supabase.
  * Called after every move to enable crash recovery.
  * Non-fatal: if it fails we log and continue.
@@ -508,6 +572,8 @@ module.exports = {
   serializePublicState,
   serializePlayers,
   serializeForPlayer,
+  serializeSpectatorHands,
+  serializeSpectatorMoveHistory,
   persistGameState,
   restoreGameState,
   // AC 52: abandoned-game cleanup

@@ -85,6 +85,28 @@ export interface GameInitPayload {
   gameState: PublicGameState;
 }
 
+/** Full hand map sent only to God-mode spectators. */
+export type SpectatorHands = Record<string, CardId[]>;
+
+/** Formatted move-log entry sent only to God-mode spectators. */
+export interface SpectatorMoveEntry {
+  type: string;
+  ts: number;
+  message: string;
+}
+
+/** Read-only init payload sent to spectator connections on connect/rematch. */
+export interface SpectatorInitPayload {
+  type: 'spectator_init';
+  roomCode: string;
+  variant: 'remove_2s' | 'remove_7s' | 'remove_8s';
+  playerCount: 6 | 8;
+  players: GamePlayer[];
+  hands: SpectatorHands;
+  moveHistory: SpectatorMoveEntry[];
+  gameState: PublicGameState;
+}
+
 /** Result of an ask-card action. */
 export interface AskResultPayload {
   type: 'ask_result';

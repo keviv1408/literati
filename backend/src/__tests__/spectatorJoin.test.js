@@ -509,6 +509,31 @@ describe('Game WebSocket spectator connection', () => {
     }
   });
 
+  // ── spectator_init includes God-mode hand map for spectators only ──────────
+  it('spectator_init includes a hands map keyed by playerId', async () => {
+    const msg = await firstMessage(`spectatorToken=${VALID_SPECTATOR_TOKEN}`);
+    expect(msg.type).toBe('spectator_init');
+
+    expect(msg.hands).toBeDefined();
+
+    for (const player of msg.players) {
+      expect(Array.isArray(msg.hands[player.playerId])).toBe(true);
+      expect(msg.hands[player.playerId].length).toBe(player.cardCount);
+    }
+  });
+
+  it('spectator_init includes a formatted moveHistory array for God mode', async () => {
+    const msg = await firstMessage(`spectatorToken=${VALID_SPECTATOR_TOKEN}`);
+    expect(msg.type).toBe('spectator_init');
+
+    expect(Array.isArray(msg.moveHistory)).toBe(true);
+    for (const move of msg.moveHistory) {
+      expect(typeof move.type).toBe('string');
+      expect(typeof move.ts).toBe('number');
+      expect(typeof move.message).toBe('string');
+    }
+  });
+
   // ── spectator_init carries inferenceMode flag ───────────────────────────────
   it('spectator_init includes the inferenceMode boolean flag', async () => {
     const msg = await firstMessage(`spectatorToken=${VALID_SPECTATOR_TOKEN}`);

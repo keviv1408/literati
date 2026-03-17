@@ -19,7 +19,7 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Lightweight mock for GamePlayerSeat — the real component renders SVG icons
@@ -34,12 +34,19 @@ jest.mock('@/components/GamePlayerSeat', () => ({
   ),
 }));
 
+jest.mock('@/components/CardHand', () => ({
+  __esModule: true,
+  default: ({ hand }: { hand: string[] }) => (
+    <div data-testid="mock-spectator-hand">{hand.join(',')}</div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Import component under test after mocks are set up
 // ---------------------------------------------------------------------------
 import SpectatorView from '@/components/SpectatorView';
 import type { SpectatorViewProps } from '@/components/SpectatorView';
-import type { GamePlayer, PublicGameState } from '@/types/game';
+import type { GamePlayer, PublicGameState, SpectatorHands, SpectatorMoveEntry } from '@/types/game';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,6 +65,8 @@ function makePlayer(
     seatIndex,
     cardCount: 8,
     isBot: false,
+    isGuest: false,
+    isCurrentTurn: false,
     avatarId: null,
   };
 }
@@ -85,12 +94,28 @@ const SIX_PLAYERS: GamePlayer[] = [
   makePlayer('p6', 'Frank', 2, 5),
 ];
 
+const SPECTATOR_HANDS: SpectatorHands = {
+  p1: ['1_s', '3_s', '5_h'],
+  p2: ['1_h', '2_h'],
+  p3: ['4_d'],
+  p4: ['6_c'],
+  p5: ['8_s'],
+  p6: ['10_h'],
+};
+
+const SPECTATOR_MOVE_HISTORY: SpectatorMoveEntry[] = [
+  { type: 'ask', ts: 1, message: 'Alice asked Bob for A♠ — got it' },
+  { type: 'declaration', ts: 2, message: 'Carol declared Low Hearts — correct! Team 1 scores' },
+];
+
 function buildProps(
   overrides: Partial<SpectatorViewProps> = {},
 ): SpectatorViewProps {
   return {
     wsStatus: 'connected',
     players: SIX_PLAYERS,
+    spectatorHands: SPECTATOR_HANDS,
+    spectatorMoveHistory: SPECTATOR_MOVE_HISTORY,
     gameState: makeGameState(),
     variant: 'remove_7s',
     playerCount: 6,
@@ -172,6 +197,37 @@ describe('SpectatorView', () => {
       expect(screen.getByTestId('spectator-readonly-note').textContent).toContain(
         'spectating',
       );
+    });
+
+    it('shows a placeholder until a spectator selects a player', () => {
+      render(<SpectatorView {...buildProps()} />);
+      expect(screen.getByTestId('spectator-god-mode-disabled')).toBeTruthy();
+      expect(screen.queryByTestId('spectator-hand-panel')).toBeNull();
+    });
+
+    it('reveals the selected player hand and move log when God mode is enabled', () => {
+      render(<SpectatorView {...buildProps()} />);
+
+      fireEvent.click(screen.getByTestId('spectator-god-mode-toggle'));
+      fireEvent.click(screen.getByTestId('spectator-player-button-p1'));
+
+      const panel = screen.getByTestId('spectator-hand-panel');
+      expect(panel).toBeTruthy();
+      expect(panel.getAttribute('aria-label')).toBe("Alice's hand");
+      expect(screen.getByTestId('mock-spectator-hand').textContent).toContain('1_s');
+      expect(screen.getByTestId('mock-spectator-hand').textContent).toContain('5_h');
+      expect(screen.getByTestId('spectator-move-log')).toBeTruthy();
+      expect(screen.getByTestId('spectator-move-log-list').textContent).toContain('Alice asked Bob');
+      expect(screen.getByTestId('spectator-move-log-list').textContent).toContain('Carol declared Low Hearts');
+    });
+
+    it('does not reveal hands until God mode is enabled', () => {
+      render(<SpectatorView {...buildProps()} />);
+
+      fireEvent.click(screen.getByTestId('spectator-player-button-p1'));
+
+      expect(screen.queryByTestId('spectator-hand-panel')).toBeNull();
+      expect(screen.getByTestId('spectator-god-mode-disabled')).toBeTruthy();
     });
   });
 
