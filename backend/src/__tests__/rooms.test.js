@@ -311,6 +311,51 @@ describe('POST /api/rooms', () => {
     expect(session.displayName).toBe('Guest Host');
   });
 
+  it('allows a guest host to create a new room after their previous room completed', async () => {
+    const { createGuestSession } = require('../sessions/guestSessionStore');
+    const { guestHostMap } = require('../routes/rooms');
+    const { token, session } = createGuestSession('Guest Host');
+    const staleRoomId = 'completed-room-id';
+    const freshGuestRoom = {
+      id: 'new-guest-room-id',
+      code: 'NEW123',
+      invite_code: 'B3F2C91E7B046D52',
+      spectator_token: 'B3F2C91E7B046D52C91E7B046D52B3F2',
+      host_user_id: null,
+      player_count: 6,
+      card_removal_variant: 'remove_7s',
+      status: 'waiting',
+      created_at: '2026-03-17T00:00:00.000Z',
+      updated_at: '2026-03-17T00:00:00.000Z',
+    };
+
+    guestHostMap.set(staleRoomId, session.sessionId);
+
+    mockSupabase._chain.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: staleRoomId, code: 'OLD123', status: 'completed' },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: null,
+      });
+    mockSupabase._chain.single.mockResolvedValueOnce({
+      data: freshGuestRoom,
+      error: null,
+    });
+
+    const res = await request(app)
+      .post('/api/rooms')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.room.code).toBe('NEW123');
+    expect(guestHostMap.has(staleRoomId)).toBe(false);
+    expect(guestHostMap.get(freshGuestRoom.id)).toBe(session.sessionId);
+  });
+
   // ── All card removal variants accepted ────────────────────────────────────
 
   it.each(['remove_2s', 'remove_7s', 'remove_8s'])(

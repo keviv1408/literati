@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Live Games Store — in-memory registry of all active matchmaking games.
+ * Live Games Store — in-memory registry of all active in-progress games.
  *
- * Tracks every matchmaking room that is currently:
+ * Tracks every room that is currently:
  *   • 'waiting'     — lobby phase, players are connecting
  *   • 'in_progress' — active game running
  *

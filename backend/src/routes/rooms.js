@@ -79,6 +79,12 @@ const ROOM_STATUS = {
   CANCELLED: 'cancelled',
 };
 
+const ACTIVE_ROOM_STATUSES = new Set([
+  ROOM_STATUS.WAITING,
+  ROOM_STATUS.STARTING,
+  ROOM_STATUS.IN_PROGRESS,
+]);
+
 /**
  * GET /api/rooms/spectate/:token
  *
@@ -227,34 +233,39 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
   if (req.user.isGuest) {
     // For guests, check the in-memory map (host_user_id is null in DB).
     for (const [roomId, guestId] of guestHostMap.entries()) {
-      if (guestId === hostUserId) {
-        let existingRoom = { id: roomId };
+      if (guestId !== hostUserId) continue;
 
-        try {
-          const { data: roomRecord, error: roomLookupError } = await supabase
-            .from('rooms')
-            .select('id, code, status')
-            .eq('id', roomId)
-            .maybeSingle();
+      let existingRoom = { id: roomId };
 
-          if (roomLookupError) {
-            console.error('Error looking up existing guest room:', roomLookupError);
-          } else if (roomRecord) {
-            existingRoom = {
-              id: roomRecord.id,
-              code: roomRecord.code,
-              status: roomRecord.status,
-            };
-          }
-        } catch (err) {
-          console.error('Unexpected error looking up existing guest room:', err);
+      try {
+        const { data: roomRecord, error: roomLookupError } = await supabase
+          .from('rooms')
+          .select('id, code, status')
+          .eq('id', roomId)
+          .maybeSingle();
+
+        if (roomLookupError) {
+          console.error('Error looking up existing guest room:', roomLookupError);
+        } else if (!roomRecord || !ACTIVE_ROOM_STATUSES.has(roomRecord.status)) {
+          // Stale guest-host binding: the room was removed or has already
+          // reached a terminal state, so it should not block new room creation.
+          guestHostMap.delete(roomId);
+          continue;
+        } else {
+          existingRoom = {
+            id: roomRecord.id,
+            code: roomRecord.code,
+            status: roomRecord.status,
+          };
         }
-
-        return res.status(409).json({
-          error: 'You already have an active game room',
-          existingRoom,
-        });
+      } catch (err) {
+        console.error('Unexpected error looking up existing guest room:', err);
       }
+
+      return res.status(409).json({
+        error: 'You already have an active game room',
+        existingRoom,
+      });
     }
   } else {
     try {

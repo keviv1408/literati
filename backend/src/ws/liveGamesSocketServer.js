@@ -3,7 +3,7 @@
 /**
  * Live Games WebSocket server — /ws/live-games
  *
- * Exposes a real-time feed of all active matchmaking games.
+ * Exposes a real-time feed of all active in-progress games.
  * No authentication required — this is a public, read-only channel
  * intended for the Live Games browsing page and spectators.
  *
@@ -41,7 +41,9 @@
 
 const { WebSocketServer, WebSocket } = require('ws');
 const url = require('url');
+const { getSupabaseClient } = require('../db/supabase');
 const liveGamesStore = require('../liveGames/liveGamesStore');
+const { syncInProgressRoomsToLiveGamesStore } = require('../liveGames/syncLiveGamesStore');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,7 +111,13 @@ function attachLiveGamesSocketServer(httpServer) {
   });
 
   // ── Handle each client connection ──────────────────────────────────────────
-  wss.on('connection', (ws) => {
+  wss.on('connection', async (ws) => {
+    try {
+      await syncInProgressRoomsToLiveGamesStore(getSupabaseClient());
+    } catch (err) {
+      console.warn('[live-games-ws] Failed to sync in-progress rooms from DB:', err.message);
+    }
+
     // Immediately send the current snapshot.
     sendJson(ws, {
       type:  'live_games_init',

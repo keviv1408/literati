@@ -10,6 +10,7 @@
  */
 
 const request = require('supertest');
+let mockSupabase;
 
 // ── Isolate the live games store before requiring app ──────────────────────
 // We require the store singleton, clear it, then set up fixtures.
@@ -17,11 +18,7 @@ const liveGamesStore = require('../liveGames/liveGamesStore');
 
 // Stub out Supabase and other heavy services before loading index.js
 jest.mock('../db/supabase', () => ({
-  getSupabaseClient: jest.fn(() => ({
-    from:  jest.fn(),
-    auth:  { getUser: jest.fn() },
-    rpc:   jest.fn(),
-  })),
+  getSupabaseClient: jest.fn(() => mockSupabase),
 }));
 jest.mock('../sessions/guestSessionStore', () => ({
   getGuestSession:   jest.fn(() => null),
@@ -46,6 +43,21 @@ jest.mock('../ws/liveGamesSocketServer', () => ({ attachLiveGamesSocketServer: j
 const app = require('../index');
 
 beforeEach(() => {
+  const roomsEq = jest.fn().mockResolvedValue({ data: [], error: null });
+  const roomsSelect = jest.fn(() => ({ eq: roomsEq }));
+  mockSupabase = {
+    from: jest.fn((table) => {
+      if (table === 'rooms') {
+        return { select: roomsSelect };
+      }
+      return {
+        select: jest.fn(() => ({ eq: jest.fn().mockResolvedValue({ data: null, error: null }) })),
+      };
+    }),
+    auth: { getUser: jest.fn() },
+    rpc: jest.fn(),
+    _roomsEq: roomsEq,
+  };
   liveGamesStore._clearAll();
 });
 
@@ -120,5 +132,41 @@ describe('GET /api/live-games', () => {
     expect(res.body.total).toBe(0);
     const done = res.body.games.find((g) => g.roomCode === 'DONE01');
     expect(done).toBeUndefined();
+  });
+
+  it('hydrates missing in-progress rooms from Supabase before responding', async () => {
+    mockSupabase._roomsEq.mockResolvedValueOnce({
+      data: [{
+        code: 'YT66QT',
+        player_count: 6,
+        card_removal_variant: 'remove_7s',
+        status: 'in_progress',
+        created_at: '2026-03-17T10:00:00.000Z',
+        updated_at: '2026-03-17T10:10:00.000Z',
+        game_state: {
+          variant: 'remove_7s',
+          scores: { team1: 1, team2: 0 },
+          players: [
+            { playerId: 'bot-1', isBot: true },
+            { playerId: 'human-1', isBot: false },
+            { playerId: 'human-2', isBot: false },
+          ],
+        },
+      }],
+      error: null,
+    });
+
+    const res = await request(app).get('/api/live-games');
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.games[0]).toMatchObject({
+      roomCode: 'YT66QT',
+      playerCount: 6,
+      currentPlayers: 2,
+      cardVariant: 'remove_7s',
+      status: 'in_progress',
+      scores: { team1: 1, team2: 0 },
+    });
   });
 });

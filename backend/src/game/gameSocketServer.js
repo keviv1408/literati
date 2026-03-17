@@ -2857,6 +2857,32 @@ function createGame(options) {
   return gs;
 }
 
+function syncRecoveredGameToLiveGamesStore(gs) {
+  try {
+    const humanPlayers = Array.isArray(gs.players)
+      ? gs.players.filter((player) => !player.isBot).length
+      : 0;
+    const payload = {
+      roomCode:       gs.roomCode,
+      playerCount:    gs.playerCount,
+      currentPlayers: humanPlayers,
+      cardVariant:    gs.variant,
+      scores:         { ...gs.scores },
+      status:         'in_progress',
+      createdAt:      Date.now(),
+      startedAt:      Date.now(),
+    };
+
+    if (liveGamesStore.get(gs.roomCode)) {
+      liveGamesStore.updateGame(gs.roomCode, payload);
+    } else {
+      liveGamesStore.addGame(payload);
+    }
+  } catch (err) {
+    console.warn('[game] liveGamesStore sync failed for recovered room', gs.roomCode, ':', err.message);
+  }
+}
+
 /**
  * Recover a game from Supabase snapshot after a server crash.
  * @param {string} roomCode
@@ -2867,6 +2893,14 @@ function createGame(options) {
 function recoverGame(roomCode, roomId, snapshot) {
   const gs = restoreGameState(snapshot, roomCode, roomId);
   setGame(roomCode, gs);
+  if (gs.status === 'active') {
+    syncRecoveredGameToLiveGamesStore(gs);
+    // Recovery can be triggered by a spectator connection after a backend
+    // restart, so restart server-side timers here instead of waiting for a
+    // human player to reconnect.
+    scheduleBotTurnIfNeeded(gs);
+    scheduleTurnTimerIfNeeded(gs);
+  }
   return gs;
 }
 

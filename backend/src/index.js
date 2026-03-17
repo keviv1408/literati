@@ -22,6 +22,7 @@ const { attachGameSocketServer } = require('./game/gameSocketServer');
 const { attachLiveGamesSocketServer } = require('./ws/liveGamesSocketServer');
 const { initSocket } = require('./socket/server');
 const { markStaleGamesAbandoned } = require('./game/gameState');
+const { syncInProgressRoomsToLiveGamesStore } = require('./liveGames/syncLiveGamesStore');
 const { getSupabaseClient } = require('./db/supabase');
 
 const app = express();
@@ -128,9 +129,16 @@ if (require.main === module) {
     // server instance (crash / restart) and mark them 'abandoned' in Supabase.
     // Only rooms idle for ≥ 2 hours are touched — fresher rooms may have
     // players who are still in their 60-second reconnect window.
-    markStaleGamesAbandoned(getSupabaseClient()).catch((err) => {
-      console.error('[startup] markStaleGamesAbandoned failed:', err.message);
-    });
+    const supabase = getSupabaseClient();
+    markStaleGamesAbandoned(supabase)
+      .catch((err) => {
+        console.error('[startup] markStaleGamesAbandoned failed:', err.message);
+      })
+      .finally(() => {
+        syncInProgressRoomsToLiveGamesStore(supabase).catch((err) => {
+          console.error('[startup] syncInProgressRoomsToLiveGamesStore failed:', err.message);
+        });
+      });
   });
 
   // Graceful shutdown: stop the cleanup timer and close the HTTP server.

@@ -1,0 +1,59 @@
+'use strict';
+
+const liveGamesStore = require('./liveGamesStore');
+
+/**
+ * Rehydrate the in-memory live-games registry from Supabase.
+ *
+ * This keeps the public live-games feed in sync after backend restarts, where
+ * the DB still knows about `in_progress` rooms but the in-memory store starts
+ * empty. Scores and human-player counts are recovered from the persisted
+ * `game_state` snapshot when available.
+ *
+ * @param {Object} supabase
+ * @returns {Promise<Object[]>} The rows returned from Supabase
+ */
+async function syncInProgressRoomsToLiveGamesStore(supabase) {
+  const { data: rooms, error } = await supabase
+    .from('rooms')
+    .select('code, player_count, card_removal_variant, status, created_at, updated_at, game_state')
+    .eq('status', 'in_progress');
+
+  if (error) {
+    throw error;
+  }
+
+  const activeRooms = Array.isArray(rooms) ? rooms : [];
+
+  for (const room of activeRooms) {
+    const snapshot = room.game_state ?? {};
+    const players = Array.isArray(snapshot.players) ? snapshot.players : [];
+    const scores = snapshot.scores ?? { team1: 0, team2: 0 };
+    const createdAt = Date.parse(room.created_at ?? '') || Date.now();
+    const startedAt = Date.parse(room.updated_at ?? room.created_at ?? '') || createdAt;
+    const currentPlayers = players.length > 0
+      ? players.filter((player) => !player.isBot).length
+      : room.player_count;
+
+    const payload = {
+      roomCode:       room.code,
+      playerCount:    room.player_count,
+      currentPlayers,
+      cardVariant:    snapshot.variant ?? room.card_removal_variant,
+      scores,
+      status:         'in_progress',
+      createdAt,
+      startedAt,
+    };
+
+    if (liveGamesStore.get(room.code)) {
+      liveGamesStore.updateGame(room.code, payload);
+    } else {
+      liveGamesStore.addGame(payload);
+    }
+  }
+
+  return activeRooms;
+}
+
+module.exports = { syncInProgressRoomsToLiveGamesStore };
