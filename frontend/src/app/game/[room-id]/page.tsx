@@ -44,6 +44,7 @@ import SpectatorView from '@/components/SpectatorView';
 import DealAnimation from '@/components/DealAnimation';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
+import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
@@ -240,6 +241,7 @@ export default function GamePage({ params }: PageProps) {
   const {
     cardFlight,
     askDeniedCue,
+    askSpeechBubble,
     clearCardFlight,
     clearAskDeniedCue,
   } = useAskResultAnimations(lastAskResult);
@@ -1086,6 +1088,10 @@ export default function GamePage({ params }: PageProps) {
           toY={cardFlight.toY}
           onComplete={clearCardFlight}
         />
+      )}
+
+      {askSpeechBubble && (
+        <AskSpeechBubbleOverlay bubble={askSpeechBubble} />
       )}
 
       {askDeniedCue && (

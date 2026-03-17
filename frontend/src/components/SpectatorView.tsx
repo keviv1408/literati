@@ -50,6 +50,7 @@ import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDecla
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
+import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import type {
   CardId,
   GamePlayer,
@@ -177,6 +178,7 @@ export default function SpectatorView({
   const {
     cardFlight,
     askDeniedCue,
+    askSpeechBubble,
     clearCardFlight,
     clearAskDeniedCue,
   } = useAskResultAnimations(lastAskResult);
@@ -641,6 +643,10 @@ export default function SpectatorView({
           toY={cardFlight.toY}
           onComplete={clearCardFlight}
         />
+      )}
+
+      {askSpeechBubble && (
+        <AskSpeechBubbleOverlay bubble={askSpeechBubble} />
       )}
 
       {askDeniedCue && (
