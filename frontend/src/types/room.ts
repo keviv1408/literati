@@ -16,6 +16,7 @@ export type RoomStatus =
   | 'waiting'
   | 'starting'
   | 'in_progress'
+  | 'abandoned'
   | 'completed'
   | 'cancelled';
 

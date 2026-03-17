@@ -144,6 +144,7 @@ const {
   serializeSpectatorMoveHistory,
   persistGameState,
   restoreGameState,
+  markRoomAbandoned,
   getPlayerTeam,
   getTeamPlayers,
   getCardCount,
@@ -826,6 +827,103 @@ function cancelPostDeclarationTimer(roomCode) {
 }
 
 /**
+ * Cancel every reconnect window still running for a room.
+ * Safe to call even when no reconnect timers exist.
+ *
+ * @param {string} roomCode
+ */
+function _cancelReconnectWindowsForRoom(roomCode) {
+  const code = roomCode.toUpperCase();
+  for (const [playerId, entry] of _reconnectWindows.entries()) {
+    if (entry.roomCode?.toUpperCase() === code) {
+      _cancelReconnectWindow(playerId);
+    }
+  }
+}
+
+/**
+ * Return true when the room still has at least one active reconnect window.
+ *
+ * @param {string} roomCode
+ * @returns {boolean}
+ */
+function _hasReconnectWindowsForRoom(roomCode) {
+  const code = roomCode.toUpperCase();
+  for (const entry of _reconnectWindows.values()) {
+    if (entry.roomCode?.toUpperCase() === code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Clear transient in-memory runtime state for a room that is ending early.
+ *
+ * @param {string} roomCode
+ */
+function _clearRoomRuntimeState(roomCode) {
+  cancelTurnTimer(roomCode);
+  cancelBotTimer(roomCode);
+  cancelBotDeclarationTimer(roomCode);
+  cancelPostDeclarationTimer(roomCode);
+  _cancelReconnectWindowsForRoom(roomCode);
+  clearRoomPartialSelections(roomCode);
+  clearDisconnectRoom(roomCode);
+  _botControlledDeclarations.delete(roomCode);
+
+  const prefix = `${roomCode.toUpperCase()}:`;
+  for (const key of _declarationSelections.keys()) {
+    if (key.startsWith(prefix)) {
+      _declarationSelections.delete(key);
+    }
+  }
+}
+
+/**
+ * Return true when every seat in the game is bot-controlled.
+ *
+ * @param {Object} gs
+ * @returns {boolean}
+ */
+function _allPlayersAreBots(gs) {
+  return Array.isArray(gs?.players) && gs.players.length > 0 && gs.players.every((player) => player.isBot);
+}
+
+/**
+ * End an active room automatically when every seat is bot-controlled and no
+ * reconnect window remains for any human player.
+ *
+ * @param {string} roomCode
+ */
+async function _abandonGameIfAllBots(roomCode) {
+  const gs = getGame(roomCode);
+  if (!gs || gs.status !== 'active') return;
+  if (!_allPlayersAreBots(gs)) return;
+  if (_hasReconnectWindowsForRoom(roomCode)) return;
+
+  gs.status = 'abandoned';
+  gs.lastMove = 'All human players disconnected, so the game was abandoned.';
+
+  console.log(
+    `[game-ws] Room ${roomCode} abandoned automatically — all player seats are now bot-controlled`
+  );
+
+  try {
+    await markRoomAbandoned(roomCode, getSupabaseClient(), gs);
+  } catch (err) {
+    console.error('[game-ws] Failed to mark room abandoned after all-bot takeover:', err.message);
+  }
+
+  broadcastStateUpdate(gs);
+  broadcastToGame(roomCode, { type: 'room_dissolved', reason: 'all_bots' });
+
+  liveGamesStore.removeGame(roomCode);
+  _clearRoomRuntimeState(roomCode);
+  deleteGame(roomCode);
+}
+
+/**
  * Start the 30-second post-declaration turn-selection timer (Sub-AC 28c).
  *
  * Called after a HUMAN player makes a CORRECT declaration.  The declaring
@@ -1179,6 +1277,10 @@ function _startReconnectWindow(gs, player) {
 
     // Expiry event: clients remove the reconnect countdown for this player.
     broadcastToGame(roomCode, { type: 'reconnect_expired', playerId });
+
+    // If every reconnect window has now closed and every seat is bot-controlled,
+    // there is no human left to resume the game. End it automatically.
+    void _abandonGameIfAllBots(roomCode);
   }, RECONNECT_WINDOW_MS);
 
   // ── Tick interval ─────────────────────────────────────────────────────────
@@ -2985,6 +3087,12 @@ function attachGameSocketServer(httpServer) {
           return;
         }
 
+        if (room.status === 'abandoned' || room.game_state?.status === 'abandoned') {
+          sendJson(ws, { type: 'error', code: 'GAME_ABANDONED', message: 'Game was abandoned' });
+          ws.close(4005, 'Game abandoned');
+          return;
+        }
+
         if (room.status !== 'in_progress' && room.status !== 'completed') {
           sendJson(ws, { type: 'error', code: 'GAME_NOT_STARTED', message: 'Game has not started yet' });
           ws.close(4005, 'Game not started');
@@ -3005,6 +3113,12 @@ function attachGameSocketServer(httpServer) {
         ws.close(4500, 'Server error');
         return;
       }
+    }
+
+    if (gs.status === 'abandoned') {
+      sendJson(ws, { type: 'error', code: 'GAME_ABANDONED', message: 'Game was abandoned' });
+      ws.close(4005, 'Game abandoned');
+      return;
     }
 
     // Verify this player is in the game (or is a spectator)

@@ -283,6 +283,42 @@ describe('GamePage — cancelled room', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Abandoned room
+// ---------------------------------------------------------------------------
+
+describe('GamePage — abandoned room', () => {
+  it('shows "Game Abandoned" state for abandoned rooms', async () => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('abandoned') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('abandoned-view')).toBeTruthy();
+    });
+    expect(screen.getByText('Game Abandoned')).toBeTruthy();
+  });
+
+  it('switches to the abandoned state when the server dissolves an all-bot game', async () => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('game-view')).toBeTruthy();
+    });
+
+    act(() => openWs());
+
+    act(() => sendWsMessage({ type: 'room_dissolved', reason: 'all_bots' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('abandoned-view')).toBeTruthy();
+    });
+    expect(screen.getByText(/bot-only game was ended automatically/i)).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Completed room
 // ---------------------------------------------------------------------------
 

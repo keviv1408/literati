@@ -541,6 +541,18 @@ export default function GamePage({ params }: PageProps) {
   if (notFound) return <GameErrorView testId="not-found-view" emoji="🔍" title="Room Not Found" body={<>No room <span className="font-mono text-emerald-400">{roomCode}</span> found.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
   if (!room) return <GameErrorView testId="generic-error-view" emoji="⚠️" title="Something Went Wrong" body="Could not load the game." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
   if (room.status === 'cancelled') return <GameErrorView testId="cancelled-view" emoji="🚫" title="Game Cancelled" body={<>Room <span className="font-mono text-slate-300">{room.code}</span> was cancelled.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
+  if (room.status === 'abandoned' || roomDissolved?.reason === 'all_bots') {
+    return (
+      <GameErrorView
+        testId="abandoned-view"
+        emoji="🤖"
+        title="Game Abandoned"
+        body={<>All human players left room <span className="font-mono text-slate-300">{room.code}</span>, so the bot-only game was ended automatically.</>}
+        onPrimary={handleGoHome}
+        primaryLabel="Back to Home"
+      />
+    );
+  }
 
   const finalGameOver = gameOver ?? (gameState?.status === 'completed' ? { type: 'game_over' as const, winner: gameState.winner ?? null, tiebreakerWinner: gameState.tiebreakerWinner ?? null, scores: gameState.scores } : null);
 
@@ -596,7 +608,9 @@ export default function GamePage({ params }: PageProps) {
             <p className="text-xs text-slate-400">
               {roomDissolved.reason === 'timeout'
                 ? 'The rematch vote timed out and the room has been closed.'
-                : 'The majority voted no and the room has been closed.'}
+                : roomDissolved.reason === 'majority_no'
+                ? 'The majority voted no and the room has been closed.'
+                : 'All human players left, so the bot-only game was ended automatically.'}
             </p>
           </div>
         ) : (

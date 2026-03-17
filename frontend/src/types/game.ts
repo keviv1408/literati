@@ -59,7 +59,7 @@ export interface DeclaredSuit {
 
 /** Public game state broadcast to all players. */
 export interface PublicGameState {
-  status: 'active' | 'completed';
+  status: 'active' | 'completed' | 'abandoned';
   currentTurnPlayerId: string | null;
   scores: { team1: number; team2: number };
   lastMove: string | null;
@@ -280,8 +280,8 @@ export interface RematchDeclinedPayload {
  */
 export interface RoomDissolvedPayload {
   type: 'room_dissolved';
-  /** Mirrors the reason from the preceding rematch_declined event. */
-  reason: 'timeout' | 'majority_no';
+  /** Mirrors the rematch outcome or an automatic all-bot abandonment. */
+  reason: 'timeout' | 'majority_no' | 'all_bots';
 }
 
 /**

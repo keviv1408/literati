@@ -210,6 +210,35 @@ describe('markRoomAbandoned (AC 52)', () => {
     await expect(markRoomAbandoned('ROOM04', sb)).resolves.toBeUndefined();
     errorSpy.mockRestore();
   });
+
+  it('9b. persists an abandoned game_state snapshot when one is provided', async () => {
+    const sb = makeSupabaseMock();
+    const gs = {
+      variant: 'remove_7s',
+      playerCount: 6,
+      status: 'abandoned',
+      currentTurnPlayerId: null,
+      players: [],
+      hands: new Map(),
+      declaredSuits: new Map(),
+      scores: { team1: 0, team2: 0 },
+      lastMove: 'All humans left',
+      winner: null,
+      tiebreakerWinner: null,
+      moveHistory: [],
+      eliminatedPlayerIds: new Set(),
+      turnRecipients: new Map(),
+    };
+
+    await markRoomAbandoned('ROOM05', sb, gs);
+
+    expect(sb._updateFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'abandoned',
+        game_state: expect.objectContaining({ status: 'abandoned', lastMove: 'All humans left' }),
+      })
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

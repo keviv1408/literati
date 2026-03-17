@@ -397,17 +397,13 @@ function serializeSpectatorMoveHistory(gs) {
 }
 
 /**
- * Persist the game state snapshot to Supabase.
- * Called after every move to enable crash recovery.
- * Non-fatal: if it fails we log and continue.
+ * Build the JSON-safe snapshot stored in rooms.game_state.
  *
  * @param {Object} gs - GameState
- * @param {Object} supabase - Supabase client
- * @returns {Promise<void>}
+ * @returns {Object}
  */
-async function persistGameState(gs, supabase) {
-  // Convert Map structures to plain objects for JSON storage.
-  const snapshot = {
+function buildPersistedSnapshot(gs) {
+  return {
     variant:             gs.variant,
     playerCount:         gs.playerCount,
     status:              gs.status,
@@ -428,11 +424,29 @@ async function persistGameState(gs, supabase) {
     eliminatedPlayerIds: Array.from(gs.eliminatedPlayerIds ?? []),
     turnRecipients:      Object.fromEntries(gs.turnRecipients ?? new Map()),
   };
+}
+
+/**
+ * Persist the game state snapshot to Supabase.
+ * Called after every move to enable crash recovery.
+ * Non-fatal: if it fails we log and continue.
+ *
+ * @param {Object} gs - GameState
+ * @param {Object} supabase - Supabase client
+ * @returns {Promise<void>}
+ */
+async function persistGameState(gs, supabase) {
+  const snapshot = buildPersistedSnapshot(gs);
+  const roomStatus = gs.status === 'completed'
+    ? 'completed'
+    : gs.status === 'abandoned'
+    ? 'abandoned'
+    : 'in_progress';
 
   try {
     await supabase
       .from('rooms')
-      .update({ game_state: snapshot, status: gs.status === 'completed' ? 'completed' : 'in_progress' })
+      .update({ game_state: snapshot, status: roomStatus })
       .eq('code', gs.roomCode);
   } catch (err) {
     console.error('[gameState] Failed to persist game state for room', gs.roomCode, ':', err);
@@ -455,13 +469,20 @@ async function persistGameState(gs, supabase) {
  *
  * @param {string} roomCode
  * @param {Object} supabase - Supabase client (service-role)
+ * @param {Object|null} [snapshotSource=null] - Optional GameState to persist as
+ *   the final abandoned snapshot so recovery cannot resurrect an old active game.
  * @returns {Promise<void>}
  */
-async function markRoomAbandoned(roomCode, supabase) {
+async function markRoomAbandoned(roomCode, supabase, snapshotSource = null) {
+  const updatePayload = { status: 'abandoned' };
+  if (snapshotSource) {
+    updatePayload.game_state = buildPersistedSnapshot(snapshotSource);
+  }
+
   try {
     const { error } = await supabase
       .from('rooms')
-      .update({ status: 'abandoned' })
+      .update(updatePayload)
       .eq('code', roomCode)
       .in('status', ['in_progress', 'starting', 'waiting']);
 
@@ -566,6 +587,7 @@ module.exports = {
   serializeForPlayer,
   serializeSpectatorHands,
   serializeSpectatorMoveHistory,
+  buildPersistedSnapshot,
   persistGameState,
   restoreGameState,
   // AC 52: abandoned-game cleanup
