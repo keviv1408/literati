@@ -1,54 +1,16 @@
 "use client";
 
-/**
- * BotBadge — displays a robot icon + Docker-style auto-generated name
- * for bot players in the Literati card game.
- *
- * Styled with Tailwind CSS to match the rest of the frontend.
- *
- * @example
- * // Full badge (icon + name) — use in lobby / scoreboard
- * <BotBadge displayName="Quirky Turing" />
- *
- * @example
- * // Icon-only — use on card table where space is tight
- * <BotBadge displayName="Quirky Turing" showName={false} size="sm" />
- *
- * @example
- * // Inline name tag — wraps any player name, shows bot indicator only when isBot
- * <BotNameTag name={player.displayName} isBot={player.isBot} />
- */
-
 import React from "react";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 export type BadgeSize = "xs" | "sm" | "md" | "lg";
 
 export interface BotBadgeProps {
-  /** The human-readable display name, e.g. "Quirky Turing" */
   displayName: string;
-  /**
-   * Visual size variant.
-   * @default "md"
-   */
   size?: BadgeSize;
-  /**
-   * Whether to show the name text alongside the icon.
-   * @default true
-   */
   showName?: boolean;
-  /** Extra Tailwind classes forwarded to the outer element */
   className?: string;
-  /** Tooltip text. Defaults to "{displayName} (Bot)" */
   title?: string;
 }
-
-// ---------------------------------------------------------------------------
-// Size configuration
-// ---------------------------------------------------------------------------
 
 const SIZE_CONFIG: Record<
   BadgeSize,
@@ -80,10 +42,6 @@ const SIZE_CONFIG: Record<
   },
 };
 
-// ---------------------------------------------------------------------------
-// Robot SVG icon
-// ---------------------------------------------------------------------------
-
 const RobotIcon: React.FC<{ size: number; className?: string }> = ({
   size,
   className,
@@ -98,15 +56,10 @@ const RobotIcon: React.FC<{ size: number; className?: string }> = ({
     focusable="false"
     className={className}
   >
-    {/* Head */}
     <rect x="5" y="7" width="14" height="10" rx="2" ry="2" />
-    {/* Left eye */}
     <circle cx="9" cy="11" r="1.5" fill="white" />
-    {/* Right eye */}
     <circle cx="15" cy="11" r="1.5" fill="white" />
-    {/* Mouth */}
     <rect x="9" y="14" width="6" height="1.5" rx="0.75" fill="white" />
-    {/* Antenna stem */}
     <line
       x1="12"
       y1="7"
@@ -116,23 +69,12 @@ const RobotIcon: React.FC<{ size: number; className?: string }> = ({
       strokeWidth="1.5"
       strokeLinecap="round"
     />
-    {/* Antenna tip */}
     <circle cx="12" cy="3.5" r="1" />
-    {/* Left ear */}
     <rect x="3" y="9" width="2" height="4" rx="1" />
-    {/* Right ear */}
     <rect x="19" y="9" width="2" height="4" rx="1" />
   </svg>
 );
 
-// ---------------------------------------------------------------------------
-// BotBadge component
-// ---------------------------------------------------------------------------
-
-/**
- * BotBadge renders a robot icon alongside the bot's auto-generated name.
- * Uses an indigo/violet colour scheme so bots are visually distinct from humans.
- */
 export const BotBadge: React.FC<BotBadgeProps> = ({
   displayName,
   size = "md",
@@ -156,7 +98,6 @@ export const BotBadge: React.FC<BotBadgeProps> = ({
       title={tooltip}
       aria-label={tooltip}
     >
-      {/* Icon pill */}
       <span
         className={[
           "inline-flex items-center justify-center rounded flex-shrink-0",
@@ -167,7 +108,6 @@ export const BotBadge: React.FC<BotBadgeProps> = ({
         <RobotIcon size={cfg.iconSize} />
       </span>
 
-      {/* Name */}
       {showName && (
         <span className={["truncate max-w-[10rem]", cfg.text].join(" ")}>
           {displayName}
@@ -177,23 +117,13 @@ export const BotBadge: React.FC<BotBadgeProps> = ({
   );
 };
 
-// ---------------------------------------------------------------------------
-// BotNameTag — convenience wrapper for mixed human/bot name display
-// ---------------------------------------------------------------------------
-
 export interface BotNameTagProps {
-  /** Player's display name */
   name: string;
-  /** Whether this player is a bot */
   isBot: boolean;
   size?: BadgeSize;
   className?: string;
 }
 
-/**
- * BotNameTag shows a plain name for humans and a BotBadge for bots.
- * Drop-in replacement wherever a player name is rendered.
- */
 export const BotNameTag: React.FC<BotNameTagProps> = ({
   name,
   isBot,

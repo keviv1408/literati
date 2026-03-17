@@ -56,9 +56,7 @@ wonder, reflect, advocate, contrarian, judge
 ```
 literati/
 ├── frontend/          # Next.js 14 App Router (TypeScript)
-├── backend/           # Express + WebSocket server (JavaScript)
-├── packages/shared/   # Shared types/utils (seatLayout, botNames)
-└── apps/server/       # Standalone server entry (bots.ts)
+└── backend/           # Express + WebSocket server (JavaScript)
 ```
 
 ## Frontend (`frontend/src/`)

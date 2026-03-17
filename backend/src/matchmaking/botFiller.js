@@ -6,17 +6,11 @@
  * When the 2-minute lobby countdown expires (or the host manually starts with
  * an unfull room), this module generates bot players to occupy any empty seats.
  *
- * Bot IDs follow the "bot_<timestamp>_<seatIndex>" format so that
- * isBotId() in apps/server/src/bots.ts recognises them.
- *
- * Bot names follow the Docker-style adjective_noun convention defined in
- * packages/shared/src/botNames.ts.  This JS implementation uses a compatible
- * subset of the same word lists so bot names are consistent across the stack.
+ * Bot IDs follow the "bot_<timestamp>_<seatIndex>" format and bot names use
+ * the same adjective_noun convention surfaced in the frontend UI.
  */
 
-// ---------------------------------------------------------------------------
-// Word lists (Docker-style adjective + scientist/pioneer noun)
-// ---------------------------------------------------------------------------
+// Docker-style adjective + scientist/pioneer noun lists.
 
 const BOT_ADJECTIVES = [
   'admiring',   'adoring',    'amazing',    'blissful',   'bold',
@@ -51,9 +45,7 @@ const BOT_NOUNS = [
   'edison',     'bell',       'hubble',     'sagan',
 ];
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Capitalise the first letter of a word, lower-casing the rest.
@@ -100,9 +92,7 @@ function _generateUniqueBotKey(usedKeys) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Generate bot seat descriptors for all unoccupied seats in a lobby.
@@ -195,13 +185,8 @@ function fillWithBots(playerCount, occupiedSeats) {
   return bots;
 }
 
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
-
 module.exports = {
   fillWithBots,
 
-  // Exposed for unit-testing the helper logic
   _keyToDisplayName,
 };

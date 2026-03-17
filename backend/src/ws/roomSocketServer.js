@@ -470,7 +470,6 @@ function broadcast(roomCode, message) {
 
 /**
  * Send a JSON message to spectators ONLY (not to players).
- * Currently unused internally but exported for use by other modules or tests.
  * @param {string} roomCode
  * @param {Object} message
  */
