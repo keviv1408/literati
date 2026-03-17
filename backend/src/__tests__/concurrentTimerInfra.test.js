@@ -1,29 +1,29 @@
 'use strict';
 
 /**
- * Unit tests for the concurrent timer infrastructure (Sub-AC 1 of AC 39).
+ * Unit tests for the concurrent timer infrastructure.
  *
  * Verifies that on player disconnect the server:
- *   1.  Starts a 60-second turn timer (via scheduleTurnTimerIfNeeded) and a
- *       60-second reconnect window simultaneously when the disconnected player
- *       holds the active turn.
- *   2.  Starts ONLY the reconnect window (no turn timer) when the disconnected
- *       player does NOT hold the active turn.
- *   3.  Emits `reconnect_timer` start event immediately on disconnect.
- *   4.  Emits `reconnect_tick` events every TIMER_TICK_INTERVAL_MS.
- *   5.  Emits `reconnect_expired` when the 60-second window closes.
- *   6.  Emits `turn_timer` start event concurrently with the reconnect window.
- *   7.  Emits `turn_timer_tick` events every TIMER_TICK_INTERVAL_MS.
- *   8.  `bot_takeover` fires when the 60-second turn timer expires.
- *   9.  cancelReconnectWindow cancels both the expiry and the tick interval.
- *   10. startReconnectWindow + cancelReconnectWindow are idempotent.
- *   11. handlePlayerDisconnect is a no-op for spectators.
- *   12. handlePlayerDisconnect is a no-op when no game is active.
- *   13. `reconnect_timer` and `turn_timer` expiresAt values are correct.
- *   14. Concurrent timers tracked in _reconnectTimers and _turnTimers maps.
- *   15. `player_disconnected` broadcast excludes the disconnected player.
- *   16. `reconnect_tick` includes remaining time that decreases over time.
- *   17. `turn_timer_tick` includes remaining time during the 30s window.
+ * 1. Starts a 60-second turn timer (via scheduleTurnTimerIfNeeded) and a
+ * 60-second reconnect window simultaneously when the disconnected player
+ * holds the active turn.
+ * 2. Starts ONLY the reconnect window (no turn timer) when the disconnected
+ * player does NOT hold the active turn.
+ * 3. Emits `reconnect_timer` start event immediately on disconnect.
+ * 4. Emits `reconnect_tick` events every TIMER_TICK_INTERVAL_MS.
+ * 5. Emits `reconnect_expired` when the 60-second window closes.
+ * 6. Emits `turn_timer` start event concurrently with the reconnect window.
+ * 7. Emits `turn_timer_tick` events every TIMER_TICK_INTERVAL_MS.
+ * 8. `bot_takeover` fires when the 60-second turn timer expires.
+ * 9. cancelReconnectWindow cancels both the expiry and the tick interval.
+ * 10. startReconnectWindow + cancelReconnectWindow are idempotent.
+ * 11. handlePlayerDisconnect is a no-op for spectators.
+ * 12. handlePlayerDisconnect is a no-op when no game is active.
+ * 13. `reconnect_timer` and `turn_timer` expiresAt values are correct.
+ * 14. Concurrent timers tracked in _reconnectTimers and _turnTimers maps.
+ * 15. `player_disconnected` broadcast excludes the disconnected player.
+ * 16. `reconnect_tick` includes remaining time that decreases over time.
+ * 17. `turn_timer_tick` includes remaining time during the 30s window.
  */
 
 const {
@@ -553,7 +553,7 @@ describe('handlePlayerDisconnect', () => {
 });
 
 // ---------------------------------------------------------------------------
-// scheduleTurnTimerIfNeeded — tick events (new in Sub-AC 1)
+// scheduleTurnTimerIfNeeded — tick events (new in )
 // ---------------------------------------------------------------------------
 
 describe('scheduleTurnTimerIfNeeded — tick events', () => {
@@ -571,7 +571,7 @@ describe('scheduleTurnTimerIfNeeded — tick events', () => {
     // timerService fires 'timer_tick' every 1 second; advance > 1 s to get at least one
     jest.advanceTimersByTime(TIMER_TICK_INTERVAL_MS);
 
-    // New event name: 'timer_tick' with phase:'turn' (timerService Sub-AC 36.1)
+    // New event name: 'timer_tick' with phase:'turn' (timerService )
     expect(ws1._messages.some((m) => m.type === 'timer_tick' && m.phase === 'turn')).toBe(true);
     expect(ws2._messages.some((m) => m.type === 'timer_tick' && m.phase === 'turn')).toBe(true);
 
@@ -589,7 +589,7 @@ describe('scheduleTurnTimerIfNeeded — tick events', () => {
     scheduleTurnTimerIfNeeded(gs);
     jest.advanceTimersByTime(TIMER_TICK_INTERVAL_MS);
 
-    // New event name: 'timer_tick' with phase:'turn' (timerService Sub-AC 36.1)
+    // New event name: 'timer_tick' with phase:'turn' (timerService )
     const tick = ws._messages.find((m) => m.type === 'timer_tick' && m.phase === 'turn');
     expect(tick).toBeDefined();
     expect(tick.playerId).toBe('p1');

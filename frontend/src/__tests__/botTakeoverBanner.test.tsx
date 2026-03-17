@@ -1,21 +1,21 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for the bot-takeover banner (Sub-AC 2 of AC 39).
+ * Tests for the bot-takeover banner.
  *
  * When a human player's 30-second turn timer expires, the server broadcasts a
- * `bot_takeover` event then auto-executes a move via bot logic.  The game page
+ * `bot_takeover` event then auto-executes a move via bot logic. The game page
  * shows a brief orange banner notifying all connected clients.
  *
  * Coverage:
- *   1. Banner is NOT rendered when botTakeover is null
- *   2. Banner renders when bot_takeover WS message is received
- *   3. Banner shows "Your turn timed out" message for the local player
- *   4. Banner shows the timed-out player's display name for another player
- *   5. Banner has data-testid="bot-takeover-banner"
- *   6. Banner disappears when ask_result arrives (move complete)
- *   7. Banner disappears when declaration_result arrives (move complete)
- *   8. Multiple clients all see the banner (broadcast)
+ * 1. Banner is NOT rendered when botTakeover is null
+ * 2. Banner renders when bot_takeover WS message is received
+ * 3. Banner shows "Your turn timed out" message for the local player
+ * 4. Banner shows the timed-out player's display name for another player
+ * 5. Banner has data-testid="bot-takeover-banner"
+ * 6. Banner disappears when ask_result arrives (move complete)
+ * 7. Banner disappears when declaration_result arrives (move complete)
+ * 8. Multiple clients all see the banner (broadcast)
  */
 
 import React from 'react';
@@ -236,7 +236,7 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('Bot-takeover banner (Sub-AC 2 of AC 39)', () => {
+describe('Bot-takeover banner ', () => {
   it('1. Banner is NOT rendered on initial game load (no bot_takeover received)', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());

@@ -3,7 +3,7 @@
 /**
  * askCardPrivacy.test.js
  *
- * Tests for Sub-AC 15b: Server-side privacy of the card request flow.
+ * Tests for Server-side privacy of the card request flow.
  *
  * The "in-progress selection" phase covers the period when an active player
  * opens the AskCardModal, selects a card, and picks a target opponent.
@@ -12,29 +12,29 @@
  *
  * The server MUST enforce the following privacy guarantees:
  *
- *   1. No data about an in-progress selection is broadcast to non-active
- *      players or spectators before the `ask_card` message is submitted.
- *      Selection state is purely local to the active player's browser.
+ * 1. No data about an in-progress selection is broadcast to non-active
+ * players or spectators before the `ask_card` message is submitted.
+ * Selection state is purely local to the active player's browser.
  *
- *   2. An `ask_card` attempt from a non-active player (wrong turn) returns
- *      an error ONLY to the sender — it is NOT broadcast to other clients.
+ * 2. An `ask_card` attempt from a non-active player (wrong turn) returns
+ * an error ONLY to the sender — it is NOT broadcast to other clients.
  *
- *   3. A game-action message from a spectator returns a SPECTATOR error ONLY
- *      to the spectator — it is NOT broadcast to player connections.
+ * 3. A game-action message from a spectator returns a SPECTATOR error ONLY
+ * to the spectator — it is NOT broadcast to player connections.
  *
- *   4. Any unrecognised message type (e.g. a hypothetical "ask_preview"
- *      snooping event) is rejected with UNKNOWN_TYPE ONLY to the sender.
+ * 4. Any unrecognised message type (e.g. a hypothetical "ask_preview"
+ * snooping event) is rejected with UNKNOWN_TYPE ONLY to the sender.
  *
- *   5. ONLY after a valid `ask_card` is fully validated and applied do
- *      `ask_result`, `game_state`, and `game_players` get broadcast to ALL
- *      connected clients (active player, non-active players, and spectators).
+ * 5. ONLY after a valid `ask_card` is fully validated and applied do
+ * `ask_result`, `game_state`, and `game_players` get broadcast to ALL
+ * connected clients (active player, non-active players, and spectators).
  *
- *   6. `spectator_init` and subsequent broadcast events sent to spectators
- *      contain NO player hands, NO move history, and NO pending-selection
- *      fields.
+ * 6. `spectator_init` and subsequent broadcast events sent to spectators
+ * contain NO player hands, NO move history, and NO pending-selection
+ * fields.
  *
- *   7. `game_init` for a non-active (but authenticated) player contains NO
- *      other players' hands, NO move history, and NO selection-state fields.
+ * 7. `game_init` for a non-active (but authenticated) player contains NO
+ * other players' hands, NO move history, and NO selection-state fields.
  */
 
 const http      = require('http');
@@ -49,8 +49,8 @@ const SPECTATOR_HEX = 'AABBCCDDEEFF00112233445566778899';
 
 /**
  * Card ask setup (remove_7s variant, low_s half-suit):
- *   - p1 (Team 1) holds 1_s 2_s 3_s  →  can ask for 4_s (same half-suit)
- *   - p2 (Team 2) holds 4_s 5_s 6_s  →  p2 is the target
+ * - p1 (Team 1) holds 1_s 2_s 3_s → can ask for 4_s (same half-suit)
+ * - p2 (Team 2) holds 4_s 5_s 6_s → p2 is the target
  */
 const ASK_CARD = '4_s'; // p1 requests from p2 — valid ask (p1 holds low_s card)
 
@@ -58,12 +58,12 @@ const ASK_CARD = '4_s'; // p1 requests from p2 — valid ask (p1 holds low_s car
 
 /**
  * Build a minimal Supabase mock that:
- *  - auth.getUser: always returns "no user" (forces guest-session path)
- *  - from().select().eq().maybeSingle(): returns the room row for spectator
- *    token lookup AND for the crash-recovery path (if triggered)
- *  - from().update().eq(): resolves silently (for persistGameState)
- *  - rpc(): resolves silently (for increment_user_stats — won't be called
- *    during asks, but included for completeness)
+ * - auth.getUser: always returns "no user" (forces guest-session path)
+ * - from().select().eq().maybeSingle(): returns the room row for spectator
+ * token lookup AND for the crash-recovery path (if triggered)
+ * - from().update().eq(): resolves silently (for persistGameState)
+ * - rpc(): resolves silently (for increment_user_stats — won't be called
+ * during asks, but included for completeness)
  */
 function buildSupabaseMock() {
   const chain = {};
@@ -89,7 +89,7 @@ function buildSupabaseMock() {
 
 // ── Test suite ─────────────────────────────────────────────────────────────
 
-describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
+describe('Ask card privacy — server-side enforcement ', () => {
   let httpServer;
   let port;
   let mockSupabase;
@@ -133,9 +133,9 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
     ({ _clearAll: clearGameStore } = require('../game/gameStore'));
 
     // Build game with deterministic 6-player seating:
-    //   Seat 0: p1 (Team 1, human — will be the current-turn player)
-    //   Seat 1: p2 (Team 2, human — non-active)
-    //   Seats 2-5: bots
+    // Seat 0: p1 (Team 1, human — will be the current-turn player)
+    // Seat 1: p2 (Team 2, human — non-active)
+    // Seats 2-5: bots
     const seats = [
       { seatIndex: 0, playerId: p1Id,    displayName: 'Alice', avatarId: null, teamId: 1, isBot: false, isGuest: true  },
       { seatIndex: 1, playerId: p2Id,    displayName: 'Bob',   avatarId: null, teamId: 2, isBot: false, isGuest: true  },
@@ -154,7 +154,7 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
     });
 
     // Override hands for deterministic card layout.
-    // low_s  = 1_s 2_s 3_s 4_s 5_s 6_s  (remove_7s variant)
+    // low_s = 1_s 2_s 3_s 4_s 5_s 6_s (remove_7s variant)
     // p1 holds 1_s 2_s 3_s → can ask for 4_s (same half-suit) from p2
     gs.hands.set(p1Id,    new Set(['1_s', '2_s', '3_s']));
     gs.hands.set(p2Id,    new Set(['4_s', '5_s', '6_s']));
@@ -217,10 +217,10 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
 
   /**
    * Open a WebSocket to the game endpoint and resolve once the expected init
-   * message type is received.  Returns { ws, initMsg }.
+   * message type is received. Returns { ws, initMsg }.
    *
-   * @param {string} queryString  e.g. "token=<bearer>" or "spectatorToken=<hex>"
-   * @param {string} initType     'game_init' | 'spectator_init'
+   * @param {string} queryString e.g. "token=<bearer>" or "spectatorToken=<hex>"
+   * @param {string} initType 'game_init' | 'spectator_init'
    * @param {number} [timeoutMs]
    * @returns {Promise<{ws: WebSocket, initMsg: Object}>}
    */
@@ -305,11 +305,11 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
    * The listener is attached BEFORE the message is sent so there is no race
    * condition between the send and the observer setup.
    *
-   * @param {WebSocket}  senderWs
-   * @param {Object}     payload
-   * @param {WebSocket}  observerWs
-   * @param {number}     [windowMs]
-   * @returns {Promise<Object[]>}   All messages observed during the window.
+   * @param {WebSocket} senderWs
+   * @param {Object} payload
+   * @param {WebSocket} observerWs
+   * @param {number} [windowMs]
+   * @returns {Promise<Object[]>} All messages observed during the window.
    */
   function sendAndObserve(senderWs, payload, observerWs, windowMs = 300) {
     return new Promise((resolve) => {
@@ -812,10 +812,10 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
     );
 
     // In our hand layout:
-    //   bot-1 (Team 1) has cards; bot-3 (Team 1) also has cards
-    //   p1 asks p2 → hands that change: p1 and p2
-    //   bot-1, bot-3 (team-mates of p1) should NOT receive hand_update
-    //   spectator should NOT receive hand_update
+    // bot-1 (Team 1) has cards; bot-3 (Team 1) also has cards
+    // p1 asks p2 → hands that change: p1 and p2
+    // bot-1, bot-3 (team-mates of p1) should NOT receive hand_update
+    // spectator should NOT receive hand_update
 
     // We cannot directly test bot connections (they are not WebSocket clients),
     // so we verify that the spectator does NOT receive a hand_update.

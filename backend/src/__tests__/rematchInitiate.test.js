@@ -1,21 +1,21 @@
 'use strict';
 
 /**
- * Unit tests for handleRematchInitiate (Sub-AC 45a).
+ * Unit tests for handleRematchInitiate.
  *
  * handleRematchInitiate is the server handler for `rematch_initiate` — a
  * host-only WebSocket message that immediately triggers a rematch in a
  * private room without requiring a majority vote.
  *
  * Coverage:
- *   1. Host of a private room triggers rematch → rematch_start broadcast to all
- *   2. Matchmaking room → rejects with NOT_PRIVATE_ROOM error
- *   3. Non-host player → rejects with HOST_ONLY error
- *   4. DB lookup failure → rejects with ROOM_NOT_FOUND error
- *   5. Supabase update failure → rejects with REMATCH_RESET_FAILED error
- *   6. Clears any active rematch vote before triggering rematch_start
- *   7. rematch_start payload contains the correct roomCode
- *   8. No error sent to caller on success
+ * 1. Host of a private room triggers rematch → rematch_start broadcast to all
+ * 2. Matchmaking room → rejects with NOT_PRIVATE_ROOM error
+ * 3. Non-host player → rejects with HOST_ONLY error
+ * 4. DB lookup failure → rejects with ROOM_NOT_FOUND error
+ * 5. Supabase update failure → rejects with REMATCH_RESET_FAILED error
+ * 6. Clears any active rematch vote before triggering rematch_start
+ * 7. rematch_start payload contains the correct roomCode
+ * 8. No error sent to caller on success
  */
 
 // ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('handleRematchInitiate (Sub-AC 45a)', () => {
+describe('handleRematchInitiate ', () => {
   it('1. host of a private room → broadcasts rematch_start to all connected clients', async () => {
     const observerWs = registerFakeWs(ROOM_CODE, 'observer');
     const callerWs   = makeFakeWs();

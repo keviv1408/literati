@@ -2,9 +2,9 @@
  * Lobby type definitions.
  *
  * These types describe the player data that the lobby UI needs to render
- * team columns and player cards.  They are intentionally separate from the
+ * team columns and player cards. They are intentionally separate from the
  * backend `Room` type so the lobby can be driven by either static mock data
- * (for development) or real-time WebSocket updates (Sub-AC 4 and beyond).
+ * (for development) or real-time WebSocket updates.
  */
 
 // ── Player in a lobby seat ───────────────────────────────────────────────────
@@ -13,8 +13,8 @@
  * A single occupant of a lobby seat.
  *
  * Seat indices start at 0 (host) and alternate between teams:
- *   seatIndex 0, 2, 4, 6 → Team 1
- *   seatIndex 1, 3, 5, 7 → Team 2
+ * seatIndex 0, 2, 4, 6 → Team 1
+ * seatIndex 1, 3, 5, 7 → Team 2
  *
  * Empty seats are represented by `null` in the `LobbyState.seats` array.
  */
@@ -54,8 +54,8 @@ export function getTeamForSeat(seatIndex: number): 1 | 2 {
  * Split an array of nullable seat entries (indexed 0..playerCount-1) into
  * two team arrays preserving the relative order within each team.
  *
- * @param seats   Sparse array of length `playerCount`.  Null = empty seat.
- * @returns       `{ team1, team2 }` where each entry is `{ seatIndex, player | null }`.
+ * @param seats Sparse array of length `playerCount`. Null = empty seat.
+ * @returns `{ team1, team2 }` where each entry is `{ seatIndex, player | null }`.
  */
 export function splitSeatsByTeam(
   seats: Array<LobbyPlayer | null>,

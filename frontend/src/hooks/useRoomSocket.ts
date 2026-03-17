@@ -5,46 +5,46 @@
  *
  * Protocol (all messages are JSON):
  *
- *   On connect:   client automatically sends { type: 'join-room', roomCode }
+ * On connect: client automatically sends { type: 'join-room', roomCode }
  *
- *   Server → client messages handled:
- *   ─────────────────────────────────
- *   { type: 'connected',     playerId, displayName }
- *     → Server confirms auth. Hook sends 'join-room' immediately after.
+ * Server → client messages handled:
+ * ─────────────────────────────────
+ * { type: 'connected', playerId, displayName }
+ * → Server confirms auth. Hook sends 'join-room' immediately after.
  *
- *   { type: 'room-joined',   roomCode, playerId, players: LobbyPlayer[] }
- *     → Populates the full initial player list (including the current user).
- *       Each player has { playerId, displayName, avatarId, isGuest, isHost }.
+ * { type: 'room-joined', roomCode, playerId, players: LobbyPlayer[] }
+ * → Populates the full initial player list (including the current user).
+ * Each player has { playerId, displayName, avatarId, isGuest, isHost }.
  *
- *   { type: 'player-joined', roomCode, player: LobbyPlayer }
- *     → Appends the new arrival to the player list.
+ * { type: 'player-joined', roomCode, player: LobbyPlayer }
+ * → Appends the new arrival to the player list.
  *
- *   { type: 'player-kicked', roomCode, playerId, displayName }
- *     → Removes the kicked player from the list (broadcast to observers).
+ * { type: 'player-kicked', roomCode, playerId, displayName }
+ * → Removes the kicked player from the list (broadcast to observers).
  *
- *   { type: 'you-were-kicked', roomCode }
- *     → Sent only to the kicked client. Sets isKicked=true and fires onKicked.
+ * { type: 'you-were-kicked', roomCode }
+ * → Sent only to the kicked client. Sets isKicked=true and fires onKicked.
  *
- *   { type: 'player-left',   roomCode, playerId, displayName }
- *     → Removes the disconnected player from the list.
+ * { type: 'player-left', roomCode, playerId, displayName }
+ * → Removes the disconnected player from the list.
  *
- *   { type: 'kick-confirmed', roomCode, playerId }
- *     → Sent only to the host after a successful kick (player already removed
- *       from the list by the preceding 'player-kicked' broadcast).
+ * { type: 'kick-confirmed', roomCode, playerId }
+ * → Sent only to the host after a successful kick (player already removed
+ * from the list by the preceding 'player-kicked' broadcast).
  *
- *   Client → server messages:
- *   ──────────────────────────
- *   { type: 'join-room',   roomCode }          — sent automatically on connect
- *   { type: 'kick-player', roomCode, targetPlayerId }  — via kickPlayer()
- *   (other types via the generic emit() escape-hatch)
+ * Client → server messages:
+ * ──────────────────────────
+ * { type: 'join-room', roomCode } — sent automatically on connect
+ * { type: 'kick-player', roomCode, targetPlayerId } — via kickPlayer()
+ * (other types via the generic emit() escape-hatch)
  *
- * @param options.roomCode     6-char room code to join.
- * @param options.sessionId    Caller's backend identity (guest sessionId or
- *                             Supabase user id). Pass null to skip connecting.
- * @param options.bearerToken  Auth token passed as ?token= query param.
- *                             Pass null to skip connecting (server will reject).
- * @param options.onKicked     Optional callback fired once when the server
- *                             sends 'you-were-kicked' to this client.
+ * @param options.roomCode 6-char room code to join.
+ * @param options.sessionId Caller's backend identity (guest sessionId or
+ * Supabase user id). Pass null to skip connecting.
+ * @param options.bearerToken Auth token passed as ?token= query param.
+ * Pass null to skip connecting (server will reject).
+ * @param options.onKicked Optional callback fired once when the server
+ * sends 'you-were-kicked' to this client.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -57,7 +57,7 @@ import { API_URL } from '@/lib/api';
  * A single player as broadcast by the server in lobby state messages.
  *
  * `teamId` is present in `room_players` snapshots sent by the room WS server
- * (/ws/room/<CODE>).  It is optional so existing callers that still receive
+ * (/ws/room/<CODE>). It is optional so existing callers that still receive
  * the older `room-joined` / `player-joined` incremental events (from the
  * legacy /ws server) continue to compile without changes.
  *
@@ -72,7 +72,7 @@ export interface LobbyPlayer {
   isGuest: boolean;
   /** True for the room creator (host_user_id in Supabase). */
   isHost: boolean;
-  /** Team assignment: 1 or 2.  Present in room_players snapshots. */
+  /** Team assignment: 1 or 2. Present in room_players snapshots. */
   teamId?: 1 | 2;
   /** True when this player is an AI bot (present in lobby-starting seats). */
   isBot?: boolean;
@@ -82,7 +82,7 @@ export type WsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'e
 
 /**
  * Lobby countdown timer state broadcast by the server when the first player
- * joins a room.  The timer fires after 2 minutes; if all seats fill before
+ * joins a room. The timer fires after 2 minutes; if all seats fill before
  * then, the timer is cancelled and the game starts immediately.
  */
 export interface LobbyTimerState {
@@ -95,8 +95,8 @@ export interface UseRoomSocketOptions {
   roomCode: string | null;
   /**
    * Caller's backend session identifier:
-   *   - guest:      the sessionId returned by POST /api/auth/guest
-   *   - registered: the Supabase user UUID from session.user.id
+   * - guest: the sessionId returned by POST /api/auth/guest
+   * - registered: the Supabase user UUID from session.user.id
    *
    * Pass null while the session is still loading; the hook will not connect
    * until a non-null value is provided.
@@ -104,8 +104,8 @@ export interface UseRoomSocketOptions {
   sessionId: string | null;
   /**
    * Bearer token to authenticate the WebSocket connection (passed as ?token=).
-   *   - guest:      opaque token from getGuestBearerToken()
-   *   - registered: session.access_token from Supabase
+   * - guest: opaque token from getGuestBearerToken()
+   * - registered: session.access_token from Supabase
    *
    * Pass null to defer connection.
    */
@@ -139,8 +139,8 @@ export interface UseRoomSocketResult {
    * Null until the WebSocket handshake completes. Use this to identify the
    * current user's entry in `players` and determine whether they are the host:
    *
-   *   const myPlayer = players.find(p => p.playerId === myPlayerId);
-   *   const amIHost  = myPlayer?.isHost ?? false;
+   * const myPlayer = players.find(p => p.playerId === myPlayerId);
+   * const amIHost = myPlayer?.isHost ?? false;
    */
   myPlayerId: string | null;
   /** True once 'you-were-kicked' is received for this client. */
@@ -149,7 +149,7 @@ export interface UseRoomSocketResult {
   kickReason: string | null;
   /**
    * Most recent host-authority-transfer notification, or null if no transfer
-   * has occurred this session.  Populated when the server broadcasts
+   * has occurred this session. Populated when the server broadcasts
    * `{ type: 'host_changed' }` after the original host's grace window expires.
    * The `room_players` snapshot that follows this message will carry the updated
    * `isHost` flags, so callers may also derive host status directly from `players`.
@@ -160,7 +160,7 @@ export interface UseRoomSocketResult {
    * Server enforces that only the host may kick; non-hosts receive an error.
    * No-ops silently when the socket is not OPEN.
    *
-   * @param targetPlayerId  The playerId of the player to kick.
+   * @param targetPlayerId The playerId of the player to kick.
    */
   kickPlayer: (targetPlayerId: string) => void;
   /**
@@ -170,7 +170,7 @@ export interface UseRoomSocketResult {
    * `room_players` snapshot to ALL connected clients on success.
    * No-ops silently when the socket is not OPEN.
    *
-   * @param teamId  1 or 2 — the team to switch to.
+   * @param teamId 1 or 2 — the team to switch to.
    */
   changeTeam: (teamId: 1 | 2) => void;
   /**
@@ -200,7 +200,7 @@ export interface UseRoomSocketResult {
   lobbyStarting: boolean;
   /**
    * Last error message received from the server (non-fatal { type: 'error' }
-   * messages).  Useful for surfacing validation errors from host commands.
+   * messages). Useful for surfacing validation errors from host commands.
    * Cleared when a new WebSocket connection is opened.
    */
   lastError: string | null;
@@ -210,8 +210,8 @@ export interface UseRoomSocketResult {
 
 /**
  * Convert an HTTP(S) base URL to a WS(S) base URL.
- *   "http://localhost:3001"  → "ws://localhost:3001"
- *   "https://api.example.com" → "wss://api.example.com"
+ * "http://localhost:3001" → "ws://localhost:3001"
+ * "https://api.example.com" → "wss://api.example.com"
  */
 function toWsBase(httpUrl: string): string {
   return httpUrl.replace(/^https?/, (proto) =>
@@ -392,7 +392,7 @@ export function useRoomSocket({
 
         // ── Full roster snapshot (room WS server, /ws/room/<CODE>) ──────────
         // Sent by the server after every state change: join, leave, kick, or
-        // team reassignment.  Replaces the entire player list atomically so
+        // team reassignment. Replaces the entire player list atomically so
         // all clients converge to the same state without incremental merging.
         case 'room_players': {
           const rawPlayers = msg.players;
@@ -424,13 +424,13 @@ export function useRoomSocket({
         // Both event types signal that the room has transitioned from "waiting"
         // to "starting" and all clients should navigate to the game board.
         //
-        //   'lobby-starting' — sent by:
-        //     • roomSocketServer.js (/ws/room/<CODE>) when the host fires
-        //       start_game (Sub-AC 5.4).
-        //     • wsServer.js (/ws) when the lobby fill timer fires or the
-        //       room reaches capacity.
+        // 'lobby-starting' — sent by:
+        // • roomSocketServer.js (/ws/room/<CODE>) when the host fires
+        // start_game.
+        // • wsServer.js (/ws) when the lobby fill timer fires or the
+        // room reaches capacity.
         //
-        //   'game_starting' — forward-compatible alias (same semantics).
+        // 'game_starting' — forward-compatible alias (same semantics).
         //
         // Payload: { seats: LobbySeat[], botsAdded: string[], roomCode: string }
         case 'lobby-starting':
@@ -440,7 +440,7 @@ export function useRoomSocket({
           setLobbyTimer(null); // timer no longer relevant
           // Update player list with final seats (includes bots).
           // `isBot` must be mapped here so bot seats render BotBadge indicators
-          // in the brief pre-navigation lobby snapshot (Sub-AC 6.3).
+          // in the brief pre-navigation lobby snapshot.
           const seats = msg.seats;
           if (Array.isArray(seats)) {
             setPlayers(

@@ -4,32 +4,32 @@
  * Unit tests for gameEngine.js
  *
  * Coverage:
- *   validateAsk:
- *     1. Valid ask → { valid: true }
- *     2. p1 asks teammate (p2) → NOT_YOUR_TURN / SAME_TEAM
- *     3. p1 asks for card not in same half-suit it holds → NO_HALF_SUIT_CARD
- *     4. p1 asks when it's p2's turn → NOT_YOUR_TURN
- *     5. p1 asks for card already in p1's hand → ALREADY_HELD
- *     6. Target player has 0 cards → TARGET_EMPTY
- *     7. p1 asks for a card that doesn't exist → INVALID_CARD
- *   applyAsk:
- *     8. Successful ask transfers card, turn stays with asker
- *     9. Failed ask keeps card with target, turn passes to target
- *    10. Returns { success, newTurnPlayerId, lastMove }
- *   validateDeclaration:
- *    11. Valid declaration → { valid: true }
- *    12. Wrong turn → NOT_YOUR_TURN
- *    13. Only 5 cards assigned → INCOMPLETE_ASSIGNMENT
- *    14. Opponent in assignment → CROSS_TEAM_ASSIGN
- *    15. Half-suit already declared → ALREADY_DECLARED
- *    15a. Declarer holds no cards from that half-suit → DECLARANT_HAS_NO_CARDS
- *   applyDeclaration:
- *    16. Correct declaration: team gets point, cards removed
- *    17. Incorrect declaration: opponent gets point
- *    18. declaredSuits updated
- *    19. After 8 declarations gs.status === 'completed'
- *    20. Tiebreaker: 4-4 tie → winner is team that declared high_d
- *    21. moveHistory updated after declaration
+ * validateAsk:
+ * 1. Valid ask → { valid: true }
+ * 2. p1 asks teammate (p2) → NOT_YOUR_TURN / SAME_TEAM
+ * 3. p1 asks for card not in same half-suit it holds → NO_HALF_SUIT_CARD
+ * 4. p1 asks when it's p2's turn → NOT_YOUR_TURN
+ * 5. p1 asks for card already in p1's hand → ALREADY_HELD
+ * 6. Target player has 0 cards → TARGET_EMPTY
+ * 7. p1 asks for a card that doesn't exist → INVALID_CARD
+ * applyAsk:
+ * 8. Successful ask transfers card, turn stays with asker
+ * 9. Failed ask keeps card with target, turn passes to target
+ * 10. Returns { success, newTurnPlayerId, lastMove }
+ * validateDeclaration:
+ * 11. Valid declaration → { valid: true }
+ * 12. Wrong turn → NOT_YOUR_TURN
+ * 13. Only 5 cards assigned → INCOMPLETE_ASSIGNMENT
+ * 14. Opponent in assignment → CROSS_TEAM_ASSIGN
+ * 15. Half-suit already declared → ALREADY_DECLARED
+ * 15a. Declarer holds no cards from that half-suit → DECLARANT_HAS_NO_CARDS
+ * applyDeclaration:
+ * 16. Correct declaration: team gets point, cards removed
+ * 17. Incorrect declaration: opponent gets point
+ * 18. declaredSuits updated
+ * 19. After 8 declarations gs.status === 'completed'
+ * 20. Tiebreaker: 4-4 tie → winner is team that declared high_d
+ * 21. moveHistory updated after declaration
  */
 
 const { validateAsk, applyAsk, getDeclarantLockedCards, validateDeclaration, applyDeclaration, applyForcedFailedDeclaration, _nextClockwiseOpponent } = require('../game/gameEngine');
@@ -42,14 +42,14 @@ const { serializePlayers, getHalfSuitCardCount } = require('../game/gameState');
 
 /**
  * Card layout for remove_7s (for reference):
- *   low_s:  1_s 2_s 3_s 4_s 5_s 6_s
- *   high_s: 8_s 9_s 10_s 11_s 12_s 13_s
- *   low_h:  1_h 2_h 3_h 4_h 5_h 6_h
- *   high_h: 8_h 9_h 10_h 11_h 12_h 13_h
- *   low_d:  1_d 2_d 3_d 4_d 5_d 6_d
- *   high_d: 8_d 9_d 10_d 11_d 12_d 13_d
- *   low_c:  1_c 2_c 3_c 4_c 5_c 6_c
- *   high_c: 8_c 9_c 10_c 11_c 12_c 13_c
+ * low_s: 1_s 2_s 3_s 4_s 5_s 6_s
+ * high_s: 8_s 9_s 10_s 11_s 12_s 13_s
+ * low_h: 1_h 2_h 3_h 4_h 5_h 6_h
+ * high_h: 8_h 9_h 10_h 11_h 12_h 13_h
+ * low_d: 1_d 2_d 3_d 4_d 5_d 6_d
+ * high_d: 8_d 9_d 10_d 11_d 12_d 13_d
+ * low_c: 1_c 2_c 3_c 4_c 5_c 6_c
+ * high_c: 8_c 9_c 10_c 11_c 12_c 13_c
  *
  * Team 1: p1, p2, p3
  * Team 2: p4, p5, p6
@@ -346,11 +346,11 @@ describe('validateDeclaration', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Sub-AC 22a: Locked-card enforcement — declarant's own cards must be
+  // Locked-card enforcement — declarant's own cards must be
   // assigned to themselves and cannot be re-attributed to a teammate.
   // -------------------------------------------------------------------------
 
-  it('Sub-AC 22a: p1 tries to assign their own card (1_s) to teammate p2 → LOCKED_CARD_REASSIGNED', () => {
+  it('p1 tries to assign their own card (1_s) to teammate p2 → LOCKED_CARD_REASSIGNED', () => {
     // p1 holds 1_s,2_s,3_s. Assigning 1_s to p2 should be rejected.
     const assignment = {
       '1_s': 'p2', // p1 actually holds this — locked!
@@ -366,7 +366,7 @@ describe('validateDeclaration', () => {
     expect(result.lockedCard).toBe('1_s');
   });
 
-  it('Sub-AC 22a: p1 tries to assign all their cards (1_s,2_s,3_s) to p3 → LOCKED_CARD_REASSIGNED', () => {
+  it('p1 tries to assign all their cards (1_s,2_s,3_s) to p3 → LOCKED_CARD_REASSIGNED', () => {
     // All of p1's own low_s cards assigned to a teammate — rejected on the first locked card found.
     const assignment = {
       '1_s': 'p3',
@@ -381,7 +381,7 @@ describe('validateDeclaration', () => {
     expect(result.errorCode).toBe('LOCKED_CARD_REASSIGNED');
   });
 
-  it('Sub-AC 22a: correct assignment where declarant holds no extra cards passes lock check', () => {
+  it('correct assignment where declarant holds no extra cards passes lock check', () => {
     // p2 has the turn. p2 holds 4_s,5_s,6_s. They declare low_s.
     // p1 holds 1_s,2_s,3_s — not the declarer, so no lock from p2's perspective on those.
     gs.currentTurnPlayerId = 'p2';
@@ -397,7 +397,7 @@ describe('validateDeclaration', () => {
     expect(result).toEqual({ valid: true });
   });
 
-  it('Sub-AC 22a: p2 (declarant) tries to assign their own card (4_s) to p1 → LOCKED_CARD_REASSIGNED', () => {
+  it('p2 (declarant) tries to assign their own card (4_s) to p1 → LOCKED_CARD_REASSIGNED', () => {
     // p2 holds 4_s,5_s,6_s. Assigning 4_s to p1 is a locked-card violation.
     gs.currentTurnPlayerId = 'p2';
     const assignment = {
@@ -705,7 +705,7 @@ describe('applyDeclaration', () => {
 });
 
 // ---------------------------------------------------------------------------
-// getHalfSuitCardCount + serializePlayers halfSuitCounts (Sub-AC 1 of AC 38)
+// getHalfSuitCardCount + serializePlayers halfSuitCounts
 // ---------------------------------------------------------------------------
 
 describe('getHalfSuitCardCount', () => {
@@ -797,11 +797,11 @@ describe('serializePlayers — halfSuitCounts', () => {
 
 // ---------------------------------------------------------------------------
 // AC 29: After failed declaration, turn auto-passes clockwise to next eligible
-//        opponent.
+// opponent.
 //
 // Seat layout (clockwise by seatIndex):
-//   p1 (team1, seat 0) → p4 (team2, seat 1) → p2 (team1, seat 2)
-//   → p5 (team2, seat 3) → p3 (team1, seat 4) → p6 (team2, seat 5)
+// p1 (team1, seat 0) → p4 (team2, seat 1) → p2 (team1, seat 2)
+// → p5 (team2, seat 3) → p3 (team1, seat 4) → p6 (team2, seat 5)
 // ---------------------------------------------------------------------------
 
 describe('_nextClockwiseOpponent (AC 29)', () => {

@@ -1,44 +1,44 @@
 'use strict';
 
 /**
- * Unit tests for Sub-AC 45d: Rematch bot-fill timer.
+ * Unit tests for Rematch bot-fill timer.
  *
  * After a rematch is agreed (host sends rematch_initiate), a 30-second window
- * opens for original human players to navigate back to the room lobby.  On
+ * opens for original human players to navigate back to the room lobby. On
  * expiry, any still-absent human slots are filled with bots and the new game
  * starts automatically.
  *
  * Coverage:
- *   startRematchBotFillTimer:
- *     1.  No pending rematch → logs a warning and returns without setting a timer
- *     2.  Sets a timer for the configured duration
- *     3.  Re-calling before expiry cancels the first timer
- *     4.  All-bot roster → no timer needed (skips human check, doesn't set a timer)
+ * startRematchBotFillTimer:
+ * 1. No pending rematch → logs a warning and returns without setting a timer
+ * 2. Sets a timer for the configured duration
+ * 3. Re-calling before expiry cancels the first timer
+ * 4. All-bot roster → no timer needed (skips human check, doesn't set a timer)
  *
- *   cancelRematchBotFillTimer:
- *     5.  Clears the pending timer
- *     6.  Safe to call when no timer is active
+ * cancelRematchBotFillTimer:
+ * 5. Clears the pending timer
+ * 6. Safe to call when no timer is active
  *
- *   _executeRematchBotFill:
- *     7.  No pending rematch → skips and returns
- *     8.  DB room not found → skips and clears pending rematch
- *     9.  Room already in_progress → skips and clears pending rematch
- *    10.  All humans absent → all seats filled with bots; lobby-starting broadcast
- *    11.  Some humans present → present humans keep original seats; absent → bots
- *    12.  All humans present → no bots added; botsAdded = []
- *    13.  lobby-starting payload includes isRematch: true
- *    14.  Supabase room status updated to 'in_progress'
- *    15.  createGame called with correct roomCode, variant, playerCount, seats
- *    16.  createGame failure → broadcast error and skip; pending rematch cleared
- *    17.  _startingRooms idempotency guard prevents double-start
- *    18.  pendingRematch is cleared after a successful start
+ * _executeRematchBotFill:
+ * 7. No pending rematch → skips and returns
+ * 8. DB room not found → skips and clears pending rematch
+ * 9. Room already in_progress → skips and clears pending rematch
+ * 10. All humans absent → all seats filled with bots; lobby-starting broadcast
+ * 11. Some humans present → present humans keep original seats; absent → bots
+ * 12. All humans present → no bots added; botsAdded = []
+ * 13. lobby-starting payload includes isRematch: true
+ * 14. Supabase room status updated to 'in_progress'
+ * 15. createGame called with correct roomCode, variant, playerCount, seats
+ * 16. createGame failure → broadcast error and skip; pending rematch cleared
+ * 17. _startingRooms idempotency guard prevents double-start
+ * 18. pendingRematch is cleared after a successful start
  *
- *   Early-start integration (via startRematchBotFillTimer fast-path):
- *    19.  All humans already present when timer starts → starts immediately
- *    20.  Timer start with humans partially present → timer set, not immediate
+ * Early-start integration (via startRematchBotFillTimer fast-path):
+ * 19. All humans already present when timer starts → starts immediately
+ * 20. Timer start with humans partially present → timer set, not immediate
  *
- *   REMATCH_BOT_FILL_TIMEOUT_MS:
- *    21.  Constant equals 30 000 ms
+ * REMATCH_BOT_FILL_TIMEOUT_MS:
+ * 21. Constant equals 30 000 ms
  */
 
 jest.useFakeTimers();
@@ -143,7 +143,7 @@ const DEFAULT_DB_ROOM = {
  * Build a mock Supabase client that handles both read and write chains.
  *
  * fetchRoomMetaFull does: from('rooms').select(...).eq('code', code).maybeSingle()
- * status update does:     from('rooms').update({...}).eq('code', code)
+ * status update does: from('rooms').update({...}).eq('code', code)
  *
  * We track which operation is in progress and return the appropriate mock.
  */

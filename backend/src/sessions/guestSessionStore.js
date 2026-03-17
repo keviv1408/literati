@@ -9,14 +9,14 @@
  *
  * Shape of a stored session:
  * {
- *   sessionId   : string  — UUIDv4, stable identity for this guest
- *   token       : string  — cryptographically random hex string used as the
- *                           bearer token; treated as a secret
- *   displayName : string  — chosen display name (1–20 chars, trimmed)
- *   avatarId    : string  — one of VALID_AVATAR_IDS
- *   isGuest     : true    — always true; used by middleware to gate DB writes
- *   createdAt   : number  — Unix timestamp (ms)
- *   expiresAt   : number  — Unix timestamp (ms); session auto-expires after TTL
+ * sessionId : string — UUIDv4, stable identity for this guest
+ * token : string — cryptographically random hex string used as the
+ * bearer token; treated as a secret
+ * displayName: string — chosen display name (1–20 chars, trimmed)
+ * avatarId : string — one of VALID_AVATAR_IDS
+ * isGuest : true — always true; used by middleware to gate DB writes
+ * createdAt : number — Unix timestamp (ms)
+ * expiresAt : number — Unix timestamp (ms); session auto-expires after TTL
  * }
  */
 
@@ -69,10 +69,10 @@ function _generateToken() {
  * Create a new guest session.
  *
  * @param {string} displayName - The guest's chosen display name.
- * @param {string} [avatarId]  - One of VALID_AVATAR_IDS; defaults to DEFAULT_AVATAR_ID.
+ * @param {string} [avatarId] - One of VALID_AVATAR_IDS; defaults to DEFAULT_AVATAR_ID.
  * @returns {{ token: string, session: Object }} - The opaque bearer token and
- *   the public session data the client needs. The `token` must be kept secret
- *   (sent only over HTTPS / WSS).
+ * the public session data the client needs. The `token` must be kept secret
+ * (sent only over HTTPS / WSS).
  * @throws {Error} if displayName fails validation.
  */
 function createGuestSession(displayName, avatarId) {

@@ -4,27 +4,27 @@
  * Live Games Store — in-memory registry of all active in-progress games.
  *
  * Tracks every room that is currently:
- *   • 'waiting'     — lobby phase, players are connecting
- *   • 'in_progress' — active game running
+ * • 'waiting' — lobby phase, players are connecting
+ * • 'in_progress' — active game running
  *
  * Completed or cancelled rooms are removed automatically when the game ends.
  *
  * Published events (via EventEmitter):
- *   'game_added'   (game)         — a new live game was registered
- *   'game_updated' (game)         — a live game's fields were changed
- *   'game_removed' ({ roomCode }) — a game was removed (completed / cancelled)
+ * 'game_added' (game) — a new live game was registered
+ * 'game_updated' (game) — a live game's fields were changed
+ * 'game_removed' ({ roomCode }) — a game was removed (completed / cancelled)
  *
  * LiveGame shape:
  * {
- *   roomCode:       string,                      // 6-char uppercase code
- *   playerCount:    number,                      // max capacity (6 or 8)
- *   currentPlayers: number,                      // players currently connected
- *   cardVariant:    string,                      // 'remove_2s' | 'remove_7s' | 'remove_8s'
- *   spectatorUrl:   string,                      // frontend path used to spectate
- *   scores:         { team1: number, team2: number },
- *   status:         'waiting' | 'in_progress',
- *   createdAt:      number,                      // epoch ms — when the room was created
- *   startedAt:      number | null,               // epoch ms — when in_progress began
+ * roomCode: string, /6-char uppercase code
+ * playerCount: number, // max capacity (6 or 8)
+ * currentPlayers: number, // players currently connected
+ * cardVariant: string, // 'remove_2s' | 'remove_7s' | 'remove_8s'
+ * spectatorUrl: string, // frontend path used to spectate
+ * scores: { team1: number, team2: number },
+ * status: 'waiting' | 'in_progress',
+ * createdAt: number, // epoch ms — when the room was created
+ * startedAt: number | null, // epoch ms — when in_progress began
  * }
  *
  * The computed field `elapsedMs` is NOT stored here; callers derive it from
@@ -46,15 +46,15 @@ class LiveGamesStore extends EventEmitter {
    * Register a brand-new live game.
    *
    * @param {{
-   *   roomCode:       string,
-   *   playerCount:    number,
-   *   currentPlayers: number,
-   *   cardVariant:    string,
-   *   spectatorUrl:   string,
-   *   scores?:        { team1: number, team2: number },
-   *   status?:        'waiting' | 'in_progress',
-   *   createdAt?:     number,
-   *   startedAt?:     number | null,
+   * roomCode: string,
+   * playerCount: number,
+   * currentPlayers: number,
+   * cardVariant: string,
+   * spectatorUrl: string,
+   * scores?: { team1: number, team2: number },
+   * status?: 'waiting' | 'in_progress',
+   * createdAt?: number,
+   * startedAt?: number | null,
    * }} data
    * @returns {Object} The stored LiveGame object
    */

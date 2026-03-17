@@ -1,46 +1,46 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for DeclareModal — Sub-AC 23c: Revision UI.
+ * Tests for DeclareModal — Revision UI.
  *
  * The revision badge is a visual indicator shown on each non-locked card row
  * that prominently displays the current assignee with a "✎ change" hint.
  * Clicking the badge (or the card row) enters seat-targeting mode so the
- * player can easily change the assignment.  Every change is broadcast in
+ * player can easily change the assignment. Every change is broadcast in
  * real-time via the `onDeclareProgress` callback → WebSocket.
  *
  * Coverage:
- *   [revision-badge presence]
- *   1.  Revision badge appears for each non-owned, unconfirmed card that has
- *       an assignment
- *   2.  Owned ("In your hand") cards do NOT have a revision badge
- *   3.  Confirmed/locked cards do NOT have a revision badge (locked-assignment-badge instead)
- *   4.  Badge is NOT present when the assignment is empty (placeholder)
+ * [revision-badge presence]
+ * 1. Revision badge appears for each non-owned, unconfirmed card that has
+ * an assignment
+ * 2. Owned ("In your hand") cards do NOT have a revision badge
+ * 3. Confirmed/locked cards do NOT have a revision badge (locked-assignment-badge instead)
+ * 4. Badge is NOT present when the assignment is empty (placeholder)
  *
- *   [revision-badge content]
- *   5.  Badge shows the currently-assigned teammate's display name
- *   6.  Badge shows "(you)" suffix when the card is assigned to the declarant
- *   7.  Badge shows "✎ change" hint (visible when not submitted)
- *   8.  Change hint is hidden when declaration is in-flight (isLoading=true)
+ * [revision-badge content]
+ * 5. Badge shows the currently-assigned teammate's display name
+ * 6. Badge shows "(you)" suffix when the card is assigned to the declarant
+ * 7. Badge shows "✎ change" hint (visible when not submitted)
+ * 8. Change hint is hidden when declaration is in-flight (isLoading=true)
  *
- *   [revision interaction — badge click]
- *   9.  Clicking the badge (which propagates to the outer card-row div) enters
- *       seat-targeting mode (seat-targeting strip appears)
- *   10. After seat-targeting: changing via seat chip updates the revision badge
- *       to show the new assignee
- *   11. revision-badge data-assigned-to reflects the new assignee after change
+ * [revision interaction — badge click]
+ * 9. Clicking the badge (which propagates to the outer card-row div) enters
+ * seat-targeting mode (seat-targeting strip appears)
+ * 10. After seat-targeting: changing via seat chip updates the revision badge
+ * to show the new assignee
+ * 11. revision-badge data-assigned-to reflects the new assignee after change
  *
- *   [revision interaction — dropdown]
- *   12. Changing the dropdown updates the revision badge to show the new assignee
+ * [revision interaction — dropdown]
+ * 12. Changing the dropdown updates the revision badge to show the new assignee
  *
- *   [real-time broadcast]
- *   13. onDeclareProgress is called when an assignment is changed via seat chip
- *   14. onDeclareProgress is called when an assignment is changed via dropdown
- *   15. Multiple revisions each trigger separate onDeclareProgress calls
+ * [real-time broadcast]
+ * 13. onDeclareProgress is called when an assignment is changed via seat chip
+ * 14. onDeclareProgress is called when an assignment is changed via dropdown
+ * 15. Multiple revisions each trigger separate onDeclareProgress calls
  *
- *   [accessibility]
- *   16. revision-badge has a descriptive aria-label including the assignee name
- *   17. revision-badge aria-label includes "tap to change" when not submitted
+ * [accessibility]
+ * 16. revision-badge has a descriptive aria-label including the assignee name
+ * 17. revision-badge aria-label includes "tap to change" when not submitted
  */
 
 import React from 'react';

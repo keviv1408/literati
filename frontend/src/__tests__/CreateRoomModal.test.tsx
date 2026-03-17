@@ -1,16 +1,15 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for CreateRoomModal — Sub-AC 2c:
- *   • After createRoom() resolves, the modal immediately transitions to the
- *     "Room Created!" confirmation phase.
- *   • The confirmation phase displays the room code, invite URL, and spectator
- *     URL (…?spectate=1) before any navigation occurs.
- *   • Copy buttons for invite and spectator links call navigator.clipboard.
- *   • "Enter Room →" button navigates to /room/<code> and calls onClose.
- *   • Overlay click does NOT close the modal while in the success phase.
- *   • sessionStorage cache helpers (getCreatedRoomCacheKey, cacheCreatedRoom,
- *     consumeCreatedRoom) store and consume room data correctly.
+ * Tests for CreateRoomModal — * • After createRoom() resolves, the modal immediately transitions to the
+ * "Room Created!" confirmation phase.
+ * • The confirmation phase displays the room code, invite URL, and spectator
+ * URL (…?spectate=1) before any navigation occurs.
+ * • Copy buttons for invite and spectator links call navigator.clipboard.
+ * • "Enter Room →" button navigates to /room/<code> and calls onClose.
+ * • Overlay click does NOT close the modal while in the success phase.
+ * • sessionStorage cache helpers (getCreatedRoomCacheKey, cacheCreatedRoom,
+ * consumeCreatedRoom) store and consume room data correctly.
  */
 
 import React from 'react';
@@ -186,10 +185,10 @@ describe('CreateRoomModal — form phase', () => {
 });
 
 // ---------------------------------------------------------------------------
-// CreateRoomModal — success phase (Sub-AC 2c core tests)
+// CreateRoomModal — success phase
 // ---------------------------------------------------------------------------
 
-describe('CreateRoomModal — success phase (Sub-AC 2c)', () => {
+describe('CreateRoomModal — success phase ', () => {
   beforeEach(() => {
     sessionStorage.clear();
     mockCreateRoom.mockResolvedValue({ room: MOCK_ROOM });

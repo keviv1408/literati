@@ -1,31 +1,31 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 28a: getEligibleNextTurnPlayers
+ * Tests for getEligibleNextTurnPlayers
  *
  * Verifies that after a declaration, the server correctly computes and
  * exposes the list of non-eliminated players with cards remaining.
  *
  * Coverage:
- *   getEligibleNextTurnPlayers:
- *     1. All players have cards → all 6 players are eligible
- *     2. One player's hand is emptied → they are excluded from the list
- *     3. Player in eliminatedPlayerIds with cards still returns excluded
- *        (the eliminatedPlayerIds flag is authoritative)
- *     4. Player with cards NOT in eliminatedPlayerIds is included
- *     5. Game completed (all 8 suits) → still returns remaining card holders
- *     6. Empty players array → returns empty list
- *     7. No eliminatedPlayerIds set on gs → treated as no one eliminated
- *     8. Declarant still has cards after declaration → included in eligible list
- *     9. Declarant has NO cards after declaration → excluded from eligible list
- *    10. Order is by seatIndex (ascending)
+ * getEligibleNextTurnPlayers:
+ * 1. All players have cards → all 6 players are eligible
+ * 2. One player's hand is emptied → they are excluded from the list
+ * 3. Player in eliminatedPlayerIds with cards still returns excluded
+ * (the eliminatedPlayerIds flag is authoritative)
+ * 4. Player with cards NOT in eliminatedPlayerIds is included
+ * 5. Game completed (all 8 suits) → still returns remaining card holders
+ * 6. Empty players array → returns empty list
+ * 7. No eliminatedPlayerIds set on gs → treated as no one eliminated
+ * 8. Declarant still has cards after declaration → included in eligible list
+ * 9. Declarant has NO cards after declaration → excluded from eligible list
+ * 10. Order is by seatIndex (ascending)
  *
- *   Integration — applyDeclaration + getEligibleNextTurnPlayers:
- *    11. Correct declaration: eligible list excludes players emptied by card removal
- *    12. Incorrect declaration: same exclusion applies
- *    13. After declaration that empties multiple players, eligible list shrinks
- *    14. Declarant is included in eligible list if they still hold cards
- *    15. Declarant is excluded from eligible list if their hand is emptied
+ * Integration — applyDeclaration + getEligibleNextTurnPlayers:
+ * 11. Correct declaration: eligible list excludes players emptied by card removal
+ * 12. Incorrect declaration: same exclusion applies
+ * 13. After declaration that empties multiple players, eligible list shrinks
+ * 14. Declarant is included in eligible list if they still hold cards
+ * 15. Declarant is excluded from eligible list if their hand is emptied
  */
 
 const { getEligibleNextTurnPlayers, applyDeclaration } = require('../game/gameEngine');
@@ -39,14 +39,14 @@ const { getCardCount } = require('../game/gameState');
  * Build a test game with remove_7s variant.
  *
  * Card layout (remove_7s):
- *   low_s:  1_s 2_s 3_s 4_s 5_s 6_s
- *   high_s: 8_s 9_s 10_s 11_s 12_s 13_s
- *   low_h:  1_h 2_h 3_h 4_h 5_h 6_h
- *   high_h: 8_h 9_h 10_h 11_h 12_h 13_h
- *   low_d:  1_d 2_d 3_d 4_d 5_d 6_d
- *   high_d: 8_d 9_d 10_d 11_d 12_d 13_d
- *   low_c:  1_c 2_c 3_c 4_c 5_c 6_c
- *   high_c: 8_c 9_c 10_c 11_c 12_c 13_c
+ * low_s: 1_s 2_s 3_s 4_s 5_s 6_s
+ * high_s: 8_s 9_s 10_s 11_s 12_s 13_s
+ * low_h: 1_h 2_h 3_h 4_h 5_h 6_h
+ * high_h: 8_h 9_h 10_h 11_h 12_h 13_h
+ * low_d: 1_d 2_d 3_d 4_d 5_d 6_d
+ * high_d: 8_d 9_d 10_d 11_d 12_d 13_d
+ * low_c: 1_c 2_c 3_c 4_c 5_c 6_c
+ * high_c: 8_c 9_c 10_c 11_c 12_c 13_c
  *
  * Team 1: p1(seat 0), p2(seat 2), p3(seat 4)
  * Team 2: p4(seat 1), p5(seat 3), p6(seat 5)

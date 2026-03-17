@@ -1,18 +1,18 @@
 /**
  * @jest-environment jsdom
  *
- * Unit tests for DeclarationTurnPassPrompt — Sub-AC 56b.
+ * Unit tests for DeclarationTurnPassPrompt —
  *
  * Covers:
- *  • "for-me" variant renders for the current-turn player (declarant)
- *  • "for-others" variant renders for non-declaring observers
- *  • Accessibility attributes (role, aria-live, data-testid)
- *  • data-variant attribute distinguishes the two render modes
- *  • Pulsing highlight indicator (cyan dot) present in both variants
- *  • chooserName displayed correctly in the observer variant
- *  • Fallback "Someone" when chooserName is null
- *  • className forwarding
- *  • Prompt disappears when unmounted (simulating highlight clear)
+ * • "for-me" variant renders for the current-turn player (declarant)
+ * • "for-others" variant renders for non-declaring observers
+ * • Accessibility attributes (role, aria-live, data-testid)
+ * • data-variant attribute distinguishes the two render modes
+ * • Pulsing highlight indicator (cyan dot) present in both variants
+ * • chooserName displayed correctly in the observer variant
+ * • Fallback "Someone" when chooserName is null
+ * • className forwarding
+ * • Prompt disappears when unmounted (simulating highlight clear)
  */
 
 import React from 'react';

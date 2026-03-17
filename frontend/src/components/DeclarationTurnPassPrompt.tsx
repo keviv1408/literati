@@ -4,30 +4,30 @@
  * DeclarationTurnPassPrompt — a banner shown after a correct declaration while
  * the declarant chooses which eligible teammate receives the next turn.
  *
- * Sub-AC 56b: Visually prompt the current turn player (the declarant) to click
- * one of the cyan-highlighted eligible seats.  Other players see a read-only
- * status strip indicating who is making the choice.  Both views clear when the
+ * Visually prompt the current turn player (the declarant) to click
+ * one of the cyan-highlighted eligible seats. Other players see a read-only
+ * status strip indicating who is making the choice. Both views clear when the
  * selection is made (i.e. when `postDeclarationHighlight` becomes null after
  * `sendChooseNextTurn` fires or `post_declaration_turn_selected` arrives).
  *
  * ### When it appears
  * Rendered whenever `postDeclarationHighlight` is non-null in the game view.
  * - For the **current turn player** (declarant): full-colour cyan banner with
- *   actionable instruction text and a blinking arrow cue.
+ * actionable instruction text and a blinking arrow cue.
  * - For **all other players / spectators**: muted status strip showing who is
- *   choosing.
+ * choosing.
  *
  * ### When it disappears
  * The parent removes the component when `postDeclarationHighlight` is set to
- * `null`.  That happens in two ways:
+ * `null`. That happens in two ways:
  * 1. The player clicks a highlighted seat → `sendChooseNextTurn` is called →
- *    `postDeclarationHighlight` is cleared optimistically.
+ * `postDeclarationHighlight` is cleared optimistically.
  * 2. The 30-second post-declaration timer expires → server sends
- *    `post_declaration_turn_selected` → hook clears `postDeclarationHighlight`.
+ * `post_declaration_turn_selected` → hook clears `postDeclarationHighlight`.
  *
  * ### Accessibility
  * - `role="status"` + `aria-live="polite"` so screen-reader users hear the
- *   announcement without interrupting ongoing narration.
+ * announcement without interrupting ongoing narration.
  * - `data-testid="declaration-turn-pass-prompt"` on the container.
  * - `data-testid="turn-pass-prompt-for-me"` when this player is the chooser.
  * - `data-testid="turn-pass-prompt-for-others"` when observing another's choice.
@@ -35,10 +35,10 @@
  * @example
  * // Inside game page — render when postDeclarationHighlight is non-null:
  * {postDeclarationHighlight && (
- *   <DeclarationTurnPassPrompt
- *     isMyTurn={isMyTurn}
- *     chooserName={currentTurnPlayer?.displayName ?? null}
- *   />
+ * <DeclarationTurnPassPrompt
+ * isMyTurn={isMyTurn}
+ * chooserName={currentTurnPlayer?.displayName ?? null}
+ * />
  * )}
  */
 
@@ -49,7 +49,7 @@ import React from 'react';
 export interface DeclarationTurnPassPromptProps {
   /**
    * `true` when the local player is the current turn player (the declarant who
-   * must choose a teammate to pass the turn to).  Drives the two visual variants.
+   * must choose a teammate to pass the turn to). Drives the two visual variants.
    */
   isMyTurn: boolean;
 
@@ -57,11 +57,11 @@ export interface DeclarationTurnPassPromptProps {
    * Display name of the player who is making the choice.
    *
    * - When `isMyTurn` is `false`, the banner reads "X is choosing who gets the
-   *   next turn" using this name.
+   * next turn" using this name.
    * - When `isMyTurn` is `true`, this prop is not displayed but may be used for
-   *   accessibility labels.
+   * accessibility labels.
    * - `null` is accepted for transient loading states; the banner falls back to
-   *   "Someone is choosing…".
+   * "Someone is choosing…".
    */
   chooserName: string | null;
 

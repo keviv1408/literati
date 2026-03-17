@@ -14,7 +14,7 @@
  * - Animated turn-timer progress bar (same as the player view).
  * - Last-move description (one line, no history log).
  * - All players arranged in two team rows, each with avatar, name, card count,
- *   team colour, and active-turn glow.
+ * team colour, and active-turn glow.
  * - Declared half-suit badges accumulating in the centre.
  * - WebSocket connection-status dot.
  *
@@ -27,19 +27,19 @@
  * @example
  * // Inside /game/[room-id]/page.tsx when spectator mode is detected:
  * <SpectatorView
- *   wsStatus={wsStatus}
- *   players={players}
- *   gameState={gameState}
- *   variant={variant}
- *   playerCount={playerCount}
- *   turnTimer={turnTimer}
- *   declarationTimer={declarationTimer}
- *   lastAskResult={lastAskResult}
- *   lastDeclareResult={lastDeclareResult}
- *   roomCode={roomCode}
- *   cardRemovalVariant={room.card_removal_variant}
- *   gamePlayerCount={room.player_count}
- *   onGoHome={handleGoHome}
+ * wsStatus={wsStatus}
+ * players={players}
+ * gameState={gameState}
+ * variant={variant}
+ * playerCount={playerCount}
+ * turnTimer={turnTimer}
+ * declarationTimer={declarationTimer}
+ * lastAskResult={lastAskResult}
+ * lastDeclareResult={lastDeclareResult}
+ * roomCode={roomCode}
+ * cardRemovalVariant={room.card_removal_variant}
+ * gamePlayerCount={room.player_count}
+ * onGoHome={handleGoHome}
  * />
  */
 
@@ -117,20 +117,20 @@ export interface SpectatorViewProps {
    */
   declareProgress?: DeclareProgressPayload | null;
   /**
-   * Active 60-second declaration phase timer (Sub-AC 36 / 23a).
+   * Active 60-second declaration phase timer.
    * The server broadcasts `declaration_timer` to ALL connections so spectators
    * can see the same countdown the declaring player sees.
    */
   declarationTimer?: DeclarationTimerPayload | null;
   /**
-   * Per-card diff from a failed declaration (Sub-AC 26b).
+   * Per-card diff from a failed declaration.
    * Non-null when the server broadcasts `declarationFailed` after an incorrect
-   * declaration.  The FailedDeclarationReveal overlay is rendered when set.
+   * declaration. The FailedDeclarationReveal overlay is rendered when set.
    * Cleared when the next ask_result / declaration_result arrives.
    */
   declarationFailed?: DeclarationFailedPayload | null;
   /**
-   * Active post-declaration turn-selection timer (AC 28 / Sub-AC 28c).
+   * Active post-declaration turn-selection timer (AC 28).
    * Non-null for 30 seconds after a human correct declaration while the
    * declaring team is choosing who takes the next turn.
    */
@@ -164,7 +164,7 @@ export default function SpectatorView({
   gamePlayerCount,
   onGoHome,
 }: SpectatorViewProps) {
-  // ── Failed Declaration Reveal dismiss state (Sub-AC 26b) ───────────────────
+  // ── Failed Declaration Reveal dismiss state ───────────────────
   const [dismissedDeclarationFailed, setDismissedDeclarationFailed] =
     React.useState<DeclarationFailedPayload | null>(null);
   const showFailedReveal = Boolean(
@@ -314,10 +314,10 @@ export default function SpectatorView({
       />
 
       {/* ── Prominent SPECTATING banner ──────────────────────────────────────
-       *  Rendered as a full-width strip directly below the header so spectators
-       *  cannot mistake this view for an interactive player view.  The eye icon
-       *  and ALL-CAPS "SPECTATING · READ ONLY" text make the mode unambiguous
-       *  on both desktop and mobile without requiring a modal or overlay.
+       * Rendered as a full-width strip directly below the header so spectators
+       * cannot mistake this view for an interactive player view. The eye icon
+       * and ALL-CAPS "SPECTATING · READ ONLY" text make the mode unambiguous
+       * on both desktop and mobile without requiring a modal or overlay.
        */}
       <div
         className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-900/40 border-b border-amber-700/50 text-amber-200"
@@ -332,8 +332,8 @@ export default function SpectatorView({
       </div>
 
       {/* ── Turn indicator ───────────────────────────────────────────────────
-       *  Shows whose turn it is.  Spectators can see this but cannot act.
-       *  The banner intentionally omits the "ask a card or declare" prompt.
+       * Shows whose turn it is. Spectators can see this but cannot act.
+       * The banner intentionally omits the "ask a card or declare" prompt.
        */}
       {gameState && (
         <div
@@ -358,9 +358,9 @@ export default function SpectatorView({
       )}
 
       {/* ── Turn-timer countdown ─────────────────────────────────────────────
-       *  Re-mounts on each new expiresAt value via the `key` prop.
-       *  Spectators see the same countdown as players so they can follow along.
-       *  Uses the shared CountdownTimer component (isMyTimer=false → slate scheme).
+       * Re-mounts on each new expiresAt value via the `key` prop.
+       * Spectators see the same countdown as players so they can follow along.
+       * Uses the shared CountdownTimer component (isMyTimer=false → slate scheme).
        */}
       {turnTimer && gameState && (
         <CountdownTimer
@@ -372,11 +372,11 @@ export default function SpectatorView({
         />
       )}
 
-      {/* ── Declaration-phase countdown (Sub-AC 36 / 23a) ────────────────────
-       *  Shown to all spectators during the 60-second card-assignment phase.
-       *  The server broadcasts `declaration_timer` to ALL connections so the
-       *  entire table (players + spectators) can follow the declarant's timer.
-       *  Re-mounts on each new expiresAt value via the `key` prop.
+      {/* ── Declaration-phase countdown ────────────────────
+       * Shown to all spectators during the 60-second card-assignment phase.
+       * The server broadcasts `declaration_timer` to ALL connections so the
+       * entire table (players + spectators) can follow the declarant's timer.
+       * Re-mounts on each new expiresAt value via the `key` prop.
        */}
       {declarationTimer && gameState && (
         <div className="relative z-10 px-4 pb-1">
@@ -389,10 +389,10 @@ export default function SpectatorView({
         </div>
       )}
 
-      {/* ── Post-declaration turn-selection countdown (AC 28 / Sub-AC 28c) ───
-       *  Shown to spectators for 30 seconds after a human correct declaration
-       *  while the declaring team chooses who takes the next turn.
-       *  On expiry the server auto-selects a random eligible player.
+      {/* ── Post-declaration turn-selection countdown (AC 28) ───
+       * Shown to spectators for 30 seconds after a human correct declaration
+       * while the declaring team chooses who takes the next turn.
+       * On expiry the server auto-selects a random eligible player.
        */}
       {postDeclarationTimer && gameState && (
         <CountdownTimer
@@ -406,8 +406,8 @@ export default function SpectatorView({
       )}
 
       {/* ── Last move display (AC 35) ────────────────────────────────────────
-       *  Shows only the single most-recent move (no history log per spec).
-       *  Uses the shared LastMoveDisplay component.
+       * Shows only the single most-recent move (no history log per spec).
+       * Uses the shared LastMoveDisplay component.
        */}
       <LastMoveDisplay
         message={displayedMove}
@@ -618,9 +618,9 @@ export default function SpectatorView({
         </div>
       </footer>
 
-      {/* ── Failed Declaration Reveal overlay (Sub-AC 26b) ──────────────────
-       *  Spectators also receive the `declarationFailed` broadcast and see
-       *  the same diff overlay as the players so they can follow along.
+      {/* ── Failed Declaration Reveal overlay ──────────────────
+       * Spectators also receive the `declarationFailed` broadcast and see
+       * the same diff overlay as the players so they can follow along.
        */}
       {showFailedReveal && declarationFailed && (
         <FailedDeclarationReveal

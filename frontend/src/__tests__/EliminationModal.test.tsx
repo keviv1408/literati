@@ -1,18 +1,18 @@
 /**
  * @jest-environment jsdom
  *
- * Unit tests for EliminationModal — Sub-AC 27b.
+ * Unit tests for EliminationModal —
  *
  * Covers:
- *  1. Modal renders with correct heading and description
- *  2. Eligible teammates are listed as buttons
- *  3. Clicking a teammate button calls onChoose with their ID
- *  4. When no eligible teammates: shows informational message (no buttons)
- *  5. When no eligible teammates: auto-calls onChoose('') after 4 seconds
- *  6. data-testid attributes are present
- *  7. aria-label on teammate buttons
- *  8. role="dialog" and aria-modal present
- *  9. Multiple teammates all rendered
+ * 1. Modal renders with correct heading and description
+ * 2. Eligible teammates are listed as buttons
+ * 3. Clicking a teammate button calls onChoose with their ID
+ * 4. When no eligible teammates: shows informational message (no buttons)
+ * 5. When no eligible teammates: auto-calls onChoose('') after 4 seconds
+ * 6. data-testid attributes are present
+ * 7. aria-label on teammate buttons
+ * 8. role="dialog" and aria-modal present
+ * 9. Multiple teammates all rendered
  * 10. Skull emoji rendered in header
  */
 

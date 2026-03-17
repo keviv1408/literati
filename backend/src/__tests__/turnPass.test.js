@@ -3,27 +3,27 @@
 /**
  * turnPass.test.js
  *
- * Sub-AC 56a — Backend turn-pass logic: validate declarant eligibility,
+ * Backend turn-pass logic: validate declarant eligibility,
  * accept a target seat identifier, update game state to transfer the active
  * turn, and emit a `turn-passed` socket event with the new active seat.
  *
  * Coverage:
- *   1. Successful turn pass — currentTurnPlayerId updated to target
- *   2. Successful turn pass — `turn-passed` event emitted with correct payload
- *   3. Successful turn pass — second connected player receives `game_state` broadcast
- *   4. Error: NOT_YOUR_TURN — non-active player sends pass_turn
- *   5. Error: SEAT_NOT_FOUND — targetSeatIndex resolves to no player
- *   6. Error: SELF_PASS — requester tries to pass to their own seat
- *   7. Error: WRONG_TEAM — requester tries to pass to an opponent's seat
- *   8. Error: TARGET_EMPTY_HAND — target player is eliminated (no cards)
- *   9. MISSING_FIELDS — targetSeatIndex not a number in socket message
- *  10. Post-declaration timer cancelled when turn is explicitly passed
+ * 1. Successful turn pass — currentTurnPlayerId updated to target
+ * 2. Successful turn pass — `turn-passed` event emitted with correct payload
+ * 3. Successful turn pass — second connected player receives `game_state` broadcast
+ * 4. Error: NOT_YOUR_TURN — non-active player sends pass_turn
+ * 5. Error: SEAT_NOT_FOUND — targetSeatIndex resolves to no player
+ * 6. Error: SELF_PASS — requester tries to pass to their own seat
+ * 7. Error: WRONG_TEAM — requester tries to pass to an opponent's seat
+ * 8. Error: TARGET_EMPTY_HAND — target player is eliminated (no cards)
+ * 9. MISSING_FIELDS — targetSeatIndex not a number in socket message
+ * 10. Post-declaration timer cancelled when turn is explicitly passed
  *
  * Unit tests (direct function calls, no WS):
- *  11. Updates currentTurnPlayerId without a WS connection
- *  12. Does nothing when game is not active
- *  13. Does nothing when requester is not the current turn player
- *  14. Does nothing when target seat does not exist
+ * 11. Updates currentTurnPlayerId without a WS connection
+ * 12. Does nothing when game is not active
+ * 13. Does nothing when requester is not the current turn player
+ * 14. Does nothing when target seat does not exist
  */
 
 const http      = require('http');
@@ -133,7 +133,7 @@ function waitForMessage(ws, predicate, timeoutMs = 3000) {
 
 // ── Test suite ──────────────────────────────────────────────────────────────
 
-describe('Sub-AC 56a — turn-pass logic (pass_turn socket message)', () => {
+describe('turn-pass logic (pass_turn socket message)', () => {
   let httpServer;
   let port;
   let mockSupabase;
@@ -147,12 +147,12 @@ describe('Sub-AC 56a — turn-pass logic (pass_turn socket message)', () => {
 
   /**
    * Game layout (remove_7s, 6 players):
-   *   Seat 0: p1 (Team 1, human) — **current turn player**
-   *   Seat 1: p4 (Team 2, human) — opponent
-   *   Seat 2: p2 (Team 1, human) — eligible teammate
-   *   Seat 3: bot-A (Team 2, bot)
-   *   Seat 4: bot-B (Team 1, bot)
-   *   Seat 5: bot-C (Team 2, bot)
+   * Seat 0: p1 (Team 1, human) — **current turn player**
+   * Seat 1: p4 (Team 2, human) — opponent
+   * Seat 2: p2 (Team 1, human) — eligible teammate
+   * Seat 3: bot-A (Team 2, bot)
+   * Seat 4: bot-B (Team 1, bot)
+   * Seat 5: bot-C (Team 2, bot)
    */
   let p1Token, p1Id;
   let p2Token, p2Id;

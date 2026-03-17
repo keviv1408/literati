@@ -7,30 +7,30 @@
  * a player card for every seat. Seats alternate T1-T2-T1-T2 clockwise around
  * the oval table:
  *
- *   Seat 0, 2, 4[, 6] → Team 1 (left column)
- *   Seat 1, 3, 5[, 7] → Team 2 (right column)
+ * Seat 0, 2, 4[, 6] → Team 1 (left column)
+ * Seat 1, 3, 5[, 7] → Team 2 (right column)
  *
  * For a 6-player room each column has 3 cards; for 8-player, 4 cards.
  *
  * @example
  * // All-empty lobby (just opened the room)
  * <LobbyTeamColumns
- *   playerCount={6}
- *   seats={[null, null, null, null, null, null]}
+ * playerCount={6}
+ * seats={[null, null, null, null, null, null]}
  * />
  *
  * @example
  * // Partially filled lobby
  * <LobbyTeamColumns
- *   playerCount={6}
- *   seats={[
- *     { seatIndex: 0, displayName: "Alice", isBot: false, isHost: true, isCurrentUser: true },
- *     null,
- *     { seatIndex: 2, displayName: "Quirky Turing", isBot: true, isHost: false, isCurrentUser: false },
- *     null,
- *     null,
- *     null,
- *   ]}
+ * playerCount={6}
+ * seats={[
+ * { seatIndex: 0, displayName: "Alice", isBot: false, isHost: true, isCurrentUser: true },
+ * null,
+ * { seatIndex: 2, displayName: "Quirky Turing", isBot: true, isHost: false, isCurrentUser: false },
+ * null,
+ * null,
+ * null,
+ * ]}
  * />
  */
 
@@ -108,7 +108,7 @@ const TeamColumn: React.FC<TeamColumnProps> = ({
           </h3>
         </div>
 
-        {/* Seat count badge  */}
+        {/* Seat count badge */}
         <span
           className={["text-xs tabular-nums font-mono", style.countText].join(
             " ",
@@ -140,7 +140,7 @@ const TeamColumn: React.FC<TeamColumnProps> = ({
  * LobbyTeamColumns renders the two-column team layout for the game lobby.
  *
  * The component is purely presentational — it accepts `seats` as a prop and
- * does not manage any WebSocket state. Real-time updates (Sub-AC 4) will
+ * does not manage any WebSocket state. Real-time updates will
  * update the `seats` array from above.
  */
 const LobbyTeamColumns: React.FC<LobbyTeamColumnsProps> = ({

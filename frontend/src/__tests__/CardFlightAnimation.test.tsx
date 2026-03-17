@@ -1,23 +1,23 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for CardFlightAnimation (AC 33 Sub-AC 1) — face-up card flight
+ * Tests for CardFlightAnimation (AC 33) — face-up card flight
  * animation triggered after a successful ask_card result.
  *
  * Covers:
- *  • Component mounts with correct data-testid
- *  • aria-hidden="true" so the overlay is excluded from accessibility tree
- *  • pointer-events-none class so game controls are not blocked
- *  • fixed + inset-0 classes for full-viewport overlay
- *  • The flying card element is present on mount
- *  • Card carries the transferred card face so players can identify it
- *  • CSS custom properties --flight-dx and --flight-dy are set from props
- *  • animate-card-flight class is applied to the flying card element
- *  • onComplete fires after FLIGHT_DURATION_MS
- *  • onComplete does NOT fire before FLIGHT_DURATION_MS elapses
- *  • Component is driven by timer not DOM events — cleanup cancels timer on unmount
- *  • animationDuration inline style is set from FLIGHT_DURATION_MS
- *  • Card is positioned at (fromX - halfW, fromY - halfH) i.e. centred on source
+ * • Component mounts with correct data-testid
+ * • aria-hidden="true" so the overlay is excluded from accessibility tree
+ * • pointer-events-none class so game controls are not blocked
+ * • fixed + inset-0 classes for full-viewport overlay
+ * • The flying card element is present on mount
+ * • Card carries the transferred card face so players can identify it
+ * • CSS custom properties --flight-dx and --flight-dy are set from props
+ * • animate-card-flight class is applied to the flying card element
+ * • onComplete fires after FLIGHT_DURATION_MS
+ * • onComplete does NOT fire before FLIGHT_DURATION_MS elapses
+ * • Component is driven by timer not DOM events — cleanup cancels timer on unmount
+ * • animationDuration inline style is set from FLIGHT_DURATION_MS
+ * • Card is positioned at (fromX - halfW, fromY - halfH) i.e. centred on source
  */
 
 import React from 'react';

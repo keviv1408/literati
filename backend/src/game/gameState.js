@@ -9,39 +9,39 @@
  *
  * Shape:
  * {
- *   roomCode:           string,
- *   roomId:             string,    // Supabase room UUID
- *   variant:            'remove_2s'|'remove_7s'|'remove_8s',
- *   playerCount:        6|8,
- *   status:             'active'|'completed',
- *   currentTurnPlayerId:string,
- *   players:            Player[],
- *   hands:              Map<playerId, Set<cardId>>,
- *   declaredSuits:      Map<halfSuitId, { teamId:1|2, declaredBy:string }>,
- *   scores:             { team1: number, team2: number },
- *   lastMove:           string|null,
- *   winner:             1|2|null,
- *   tiebreakerWinner:   1|2|null,
- *   // Bot inference: not broadcast to clients
- *   botKnowledge:       Map<playerId, Map<cardId, boolean>>,
- *   // Call history for crash recovery
- *   moveHistory:        MoveRecord[],
+ * roomCode: string,
+ * roomId: string, // Supabase room UUID
+ * variant: 'remove_2s'|'remove_7s'|'remove_8s',
+ * playerCount: 6|8,
+ * status: 'active'|'completed',
+ * currentTurnPlayerId:string,
+ * players: Player[],
+ * hands: Map<playerId, Set<cardId>>,
+ * declaredSuits: Map<halfSuitId, { teamId:1|2, declaredBy:string }>,
+ * scores: { team1: number, team2: number },
+ * lastMove: string|null,
+ * winner: 1|2|null,
+ * tiebreakerWinner: 1|2|null,
+ * // Bot inference: not broadcast to clients
+ * botKnowledge: Map<playerId, Map<cardId, boolean>>,
+ * // Call history for crash recovery
+ * moveHistory: MoveRecord[],
  * }
  *
  * Note: partial-selection state (current wizard step for ask/declare) is
  * maintained in a SEPARATE store (partialSelectionStore.js) keyed by
- * `roomCode:playerId`.  It is NOT part of the GameState object itself so
+ * `roomCode:playerId`. It is NOT part of the GameState object itself so
  * it never leaks into the Supabase snapshot or affects crash recovery.
  *
  * Player shape:
  * {
- *   playerId:    string,
- *   displayName: string,
- *   avatarId:    string|null,
- *   teamId:      1|2,
- *   seatIndex:   number,
- *   isBot:       boolean,
- *   isGuest:     boolean,
+ * playerId: string,
+ * displayName: string,
+ * avatarId: string|null,
+ * teamId: 1|2,
+ * seatIndex: number,
+ * isBot: boolean,
+ * isGuest: boolean,
  * }
  */
 
@@ -61,19 +61,19 @@ function _cachedHalfSuitMap(variant) {
  * Create a brand-new game state from a lobby seat snapshot.
  *
  * @param {{
- *   roomCode:    string,
- *   roomId:      string,
- *   variant:     'remove_2s'|'remove_7s'|'remove_8s',
- *   playerCount: 6|8,
- *   seats:       Array<{
- *     seatIndex:   number,
- *     playerId:    string,
- *     displayName: string,
- *     avatarId:    string|null,
- *     teamId:      1|2,
- *     isBot:       boolean,
- *     isGuest:     boolean,
- *   }>,
+ * roomCode: string,
+ * roomId: string,
+ * variant: 'remove_2s'|'remove_7s'|'remove_8s',
+ * playerCount: 6|8,
+ * seats: Array<{
+ * seatIndex: number,
+ * playerId: string,
+ * displayName: string,
+ * avatarId: string|null,
+ * teamId: 1|2,
+ * isBot: boolean,
+ * isGuest: boolean,
+ * }>,
  * }} options
  * @returns {Object} A fresh GameState
  */
@@ -132,7 +132,7 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
     // Move history for crash recovery
     moveHistory: [],
 
-    // ── Player elimination (Sub-AC 27b) ─────────────────────────────────────
+    // ── Player elimination ─────────────────────────────────────
     // Set of playerIds whose hands are now empty (cards removed by a declaration).
     // Populated by applyDeclaration / applyForcedFailedDeclaration when a
     // player's card count drops to zero.
@@ -141,7 +141,7 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
 
     // Optional turn-recipient map: when an eliminated player (human or bot)
     // designates a teammate to receive their future turns, the choice is stored
-    // here.  _resolveValidTurn consults this map before falling back to seat order.
+    // here. _resolveValidTurn consults this map before falling back to seat order.
     /** @type {Map<string, string>} */
     turnRecipients: new Map(),
   };
@@ -265,11 +265,11 @@ function serializePublicState(gs) {
  * Build the player list with card counts (not actual cards) for broadcast.
  *
  * Each player entry includes:
- *   - cardCount: total cards held
- *   - halfSuitCounts: { [halfSuitId]: number } — how many cards in each half-suit.
- *     This is public information and is used for:
- *       • Enforcing ask eligibility (server checks target has ≥1 in half-suit)
- *       • Bot decision-making
+ * - cardCount: total cards held
+ * - halfSuitCounts: { [halfSuitId]: number } — how many cards in each half-suit.
+ * This is public information and is used for:
+ * • Enforcing ask eligibility (server checks target has ≥1 in half-suit)
+ * • Bot decision-making
  *
  * @param {Object} gs
  * @returns {Array}
@@ -303,7 +303,7 @@ function serializePlayers(gs) {
       cardCount:     hand.size,
       isCurrentTurn: p.playerId === gs.currentTurnPlayerId,
       halfSuitCounts,
-      // Sub-AC 27b: true when this player has no cards left (hand emptied by declaration)
+      // true when this player has no cards left (hand emptied by declaration)
       isEliminated:  gs.eliminatedPlayerIds ? gs.eliminatedPlayerIds.has(p.playerId) : false,
     };
   });
@@ -420,7 +420,7 @@ function buildPersistedSnapshot(gs) {
     winner:         gs.winner,
     tiebreakerWinner: gs.tiebreakerWinner,
     moveHistory:    gs.moveHistory,
-    // Sub-AC 27b: persist eliminated player IDs and turn recipients
+    // persist eliminated player IDs and turn recipients
     eliminatedPlayerIds: Array.from(gs.eliminatedPlayerIds ?? []),
     turnRecipients:      Object.fromEntries(gs.turnRecipients ?? new Map()),
   };
@@ -470,7 +470,7 @@ async function persistGameState(gs, supabase) {
  * @param {string} roomCode
  * @param {Object} supabase - Supabase client (service-role)
  * @param {Object|null} [snapshotSource=null] - Optional GameState to persist as
- *   the final abandoned snapshot so recovery cannot resurrect an old active game.
+ * the final abandoned snapshot so recovery cannot resurrect an old active game.
  * @returns {Promise<void>}
  */
 async function markRoomAbandoned(roomCode, supabase, snapshotSource = null) {
@@ -504,7 +504,7 @@ async function markRoomAbandoned(roomCode, supabase, snapshotSource = null) {
  *
  * Intended to be called once at server startup so rooms that were left in
  * 'in_progress' by a previous server instance (crash / graceful restart) are
- * correctly classified.  Only rooms whose updated_at is older than
+ * correctly classified. Only rooms whose updated_at is older than
  * `staleAfterMs` are touched — this preserves any room that was updated
  * very recently and whose players might still be reconnecting.
  *
@@ -513,7 +513,7 @@ async function markRoomAbandoned(roomCode, supabase, snapshotSource = null) {
  *
  * @param {Object} supabase - Supabase client (service-role)
  * @param {number} [staleAfterMs=7200000] - Rooms idle longer than this are
- *   considered abandoned (default: 2 hours)
+ * considered abandoned (default: 2 hours)
  * @returns {Promise<void>}
  */
 async function markStaleGamesAbandoned(supabase, staleAfterMs = 2 * 60 * 60 * 1000) {
@@ -566,7 +566,7 @@ function restoreGameState(snapshot, roomCode, roomId) {
     tiebreakerWinner: snapshot.tiebreakerWinner,
     botKnowledge:  new Map(),
     moveHistory:   snapshot.moveHistory ?? [],
-    // Sub-AC 27b: restore elimination state
+    // restore elimination state
     eliminatedPlayerIds: new Set(snapshot.eliminatedPlayerIds ?? []),
     turnRecipients:      new Map(Object.entries(snapshot.turnRecipients ?? {})),
   };

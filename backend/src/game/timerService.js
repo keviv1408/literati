@@ -6,46 +6,46 @@
  * Provides a unified, testable API for tracking remaining seconds during the
  * two timed phases of a Literature turn:
  *
- *   'turn'        — 30 seconds for a human player to initiate a card request
- *   'declaration' — 60 seconds for the declaring player to assign all 6 cards
+ * 'turn' — 30 seconds for a human player to initiate a card request
+ * 'declaration' — 60 seconds for the declaring player to assign all 6 cards
  *
  * For each active timer the service:
- *   1. Broadcasts `timer_start`     immediately via broadcastFn (phase, playerId,
- *                                   durationMs, expiresAt)
- *   2. Broadcasts `timer_tick`      every TICK_INTERVAL_MS (1 second) with
- *                                   remainingMs, remainingS, and expiresAt so
- *                                   clients can keep a pixel-accurate countdown
- *   3. Broadcasts `timer_threshold` ONCE when ≤ TIMER_THRESHOLD_S (10) seconds
- *                                   remain — lets clients trigger a visual/audio
- *                                   urgency cue exactly once per timer lifecycle
- *   4. Calls onExpiry(roomCode, playerId) when the timer fires
+ * 1. Broadcasts `timer_start` immediately via broadcastFn (phase, playerId,
+ * durationMs, expiresAt)
+ * 2. Broadcasts `timer_tick` every TICK_INTERVAL_MS (1 second) with
+ * remainingMs, remainingS, and expiresAt so
+ * clients can keep a pixel-accurate countdown
+ * 3. Broadcasts `timer_threshold` ONCE when ≤ TIMER_THRESHOLD_S (10) seconds
+ * remain — lets clients trigger a visual/audio
+ * urgency cue exactly once per timer lifecycle
+ * 4. Calls onExpiry(roomCode, playerId) when the timer fires
  *
  * Both players AND spectators receive all three broadcast types because the
  * broadcastFn is expected to be `broadcastToGame()`, which iterates over all
  * registered WebSocket connections for a room (players + spectators).
  *
  * Design notes:
- *   - One active countdown timer per room (keyed by roomCode).  Starting a new
- *     timer automatically cancels any pre-existing one for the same room.
- *   - cancelCountdownTimer() is idempotent.
- *   - All Node.js timer handles are .unref()'d so pending timers do not prevent
- *     the process from exiting cleanly during tests.
- *   - The module has NO dependency on gameStore, gameSocketServer, or any other
- *     game-domain module — it only needs the broadcastFn and onExpiry callbacks
- *     injected at call-site.  This makes it easy to unit-test in isolation.
+ * - One active countdown timer per room (keyed by roomCode). Starting a new
+ * timer automatically cancels any pre-existing one for the same room.
+ * - cancelCountdownTimer() is idempotent.
+ * - All Node.js timer handles are.unref()'d so pending timers do not prevent
+ * the process from exiting cleanly during tests.
+ * - The module has NO dependency on gameStore, gameSocketServer, or any other
+ * game-domain module — it only needs the broadcastFn and onExpiry callbacks
+ * injected at call-site. This makes it easy to unit-test in isolation.
  *
  * Usage:
- *   const timerService = require('./timerService');
+ * const timerService = require('./timerService');
  *
- *   // Start a 30-second turn timer:
- *   timerService.startCountdownTimer(
- *     roomCode, 'turn', playerId, 30_000,
- *     (rc, data) => broadcastToGame(rc, data),
- *     (rc, pid) => executeTimedOutTurn(rc, pid),
- *   );
+ * // Start a 30-second turn timer:
+ * timerService.startCountdownTimer(
+ * roomCode, 'turn', playerId, 30_000,
+ * (rc, data) => broadcastToGame(rc, data),
+ * (rc, pid) => executeTimedOutTurn(rc, pid),
+ * );
  *
- *   // Cancel it:
- *   timerService.cancelCountdownTimer(roomCode);
+ * // Cancel it:
+ * timerService.cancelCountdownTimer(roomCode);
  */
 
 // ---------------------------------------------------------------------------
@@ -67,11 +67,11 @@ const TIMER_THRESHOLD_S = 10;
 
 /**
  * @typedef {Object} TimerRecord
- * @property {ReturnType<typeof setInterval>}  tickId         - Interval ID for tick events
- * @property {ReturnType<typeof setTimeout>}   timerId        - Expiry timeout ID
- * @property {number}  expiresAt      - Epoch ms when the timer fires
- * @property {string}  phase          - 'turn' | 'declaration'
- * @property {string}  playerId       - Active player whose turn is ticking down
+ * @property {ReturnType<typeof setInterval>} tickId - Interval ID for tick events
+ * @property {ReturnType<typeof setTimeout>} timerId - Expiry timeout ID
+ * @property {number} expiresAt - Epoch ms when the timer fires
+ * @property {string} phase - 'turn' | 'declaration'
+ * @property {string} playerId - Active player whose turn is ticking down
  * @property {boolean} thresholdFired - true once the ≤10 s threshold event has been sent
  */
 
@@ -88,14 +88,14 @@ const _timers = new Map();
  * If a timer is already running for this room it is cancelled before the new
  * one starts (idempotent replacement).
  *
- * @param {string}   roomCode    - Room identifier (case-sensitive; caller is responsible for normalisation).
- * @param {string}   phase       - 'turn' | 'declaration'
- * @param {string}   playerId    - The player whose turn is ticking down.
- * @param {number}   durationMs  - Duration in milliseconds (e.g. 30_000 or 60_000).
+ * @param {string} roomCode - Room identifier (case-sensitive; caller is responsible for normalisation).
+ * @param {string} phase - 'turn' | 'declaration'
+ * @param {string} playerId - The player whose turn is ticking down.
+ * @param {number} durationMs - Duration in milliseconds (e.g. 30_000 or 60_000).
  * @param {Function} broadcastFn - fn(roomCode, data) → void — sends to ALL connections
- *                                 in the room (players + spectators).
- * @param {Function} onExpiry    - fn(roomCode, playerId) → void|Promise — called when
- *                                 the timer fires.  Async rejections are caught and logged.
+ * in the room (players + spectators).
+ * @param {Function} onExpiry - fn(roomCode, playerId) → void|Promise — called when
+ * the timer fires. Async rejections are caught and logged.
  * @returns {{ expiresAt: number }} Absolute epoch-ms timestamp when the timer will fire.
  */
 function startCountdownTimer(roomCode, phase, playerId, durationMs, broadcastFn, onExpiry) {

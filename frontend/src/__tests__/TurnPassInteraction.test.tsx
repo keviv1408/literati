@@ -1,19 +1,19 @@
 /**
  * @jest-environment jsdom
  *
- * Sub-AC 56c: Frontend turn-pass seat-selection interaction tests.
+ * Frontend turn-pass seat-selection interaction tests.
  *
  * Covers:
- *  • Turn indicator shows "Tap a highlighted seat" when postDeclarationHighlight is set
- *  • Ask and Declare buttons hidden during turn-pass selection mode
- *  • "Turn-pass action prompt" replaces Ask/Declare row during selection
- *  • Ask-prompt hint suppressed during turn-pass mode
- *  • CardHand is disabled during turn-pass mode
- *  • Clicking a highlighted seat dispatches `choose_next_turn` via WebSocket
- *  • After seat click, UI shows "Choosing…" pending state
- *  • Ask/Declare still hidden while pendingTurnPassAck (waiting for server ack)
- *  • After `post_declaration_turn_selected` all turn-pass UI clears and normal
- *    Ask/Declare controls reappear for the NEW turn player
+ * • Turn indicator shows "Tap a highlighted seat" when postDeclarationHighlight is set
+ * • Ask and Declare buttons hidden during turn-pass selection mode
+ * • "Turn-pass action prompt" replaces Ask/Declare row during selection
+ * • Ask-prompt hint suppressed during turn-pass mode
+ * • CardHand is disabled during turn-pass mode
+ * • Clicking a highlighted seat dispatches `choose_next_turn` via WebSocket
+ * • After seat click, UI shows "Choosing…" pending state
+ * • Ask/Declare still hidden while pendingTurnPassAck (waiting for server ack)
+ * • After `post_declaration_turn_selected` all turn-pass UI clears and normal
+ * Ask/Declare controls reappear for the NEW turn player
  */
 
 import React from 'react';

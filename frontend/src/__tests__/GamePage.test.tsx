@@ -1,22 +1,21 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for /game/[room-id] — Sub-AC 47a:
- *
- *   • Renders loading state immediately on mount.
- *   • Renders "Invalid Room Code" error for malformed room IDs (e.g. "ABC").
- *   • Renders "Room Not Found" error when GET /api/rooms/:code returns 404.
- *   • Renders "Something Went Wrong" error for unexpected API failures.
- *   • Redirects to /room/<CODE> when room status is 'waiting'.
- *   • Redirects to /room/<CODE> when room status is 'starting'.
- *   • Renders game view (data-testid="game-view") for 'in_progress' rooms.
- *   • Renders "Game Cancelled" state for cancelled rooms.
- *   • Renders "Game Over" state for completed rooms.
- *   • Shows room code in the game view header.
- *   • Shows variant label in the game view header.
- *   • WebSocket status indicator is rendered in the game view.
- *   • Turn indicator is NOT rendered when gameState is null.
- *   • Player hand area is rendered in the game view footer.
+ * Tests for /game/[room-id] — *
+ * • Renders loading state immediately on mount.
+ * • Renders "Invalid Room Code" error for malformed room IDs (e.g. "ABC").
+ * • Renders "Room Not Found" error when GET /api/rooms/:code returns 404.
+ * • Renders "Something Went Wrong" error for unexpected API failures.
+ * • Redirects to /room/<CODE> when room status is 'waiting'.
+ * • Redirects to /room/<CODE> when room status is 'starting'.
+ * • Renders game view (data-testid="game-view") for 'in_progress' rooms.
+ * • Renders "Game Cancelled" state for cancelled rooms.
+ * • Renders "Game Over" state for completed rooms.
+ * • Shows room code in the game view header.
+ * • Shows variant label in the game view header.
+ * • WebSocket status indicator is rendered in the game view.
+ * • Turn indicator is NOT rendered when gameState is null.
+ * • Player hand area is rendered in the game view footer.
  */
 
 import React from 'react';
@@ -647,10 +646,10 @@ describe('GamePage — 8-player in_progress game', () => {
 //
 // These tests verify that the game controls (Declare button, card hand,
 // AskCardModal, DeclareModal) are:
-//   • Available immediately after game_init is received
-//   • Available when the current player is on their turn, regardless of
-//     whether teammates/opponents are bots or humans
-//   • Available for both 6-player and 8-player game configurations
+// • Available immediately after game_init is received
+// • Available when the current player is on their turn, regardless of
+// whether teammates/opponents are bots or humans
+// • Available for both 6-player and 8-player game configurations
 //
 // The controls are gated exclusively on `isMyTurn`, derived from
 // gameState.currentTurnPlayerId === myPlayerId.
@@ -702,7 +701,7 @@ function makeGameInit(
   };
 }
 
-describe('GamePage — Sub-AC 9.2: game controls always available', () => {
+describe('GamePage — game controls always available', () => {
   describe('6-player game — all human players', () => {
     const MY_PLAYER_ID = 'player-me';
     const players6 = [
@@ -806,7 +805,7 @@ describe('GamePage — Sub-AC 9.2: game controls always available', () => {
 
     it('game controls are never disabled due to matchmaking state', async () => {
       // This verifies that no matchmaking-related import/state is gating the
-      // controls.  The game page should not import useMatchmakingSocket or
+      // controls. The game page should not import useMatchmakingSocket or
       // reference any matchmaking status.
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
@@ -973,16 +972,16 @@ describe('GamePage — Sub-AC 9.2: game controls always available', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 25b: Declaration outcome broadcast — score display and score flash
+// Declaration outcome broadcast — score display and score flash
 //
 // Verifies that:
-//   1. Score header renders with team 1 and team 2 score testids
-//   2. Score updates in the header after game_state broadcast with new scores
-//   3. lastMove text is displayed after a declaration_result arrives
-//   4. declaration_result.correct and .winningTeam are reflected in lastMove
+// 1. Score header renders with team 1 and team 2 score testids
+// 2. Score updates in the header after game_state broadcast with new scores
+// 3. lastMove text is displayed after a declaration_result arrives
+// 4. declaration_result.correct and.winningTeam are reflected in lastMove
 // ---------------------------------------------------------------------------
 
-describe('GamePage — Sub-AC 25b: declaration outcome broadcast and score display', () => {
+describe('GamePage — declaration outcome broadcast and score display', () => {
   const MY_PLAYER_ID = 'player-me';
 
   const players6 = [
@@ -1183,21 +1182,21 @@ describe('GamePage — Sub-AC 25b: declaration outcome broadcast and score displ
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 46d: Rematch vote UI — vote panel, rematch-starting overlay,
+// Rematch vote UI — vote panel, rematch-starting overlay,
 // and room-dissolved dissolution notice.
 //
 // Tests:
-//   1. After game_over + rematch_vote_update, RematchVotePanel is shown
-//   2. Clicking Yes sends rematch_vote message to server
-//   3. Clicking No sends rematch_vote message to server
-//   4. rematch_start shows "Rematch starting…" overlay and triggers redirect
-//   5. room_dissolved (timeout) shows dissolution notice instead of vote panel
-//   6. room_dissolved (majority_no) shows dissolution notice with correct text
-//   7. rematch_declined alone shows RematchVotePanel in declined state
-//   8. room_dissolved replaces the vote panel in the UI
+// 1. After game_over + rematch_vote_update, RematchVotePanel is shown
+// 2. Clicking Yes sends rematch_vote message to server
+// 3. Clicking No sends rematch_vote message to server
+// 4. rematch_start shows "Rematch starting…" overlay and triggers redirect
+// 5. room_dissolved (timeout) shows dissolution notice instead of vote panel
+// 6. room_dissolved (majority_no) shows dissolution notice with correct text
+// 7. rematch_declined alone shows RematchVotePanel in declined state
+// 8. room_dissolved replaces the vote panel in the UI
 // ---------------------------------------------------------------------------
 
-describe('GamePage — Sub-AC 46d: rematch vote UI and room_dissolved', () => {
+describe('GamePage — rematch vote UI and room_dissolved', () => {
   const MY_PLAYER_ID = 'player-me';
 
   const players6 = [

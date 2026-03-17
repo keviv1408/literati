@@ -1,32 +1,32 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for TurnTimerStrip — Sub-AC 3 (continuous 30-second turn timer
+ * Tests for TurnTimerStrip — (continuous 30-second turn timer
  * visible inside ask/declare modals throughout the card-request flow).
  *
  * Coverage:
- *   Rendering:
- *     • Renders the data-testid="turn-timer-strip" wrapper
- *     • Renders a progress bar fill element (data-testid="turn-timer-strip-fill")
- *     • Renders a progressbar role element with correct aria-valuemax
- *     • Shows the correct remaining seconds label (data-testid="turn-timer-seconds")
- *   Timer content (my timer):
- *     • Shows "Your turn" label when isMyTimer=true
- *     • Uses emerald fill colour when isMyTimer=true and plenty of time remains
- *   Timer content (other player's timer):
- *     • Shows "Turn timer" label when isMyTimer=false
- *     • Uses slate fill colour when isMyTimer=false
- *   Danger zone (< 25%):
- *     • Fill uses red colour class when remaining is below 25% of duration
- *   Already-expired timer:
- *     • Renders without crashing when expiresAt is already in the past
- *     • Shows "0s" countdown
- *     • Fill width is 0%
- *   Accessibility:
- *     • progressbar has correct aria-valuenow
- *     • seconds label has aria-label with remaining seconds
- *   Custom className:
- *     • Extra className is forwarded to the outer wrapper
+ * Rendering:
+ * • Renders the data-testid="turn-timer-strip" wrapper
+ * • Renders a progress bar fill element (data-testid="turn-timer-strip-fill")
+ * • Renders a progressbar role element with correct aria-valuemax
+ * • Shows the correct remaining seconds label (data-testid="turn-timer-seconds")
+ * Timer content (my timer):
+ * • Shows "Your turn" label when isMyTimer=true
+ * • Uses emerald fill colour when isMyTimer=true and plenty of time remains
+ * Timer content (other player's timer):
+ * • Shows "Turn timer" label when isMyTimer=false
+ * • Uses slate fill colour when isMyTimer=false
+ * Danger zone (< 25%):
+ * • Fill uses red colour class when remaining is below 25% of duration
+ * Already-expired timer:
+ * • Renders without crashing when expiresAt is already in the past
+ * • Shows "0s" countdown
+ * • Fill width is 0%
+ * Accessibility:
+ * • progressbar has correct aria-valuenow
+ * • seconds label has aria-label with remaining seconds
+ * Custom className:
+ * • Extra className is forwarded to the outer wrapper
  */
 
 import React from 'react';
@@ -223,7 +223,7 @@ describe('TurnTimerStrip — already expired', () => {
 describe('TurnTimerStrip — seconds display', () => {
   it('shows correct ceiling of remaining seconds (20000ms → 20s)', () => {
     renderStrip({ remainingMs: 20_000 });
-    // Math.ceil(20000 / 1000) = 20
+    // Math.ceil(20000 1000) = 20
     expect(screen.getByTestId('turn-timer-seconds').textContent).toBe('20s');
   });
 

@@ -1,24 +1,24 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 5.2: Backend game-start validation and processing.
+ * Tests for Backend game-start validation and processing.
  *
  * Covers:
- *   1. validateStartGame() — pure validation function
- *   2. buildSeatsFromClients() — seat-descriptor builder
- *   3. handleStartGame() WebSocket handler — via direct invocation
- *   4. POST /api/rooms/:code/start REST endpoint — via supertest
+ * 1. validateStartGame() — pure validation function
+ * 2. buildSeatsFromClients() — seat-descriptor builder
+ * 3. handleStartGame() WebSocket handler — via direct invocation
+ * 4. POST /api/rooms/:code/start REST endpoint — via supertest
  *
- * All Supabase calls are mocked.  No real DB or network connections are made.
+ * All Supabase calls are mocked. No real DB or network connections are made.
  *
  * NOTE on mock design:
- *   The Supabase chain mock is built so that:
- *     select → eq → maybeSingle  (terminal call)
- *     update → eq                 (eq itself is awaited; default returns chain,
- *                                  `await chain` resolves to chain with no .error,
- *                                  so the `if (error)` check passes cleanly)
- *   We never call `eq.mockResolvedValue()` because that overrides eq to return a
- *   Promise instead of the chain, breaking the SELECT.eq.maybeSingle pipeline.
+ * The Supabase chain mock is built so that:
+ * select → eq → maybeSingle (terminal call)
+ * update → eq (eq itself is awaited; default returns chain,
+ * `await chain` resolves to chain with no.error,
+ * so the `if (error)` check passes cleanly)
+ * We never call `eq.mockResolvedValue()` because that overrides eq to return a
+ * Promise instead of the chain, breaking the SELECT.eq.maybeSingle pipeline.
  */
 
 const request = require('supertest');
@@ -306,7 +306,7 @@ describe('handleStartGame() WS handler', () => {
    *
    * @param {string} roomCode
    * @param {number} playerCount
-   * @param {Array}  entries
+   * @param {Array} entries
    * @returns {Map}
    */
   function seedRoomInStore(roomCode, playerCount, entries) {

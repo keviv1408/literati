@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * Unit tests for game/gameInitService.js — Sub-AC 6.1
+ * Unit tests for game/gameInitService.js —
  *
  * Verifies that the game initialization service correctly:
- *   1. Detects empty (unfilled) seat slots at game start.
- *   2. Triggers bot auto-fill for every empty slot.
- *   3. Merges and sorts the final seat array.
- *   4. Delegates game state creation to the provided createGame function.
+ * 1. Detects empty (unfilled) seat slots at game start.
+ * 2. Triggers bot auto-fill for every empty slot.
+ * 3. Merges and sorts the final seat array.
+ * 4. Delegates game state creation to the provided createGame function.
  *
  * Test sections:
- *   A. detectEmptySeats()  — pure seat-gap detection
- *   B. buildBotSeats()     — bot generation for empty slots
- *   C. buildGameSeats()    — detection + fill + merge pipeline
- *   D. initializeGame()    — full initialization entry point
+ * A. detectEmptySeats() — pure seat-gap detection
+ * B. buildBotSeats() — bot generation for empty slots
+ * C. buildGameSeats() — detection + fill + merge pipeline
+ * D. initializeGame() — full initialization entry point
  *
  * All external dependencies (createGame) are injected as mocks.
  * No network calls, no Supabase, no WebSocket ports opened.

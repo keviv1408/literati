@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * Tests for AC 28 / Sub-AC 28c: Post-declaration turn-selection timer.
+ * Tests for AC 28: Post-declaration turn-selection timer.
  *
  * After a HUMAN player makes a CORRECT declaration, the server broadcasts a
- * `post_declaration_timer` (30-second countdown) to ALL clients.  The
- * declaring team can send `choose_next_turn` to select who goes next.  On
+ * `post_declaration_timer` (30-second countdown) to ALL clients. The
+ * declaring team can send `choose_next_turn` to select who goes next. On
  * expiry the server auto-selects a random eligible player.
  *
  * Coverage:
- *  1. `post_declaration_timer` is broadcast to ALL connections after a human correct declaration
- *  2. `post_declaration_timer` is NOT sent for a failed (incorrect) declaration
- *  3. `post_declaration_timer` is NOT sent when the declarant is a bot
- *  4. Timer entry is stored in `_postDeclarationTimers` map with correct fields
- *  5. `cancelPostDeclarationTimer` clears the map entry and prevents expiry callback
- *  6. On timer expiry, `post_declaration_turn_selected` is broadcast with reason:'timeout'
- *  7. On timer expiry, selected player has cards (still eligible)
- *  8. `handleChooseNextTurn` cancels the timer and broadcasts `post_declaration_turn_selected`
- *  9. `handleChooseNextTurn` resolves reason:'player_choice' correctly
+ * 1. `post_declaration_timer` is broadcast to ALL connections after a human correct declaration
+ * 2. `post_declaration_timer` is NOT sent for a failed (incorrect) declaration
+ * 3. `post_declaration_timer` is NOT sent when the declarant is a bot
+ * 4. Timer entry is stored in `_postDeclarationTimers` map with correct fields
+ * 5. `cancelPostDeclarationTimer` clears the map entry and prevents expiry callback
+ * 6. On timer expiry, `post_declaration_turn_selected` is broadcast with reason:'timeout'
+ * 7. On timer expiry, selected player has cards (still eligible)
+ * 8. `handleChooseNextTurn` cancels the timer and broadcasts `post_declaration_turn_selected`
+ * 9. `handleChooseNextTurn` resolves reason:'player_choice' correctly
  * 10. Correct declaration with only ONE eligible player still starts the timer
  * 11. Game over after declaration: no post_declaration_timer is broadcast
  */

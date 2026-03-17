@@ -8,16 +8,16 @@
  * The callers (gameSocketServer) apply mutations after validation.
  *
  * Rules reference:
- *  - Ask eligibility: asker must hold ≥1 card in the target half-suit;
- *    target must be an opponent with ≥1 card total AND ≥1 card in the
- *    requested half-suit; asker must not hold the requested card;
- *    card must not already be in a declared suit.
- *  - Declaration: only the current-turn player may declare; all 6 cards of
- *    the half-suit must be assigned to teammates; correctness checked card-by-card.
- *  - Turn pass: ask failure → turn to target; ask success → keep turn.
- *    After declaration: declarer keeps turn if they still have cards,
- *    otherwise passes to next teammate with cards (or any remaining player).
- *  - Game end: all 8 half-suits declared; tiebreaker = team that declared high_d.
+ * - Ask eligibility: asker must hold ≥1 card in the target half-suit;
+ * target must be an opponent with ≥1 card total AND ≥1 card in the
+ * requested half-suit; asker must not hold the requested card;
+ * card must not already be in a declared suit.
+ * - Declaration: only the current-turn player may declare; all 6 cards of
+ * the half-suit must be assigned to teammates; correctness checked card-by-card.
+ * - Turn pass: ask failure → turn to target; ask success → keep turn.
+ * After declaration: declarer keeps turn if they still have cards,
+ * otherwise passes to next teammate with cards (or any remaining player).
+ * - Game end: all 8 half-suits declared; tiebreaker = team that declared high_d.
  */
 
 const { buildHalfSuitMap, buildCardToHalfSuitMap, TIEBREAKER_HALF_SUIT, allHalfSuitIds, halfSuitLabel } = require('./halfSuits');
@@ -39,10 +39,10 @@ const {
 /**
  * Validate an ask-card action.
  *
- * @param {Object} gs     - Current GameState
- * @param {string} askerId    - Player making the request
- * @param {string} targetId   - Player being asked
- * @param {string} cardId     - Card being requested
+ * @param {Object} gs - Current GameState
+ * @param {string} askerId - Player making the request
+ * @param {string} targetId - Player being asked
+ * @param {string} cardId - Card being requested
  * @returns {{ valid: boolean, error?: string, errorCode?: string }}
  */
 function validateAsk(gs, askerId, targetId, cardId) {
@@ -192,7 +192,7 @@ function getDeclarantLockedCards(gs, declarerId, halfSuitId) {
  * @param {Object} gs
  * @param {string} declarerId
  * @param {string} halfSuitId
- * @param {Object.<string, string>} assignment  - { cardId: playerId }
+ * @param {Object.<string, string>} assignment - { cardId: playerId }
  * @returns {{ valid: boolean, error?: string, errorCode?: string }}
  */
 function validateDeclaration(gs, declarerId, halfSuitId, assignment) {
@@ -285,12 +285,12 @@ function validateDeclaration(gs, declarerId, halfSuitId, assignment) {
  * @param {string} halfSuitId
  * @param {Object.<string, string>} assignment - { cardId: playerId }
  * @returns {{
- *   correct: boolean,
- *   winningTeam: 1|2,
- *   newTurnPlayerId: string,
- *   lastMove: string,
- *   actualHolders: Object.<string, string>,
- *   wrongAssignmentDiffs: Array<{ card: string, claimedPlayerId: string, actualPlayerId: string|null }>
+ * correct: boolean,
+ * winningTeam: 1|2,
+ * newTurnPlayerId: string,
+ * lastMove: string,
+ * actualHolders: Object.<string, string>,
+ * wrongAssignmentDiffs: Array<{ card: string, claimedPlayerId: string, actualPlayerId: string|null }>
  * }}
  */
 function applyDeclaration(gs, declarerId, halfSuitId, assignment) {
@@ -325,7 +325,7 @@ function applyDeclaration(gs, declarerId, halfSuitId, assignment) {
     }
   }
 
-  // Sub-AC 27b: detect players whose hands are now empty for the first time
+  // detect players whose hands are now empty for the first time
   const newlyEliminated = _detectNewlyEliminated(gs);
 
   // Mark as declared
@@ -412,7 +412,7 @@ function applyForcedFailedDeclaration(gs, declarerId, halfSuitId) {
     }
   }
 
-  // Sub-AC 27b: detect players whose hands are now empty for the first time
+  // detect players whose hands are now empty for the first time
   const newlyEliminated = _detectNewlyEliminated(gs);
 
   // Mark as declared (won by opposing team)
@@ -490,12 +490,12 @@ function _endGame(gs) {
  * "Clockwise" is defined by ascending seatIndex order, wrapping around.
  *
  * Falls back to:
- *   1. Any opponent with cards (regardless of seat order).
- *   2. _resolveValidTurn(gs, fromPlayerId) as a last resort.
+ * 1. Any opponent with cards (regardless of seat order).
+ * 2. _resolveValidTurn(gs, fromPlayerId) as a last resort.
  *
  * @param {Object} gs
- * @param {string} fromPlayerId  — the declarer (turn passes FROM them)
- * @param {number} opponentTeam  — the winning team (1 or 2)
+ * @param {string} fromPlayerId — the declarer (turn passes FROM them)
+ * @param {number} opponentTeam — the winning team (1 or 2)
  * @returns {string}
  */
 function _nextClockwiseOpponent(gs, fromPlayerId, opponentTeam) {
@@ -529,14 +529,14 @@ function _nextClockwiseOpponent(gs, fromPlayerId, opponentTeam) {
  *
  * If `candidateId` has ≥1 card, return them unchanged.
  * Otherwise, find the next player who has cards:
- *   1. Honour any stored turnRecipient designated by the eliminated player (Sub-AC 27b).
- *   2. AC 19: pass clockwise (ascending seatIndex, wrapping) to the next same-team
- *      player who has ≥1 card.  "Clockwise" is defined by seatIndex order so that the
- *      turn stays within the correct team even when the designated turn-holder is
- *      simultaneously eliminated (e.g. a correct declarant whose only cards were in
- *      the just-declared half-suit).
- *   3. Fall back to any player with cards (all teammates empty).
- *   4. If nobody has cards (game should be over), return candidateId unchanged.
+ * 1. Honour any stored turnRecipient designated by the eliminated player.
+ * 2. AC 19: pass clockwise (ascending seatIndex, wrapping) to the next same-team
+ * player who has ≥1 card. "Clockwise" is defined by seatIndex order so that the
+ * turn stays within the correct team even when the designated turn-holder is
+ * simultaneously eliminated (e.g. a correct declarant whose only cards were in
+ * the just-declared half-suit).
+ * 3. Fall back to any player with cards (all teammates empty).
+ * 4. If nobody has cards (game should be over), return candidateId unchanged.
  *
  * @param {Object} gs
  * @param {string} candidateId
@@ -548,7 +548,7 @@ function _resolveValidTurn(gs, candidateId) {
   // If candidate has cards, they're fine.
   if (getCardCount(gs, candidateId) > 0) return candidateId;
 
-  // Sub-AC 27b: if the eliminated player has designated a turn recipient, prefer them.
+  // if the eliminated player has designated a turn recipient, prefer them.
   const storedRecipient = gs.turnRecipients?.get(candidateId);
   if (storedRecipient && getCardCount(gs, storedRecipient) > 0) {
     return storedRecipient;
@@ -576,7 +576,7 @@ function _resolveValidTurn(gs, candidateId) {
 }
 
 // ---------------------------------------------------------------------------
-// Elimination helpers (Sub-AC 27b)
+// Elimination helpers
 // ---------------------------------------------------------------------------
 
 /**
@@ -622,20 +622,20 @@ function _findCardHolder(gs, cardId) {
 }
 
 // ---------------------------------------------------------------------------
-// Eligible next-turn players (Sub-AC 28a)
+// Eligible next-turn players
 // ---------------------------------------------------------------------------
 
 /**
  * Compute the list of player IDs that are eligible to hold the turn.
  *
  * A player is eligible when ALL of the following are true:
- *   1. They have at least 1 card remaining in their hand.
- *   2. They are NOT in `gs.eliminatedPlayerIds` (i.e. their hand has not
- *      been emptied by a previous declaration).
+ * 1. They have at least 1 card remaining in their hand.
+ * 2. They are NOT in `gs.eliminatedPlayerIds` (i.e. their hand has not
+ * been emptied by a previous declaration).
  *
  * This list is broadcast to all clients inside `declaration_result` after
  * every declaration so the UI can immediately highlight which seats are
- * still active participants.  The list is purely informational — the
+ * still active participants. The list is purely informational — the
  * authoritative `newTurnPlayerId` field tells the clients WHO actually gets
  * the next turn; `eligibleNextTurnPlayerIds` tells them WHO COULD have.
  *
@@ -660,7 +660,7 @@ function getEligibleNextTurnPlayers(gs) {
 }
 
 // ---------------------------------------------------------------------------
-// Host migration helper (Sub-AC 40b)
+// Host migration helper
 // ---------------------------------------------------------------------------
 
 /**
@@ -669,28 +669,28 @@ function getEligibleNextTurnPlayers(gs) {
  * Traverses the player list starting immediately after the current host
  * (ascending seatIndex, wrapping around) and returns the first player who
  * meets ALL of the following criteria:
- *   1. NOT a bot (`isBot === false`) — bots cannot take on the host role.
- *   2. NOT eliminated — their hand has not been emptied by a declaration
- *      (i.e. their playerId is absent from `gs.eliminatedPlayerIds`).
+ * 1. NOT a bot (`isBot === false`) — bots cannot take on the host role.
+ * 2. NOT eliminated — their hand has not been emptied by a declaration
+ * (i.e. their playerId is absent from `gs.eliminatedPlayerIds`).
  *
  * "Clockwise" is defined by ascending seatIndex, identical to the convention
  * used throughout the game engine (see `_resolveValidTurn`,
  * `_nextClockwiseOpponent`).
  *
  * Edge cases:
- *   - If `currentHostId` is not found in the player list, traversal starts
- *     from seatIndex 0 (i.e. the first player in seat order).
- *   - Returns `null` when no eligible candidate exists (e.g. all remaining
- *     players are bots or eliminated).
- *   - A player with 0 cards who is NOT yet in `eliminatedPlayerIds` is still
- *     eligible (the calling code should populate `eliminatedPlayerIds` before
- *     invoking this function if card-emptiness matters).
+ * - If `currentHostId` is not found in the player list, traversal starts
+ * from seatIndex 0 (i.e. the first player in seat order).
+ * - Returns `null` when no eligible candidate exists (e.g. all remaining
+ * players are bots or eliminated).
+ * - A player with 0 cards who is NOT yet in `eliminatedPlayerIds` is still
+ * eligible (the calling code should populate `eliminatedPlayerIds` before
+ * invoking this function if card-emptiness matters).
  *
- * @param {Object} gs              - GameState (must have `players` array and
- *                                   optionally `eliminatedPlayerIds` Set)
- * @param {string} currentHostId   - playerId of the current host
- * @returns {string|null}          - playerId of the next eligible candidate,
- *                                   or null if none is found
+ * @param {Object} gs - GameState (must have `players` array and
+ * optionally `eliminatedPlayerIds` Set)
+ * @param {string} currentHostId - playerId of the current host
+ * @returns {string|null} - playerId of the next eligible candidate,
+ * or null if none is found
  */
 function nextEligibleHostCandidate(gs, currentHostId) {
   if (!gs || !gs.players || gs.players.length === 0) return null;

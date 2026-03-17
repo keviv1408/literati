@@ -1,35 +1,35 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 45b: Server-side handler clones all previous room settings
+ * Tests for Server-side handler clones all previous room settings
  * (teams, bot difficulty, turn timer, etc.) into a new pending game state and
  * notifies all players of the pending rematch.
  *
  * Coverage:
- *   pendingRematchStore:
- *     1. setPendingRematch stores settings indexed by roomCode (case-insensitive)
- *     2. getPendingRematch returns the stored settings
- *     3. getPendingRematch returns null for unknown room
- *     4. hasPendingRematch returns true when settings exist
- *     5. hasPendingRematch returns false for unknown room
- *     6. clearPendingRematch removes the settings
- *     7. clearPendingRematch is a no-op for unknown room
- *     8. setPendingRematch overwrites an existing snapshot
- *     9. createdAt timestamp is set automatically
- *    10. _clearAll resets all state
+ * pendingRematchStore:
+ * 1. setPendingRematch stores settings indexed by roomCode (case-insensitive)
+ * 2. getPendingRematch returns the stored settings
+ * 3. getPendingRematch returns null for unknown room
+ * 4. hasPendingRematch returns true when settings exist
+ * 5. hasPendingRematch returns false for unknown room
+ * 6. clearPendingRematch removes the settings
+ * 7. clearPendingRematch is a no-op for unknown room
+ * 8. setPendingRematch overwrites an existing snapshot
+ * 9. createdAt timestamp is set automatically
+ * 10. _clearAll resets all state
  *
- *   handleRematchVote (majority path):
- *    11. majority YES → setPendingRematch called with player/variant/playerCount
- *    12. majority YES → rematch_start broadcast includes previousTeams array
- *    13. majority YES → rematch_start broadcast includes variant and playerCount
- *    14. majority YES → previousTeams contains correct teamId/seatIndex/isBot per player
- *    15. majority YES → rematch_start is broadcast when gs is null (no previousTeams)
+ * handleRematchVote (majority path):
+ * 11. majority YES → setPendingRematch called with player/variant/playerCount
+ * 12. majority YES → rematch_start broadcast includes previousTeams array
+ * 13. majority YES → rematch_start broadcast includes variant and playerCount
+ * 14. majority YES → previousTeams contains correct teamId/seatIndex/isBot per player
+ * 15. majority YES → rematch_start is broadcast when gs is null (no previousTeams)
  *
- *   handleRematchInitiate (host-initiated path):
- *    16. host-initiated → setPendingRematch called with previous game settings
- *    17. host-initiated → rematch_start broadcast includes previousTeams + config
- *    18. host-initiated → non-host player receives HOST_ONLY error
- *    19. host-initiated → matchmaking room receives NOT_PRIVATE_ROOM error
+ * handleRematchInitiate (host-initiated path):
+ * 16. host-initiated → setPendingRematch called with previous game settings
+ * 17. host-initiated → rematch_start broadcast includes previousTeams + config
+ * 18. host-initiated → non-host player receives HOST_ONLY error
+ * 19. host-initiated → matchmaking room receives NOT_PRIVATE_ROOM error
  */
 
 jest.useFakeTimers();
@@ -216,9 +216,9 @@ describe('handleRematchVote — pending rematch cloning', () => {
    * handleRematchVote without spinning up a real WebSocket server.
    *
    * We call the logic directly by:
-   *   1. Setting up a game in the game store mock
-   *   2. Initialising a rematch vote with all-bot players (instant majority)
-   *   3. Calling handleRematchVote and observing pendingRematchStore state
+   * 1. Setting up a game in the game store mock
+   * 2. Initialising a rematch vote with all-bot players (instant majority)
+   * 3. Calling handleRematchVote and observing pendingRematchStore state
    */
   test('11. majority YES → setPendingRematch called with correct settings', async () => {
     // Patch the game store and Supabase at the module level using jest.mock

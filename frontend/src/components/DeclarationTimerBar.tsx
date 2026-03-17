@@ -5,14 +5,14 @@
  * phase (Step 2 of DeclareModal, card-assignment form).
  *
  * Behaviour:
- *   • Uses requestAnimationFrame for smooth 60fps countdown
- *   • Normal state: emerald progress bar (plenty of time)
- *   • Warning state (≤ WARNING_THRESHOLD_S seconds): red bar + label pulse
- *   • Danger state  (≤ DANGER_THRESHOLD_S  seconds): red bar + seconds pulse
- *   • Calls `onExpiry` exactly once when the remaining time reaches 0
- *     (the parent uses this to auto-submit the current declaration assignment)
+ * • Uses requestAnimationFrame for smooth 60fps countdown
+ * • Normal state: emerald progress bar (plenty of time)
+ * • Warning state (≤ WARNING_THRESHOLD_S seconds): red bar + label pulse
+ * • Danger state (≤ DANGER_THRESHOLD_S seconds): red bar + seconds pulse
+ * • Calls `onExpiry` exactly once when the remaining time reaches 0
+ * (the parent uses this to auto-submit the current declaration assignment)
  *
- * Sub-AC 23a: visible to the declarant; triggers warning state in the final
+ * visible to the declarant; triggers warning state in the final
  * WARNING_THRESHOLD_S seconds; auto-submits via the onExpiry callback on expiry.
  */
 

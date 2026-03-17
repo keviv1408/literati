@@ -3,35 +3,35 @@
 /**
  * Unit tests for the server-side turn timer in gameSocketServer.js.
  *
- * Sub-AC 3: 60-second server-side turn timer for the card request flow that
+ * 60-second server-side turn timer for the card request flow that
  * persists across step navigation and triggers an auto-forfeit/skip on expiry.
  *
  * Coverage:
- *   scheduleTurnTimerIfNeeded:
- *     1. Does NOT schedule timer when game is not active
- *     2. Does NOT schedule timer when current player is a bot
- *     3. Schedules timer for a human player and broadcasts turn_timer event
- *     4. Cancels existing timer before scheduling a new one (prevents double-fire)
- *     5. Broadcasts correct { type, playerId, durationMs, expiresAt } fields
- *     6. expiresAt is approximately Date.now() + 60000
+ * scheduleTurnTimerIfNeeded:
+ * 1. Does NOT schedule timer when game is not active
+ * 2. Does NOT schedule timer when current player is a bot
+ * 3. Schedules timer for a human player and broadcasts turn_timer event
+ * 4. Cancels existing timer before scheduling a new one (prevents double-fire)
+ * 5. Broadcasts correct { type, playerId, durationMs, expiresAt } fields
+ * 6. expiresAt is approximately Date.now() + 60000
  *
- *   cancelTurnTimer:
- *     7. Calling cancelTurnTimer clears the scheduled timeout
- *     8. cancelTurnTimer is idempotent (safe to call when no timer exists)
+ * cancelTurnTimer:
+ * 7. Calling cancelTurnTimer clears the scheduled timeout
+ * 8. cancelTurnTimer is idempotent (safe to call when no timer exists)
  *
- *   executeTimedOutTurn:
- *     9.  Does nothing when game is not found
- *    10.  Does nothing when game is not active
- *    11.  Does nothing when the turn has already passed to another player
- *    12.  Invokes bot-logic to decide and execute a move when turn matches
+ * executeTimedOutTurn:
+ * 9. Does nothing when game is not found
+ * 10. Does nothing when game is not active
+ * 11. Does nothing when the turn has already passed to another player
+ * 12. Invokes bot-logic to decide and execute a move when turn matches
  *
- *   scheduleBotTurnIfNeeded:
- *    13.  Schedules a bot turn when the current player is a bot
- *    14.  Does NOT schedule a bot turn when the current player is human
+ * scheduleBotTurnIfNeeded:
+ * 13. Schedules a bot turn when the current player is a bot
+ * 14. Does NOT schedule a bot turn when the current player is human
  *
- *   Timer lifecycle after handleAskCard:
- *    15.  Turn timer is cancelled when a valid ask is made
- *    16.  New timer is scheduled after the ask (for the new current player)
+ * Timer lifecycle after handleAskCard:
+ * 15. Turn timer is cancelled when a valid ask is made
+ * 16. New timer is scheduled after the ask (for the new current player)
  */
 
 const {
@@ -293,7 +293,7 @@ describe('scheduleTurnTimerIfNeeded', () => {
     jest.advanceTimersByTime(65_000);
 
     // decideMove returns 'pass' so no actual game action — but executeTimedOutTurn
-    // should be called at most once.  Because mockDecideBotMove returns 'pass'
+    // should be called at most once. Because mockDecideBotMove returns 'pass'
     // we can't directly measure it here; we verify no extra timers fired by
     // checking the game is still in 'active' state.
     const storedGs = getGame('TIMER1');

@@ -4,33 +4,33 @@
  * GamePlayerSeat — compact seat chip for the active game view.
  *
  * Renders one player's position around the oval game table during an active
- * game.  It is the game-play counterpart to the lobby's `PlayerSeat` component
+ * game. It is the game-play counterpart to the lobby's `PlayerSeat` component
  * and works with the richer `GamePlayer` type (which carries live game
  * attributes such as `cardCount`, `isCurrentTurn`, and `teamId`).
  *
  * ### Two render states
- * | State    | Trigger              | Visual                              |
+ * | State | Trigger | Visual |
  * |----------|----------------------|-------------------------------------|
  * | Occupied | `player` is not null | Avatar + name + badges + card count |
- * | Empty    | `player` is null     | Pulsing hourglass + "Waiting…"      |
+ * | Empty | `player` is null | Pulsing hourglass + "Waiting…" |
  *
  * ### What is displayed (occupied)
  * - **Avatar**: image from `player.avatarId` (treated as a URL); falls back to
- *   an initials circle deterministically coloured by display name.
+ * an initials circle deterministically coloured by display name.
  * - **Name**: plain text for humans; `<BotBadge>` widget for bots.
  * - **"You" pill**: appears when `player.playerId === myPlayerId`.
  * - **Active-turn glow**: outer container receives `animate-seat-glow`
- *   (amber box-shadow keyframe from `globals.css`) + an inset amber ring
- *   when it is this player's turn.  Both effects are removed the moment
- *   `currentTurnPlayerId` (or `isActiveTurn`) no longer matches, i.e.
- *   as soon as the player takes an action and the server advances the turn.
+ * (amber box-shadow keyframe from `globals.css`) + an inset amber ring
+ * when it is this player's turn. Both effects are removed the moment
+ * `currentTurnPlayerId` (or `isActiveTurn`) no longer matches, i.e.
+ * as soon as the player takes an action and the server advances the turn.
  * - **Card count badge**: small circle showing remaining hand size.
  * - **Team colour**: border and background tinted emerald (T1) or violet (T2).
  *
  * ### Active-turn animation lifecycle
  * The animation is triggered by either:
- *  1. The `isActiveTurn` boolean prop (explicit override), or
- *  2. `currentTurnPlayerId === player.playerId` / `player.isCurrentTurn` (derived).
+ * 1. The `isActiveTurn` boolean prop (explicit override), or
+ * 2. `currentTurnPlayerId === player.playerId` / `player.isCurrentTurn` (derived).
  *
  * It is automatically cleared when the player submits an ask or declaration:
  * the server advances `currentTurnPlayerId`, the prop updates, and React
@@ -46,10 +46,10 @@
  * const { players, myPlayerId, gameState } = useGameContext();
  * const player = players.find(p => p.seatIndex === seatIndex) ?? null;
  * <GamePlayerSeat
- *   seatIndex={seatIndex}
- *   player={player}
- *   myPlayerId={myPlayerId}
- *   currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+ * seatIndex={seatIndex}
+ * player={player}
+ * myPlayerId={myPlayerId}
+ * currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
  * />
  */
 
@@ -62,7 +62,7 @@ import type { VoiceSeatState } from '@/hooks/useDailyVoice';
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface GamePlayerSeatProps {
-  /** Zero-based seat index (0 = bottom / 6 o'clock). */
+  /** Zero-based seat index (0 = bottom 6 o'clock). */
   seatIndex: number;
 
   /**
@@ -89,7 +89,7 @@ export interface GamePlayerSeatProps {
    * Explicit boolean override for the active-turn state.
    *
    * When provided, this takes precedence over the `currentTurnPlayerId` /
-   * `player.isCurrentTurn` derivation.  Useful when the parent component
+   * `player.isCurrentTurn` derivation. Useful when the parent component
    * manages the turn flag independently (e.g. optimistic UI after action).
    *
    * Pass `false` (or omit) to rely on `currentTurnPlayerId` matching.
@@ -97,18 +97,18 @@ export interface GamePlayerSeatProps {
   isActiveTurn?: boolean;
 
   /**
-   * Sub-AC 28b: When true, renders a cyan highlight ring around this seat
+   * When true, renders a cyan highlight ring around this seat
    * to indicate the player is eligible to receive the turn after a correct
-   * declaration.  Set on same-team players with cards remaining.
+   * declaration. Set on same-team players with cards remaining.
    */
   isHighlighted?: boolean;
 
   /**
-   * Sub-AC 28b: Click handler for the highlight selection flow.
+   * Click handler for the highlight selection flow.
    *
    * When `isHighlighted` is true and this prop is provided, the seat becomes
    * clickable (cursor-pointer, hover scale) and calling this handler emits
-   * `choose_next_turn` to the server.  Only the current turn player (the
+   * `choose_next_turn` to the server. Only the current turn player (the
    * declarant) should receive a non-undefined handler; all other clients see
    * the highlight as read-only informational feedback.
    */
@@ -230,7 +230,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   const handleClick = isAskClickable ? onAskTargetClick : onHighlightClick;
 
   // AC 55: on mobile, avatar upgrades to 'md' (40 px) so the seat card itself
-  // comfortably clears the 44 px minimum tap-target height.  On desktop the
+  // comfortably clears the 44 px minimum tap-target height. On desktop the
   // 'sm' size remains — layout is denser and pointer precision is higher.
   const avatarSize = isClickable ? 'md' : 'sm';
 
@@ -249,11 +249,11 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         !isEliminated && isTurn ? 'ring-2 ring-amber-400/80 ring-offset-1 ring-offset-slate-950' : '',
         // Active-turn glow animation (box-shadow keyframe from globals.css)
         !isEliminated && isTurn ? 'animate-seat-glow' : '',
-        // Sub-AC 28b: eligible-for-turn highlight (cyan ring, raised z-index)
+        // eligible-for-turn highlight (cyan ring, raised z-index)
         isHighlighted && !isEliminated ? 'ring-2 ring-cyan-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
         // Ask flow target highlight uses emerald to match the ask action.
         isAskTargetable && !isEliminated ? 'ring-2 ring-emerald-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
-        // Sub-AC 28b + AC 55: clickable seats get pointer cursor, hover scale,
+        // + AC 55: clickable seats get pointer cursor, hover scale,
         // and mobile tap-target enlargement (≥44 px min-height + scale-110).
         // On mobile the seat is statically enlarged so a thumb can hit it
         // without needing precision; on desktop (md+) scale resets to 1.0 with
@@ -296,10 +296,10 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         />
       )}
 
-      {/* ── Sub-AC 28b: eligible-for-turn pulsing highlight ring ─── */}
-      {/* Shown when the seat belongs to a same-team player who can   */}
-      {/* receive the turn after a correct declaration.  Cyan/teal    */}
-      {/* to distinguish from the amber active-turn ring.             */}
+      {/* ── eligible-for-turn pulsing highlight ring ─── */}
+      {/* Shown when the seat belongs to a same-team player who can */}
+      {/* receive the turn after a correct declaration. Cyan/teal */}
+      {/* to distinguish from the amber active-turn ring. */}
       {isHighlighted && !isEliminated && (
         <span
           className="absolute inset-0 rounded-xl border-2 border-cyan-400/80 animate-pulse pointer-events-none"
@@ -316,10 +316,10 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         />
       )}
 
-      {/* ── Eliminated overlay (Sub-AC 27b) ───────────────────────── */}
-      {/* Shown when a player's hand was emptied by a declaration.     */}
-      {/* A skull badge overlays the avatar to signal they can no      */}
-      {/* longer ask, be asked, or declare.                            */}
+      {/* ── Eliminated overlay ───────────────────────── */}
+      {/* Shown when a player's hand was emptied by a declaration. */}
+      {/* A skull badge overlays the avatar to signal they can no */}
+      {/* longer ask, be asked, or declare. */}
       {isEliminated && (
         <span
           className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center rounded-full bg-slate-800 border border-slate-600 text-[9px] leading-none select-none"
@@ -332,8 +332,8 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       )}
 
       {/* ── Avatar with card-count badge ─────────────────────────── */}
-      {/* AC 55: avatarSize is 'md' (40px) when the seat is a tap target        */}
-      {/* in turn-pass selection mode; 'sm' (32px) otherwise.                   */}
+      {/* AC 55: avatarSize is 'md' (40px) when the seat is a tap target */}
+      {/* in turn-pass selection mode; 'sm' (32px) otherwise. */}
       <div className="relative">
         <Avatar
           displayName={displayName}

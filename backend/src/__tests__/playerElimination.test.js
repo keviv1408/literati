@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 27b: Player elimination after half-suit removal.
+ * Tests for Player elimination after half-suit removal.
  *
  * Covers:
- *   1. _detectNewlyEliminated marks players with 0 cards after a declaration
- *   2. applyDeclaration returns newlyEliminated list
- *   3. applyForcedFailedDeclaration returns newlyEliminated list
- *   4. _resolveValidTurn respects stored turnRecipients
- *   5. handleChooseTurnRecipient stores recipient in gs.turnRecipients
- *   6. _processNewlyEliminatedPlayers broadcasts player_eliminated and prompts
+ * 1. _detectNewlyEliminated marks players with 0 cards after a declaration
+ * 2. applyDeclaration returns newlyEliminated list
+ * 3. applyForcedFailedDeclaration returns newlyEliminated list
+ * 4. _resolveValidTurn respects stored turnRecipients
+ * 5. handleChooseTurnRecipient stores recipient in gs.turnRecipients
+ * 6. _processNewlyEliminatedPlayers broadcasts player_eliminated and prompts
  */
 
 const {
@@ -33,7 +33,7 @@ const { _clearAll, setGame, getGame } = require('../game/gameStore');
  * Team 2: p4 (seat 1), p5 (seat 3), p6 (seat 5)
  *
  * Variant: remove_7s (standard)
- * Half-suit low_s = [1_s, 2_s, 3_s, 4_s, 5_s, 6_s]  (ranks 1–6, spades)
+ * Half-suit low_s = [1_s, 2_s, 3_s, 4_s, 5_s, 6_s] (ranks 1–6, spades)
  */
 function buildGameState(overrides = {}) {
   const seats = [

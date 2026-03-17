@@ -4,30 +4,30 @@
  * In-memory matchmaking queue.
  *
  * Players can join a queue with filters:
- *   - cardVariant  : 'remove_2s' | 'remove_7s' | 'remove_8s'
- *   - playerCount  : 6 | 7 | 8
+ * - cardVariant : 'remove_2s' | 'remove_7s' | 'remove_8s'
+ * - playerCount : 6 | 7 | 8
  *
  * Queues are grouped by filter combination (the "queue key"), e.g.:
- *   "remove_7s:6"  — classic 6-player game
- *   "remove_2s:8"  — 8-player game with 2s removed
+ * "remove_7s:6" — classic 6-player game
+ * "remove_2s:8" — 8-player game with 2s removed
  *
- * Each player can appear in at most ONE queue at a time.  Attempting to
+ * Each player can appear in at most ONE queue at a time. Attempting to
  * join a second queue first removes the player from the previous one.
  *
  * Queue entries expire after ENTRY_TTL_MS to prevent stale players from
- * blocking matchmaking.  Expired entries are removed lazily on access and
+ * blocking matchmaking. Expired entries are removed lazily on access and
  * eagerly by the periodic cleanup timer.
  *
  * Shape of a queue entry:
  * {
- *   playerId    : string  — user.id for registered users, sessionId for guests
- *   isGuest     : boolean
- *   displayName : string
- *   avatarId    : string
- *   cardVariant : string  — one of VALID_CARD_VARIANTS
- *   playerCount : number  — one of VALID_PLAYER_COUNTS
- *   joinedAt    : number  — Unix timestamp (ms)
- *   expiresAt   : number  — Unix timestamp (ms)
+ * playerId : string — user.id for registered users, sessionId for guests
+ * isGuest : boolean
+ * displayName: string
+ * avatarId : string
+ * cardVariant: string — one of VALID_CARD_VARIANTS
+ * playerCount: number — one of VALID_PLAYER_COUNTS
+ * joinedAt : number — Unix timestamp (ms)
+ * expiresAt : number — Unix timestamp (ms)
  * }
  */
 
@@ -145,13 +145,13 @@ function _getLiveEntries(key) {
  * If the player is already queued (even for a different filter), they are
  * first removed from that queue before being added to the new one.
  *
- * @param {Object} user          - Resolved req.user from auth middleware
- * @param {string} cardVariant   - One of VALID_CARD_VARIANTS
- * @param {number} playerCount   - One of VALID_PLAYER_COUNTS
+ * @param {Object} user - Resolved req.user from auth middleware
+ * @param {string} cardVariant - One of VALID_CARD_VARIANTS
+ * @param {number} playerCount - One of VALID_PLAYER_COUNTS
  * @returns {{ entry: Object, alreadyQueued: boolean }}
- *   entry         — the new queue entry
- *   alreadyQueued — true when the player was already in THIS exact queue
- *                   (entry was refreshed / TTL reset)
+ * entry — the new queue entry
+ * alreadyQueued — true when the player was already in THIS exact queue
+ * (entry was refreshed / TTL reset)
  * @throws {Error} on invalid cardVariant or playerCount
  */
 function joinQueue(user, cardVariant, playerCount) {
@@ -311,15 +311,15 @@ function getQueueForFilter(cardVariant, playerCount) {
  *
  * Shape:
  * {
- *   queues: {
- *     [queueKey]: {
- *       cardVariant: string,
- *       playerCount: number,
- *       count: number,
- *       players: Array<{ playerId, isGuest, displayName, avatarId, joinedAt, expiresAt }>
- *     }
- *   },
- *   totalWaiting: number
+ * queues: {
+ * [queueKey]: {
+ * cardVariant: string,
+ * playerCount: number,
+ * count: number,
+ * players: Array<{ playerId, isGuest, displayName, avatarId, joinedAt, expiresAt }>
+ * }
+ * },
+ * totalWaiting: number
  * }
  *
  * @returns {Object}

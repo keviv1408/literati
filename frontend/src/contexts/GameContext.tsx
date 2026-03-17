@@ -3,28 +3,28 @@
 /**
  * GameContext — provides live game state to all in-game components.
  *
- * Acts as the "game store" for the active game view.  The game page
+ * Acts as the "game store" for the active game view. The game page
  * instantiates `useGameSocket`, wraps the return value in the shape
  * expected by `GameContextValue`, and passes it to `<GameProvider>`.
  * Any descendant can then call `useGameContext()` to access the live
  * player roster, hand, game state, and send helpers.
  *
  * Design notes:
- *  • We keep the context value interface purposely thin — only what
- *    sub-components need; no internal WebSocket logic lives here.
- *  • `getPlayerBySeat` is a convenience selector so consumers can
- *    look up a `GamePlayer` by seat index without importing filtering
- *    logic everywhere.
- *  • Calling `useGameContext()` outside a `<GameProvider>` throws a
- *    clear error to catch missing wiring early.
+ * • We keep the context value interface purposely thin — only what
+ * sub-components need; no internal WebSocket logic lives here.
+ * • `getPlayerBySeat` is a convenience selector so consumers can
+ * look up a `GamePlayer` by seat index without importing filtering
+ * logic everywhere.
+ * • Calling `useGameContext()` outside a `<GameProvider>` throws a
+ * clear error to catch missing wiring early.
  *
  * @example
  * // Game page wires the context:
  * const socket = useGameSocket({ roomCode, bearerToken });
  * return (
- *   <GameProvider value={socket}>
- *     <OvalGameTable />
- *   </GameProvider>
+ * <GameProvider value={socket}>
+ * <OvalGameTable />
+ * </GameProvider>
  * );
  *
  * @example
@@ -81,14 +81,14 @@ export interface GameContextValue {
   lastDeclareResult: DeclarationResultPayload | null;
 
   /**
-   * Sub-AC 28a: IDs of all non-eliminated players with at least one card
+   * IDs of all non-eliminated players with at least one card
    * remaining, as reported by the server in the most recent `declaration_result`
-   * message.  Empty array until the first declaration.
+   * message. Empty array until the first declaration.
    *
    * Components can use this to:
-   *   • Dim eliminated-player seats immediately after a declaration.
-   *   • Power a "who can receive the next turn?" indicator on the table.
-   *   • Drive any animation that highlights still-active participants.
+   * • Dim eliminated-player seats immediately after a declaration.
+   * • Power a "who can receive the next turn?" indicator on the table.
+   * • Drive any animation that highlights still-active participants.
    */
   eligibleNextTurnPlayerIds: string[];
 
@@ -102,7 +102,7 @@ export interface GameContextValue {
 
   /**
    * Stream declaration card-assignment progress to the server so all other
-   * clients see a live banner.  Call on every assignment change in Step 2.
+   * clients see a live banner. Call on every assignment change in Step 2.
    * Pass `halfSuitId: null` when the player cancels.
    */
   sendDeclareProgress?: (halfSuitId: HalfSuitId | null, assignment: Record<CardId, string>) => void;
@@ -121,7 +121,7 @@ export interface GameContextValue {
 
   /**
    * Non-null when the server broadcasted a bot_takeover event for the current
-   * room (i.e. a human player's turn timer expired).  Cleared automatically
+   * room (i.e. a human player's turn timer expired). Cleared automatically
    * when the following ask_result or declaration_result arrives.
    */
   botTakeover?: BotTakeoverPayload | null;

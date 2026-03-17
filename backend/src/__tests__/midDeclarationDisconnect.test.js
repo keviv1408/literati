@@ -1,34 +1,33 @@
 'use strict';
 
 /**
- * Unit tests for Sub-AC 1 of AC 41:
- * Detect mid-declaration disconnect and trigger bot takeover.
+ * Unit tests for * Detect mid-declaration disconnect and trigger bot takeover.
  *
  * When the active declarer disconnects during an ongoing declaration, the
  * server must:
- *   1. Identify that the disconnecting player is mid-declaration.
- *   2. Mark the declaration as bot-controlled (_botControlledDeclarations).
- *   3. Preserve the already-assigned card mappings from partialSelectionStore.
+ * 1. Identify that the disconnecting player is mid-declaration.
+ * 2. Mark the declaration as bot-controlled (_botControlledDeclarations).
+ * 3. Preserve the already-assigned card mappings from partialSelectionStore.
  *
  * Coverage:
  *
- *   handlePlayerDisconnect — mid-declaration detection:
- *     1. Marks bot-controlled when active declarer disconnects with flow:'declare' partial
- *     2. Marks bot-controlled when active declarer disconnects after declare_selecting (Step 1 only)
- *     3. Marks bot-controlled when _declarationPhaseStarted flag is set (no partial, no selection)
- *     4. Preserves the full assignment map from the partial selection
- *     5. Preserves halfSuitId from declare partial when declaration selection also present
- *     6. Does NOT mark bot-controlled if a non-active player disconnects mid-declaration
- *     7. Does NOT mark bot-controlled if the active player disconnects with no declaration signals
- *     8. Does NOT mark bot-controlled if the active player disconnects with an ask-flow partial
- *     9. Does NOT mark bot-controlled if the game is not active
+ * handlePlayerDisconnect — mid-declaration detection:
+ * 1. Marks bot-controlled when active declarer disconnects with flow:'declare' partial
+ * 2. Marks bot-controlled when active declarer disconnects after declare_selecting (Step 1 only)
+ * 3. Marks bot-controlled when _declarationPhaseStarted flag is set (no partial, no selection)
+ * 4. Preserves the full assignment map from the partial selection
+ * 5. Preserves halfSuitId from declare partial when declaration selection also present
+ * 6. Does NOT mark bot-controlled if a non-active player disconnects mid-declaration
+ * 7. Does NOT mark bot-controlled if the active player disconnects with no declaration signals
+ * 8. Does NOT mark bot-controlled if the active player disconnects with an ask-flow partial
+ * 9. Does NOT mark bot-controlled if the game is not active
  *
- *   _botControlledDeclarations lifecycle:
- *    10. Cleared when handleDeclare completes successfully
- *    11. Cleared when handleForcedFailedDeclaration resolves
- *    12. Cleared when handleAskCard supersedes the declaration
- *    13. Stores playerId of the original human declarant
- *    14. Preserves empty assignment when only Step 1 suit was chosen
+ * _botControlledDeclarations lifecycle:
+ * 10. Cleared when handleDeclare completes successfully
+ * 11. Cleared when handleForcedFailedDeclaration resolves
+ * 12. Cleared when handleAskCard supersedes the declaration
+ * 13. Stores playerId of the original human declarant
+ * 14. Preserves empty assignment when only Step 1 suit was chosen
  */
 
 // ---------------------------------------------------------------------------
@@ -71,10 +70,10 @@ jest.mock('../game/rematchStore', () => ({
 /**
  * Builds a 6-player game state (remove_7s variant).
  *
- *   Team 1: p1, p2, p3
- *   Team 2: p4, p5, p6
+ * Team 1: p1, p2, p3
+ * Team 2: p4, p5, p6
  *
- * low_s  = 1_s, 2_s, 3_s, 4_s, 5_s, 6_s
+ * low_s = 1_s, 2_s, 3_s, 4_s, 5_s, 6_s
  * high_s = 8_s, 9_s, 10_s, 11_s, 12_s, 13_s
  */
 function buildGame({ handOverrides = {}, currentTurnPlayerId = 'p1' } = {}) {

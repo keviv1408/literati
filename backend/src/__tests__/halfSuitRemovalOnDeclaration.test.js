@@ -1,47 +1,47 @@
 'use strict';
 
 /**
- * Sub-AC 27a — Remove all 6 half-suit cards from all players' hands after
- *               a declaration resolves, regardless of success or failure.
+ * Remove all 6 half-suit cards from all players' hands after
+ * a declaration resolves, regardless of success or failure.
  *
  * Rules:
- *   - When a declaration resolves (correct, incorrect, or forced-failed via
- *     timer expiry), ALL 6 cards belonging to the declared half-suit MUST be
- *     removed from every player's hand immediately.
- *   - The removal is unconditional — it does not matter which player held any
- *     of the cards or whether the declaration was correct.
- *   - Non-declared cards remain untouched in their holders' hands.
- *   - The half-suit is recorded in gs.declaredSuits with the winning teamId.
+ * - When a declaration resolves (correct, incorrect, or forced-failed via
+ * timer expiry), ALL 6 cards belonging to the declared half-suit MUST be
+ * removed from every player's hand immediately.
+ * - The removal is unconditional — it does not matter which player held any
+ * of the cards or whether the declaration was correct.
+ * - Non-declared cards remain untouched in their holders' hands.
+ * - The half-suit is recorded in gs.declaredSuits with the winning teamId.
  *
  * Coverage:
  *
- *   applyDeclaration (correct declaration):
- *     1.  All 6 declared cards removed from the declarant's own hand
- *     2.  All 6 declared cards removed from a teammate's hand
- *     3.  Declared cards spread across 3 team-1 players — all removed
- *     4.  Non-declared cards in all hands are NOT affected
- *     5.  declaredSuits is updated after the removal
- *     6.  Removal works for remove_2s variant
- *     7.  Removal works for remove_8s variant
+ * applyDeclaration (correct declaration):
+ * 1. All 6 declared cards removed from the declarant's own hand
+ * 2. All 6 declared cards removed from a teammate's hand
+ * 3. Declared cards spread across 3 team-1 players — all removed
+ * 4. Non-declared cards in all hands are NOT affected
+ * 5. declaredSuits is updated after the removal
+ * 6. Removal works for remove_2s variant
+ * 7. Removal works for remove_8s variant
  *
- *   applyDeclaration (incorrect declaration):
- *     8.  All 6 declared cards still removed even when declaration is wrong
- *     9.  Cards held by opponents are removed even on wrong declaration
- *     10. Wrong declaration removes cards AND awards point to opposing team
+ * applyDeclaration (incorrect declaration):
+ * 8. All 6 declared cards still removed even when declaration is wrong
+ * 9. Cards held by opponents are removed even on wrong declaration
+ * 10. Wrong declaration removes cards AND awards point to opposing team
  *
- *   applyForcedFailedDeclaration (timer expiry):
- *     11. All 6 declared cards removed on forced failure
- *     12. Cards held by players who didn't initiate declare are also removed
- *     13. Other hands untouched after forced failure
+ * applyForcedFailedDeclaration (timer expiry):
+ * 11. All 6 declared cards removed on forced failure
+ * 12. Cards held by players who didn't initiate declare are also removed
+ * 13. Other hands untouched after forced failure
  *
- *   8-player game:
- *     14. All 8 players' hands are cleaned of declared cards (4v4 game)
+ * 8-player game:
+ * 14. All 8 players' hands are cleaned of declared cards (4v4 game)
  *
- *   Game state coherence after removal:
- *     15. After removal, no player holds any card from the declared half-suit
- *     16. Asking for a card from a declared half-suit is blocked (SUIT_DECLARED)
- *     17. Multiple sequential declarations each remove their respective 6 cards
- *     18. After declaring all 8 half-suits the game is over and all hands empty
+ * Game state coherence after removal:
+ * 15. After removal, no player holds any card from the declared half-suit
+ * 16. Asking for a card from a declared half-suit is blocked (SUIT_DECLARED)
+ * 17. Multiple sequential declarations each remove their respective 6 cards
+ * 18. After declaring all 8 half-suits the game is over and all hands empty
  */
 
 const { applyDeclaration, applyForcedFailedDeclaration, validateAsk } = require('../game/gameEngine');
@@ -55,8 +55,8 @@ const { buildHalfSuitMap, allHalfSuitIds } = require('../game/halfSuits');
  * Build a minimal 6-player game state for declaration tests.
  * Variant defaults to remove_7s.
  *
- *   Team 1: p1 (seat 0), p2 (seat 2), p3 (seat 4)
- *   Team 2: p4 (seat 1), p5 (seat 3), p6 (seat 5)
+ * Team 1: p1 (seat 0), p2 (seat 2), p3 (seat 4)
+ * Team 2: p4 (seat 1), p5 (seat 3), p6 (seat 5)
  *
  * @param {Object} opts
  * @param {string} [opts.variant='remove_7s']
@@ -119,8 +119,8 @@ function buildGame6({
 /**
  * Build an 8-player game state (4v4).
  *
- *   Team 1: p1, p2, p3, p4
- *   Team 2: p5, p6, p7, p8
+ * Team 1: p1, p2, p3, p4
+ * Team 2: p5, p6, p7, p8
  *
  * low_s cards are spread one-per-player across all 8 players for maximum
  * coverage of the "all hands cleaned" requirement.
@@ -200,7 +200,7 @@ function buildCorrectAssignment(gs, halfSuitId) {
 // 1–7: applyDeclaration — correct declaration removes all 6 cards
 // ---------------------------------------------------------------------------
 
-describe('Sub-AC 27a — correct declaration: all 6 cards removed', () => {
+describe('correct declaration: all 6 cards removed', () => {
   it('1. removes all 6 declared cards from the declarant\'s own hand', () => {
     const gs = buildGame6({
       handOverrides: {
@@ -302,7 +302,7 @@ describe('Sub-AC 27a — correct declaration: all 6 cards removed', () => {
 // 8–10: applyDeclaration — incorrect declaration still removes all 6 cards
 // ---------------------------------------------------------------------------
 
-describe('Sub-AC 27a — incorrect declaration: all 6 cards STILL removed', () => {
+describe('incorrect declaration: all 6 cards STILL removed', () => {
   it('8. all 6 cards still removed even when the assignment is completely wrong', () => {
     const halfSuits = buildHalfSuitMap('remove_7s');
     const [c0, c1, c2, c3, c4, c5] = halfSuits.get('low_s');
@@ -331,7 +331,7 @@ describe('Sub-AC 27a — incorrect declaration: all 6 cards STILL removed', () =
   it('9. cards held by opponents are also removed on an incorrect declaration', () => {
     // Hypothetical: all 6 low_s cards are held by team-2 players; team 1 declares
     // (server would reject validateDeclaration due to DECLARANT_HAS_NO_CARDS,
-    //  but applyDeclaration itself is side-effect-safe — we test it directly)
+    // but applyDeclaration itself is side-effect-safe — we test it directly)
     const halfSuits = buildHalfSuitMap('remove_7s');
     const [c0, c1, c2, c3, c4, c5] = halfSuits.get('low_s');
     const gs = buildGame6({
@@ -380,7 +380,7 @@ describe('Sub-AC 27a — incorrect declaration: all 6 cards STILL removed', () =
 // 11–13: applyForcedFailedDeclaration (timer expiry) — removes all 6 cards
 // ---------------------------------------------------------------------------
 
-describe('Sub-AC 27a — forced-failed declaration (timer expiry): all 6 cards removed', () => {
+describe('forced-failed declaration (timer expiry): all 6 cards removed', () => {
   it('11. all 6 declared cards removed on forced failure', () => {
     const gs = buildGame6();
     const halfSuitCards = buildHalfSuitMap('remove_7s').get('low_s');
@@ -430,7 +430,7 @@ describe('Sub-AC 27a — forced-failed declaration (timer expiry): all 6 cards r
 // 14: 8-player game — all 8 hands cleaned of declared cards
 // ---------------------------------------------------------------------------
 
-describe('Sub-AC 27a — 8-player game: all 8 hands cleaned', () => {
+describe('8-player game: all 8 hands cleaned', () => {
   it('14. all 8 players\' hands have zero cards from the declared half-suit', () => {
     // In buildGame8, p1-p6 each hold 1 low_s card, p7-p8 hold none.
     // After declaring (with a wrong-but-valid-form assignment), all 6 must be gone.
@@ -465,7 +465,7 @@ describe('Sub-AC 27a — 8-player game: all 8 hands cleaned', () => {
 // 15–18: Game state coherence after removal
 // ---------------------------------------------------------------------------
 
-describe('Sub-AC 27a — game state coherence after half-suit removal', () => {
+describe('game state coherence after half-suit removal', () => {
   it('15. after declaration no player holds any card from the declared half-suit', () => {
     const gs = buildGame6();
     const halfSuitCards = buildHalfSuitMap('remove_7s').get('low_s');
@@ -483,7 +483,7 @@ describe('Sub-AC 27a — game state coherence after half-suit removal', () => {
   it('16. asking for a card from the declared half-suit is blocked with SUIT_DECLARED', () => {
     // Setup: p4 holds a low_s card AND a non-declared card so their hand is not empty.
     // After declaring low_s, the low_s card is removed from p4 but they still have
-    // the non-declared card.  The server should reject an ask for the removed card
+    // the non-declared card. The server should reject an ask for the removed card
     // with SUIT_DECLARED (card lookup returns the half-suit as declared).
     const halfSuits = buildHalfSuitMap('remove_7s');
     const [c0, c1, c2, c3, c4, c5] = halfSuits.get('low_s');

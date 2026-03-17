@@ -4,25 +4,25 @@
  * CardRequestWizard — 3-step wizard for asking an opponent for a card.
  *
  * Steps:
- *   1. Select half-suit  — from half-suits where the player holds ≥1 card
- *                          and the suit has not yet been declared.
- *   2. Pick a card       — all 6 cards in the chosen half-suit are shown;
- *                          cards the player already holds are greyed out
- *                          (they cannot be asked for — server enforces this).
- *   3. Pick an opponent  — opponents on the other team who still have cards.
+ * 1. Select half-suit — from half-suits where the player holds ≥1 card
+ * and the suit has not yet been declared.
+ * 2. Pick a card — all 6 cards in the chosen half-suit are shown;
+ * cards the player already holds are greyed out
+ * (they cannot be asked for — server enforces this).
+ * 3. Pick an opponent — opponents on the other team who still have cards.
  *
  * Back-navigation:
- *   • Step 2 → "Back" returns to Step 1 (half-suit selection).
- *   • Step 3 → "Back" returns to Step 2 (card selection).
- *   • Step 1 → "Cancel" closes the wizard.
+ * • Step 2 → "Back" returns to Step 1 (half-suit selection).
+ * • Step 3 → "Back" returns to Step 2 (card selection).
+ * • Step 1 → "Cancel" closes the wizard.
  *
  * Entry point:
- *   • Pass `initialCard` to open directly at Step 2 (e.g. from a card tap).
- *   • Omit `initialCard` (or pass undefined) to start at Step 1.
+ * • Pass `initialCard` to open directly at Step 2 (e.g. from a card tap).
+ * • Omit `initialCard` (or pass undefined) to start at Step 1.
  *
  * Visibility:
- *   The caller (game page) must gate rendering on `isMyTurn`.
- *   This component contains no `isMyTurn` logic of its own.
+ * The caller (game page) must gate rendering on `isMyTurn`.
+ * This component contains no `isMyTurn` logic of its own.
  */
 
 import { useState, useMemo, useEffect } from 'react';
@@ -56,12 +56,12 @@ export interface CardRequestWizardProps {
   isLoading?: boolean;
   /**
    * When provided the wizard opens at Step 2 with this card pre-selected,
-   * deriving the half-suit automatically.  The player can still navigate
+   * deriving the half-suit automatically. The player can still navigate
    * back to Step 1 to change the half-suit.
    */
   initialCard?: CardId;
   /**
-   * Active server-side turn timer payload.  When provided, the wizard renders
+   * Active server-side turn timer payload. When provided, the wizard renders
    * a `TurnTimerStrip` below the step indicator so the 30-second countdown
    * remains visible as the player navigates through all three steps.
    */
@@ -71,7 +71,7 @@ export interface CardRequestWizardProps {
    * for bot completion if the turn timer expires mid-wizard.
    *
    * • After Step 1 (half-suit selected): { flow: 'ask', halfSuitId }
-   * • After Step 2 (card selected):      { flow: 'ask', halfSuitId, cardId }
+   * • After Step 2 (card selected): { flow: 'ask', halfSuitId, cardId }
    *
    * This is fire-and-forget — no response is expected.
    */
@@ -384,7 +384,7 @@ function Step3Opponent({
 }: {
   selectedCard: CardId;
   /**
-   * The half-suit that was selected in Step 1.  Used to grey out opponents
+   * The half-suit that was selected in Step 1. Used to grey out opponents
    * whose server-reported halfSuitCounts[halfSuitId] === 0, meaning they
    * cannot hold the requested card even though they have other cards.
    */
@@ -575,7 +575,7 @@ export default function CardRequestWizard({
 
   // ── Emit initial partial state when wizard opens with a pre-selected card ──
   // When opened via a card tap (initialCard provided), the wizard starts at
-  // step 2 with the half-suit already known.  Emit the partial state once on
+  // step 2 with the half-suit already known. Emit the partial state once on
   // mount so the server has context if the timer fires immediately.
   useEffect(() => {
     if (initialCard && derivedInitialHalfSuit) {

@@ -502,7 +502,7 @@ describe('GET /api/rooms/:code', () => {
 
 /**
  * Builds a chainable Supabase mock that tracks calls across the fluent API.
- * The ._chain property exposes the terminal mocks for test assertions.
+ * The._chain property exposes the terminal mocks for test assertions.
  */
 function buildMockSupabase() {
   const maybeSingle = jest.fn();

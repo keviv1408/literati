@@ -1,55 +1,55 @@
 /**
  * @jest-environment jsdom
  *
- * Sub-AC 32d + 44a: GameOverScreen — frontend game-over screen tests.
+ * + 44a: GameOverScreen — frontend game-over screen tests.
  *
  * Coverage:
- *   1.  Renders with data-testid="game-over-screen" by default
- *   2.  Custom testId override works
- *   3.  Shows "Game Over" heading always
- *   4.  Winner announcement: Team 1 wins
- *   5.  Winner announcement: Team 2 wins
- *   6.  Tie announcement when winner is null
- *   7.  Tie announcement when scores are equal (4-4, no tiebreaker)
- *   8.  Winning player (myTeamId matches winner) sees '🎉'
- *   9.  Losing player (myTeamId does not match winner) sees '😔' emoji
- *  10.  Spectator (myTeamId is null) sees '🏆' emoji for non-tie
- *  11.  Displays correct Team 1 score
- *  12.  Displays correct Team 2 score
- *  13.  Tiebreak section shown when scores are 4-4 and tiebreakerWinner is set
- *  14.  Tiebreak section mentions the winning team
- *  15.  Tiebreak section mentions "High ♦" and "High Diamonds"
- *  16.  Tiebreak section NOT shown when scores are NOT 4-4
- *  17.  Tiebreak section NOT shown when tiebreakerWinner is null even if scores are 4-4
- *  18.  Half-suit tally section is rendered
- *  19.  All 4 suit groups are rendered (spades, hearts, diamonds, clubs)
- *  20.  All 8 half-suit rows are present
- *  21.  Declared half-suit shows team badge
- *  22.  Undeclared half-suit shows "—"
- *  23.  Team 1 declared suit shows T1 badge
- *  24.  Team 2 declared suit shows T2 badge
- *  25.  high_d row carries the tiebreaker star marker
- *  26.  Room code shown in subtitle
- *  27.  Variant shown in subtitle
- *  28.  No subtitle rendered when neither roomCode nor variant is provided
- *  29.  Correct aria-label on the root element
- *  30.  score-team1 and score-team2 testIds carry the numeric values
- *  -- Sub-AC 44a: per-player declaration stats table --
- *  31.  Stats table NOT rendered when players prop is omitted
- *  32.  Stats table NOT rendered when players array is empty
- *  33.  Stats table rendered when players prop is provided
- *  34.  Only players who made at least one declaration appear in the table
- *  35.  Player row shows correct display name
- *  36.  Attempts column shows total declaration count per player
- *  37.  Successes column shows correct declaration count per player
- *  38.  Failures column shows incorrect declaration count per player
- *  39.  Player on own team sees "(You)" label
- *  40.  Correct declaration = player's team matches winning team
- *  41.  Incorrect declaration = player's team does not match winning team
- *  42.  Stats table aria-label is present
- *  43.  Each player row has correct aria-label with attempt/success/failure counts
- *  44.  Rows are sorted: Team 1 first, then Team 2, within team by successes desc
- *  45.  computePlayerStats exported function: handles empty inputs
+ * 1. Renders with data-testid="game-over-screen" by default
+ * 2. Custom testId override works
+ * 3. Shows "Game Over" heading always
+ * 4. Winner announcement: Team 1 wins
+ * 5. Winner announcement: Team 2 wins
+ * 6. Tie announcement when winner is null
+ * 7. Tie announcement when scores are equal (4-4, no tiebreaker)
+ * 8. Winning player (myTeamId matches winner) sees '🎉'
+ * 9. Losing player (myTeamId does not match winner) sees '😔' emoji
+ * 10. Spectator (myTeamId is null) sees '🏆' emoji for non-tie
+ * 11. Displays correct Team 1 score
+ * 12. Displays correct Team 2 score
+ * 13. Tiebreak section shown when scores are 4-4 and tiebreakerWinner is set
+ * 14. Tiebreak section mentions the winning team
+ * 15. Tiebreak section mentions "High ♦" and "High Diamonds"
+ * 16. Tiebreak section NOT shown when scores are NOT 4-4
+ * 17. Tiebreak section NOT shown when tiebreakerWinner is null even if scores are 4-4
+ * 18. Half-suit tally section is rendered
+ * 19. All 4 suit groups are rendered (spades, hearts, diamonds, clubs)
+ * 20. All 8 half-suit rows are present
+ * 21. Declared half-suit shows team badge
+ * 22. Undeclared half-suit shows "—"
+ * 23. Team 1 declared suit shows T1 badge
+ * 24. Team 2 declared suit shows T2 badge
+ * 25. high_d row carries the tiebreaker star marker
+ * 26. Room code shown in subtitle
+ * 27. Variant shown in subtitle
+ * 28. No subtitle rendered when neither roomCode nor variant is provided
+ * 29. Correct aria-label on the root element
+ * 30. score-team1 and score-team2 testIds carry the numeric values
+ * -- per-player declaration stats table --
+ * 31. Stats table NOT rendered when players prop is omitted
+ * 32. Stats table NOT rendered when players array is empty
+ * 33. Stats table rendered when players prop is provided
+ * 34. Only players who made at least one declaration appear in the table
+ * 35. Player row shows correct display name
+ * 36. Attempts column shows total declaration count per player
+ * 37. Successes column shows correct declaration count per player
+ * 38. Failures column shows incorrect declaration count per player
+ * 39. Player on own team sees "(You)" label
+ * 40. Correct declaration = player's team matches winning team
+ * 41. Incorrect declaration = player's team does not match winning team
+ * 42. Stats table aria-label is present
+ * 43. Each player row has correct aria-label with attempt/success/failure counts
+ * 44. Rows are sorted: Team 1 first, then Team 2, within team by successes desc
+ * 45. computePlayerStats exported function: handles empty inputs
  */
 
 import React from 'react';
@@ -103,14 +103,14 @@ const SIX_PLAYERS: GamePlayer[] = [
 
 /**
  * Declared suits where:
- *   - p1 (T1) declared low_s → T1 scores  → SUCCESS for p1
- *   - p1 (T1) declared low_h → T2 scores  → FAILURE for p1  (incorrect)
- *   - p2 (T2) declared high_s → T2 scores → SUCCESS for p2
- *   - p3 (T1) declared low_d → T1 scores  → SUCCESS for p3
- *   - p3 (T1) declared high_d → T1 scores → SUCCESS for p3
- *   - p4 (T2) declared high_h → T1 scores → FAILURE for p4  (incorrect)
- *   - p4 (T2) declared low_c  → T2 scores → SUCCESS for p4
- *   - p6 (T2) declared high_c → T2 scores → SUCCESS for p6
+ * - p1 (T1) declared low_s → T1 scores → SUCCESS for p1
+ * - p1 (T1) declared low_h → T2 scores → FAILURE for p1 (incorrect)
+ * - p2 (T2) declared high_s → T2 scores → SUCCESS for p2
+ * - p3 (T1) declared low_d → T1 scores → SUCCESS for p3
+ * - p3 (T1) declared high_d → T1 scores → SUCCESS for p3
+ * - p4 (T2) declared high_h → T1 scores → FAILURE for p4 (incorrect)
+ * - p4 (T2) declared low_c → T2 scores → SUCCESS for p4
+ * - p6 (T2) declared high_c → T2 scores → SUCCESS for p6
  */
 const MIXED_DECLARATIONS: DeclaredSuit[] = [
   { halfSuitId: 'low_s',  teamId: 1, declaredBy: 'p1' }, // p1 success
@@ -362,7 +362,7 @@ describe('GameOverScreen', () => {
     expect(screen.getByTestId('score-team2').textContent).toBe('1');
   });
 
-  // ── Sub-AC 44a: per-player declaration stats table ──────────────────────────
+  // ── per-player declaration stats table ──────────────────────────
 
   // 31. Stats table NOT rendered when players prop is omitted
   it('does not render player-stats-table when players prop is omitted', () => {

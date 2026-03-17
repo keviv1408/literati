@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * Tests for the handleStartGame WebSocket handler (Sub-AC 5.4).
+ * Tests for the handleStartGame WebSocket handler.
  *
  * Covers:
- *   - Authorization: only the host may start the game
- *   - Room validation: room must exist and be in 'waiting' status
- *   - Seat building: T1 → even indices, T2 → odd indices
- *   - Bot filling: empty seats get bot players
- *   - Game creation: gameSocketServer.createGame() is called with correct args
- *   - Supabase update: room status transitions to 'starting'
- *   - Broadcast: 'lobby-starting' sent to ALL connected clients (players + spectators)
- *   - buildOccupiedSeats: unit tests for the seat-building helper
+ * - Authorization: only the host may start the game
+ * - Room validation: room must exist and be in 'waiting' status
+ * - Seat building: T1 → even indices, T2 → odd indices
+ * - Bot filling: empty seats get bot players
+ * - Game creation: gameSocketServer.createGame() is called with correct args
+ * - Supabase update: room status transitions to 'starting'
+ * - Broadcast: 'lobby-starting' sent to ALL connected clients (players + spectators)
+ * - buildOccupiedSeats: unit tests for the seat-building helper
  *
  * Strategy:
- *   - Supabase is mocked via _setSupabaseClientFactory.
- *   - gameSocketServer is mocked via _setGameServer.
- *   - WebSocket objects are plain mock objects with send/close spies.
- *   - In-memory room state is reset between tests via _resetRoomState.
+ * - Supabase is mocked via _setSupabaseClientFactory.
+ * - gameSocketServer is mocked via _setGameServer.
+ * - WebSocket objects are plain mock objects with send/close spies.
+ * - In-memory room state is reset between tests via _resetRoomState.
  */
 
 const { WebSocket } = require('ws');
@@ -58,7 +58,7 @@ function allSent(mockWs) {
 
 /**
  * Build a chainable Supabase mock.
- * Supports .from().select().eq().maybeSingle() and .from().update().eq()
+ * Supports.from().select().eq().maybeSingle() and.from().update().eq()
  * @param {{ room?: Object|null, updateError?: Object|null }} options
  */
 function buildMockSupabase({ room = null, updateError = null } = {}) {

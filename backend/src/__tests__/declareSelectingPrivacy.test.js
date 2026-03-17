@@ -3,24 +3,24 @@
 /**
  * declareSelectingPrivacy.test.js
  *
- * Tests for Sub-AC 21a: Private half-suit selection phase.
+ * Tests for Private half-suit selection phase.
  *
  * When the active player opens DeclareModal and picks a half-suit in Step 1
  * (the suit picker), the client sends a `declare_selecting` message to the
- * server.  The server MUST:
+ * server. The server MUST:
  *
- *   1. Accept `declare_selecting` silently (no response, no broadcast).
- *   2. Store the selected half-suit ONLY in `_declarationSelections` — a
- *      private server-side map that is NEVER forwarded to other players.
- *   3. Ignore `declare_selecting` from non-active players.
- *   4. Clear `_declarationSelections` when the turn ends.
- *   5. NOT include the declaration suit in the `bot_takeover` broadcast
- *      (privacy guarantee: other players don't learn which suit is being
- *      declared until the final `declare_suit` is confirmed).
- *   6. Use `_declarationSelections` as fallback in bot-takeover logic so
- *      the bot can continue the same declaration the player started.
- *   7. NOT broadcast `declare_selecting` to other connected players.
- *   8. NOT broadcast `declare_selecting` to spectators.
+ * 1. Accept `declare_selecting` silently (no response, no broadcast).
+ * 2. Store the selected half-suit ONLY in `_declarationSelections` — a
+ * private server-side map that is NEVER forwarded to other players.
+ * 3. Ignore `declare_selecting` from non-active players.
+ * 4. Clear `_declarationSelections` when the turn ends.
+ * 5. NOT include the declaration suit in the `bot_takeover` broadcast
+ * (privacy guarantee: other players don't learn which suit is being
+ * declared until the final `declare_suit` is confirmed).
+ * 6. Use `_declarationSelections` as fallback in bot-takeover logic so
+ * the bot can continue the same declaration the player started.
+ * 7. NOT broadcast `declare_selecting` to other connected players.
+ * 8. NOT broadcast `declare_selecting` to spectators.
  */
 
 const http      = require('http');
@@ -34,11 +34,11 @@ const SPECTATOR_HEX = 'AABBCCDDEEFF00112233445566778800';
 
 /**
  * Card layout (remove_7s, low_s half-suit):
- *   low_s  = 1_s 2_s 3_s 4_s 5_s 6_s
- *   high_s = 8_s 9_s 10_s 11_s 12_s 13_s
+ * low_s = 1_s 2_s 3_s 4_s 5_s 6_s
+ * high_s = 8_s 9_s 10_s 11_s 12_s 13_s
  *
- *   p1 (Team 1) holds: 1_s 2_s 3_s → can declare low_s
- *   p2 (Team 2) holds: 4_s 5_s 6_s
+ * p1 (Team 1) holds: 1_s 2_s 3_s → can declare low_s
+ * p2 (Team 2) holds: 4_s 5_s 6_s
  */
 
 // ── Supabase mock ──────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ function buildSupabaseMock() {
 
 // ── Suite ──────────────────────────────────────────────────────────────────
 
-describe('declare_selecting — private suit selection (Sub-AC 21a)', () => {
+describe('declare_selecting — private suit selection ', () => {
   let httpServer;
   let port;
   let mockSupabase;
@@ -103,9 +103,9 @@ describe('declare_selecting — private suit selection (Sub-AC 21a)', () => {
     ({ _clearAll: clearGameStore } = require('../game/gameStore'));
 
     // Build 6-player game:
-    //   p1 (Team 1, seat 0) — current turn holder
-    //   p2 (Team 2, seat 1)
-    //   4 bots filling remaining seats
+    // p1 (Team 1, seat 0) — current turn holder
+    // p2 (Team 2, seat 1)
+    // 4 bots filling remaining seats
     const seats = [
       { seatIndex: 0, playerId: p1Id,    displayName: 'Alice', avatarId: null, teamId: 1, isBot: false, isGuest: true  },
       { seatIndex: 1, playerId: p2Id,    displayName: 'Bob',   avatarId: null, teamId: 2, isBot: false, isGuest: true  },
@@ -124,8 +124,8 @@ describe('declare_selecting — private suit selection (Sub-AC 21a)', () => {
     });
 
     // Deterministic hand layout:
-    //   low_s (remove_7s) = 1_s 2_s 3_s 4_s 5_s 6_s
-    //   p1 holds 3 cards from low_s → can declare low_s
+    // low_s (remove_7s) = 1_s 2_s 3_s 4_s 5_s 6_s
+    // p1 holds 3 cards from low_s → can declare low_s
     gs.hands.set(p1Id,    new Set(['1_s', '2_s', '3_s']));
     gs.hands.set(p2Id,    new Set(['4_s', '5_s', '6_s']));
     gs.hands.set('bot-1', new Set(['1_h', '2_h', '3_h']));

@@ -3,22 +3,22 @@
  *
  * askCardFlowPrivacy.test.tsx
  *
- * Tests for Sub-AC 15b: Frontend privacy of the card request flow.
+ * Tests for Frontend privacy of the card request flow.
  *
  * The card request flow has three phases:
- *   1. Card selection  — player taps a card from hand (sets selectedCard state).
- *                        Local UI state only; nothing sent to the server.
- *   2. Target selection — AskCardModal opens, player picks an opponent.
- *                        Local modal state only; nothing sent to the server.
- *   3. Submission      — player clicks "Ask"; onConfirm(targetId, cardId) fires.
- *                        This is the ONLY point at which sendAsk() sends a
- *                        WebSocket message.
+ * 1. Card selection — player taps a card from hand (sets selectedCard state).
+ * Local UI state only; nothing sent to the server.
+ * 2. Target selection — AskCardModal opens, player picks an opponent.
+ * Local modal state only; nothing sent to the server.
+ * 3. Submission — player clicks "Ask"; onConfirm(targetId, cardId) fires.
+ * This is the ONLY point at which sendAsk() sends a
+ * WebSocket message.
  *
  * Privacy guarantee (enforced server-side but mirrored client-side):
- *   • `onConfirm` / `sendAsk` MUST NOT fire during phases 1 or 2.
- *   • `onCancel`  MUST NOT fire during phases 1 or 2 (only on explicit cancel).
- *   • Phase 1 and 2 are purely local — no callbacks, no network requests.
- *   • Only one submission event fires per "Ask" click (no duplicate sends).
+ * • `onConfirm` / `sendAsk` MUST NOT fire during phases 1 or 2.
+ * • `onCancel` MUST NOT fire during phases 1 or 2 (only on explicit cancel).
+ * • Phase 1 and 2 are purely local — no callbacks, no network requests.
+ * • Only one submission event fires per "Ask" click (no duplicate sends).
  */
 
 import React from 'react';
@@ -170,7 +170,7 @@ describe('AskCardModal — onConfirm fires only on explicit submission (phase 3)
   });
 
   it('sends the most recently selected target on submission (not the first one)', () => {
-    // Player changed their mind — selects Carol then Eve.  Only Eve should be sent.
+    // Player changed their mind — selects Carol then Eve. Only Eve should be sent.
     const onConfirm = jest.fn();
     renderModal({ onConfirm, myPlayerId: 'p1', selectedCard: '3_h' });
     fireEvent.click(screen.getByRole('button', { name: /Carol/i }));
@@ -260,9 +260,9 @@ describe('AskCardModal — single submission per Ask click (no duplicates)', () 
 
     // Even though the button was clicked twice, onConfirm fires only once
     // because the parent typically sets isLoading=true after the first call,
-    // disabling the button.  The AskCardModal itself does not have internal
+    // disabling the button. The AskCardModal itself does not have internal
     // "submitted" state — it relies on the parent to set isLoading, which
-    // disables the button.  The first click fires immediately; the second
+    // disables the button. The first click fires immediately; the second
     // click on the same (not yet disabled) button would also fire.
     // However, the important guarantee is that onConfirm is only called
     // when the button is enabled (not when isLoading=true).
@@ -350,13 +350,13 @@ describe('AskCardModal — does not render other players\' actual cards', () => 
 
   it('does NOT show the opponents\' actual cards in any part of the modal', () => {
     // The modal only knows cardCount for opponents — the actual card IDs are
-    // never passed to this component.  The parent (game page) passes `players`
+    // never passed to this component. The parent (game page) passes `players`
     // which only contains { cardCount }, not actual card arrays.
     const players = build6Players();
     const { container } = renderModal({ players, selectedCard: '3_h' });
 
     // No raw card ID patterns (like "4_s", "13_d") from OTHER players should
-    // appear in the modal's rendered output.  The only card ID visible should
+    // appear in the modal's rendered output. The only card ID visible should
     // be the selectedCard's label (3♥).
     const html = container.innerHTML;
 

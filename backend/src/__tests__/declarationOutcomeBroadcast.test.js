@@ -1,28 +1,28 @@
 'use strict';
 
 /**
- * Tests for declaration outcome broadcasting (Sub-AC 25b).
+ * Tests for declaration outcome broadcasting.
  *
  * Verifies that when a declaration is processed by handleDeclare in
  * gameSocketServer.js, ALL connected clients (players + spectators) receive:
- *   1. A `declaration_result` event with: correct, winningTeam, declarerId,
- *      halfSuitId, assignment, newTurnPlayerId, lastMove
- *   2. A `game_state` event with updated scores reflecting the outcome
- *   3. A `game_players` event with updated card counts (all 6 cards removed)
+ * 1. A `declaration_result` event with: correct, winningTeam, declarerId,
+ * halfSuitId, assignment, newTurnPlayerId, lastMove
+ * 2. A `game_state` event with updated scores reflecting the outcome
+ * 3. A `game_players` event with updated card counts (all 6 cards removed)
  *
  * Coverage:
- *   1. Correct declaration → declaration_result broadcast to all 6 connections (5 players + spectator)
- *   2. Correct declaration → declaration_result.correct === true
- *   3. Correct declaration → declaration_result.winningTeam === declarant's team (1)
- *   4. Correct declaration → game_state.scores.team1 incremented to 1
- *   5. Incorrect declaration → declaration_result.correct === false
- *   6. Incorrect declaration → declaration_result.winningTeam === opponent team (2)
- *   7. Incorrect declaration → game_state.scores.team2 incremented to 1
- *   8. Both correct and incorrect → all 6 half-suit cards removed (game_players card counts drop)
- *   9. declaration_result includes declarerId, halfSuitId, assignment, newTurnPlayerId, lastMove
- *  10. Spectator connection receives declaration_result broadcast
- *  11. game_state scores broadcast reflects the updated team score (not 0-0)
- *  12. Multiple declarations accumulate scores correctly across broadcasts
+ * 1. Correct declaration → declaration_result broadcast to all 6 connections (5 players + spectator)
+ * 2. Correct declaration → declaration_result.correct === true
+ * 3. Correct declaration → declaration_result.winningTeam === declarant's team (1)
+ * 4. Correct declaration → game_state.scores.team1 incremented to 1
+ * 5. Incorrect declaration → declaration_result.correct === false
+ * 6. Incorrect declaration → declaration_result.winningTeam === opponent team (2)
+ * 7. Incorrect declaration → game_state.scores.team2 incremented to 1
+ * 8. Both correct and incorrect → all 6 half-suit cards removed (game_players card counts drop)
+ * 9. declaration_result includes declarerId, halfSuitId, assignment, newTurnPlayerId, lastMove
+ * 10. Spectator connection receives declaration_result broadcast
+ * 11. game_state scores broadcast reflects the updated team score (not 0-0)
+ * 12. Multiple declarations accumulate scores correctly across broadcasts
  */
 
 // ---------------------------------------------------------------------------
@@ -338,7 +338,7 @@ describe('declaration_result broadcast — card removal', () => {
 });
 
 // ---------------------------------------------------------------------------
-// declarationFailed event (Sub-AC 26a)
+// declarationFailed event
 // ---------------------------------------------------------------------------
 
 describe('declarationFailed event — incorrect declaration', () => {

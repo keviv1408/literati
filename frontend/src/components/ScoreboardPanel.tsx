@@ -3,31 +3,31 @@
 /**
  * ScoreboardPanel — side panel displaying each team's name and score (books won).
  *
- * Sub-AC 34a: Shell panel that reactively tracks and displays the number of
+ * Shell panel that reactively tracks and displays the number of
  * half-suits (books) each team has won, updating whenever the game state
  * broadcasts a new score.
  *
  * ### Layout
  * - Team 2 at the top (violet theming)
  * - Team 1 at the bottom (emerald theming)
- * - Score displayed as "N / 8" books won out of a maximum of 8 half-suits
+ * - Score displayed as "N 8" books won out of a maximum of 8 half-suits
  * - Declared-suit badges listed per team so players can see which half-suits
- *   have already been claimed
+ * have already been claimed
  * - "(You)" label appended to the current player's team name
  * - Score flashes yellow briefly when a team just scored a book
  *
  * ### Props vs Context
  * The component accepts plain props so it remains independently testable and
- * composable.  The companion `ConnectedScoreboardPanel` wrapper (exported
+ * composable. The companion `ConnectedScoreboardPanel` wrapper (exported
  * below) wires it automatically to `useGameContext()` for in-game use.
  *
  * @example
  * // Standalone usage (e.g. inside a test):
  * <ScoreboardPanel
- *   team1Score={3}
- *   team2Score={2}
- *   declaredSuits={[{ halfSuitId: 'low_s', teamId: 1, declaredBy: 'p1' }]}
- *   myTeamId={1}
+ * team1Score={3}
+ * team2Score={2}
+ * declaredSuits={[{ halfSuitId: 'low_s', teamId: 1, declaredBy: 'p1' }]}
+ * myTeamId={1}
  * />
  *
  * @example
@@ -54,7 +54,7 @@ export interface ScoreboardPanelProps {
   team2Score: number;
   /**
    * Array of declared half-suits already won this game.
-   * Used to render per-team suit badges.  Defaults to [].
+   * Used to render per-team suit badges. Defaults to [].
    */
   declaredSuits?: DeclaredSuit[];
   /**
@@ -64,13 +64,13 @@ export interface ScoreboardPanelProps {
   myTeamId?: 1 | 2 | null;
   /**
    * When non-null, the matching team's score renders with a yellow flash
-   * to indicate a newly scored book.  Typically driven by
+   * to indicate a newly scored book. Typically driven by
    * `lastDeclareResult.winningTeam` with a short timeout.
    */
   scoreFlash?: 1 | 2 | null;
   /** Extra CSS class names forwarded to the panel's root element. */
   className?: string;
-  /** data-testid forwarded to the panel root.  Defaults to "scoreboard-panel". */
+  /** data-testid forwarded to the panel root. Defaults to "scoreboard-panel". */
   'data-testid'?: string;
 }
 
@@ -127,7 +127,7 @@ function TeamSection({ teamId, score, declaredSuits, isMyTeam, isFlashing }: Tea
           )}
         </span>
 
-        {/* Score: N / 8 books */}
+        {/* Score: N 8 books */}
         <div
           className="flex items-baseline gap-0.5"
           aria-label={`${teamLabel} score: ${score} of ${MAX_BOOKS} books`}

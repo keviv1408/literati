@@ -1,47 +1,47 @@
 'use strict';
 
 /**
- * Sub-AC 32a — Game-end detection: triggers when the 8th half-suit is
- *               declared, updating game state to 'completed' and halting
- *               all further moves.
+ * Game-end detection: triggers when the 8th half-suit is
+ * declared, updating game state to 'completed' and halting
+ * all further moves.
  *
  * Rules:
- *   - When the 8th (last) half-suit is declared — correctly, incorrectly, or
- *     via forced-failed timer expiry — the game must immediately transition to
- *     status: 'completed'.
- *   - The winner is determined by score (team with more points wins).
- *   - On a 4-4 tie, the winner is the team that declared the high_d half-suit
- *     (the tiebreaker half-suit).
- *   - Once status is 'completed', no further card requests (asks) or
- *     declarations may be accepted; both return GAME_NOT_ACTIVE.
- *   - The socket server must broadcast a `game_over` event to all connected
- *     clients immediately after the 8th declaration resolves.
- *   - The game is removed from the live games store on game-over.
+ * - When the 8th (last) half-suit is declared — correctly, incorrectly, or
+ * via forced-failed timer expiry — the game must immediately transition to
+ * status: 'completed'.
+ * - The winner is determined by score (team with more points wins).
+ * - On a 4-4 tie, the winner is the team that declared the high_d half-suit
+ * (the tiebreaker half-suit).
+ * - Once status is 'completed', no further card requests (asks) or
+ * declarations may be accepted; both return GAME_NOT_ACTIVE.
+ * - The socket server must broadcast a `game_over` event to all connected
+ * clients immediately after the 8th declaration resolves.
+ * - The game is removed from the live games store on game-over.
  *
  * Coverage:
  *
- *   Pure engine — applyDeclaration:
- *     1.  After 8th correct declaration, gs.status === 'completed'
- *     2.  Winner is the team with more points (team1 5-3 → winner: 1)
- *     3.  Winner is the team with more points (team2 3-5 → winner: 2)
- *     4.  Tied 4-4 tiebreaker: winner is team that declared high_d
- *     5.  gs.winner is still null during mid-game (before 8th declaration)
+ * Pure engine — applyDeclaration:
+ * 1. After 8th correct declaration, gs.status === 'completed'
+ * 2. Winner is the team with more points (team1 5-3 → winner: 1)
+ * 3. Winner is the team with more points (team2 3-5 → winner: 2)
+ * 4. Tied 4-4 tiebreaker: winner is team that declared high_d
+ * 5. gs.winner is still null during mid-game (before 8th declaration)
  *
- *   Pure engine — applyForcedFailedDeclaration:
- *     6.  After 8th forced-failed declaration, gs.status === 'completed'
- *     7.  Winner is determined correctly after forced failure on 8th suit
+ * Pure engine — applyForcedFailedDeclaration:
+ * 6. After 8th forced-failed declaration, gs.status === 'completed'
+ * 7. Winner is determined correctly after forced failure on 8th suit
  *
- *   Move blocking after game ends:
- *     8.  validateAsk returns GAME_NOT_ACTIVE when gs.status === 'completed'
- *     9.  validateDeclaration returns GAME_NOT_ACTIVE when gs.status === 'completed'
- *    10.  GAME_NOT_ACTIVE errorCode is present (not just error string)
+ * Move blocking after game ends:
+ * 8. validateAsk returns GAME_NOT_ACTIVE when gs.status === 'completed'
+ * 9. validateDeclaration returns GAME_NOT_ACTIVE when gs.status === 'completed'
+ * 10. GAME_NOT_ACTIVE errorCode is present (not just error string)
  *
- *   Socket server integration:
- *    11.  handleDeclare broadcasts `game_over` after 8th declaration
- *    12.  game_over includes correct winner, tiebreakerWinner, and scores
- *    13.  handleAskCard sends GAME_NOT_ACTIVE error when game is completed
- *    14.  handleDeclare sends GAME_NOT_ACTIVE error when game is already completed
- *    15.  liveGamesStore.removeGame is called after 8th declaration
+ * Socket server integration:
+ * 11. handleDeclare broadcasts `game_over` after 8th declaration
+ * 12. game_over includes correct winner, tiebreakerWinner, and scores
+ * 13. handleAskCard sends GAME_NOT_ACTIVE error when game is completed
+ * 14. handleDeclare sends GAME_NOT_ACTIVE error when game is already completed
+ * 15. liveGamesStore.removeGame is called after 8th declaration
  */
 
 // ---------------------------------------------------------------------------
@@ -95,19 +95,19 @@ const ROOM = 'ENDGM';
 const VARIANT = 'remove_7s';
 
 // Half-suit card lists for remove_7s:
-//   low_s:  1_s, 2_s, 3_s, 4_s, 5_s, 6_s
-//   high_s: 8_s, 9_s, 10_s, 11_s, 12_s, 13_s
-//   low_h:  1_h, 2_h, 3_h, 4_h, 5_h, 6_h
-//   high_h: 8_h, 9_h, 10_h, 11_h, 12_h, 13_h
-//   low_d:  1_d, 2_d, 3_d, 4_d, 5_d, 6_d
-//   high_d: 8_d, 9_d, 10_d, 11_d, 12_d, 13_d  ← tiebreaker
-//   low_c:  1_c, 2_c, 3_c, 4_c, 5_c, 6_c
-//   high_c: 8_c, 9_c, 10_c, 11_c, 12_c, 13_c
+// low_s: 1_s, 2_s, 3_s, 4_s, 5_s, 6_s
+// high_s: 8_s, 9_s, 10_s, 11_s, 12_s, 13_s
+// low_h: 1_h, 2_h, 3_h, 4_h, 5_h, 6_h
+// high_h: 8_h, 9_h, 10_h, 11_h, 12_h, 13_h
+// low_d: 1_d, 2_d, 3_d, 4_d, 5_d, 6_d
+// high_d: 8_d, 9_d, 10_d, 11_d, 12_d, 13_d ← tiebreaker
+// low_c: 1_c, 2_c, 3_c, 4_c, 5_c, 6_c
+// high_c: 8_c, 9_c, 10_c, 11_c, 12_c, 13_c
 
 /**
  * Build a minimal 6-player game state.
- * Team 1: p1, p2, p3  (seats 0, 2, 4)
- * Team 2: p4, p5, p6  (seats 1, 3, 5)
+ * Team 1: p1, p2, p3 (seats 0, 2, 4)
+ * Team 2: p4, p5, p6 (seats 1, 3, 5)
  */
 function buildGame({
   variant = VARIANT,
@@ -205,7 +205,7 @@ function preDeclare(gs, halfSuitIds, teamId = 1) {
 // 1–5: Pure engine — applyDeclaration
 // ---------------------------------------------------------------------------
 
-describe('applyDeclaration — game-end detection (Sub-AC 32a)', () => {
+describe('applyDeclaration — game-end detection ', () => {
   it('1. after 8th declaration gs.status === "completed"', () => {
     const halfSuits = buildHalfSuitMap(VARIANT);
     const halfSuitIds = allHalfSuitIds();
@@ -368,7 +368,7 @@ describe('applyDeclaration — game-end detection (Sub-AC 32a)', () => {
 // 6–7: Pure engine — applyForcedFailedDeclaration
 // ---------------------------------------------------------------------------
 
-describe('applyForcedFailedDeclaration — game-end detection (Sub-AC 32a)', () => {
+describe('applyForcedFailedDeclaration — game-end detection ', () => {
   it('6. after 8th forced-failed declaration, gs.status === "completed"', () => {
     const nonLowS = allHalfSuitIds().filter((id) => id !== 'low_s');
 
@@ -417,7 +417,7 @@ describe('applyForcedFailedDeclaration — game-end detection (Sub-AC 32a)', () 
 // 8–10: Move blocking after game ends
 // ---------------------------------------------------------------------------
 
-describe('Move blocking after game ends (Sub-AC 32a)', () => {
+describe('Move blocking after game ends ', () => {
   let gs;
 
   beforeEach(() => {
@@ -455,7 +455,7 @@ describe('Move blocking after game ends (Sub-AC 32a)', () => {
 // 11–15: Socket server integration
 // ---------------------------------------------------------------------------
 
-describe('Socket server game-end integration (Sub-AC 32a)', () => {
+describe('Socket server game-end integration ', () => {
   let setGame, registerConnection, removeConnection;
   let handleAskCard, handleDeclare, cancelTurnTimer;
 

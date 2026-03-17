@@ -9,9 +9,9 @@
  * rematch is triggered. If the timeout expires or a majority-no is
  * reached before that, the vote is declined.
  *
- * Majority threshold: Math.floor(totalPlayerCount / 2) + 1
- *   e.g. 6 players → majority = 4
- *        8 players → majority = 5
+ * Majority threshold: Math.floor(totalPlayerCount 2) + 1
+ * e.g. 6 players → majority = 4
+ * 8 players → majority = 5
  */
 
 /** Milliseconds players have to cast a rematch vote before room dissolution. */
@@ -19,23 +19,23 @@ const REMATCH_VOTE_TIMEOUT_MS = 30_000;
 
 /**
  * @typedef {Object} RematchState
- * @property {Map<string, boolean>} votes         playerId → true (yes) / false (no)
- * @property {Array<Object>} players              full player roster from the finished game
- * @property {number} totalCount                  total player count (bots + humans)
- * @property {number} humanCount                  human-only player count
- * @property {number} majority                    yes-votes needed to trigger rematch
- * @property {ReturnType<typeof setTimeout>|null} timer  auto-decline timer handle
- * @property {string|null}  roomId                Supabase room UUID (for game creation)
- * @property {string|null}  variant               card-removal variant (for game creation)
- * @property {number|null}  playerCount           total seat count 6|8 (for game creation)
+ * @property {Map<string, boolean>} votes playerId → true (yes) / false (no)
+ * @property {Array<Object>} players full player roster from the finished game
+ * @property {number} totalCount total player count (bots + humans)
+ * @property {number} humanCount human-only player count
+ * @property {number} majority yes-votes needed to trigger rematch
+ * @property {ReturnType<typeof setTimeout>|null} timer auto-decline timer handle
+ * @property {string|null} roomId Supabase room UUID (for game creation)
+ * @property {string|null} variant card-removal variant (for game creation)
+ * @property {number|null} playerCount total seat count 6|8 (for game creation)
  */
 
 /**
  * @typedef {Object} RematchGameConfig
- * @property {string}        roomId      Supabase room UUID
- * @property {string}        variant     card-removal variant
- * @property {number}        playerCount total seat count
- * @property {Array<Object>} players     player roster with teamId / seatIndex preserved
+ * @property {string} roomId Supabase room UUID
+ * @property {string} variant card-removal variant
+ * @property {number} playerCount total seat count
+ * @property {Array<Object>} players player roster with teamId / seatIndex preserved
  */
 
 /** @type {Map<string, RematchState>} roomCode → RematchState */
@@ -50,13 +50,13 @@ const _rematchState = new Map();
  * Bot players are automatically assigned a 'yes' vote.
  * Returns the initial vote summary.
  *
- * @param {string}   roomCode
- * @param {Array}    players          Array of player objects from the finished GameState
- * @param {Function} onTimeout        Called (with roomCode) when the vote window expires
+ * @param {string} roomCode
+ * @param {Array} players Array of player objects from the finished GameState
+ * @param {Function} onTimeout Called (with roomCode) when the vote window expires
  * @param {{roomId?: string, variant?: string, playerCount?: number}} [gameConfig]
- *   Optional game metadata preserved for Sub-AC 46c rematch room creation.
- *   If omitted the config fields default to null (backward-compatible — older tests
- *   that call initRematch without a fourth argument continue to work).
+ * Optional game metadata preserved for rematch room creation.
+ * If omitted the config fields default to null (backward-compatible — older tests
+ * that call initRematch without a fourth argument continue to work).
  * @returns {ReturnType<typeof getVoteSummary>}
  */
 function initRematch(roomCode, players, onTimeout, gameConfig = {}) {
@@ -90,7 +90,7 @@ function initRematch(roomCode, players, onTimeout, gameConfig = {}) {
     humanCount,
     majority,
     timer,
-    // Sub-AC 46c: game metadata preserved so we can recreate the game with the
+    // game metadata preserved so we can recreate the game with the
     // same teams and seat assignments when the rematch is accepted.
     roomId:      gameConfig.roomId      ?? null,
     variant:     gameConfig.variant     ?? null,
@@ -106,9 +106,9 @@ function initRematch(roomCode, players, onTimeout, gameConfig = {}) {
  *
  * Returns the updated vote summary or null if the room has no active vote.
  *
- * @param {string}  roomCode
- * @param {string}  playerId
- * @param {boolean} vote   true = yes, false = no
+ * @param {string} roomCode
+ * @param {string} playerId
+ * @param {boolean} vote true = yes, false = no
  * @returns {ReturnType<typeof getVoteSummary>|null}
  */
 function castVote(roomCode, playerId, vote) {
@@ -133,15 +133,15 @@ function castVote(roomCode, playerId, vote) {
  *
  * @param {string} roomCode
  * @returns {{
- *   yesCount:         number,
- *   noCount:          number,
- *   totalCount:       number,
- *   humanCount:       number,
- *   majority:         number,
- *   majorityReached:  boolean,
- *   majorityDeclined: boolean,
- *   votes:            Record<string, boolean>,
- *   playerVotes:      Array<{ playerId: string, displayName: string, isBot: boolean, vote: boolean|null }>
+ * yesCount: number,
+ * noCount: number,
+ * totalCount: number,
+ * humanCount: number,
+ * majority: number,
+ * majorityReached: boolean,
+ * majorityDeclined: boolean,
+ * votes: Record<string, boolean>,
+ * playerVotes: Array<{ playerId: string, displayName: string, isBot: boolean, vote: boolean|null }>
  * }|null}
  */
 function getVoteSummary(roomCode) {
@@ -191,7 +191,7 @@ function getVoteSummary(roomCode) {
 
 /**
  * Return the game configuration stored at vote-init time.
- * Used by Sub-AC 46c to recreate the game with the same teams and seat order
+ * Used by to recreate the game with the same teams and seat order
  * when the rematch is accepted.
  *
  * Returns null if no active vote exists for the room or if the config was not

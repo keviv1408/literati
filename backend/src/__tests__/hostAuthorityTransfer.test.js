@@ -3,37 +3,37 @@
 /**
  * hostAuthorityTransfer.test.js
  *
- * Sub-AC 40c: Host authority transfer mechanism tests.
+ * Host authority transfer mechanism tests.
  *
  * Tests the following exported functions from roomSocketServer.js:
  *
- *   _executeHostTransfer(roomCode)
- *     1.  Promotes the first remaining client as new host
- *     2.  Clears isHost flag on all previous entries
- *     3.  Broadcasts host_changed with newHostId and newHostName
- *     4.  Broadcasts room_players snapshot with updated isHost flags
- *     5.  Persists the new host_user_id to Supabase
- *     6.  No-op when room has no remaining clients
- *     7.  Handles Supabase errors gracefully (does not throw)
- *     8.  Broadcasts to spectators as well as players
+ * _executeHostTransfer(roomCode)
+ * 1. Promotes the first remaining client as new host
+ * 2. Clears isHost flag on all previous entries
+ * 3. Broadcasts host_changed with newHostId and newHostName
+ * 4. Broadcasts room_players snapshot with updated isHost flags
+ * 5. Persists the new host_user_id to Supabase
+ * 6. No-op when room has no remaining clients
+ * 7. Handles Supabase errors gracefully (does not throw)
+ * 8. Broadcasts to spectators as well as players
  *
- *   _startHostTransferTimer(roomCode, currentHostId)
- *     9.  Adds an entry to hostTransferTimers with previousHostId
- *     10. No-op when timer already running for room (idempotent)
- *     11. Triggers _executeHostTransfer when timer fires
- *     12. Also broadcasts host_disconnected on start
+ * _startHostTransferTimer(roomCode, currentHostId)
+ * 9. Adds an entry to hostTransferTimers with previousHostId
+ * 10. No-op when timer already running for room (idempotent)
+ * 11. Triggers _executeHostTransfer when timer fires
+ * 12. Also broadcasts host_disconnected on start
  *
- *   _cancelHostTransferTimer(roomCode)
- *     13. Removes the entry from hostTransferTimers
- *     14. Prevents _executeHostTransfer from being called after cancel
- *     15. No-op when no timer is running
+ * _cancelHostTransferTimer(roomCode)
+ * 13. Removes the entry from hostTransferTimers
+ * 14. Prevents _executeHostTransfer from being called after cancel
+ * 15. No-op when no timer is running
  *
- *   Reconnect flow (host reconnects before timer fires)
- *     16. _cancelHostTransferTimer is called when original host reconnects
+ * Reconnect flow (host reconnects before timer fires)
+ * 16. _cancelHostTransferTimer is called when original host reconnects
  *
- *   Dynamic isHost in message handler
- *     17. After transfer, new host's liveIsHost resolves to true
- *     18. After transfer, old host's liveIsHost resolves to false
+ * Dynamic isHost in message handler
+ * 17. After transfer, new host's liveIsHost resolves to true
+ * 18. After transfer, old host's liveIsHost resolves to false
  */
 
 const {

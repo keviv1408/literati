@@ -1,30 +1,30 @@
 'use strict';
 
 /**
- * Tests for the 'start_game' WebSocket handler (handleStartGame, Sub-AC 5.1).
+ * Tests for the 'start_game' WebSocket handler (handleStartGame, ).
  *
  * Covers:
- *   1. Authorization — only the host can start the game.
- *   2. Room not found — error sent when Supabase returns null.
- *   3. Room not waiting — error when room status is not 'waiting'.
- *   4. Bot fill — empty seats are filled with bots.
- *   5. Full room — no bots added when all seats are occupied.
- *   6. Broadcast to all — 'lobby-starting' sent to all connected clients.
- *   7. Seat ordering — T1 even, T2 odd indices; sorted ascending.
- *   8. Supabase update — room status set to 'starting'.
- *   9. Supabase update error — non-fatal; broadcast still fires.
- *  10. 8-player game — correct seat count and team distribution.
- *  11. Closed WS clients — no crash when broadcasting to disconnected clients.
- *  12. Idempotency — concurrent calls blocked by _startingRooms guard.
+ * 1. Authorization — only the host can start the game.
+ * 2. Room not found — error sent when Supabase returns null.
+ * 3. Room not waiting — error when room status is not 'waiting'.
+ * 4. Bot fill — empty seats are filled with bots.
+ * 5. Full room — no bots added when all seats are occupied.
+ * 6. Broadcast to all — 'lobby-starting' sent to all connected clients.
+ * 7. Seat ordering — T1 even, T2 odd indices; sorted ascending.
+ * 8. Supabase update — room status set to 'starting'.
+ * 9. Supabase update error — non-fatal; broadcast still fires.
+ * 10. 8-player game — correct seat count and team distribution.
+ * 11. Closed WS clients — no crash when broadcasting to disconnected clients.
+ * 12. Idempotency — concurrent calls blocked by _startingRooms guard.
  *
  * Strategy:
- *   - No real DB or WebSocket ports are opened — everything is mocked.
- *   - Supabase is injected via _setSupabaseClientFactory.
- *   - cancelLobbyTimer is mocked via jest.mock.
- *   - gameSocketServer is injected via _setGameServer.
- *   - roomClients and roomMeta are populated directly.
- *   - _startingRooms is cleared manually between tests.
- *   - _resetRoomState() resets roomClients + roomMeta between tests.
+ * - No real DB or WebSocket ports are opened — everything is mocked.
+ * - Supabase is injected via _setSupabaseClientFactory.
+ * - cancelLobbyTimer is mocked via jest.mock.
+ * - gameSocketServer is injected via _setGameServer.
+ * - roomClients and roomMeta are populated directly.
+ * - _startingRooms is cleared manually between tests.
+ * - _resetRoomState() resets roomClients + roomMeta between tests.
  */
 
 // Mock cancelLobbyTimer before requiring the module under test.
@@ -69,18 +69,18 @@ function lastSent(mockWs) {
 /**
  * Build a chainable Supabase mock that supports both read and write paths:
  *
- *   Read  (fetchRoomMetaFull):
- *     supabase.from('rooms').select(...).eq('code', roomCode).maybeSingle()
- *       → resolves to { data: roomData, error: null }
+ * Read (fetchRoomMetaFull):
+ * supabase.from('rooms').select(...).eq('code', roomCode).maybeSingle()
+ * → resolves to { data: roomData, error: null }
  *
- *   Write (status update):
- *     supabase.from('rooms').update({ status }).eq('code', roomCode)
- *       → resolves to { data: null, error: updateError }
+ * Write (status update):
+ * supabase.from('rooms').update({ status }).eq('code', roomCode)
+ * → resolves to { data: null, error: updateError }
  *
  * @param {{ roomData?: Object|null, updateError?: Object|null }} opts
  */
 function buildMockSupabase({ roomData = null, updateError = null } = {}) {
-  // Shared .eq() for both chains — we differentiate by which parent called it
+  // Shared.eq() for both chains — we differentiate by which parent called it
   const eqForRead   = jest.fn().mockReturnValue({
     maybeSingle: jest.fn().mockResolvedValue({ data: roomData, error: null }),
   });
@@ -126,8 +126,8 @@ function makeFakeRoomData(overrides = {}) {
  * Populate roomClients and roomMeta for a room.
  * Returns the client Map for the room.
  *
- * @param {string}   roomCode
- * @param {number}   playerCount
+ * @param {string} roomCode
+ * @param {number} playerCount
  * @param {Object[]} players — { userId, displayName, isGuest?, isHost?, teamId, ws? }
  * @returns {Map<string, Object>}
  */
@@ -153,7 +153,7 @@ function setupRoom(roomCode, playerCount, players) {
 // Suite
 // ---------------------------------------------------------------------------
 
-describe('handleStartGame (Sub-AC 5.1)', () => {
+describe('handleStartGame ', () => {
   const ROOM = 'STRT01';
 
   beforeEach(() => {
@@ -372,14 +372,14 @@ describe('handleStartGame (Sub-AC 5.1)', () => {
 
     await handleStartGame({ ws: hostWs, userId: 'h1', isHost: true, roomCode: ROOM, clients: roomClients.get(ROOM) });
 
-    // Supabase .from('rooms').update({ status: 'starting' }).eq('code', ROOM) called
+    // Supabase.from('rooms').update({ status: 'starting' }).eq('code', ROOM) called
     expect(mockSupa.from).toHaveBeenCalledWith('rooms');
     expect(mockSupa._update).toHaveBeenCalledWith({ status: 'starting' });
     expect(mockSupa._eqWrite).toHaveBeenCalledWith('code', ROOM);
   });
 
   // ── 9a. Supabase update resolves with error object — fatal ─────────────────
-  // When .eq() resolves with { error: object }, the implementation treats
+  // When.eq() resolves with { error: object }, the implementation treats
   // it as a fatal error (sends error message and aborts before broadcast).
 
   it('sends error and does NOT broadcast when Supabase update resolves with error', async () => {
@@ -404,7 +404,7 @@ describe('handleStartGame (Sub-AC 5.1)', () => {
   });
 
   // ── 9b. Supabase update throws / rejects — non-fatal ────────────────────────
-  // When .eq() throws (network error), the implementation logs and continues.
+  // When.eq() throws (network error), the implementation logs and continues.
 
   it('still broadcasts lobby-starting when Supabase update throws (network error)', async () => {
     // Build a mock where fetchRoomMetaFull succeeds but update throws

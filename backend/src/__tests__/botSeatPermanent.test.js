@@ -1,30 +1,30 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 4: Permanent bot seat assignment after 60s with mid-game reclaim.
+ * Tests for Permanent bot seat assignment after 60s with mid-game reclaim.
  *
  * Covers:
- *   disconnectStore (unit tests):
- *     1.  startDisconnectTimer fires callback after delay
- *     2.  cancelDisconnectTimer prevents callback from firing
- *     3.  hasDisconnectTimer returns correct state
- *     4.  addToReclaimQueue / isInReclaimQueue / removeFromReclaimQueue
- *     5.  clearRoom removes all timers and reclaim entries for a room
- *     6.  _clearAll resets all state
+ * disconnectStore (unit tests):
+ * 1. startDisconnectTimer fires callback after delay
+ * 2. cancelDisconnectTimer prevents callback from firing
+ * 3. hasDisconnectTimer returns correct state
+ * 4. addToReclaimQueue / isInReclaimQueue / removeFromReclaimQueue
+ * 5. clearRoom removes all timers and reclaim entries for a room
+ * 6. _clearAll resets all state
  *
- *   gameSocketServer integration (via exported functions):
- *     7.  After RECONNECT_WINDOW_MS, `botReplacedAt` is stamped on the player
- *     8.  `botReplacedAt` stamp is absent before the window expires
- *     9.  _executeReclaim flips isBot to false and removes botReplacedAt
- *    10.  _executeReclaim broadcasts `seat_reclaimed` to all connections
- *    11.  _executeReclaim broadcasts updated `game_players`
- *    12.  _executeReclaim persists game state (Supabase call)
- *    13.  _executeReclaim removes player from reclaim queue
- *    14.  scheduleBotTurnIfNeeded triggers reclaim when player is in reclaim queue
- *    15.  After reclaim, scheduleBotTurnIfNeeded does NOT schedule a bot turn
- *    16.  scheduleBotTurnIfNeeded schedules a bot turn when player is NOT in reclaim queue
- *    17.  _executeReclaim is idempotent (calling it twice is safe)
- *    18.  _executeReclaim does nothing when player not found in gs.players
+ * gameSocketServer integration (via exported functions):
+ * 7. After RECONNECT_WINDOW_MS, `botReplacedAt` is stamped on the player
+ * 8. `botReplacedAt` stamp is absent before the window expires
+ * 9. _executeReclaim flips isBot to false and removes botReplacedAt
+ * 10. _executeReclaim broadcasts `seat_reclaimed` to all connections
+ * 11. _executeReclaim broadcasts updated `game_players`
+ * 12. _executeReclaim persists game state (Supabase call)
+ * 13. _executeReclaim removes player from reclaim queue
+ * 14. scheduleBotTurnIfNeeded triggers reclaim when player is in reclaim queue
+ * 15. After reclaim, scheduleBotTurnIfNeeded does NOT schedule a bot turn
+ * 16. scheduleBotTurnIfNeeded schedules a bot turn when player is NOT in reclaim queue
+ * 17. _executeReclaim is idempotent (calling it twice is safe)
+ * 18. _executeReclaim does nothing when player not found in gs.players
  */
 
 const {

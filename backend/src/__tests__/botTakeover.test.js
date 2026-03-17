@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * Unit tests for the bot-takeover feature (Sub-AC 2 of AC 17).
+ * Unit tests for the bot-takeover feature.
  *
  * When a human player's turn timer expires:
- *   1. The server reads any partial selection state reported by the player.
- *   2. Broadcasts a `bot_takeover` event with that partial state (or null).
- *   3. Uses `completeBotFromPartial` to finish the move using the partial context.
- *   4. Partial state is cleared after takeover (even if no action executed).
+ * 1. The server reads any partial selection state reported by the player.
+ * 2. Broadcasts a `bot_takeover` event with that partial state (or null).
+ * 3. Uses `completeBotFromPartial` to finish the move using the partial context.
+ * 4. Partial state is cleared after takeover (even if no action executed).
  *
  * Complementary coverage for handlePartialSelection:
- *   5. Stores partial state only when it's the sender's turn.
- *   6. Ignores messages from non-active players.
- *   7. Requires a valid `flow` field ('ask' or 'declare').
- *   8. Requires a halfSuitId.
- *   9. Stores { flow: 'ask', halfSuitId } after step 1 of the wizard.
- *  10. Stores { flow: 'ask', halfSuitId, cardId } after step 2 of the wizard.
- *  11. Partial state is cleared when the active player makes a valid ask.
- *  12. Partial state is cleared when the active player makes a valid declaration.
+ * 5. Stores partial state only when it's the sender's turn.
+ * 6. Ignores messages from non-active players.
+ * 7. Requires a valid `flow` field ('ask' or 'declare').
+ * 8. Requires a halfSuitId.
+ * 9. Stores { flow: 'ask', halfSuitId } after step 1 of the wizard.
+ * 10. Stores { flow: 'ask', halfSuitId, cardId } after step 2 of the wizard.
+ * 11. Partial state is cleared when the active player makes a valid ask.
+ * 12. Partial state is cleared when the active player makes a valid declaration.
  */
 
 const {

@@ -1,52 +1,52 @@
 'use strict';
 
 /**
- * Unit tests for Sub-AC 17.3: Bot completion from partial selection state.
+ * Unit tests for Bot completion from partial selection state.
  *
  * Coverage:
  *
- *   partialSelectionStore:
- *     1. setPartialSelection / getPartialSelection roundtrip
- *     2. clearPartialSelection removes the entry
- *     3. clearRoomPartialSelections removes all entries for a room
- *     4. getPartialSelection returns null for missing entries
- *     5. Room-code comparison is case-insensitive
+ * partialSelectionStore:
+ * 1. setPartialSelection / getPartialSelection roundtrip
+ * 2. clearPartialSelection removes the entry
+ * 3. clearRoomPartialSelections removes all entries for a room
+ * 4. getPartialSelection returns null for missing entries
+ * 5. Room-code comparison is case-insensitive
  *
- *   completeBotFromPartial — null / unknown input:
- *     6. Falls back to decideBotMove when partial is null
- *     7. Falls back to decideBotMove when partial has no `flow` field
- *     8. Falls back to decideBotMove when flow is unrecognised
+ * completeBotFromPartial — null / unknown input:
+ * 6. Falls back to decideBotMove when partial is null
+ * 7. Falls back to decideBotMove when partial has no `flow` field
+ * 8. Falls back to decideBotMove when flow is unrecognised
  *
- *   completeBotFromPartial — ask flow, step 2 (half-suit only):
- *     9.  Returns a valid ask using a card from the specified half-suit
- *    10.  Falls back to decideBotMove if the half-suit is already declared
- *    11.  Falls back to decideBotMove if there are no opponents left to ask
- *    12.  Prefers opponent known to have the card (inference-based)
+ * completeBotFromPartial — ask flow, step 2 (half-suit only):
+ * 9. Returns a valid ask using a card from the specified half-suit
+ * 10. Falls back to decideBotMove if the half-suit is already declared
+ * 11. Falls back to decideBotMove if there are no opponents left to ask
+ * 12. Prefers opponent known to have the card (inference-based)
  *
- *   completeBotFromPartial — ask flow, step 3 (half-suit + card):
- *    13.  Returns a valid ask using the specified card against any valid opponent
- *    14.  Falls back to decideBotMove if the specified card is no longer askable
- *    15.  Prefers opponent known to have the card (inference-based)
+ * completeBotFromPartial — ask flow, step 3 (half-suit + card):
+ * 13. Returns a valid ask using the specified card against any valid opponent
+ * 14. Falls back to decideBotMove if the specified card is no longer askable
+ * 15. Prefers opponent known to have the card (inference-based)
  *
- *   completeBotFromPartial — declare flow:
- *    16.  Completes a partial assignment — all 6 cards are covered
- *    17.  Respects player's existing partial assignments (does not override them)
- *    18.  Falls back to decideBotMove if the half-suit is already declared
- *    19.  Uses actual hand data to fill gaps in the assignment
- *    20.  Result passes validateDeclaration when team holds all cards
+ * completeBotFromPartial — declare flow:
+ * 16. Completes a partial assignment — all 6 cards are covered
+ * 17. Respects player's existing partial assignments (does not override them)
+ * 18. Falls back to decideBotMove if the half-suit is already declared
+ * 19. Uses actual hand data to fill gaps in the assignment
+ * 20. Result passes validateDeclaration when team holds all cards
  *
- *   handlePartialSelection (gameSocketServer integration):
- *    21.  Stores partial state when player is active turn holder
- *    22.  Ignores partial state when player is NOT the active turn holder
- *    23.  Ignores unknown flow values
- *    24.  Stores cardId for ask-step-3 partial
- *    25.  Stores assignment for declare partial
+ * handlePartialSelection (gameSocketServer integration):
+ * 21. Stores partial state when player is active turn holder
+ * 22. Ignores partial state when player is NOT the active turn holder
+ * 23. Ignores unknown flow values
+ * 24. Stores cardId for ask-step-3 partial
+ * 25. Stores assignment for declare partial
  *
- *   executeTimedOutTurn integration:
- *    26.  Uses partial state from store when completing a timed-out ask
- *    27.  Clears partial state after execution
- *    28.  Broadcasts bot_takeover before executing the move
- *    29.  Falls back gracefully when partial state is stale/invalid
+ * executeTimedOutTurn integration:
+ * 26. Uses partial state from store when completing a timed-out ask
+ * 27. Clears partial state after execution
+ * 28. Broadcasts bot_takeover before executing the move
+ * 29. Falls back gracefully when partial state is stale/invalid
  */
 
 const {
@@ -106,13 +106,13 @@ jest.mock('../game/rematchStore', () => ({
 /**
  * Builds a 6-player game state for remove_7s variant.
  *
- *   Team 1: p1 (bot), p2, p3
- *   Team 2: p4, p5, p6
+ * Team 1: p1 (bot), p2, p3
+ * Team 2: p4, p5, p6
  *
  * With remove_7s:
- *   low_s  = 1_s,2_s,3_s,4_s,5_s,6_s
- *   high_s = 8_s,9_s,10_s,11_s,12_s,13_s
- *   ... (same pattern for h, d, c)
+ * low_s = 1_s,2_s,3_s,4_s,5_s,6_s
+ * high_s = 8_s,9_s,10_s,11_s,12_s,13_s
+ * ... (same pattern for h, d, c)
  */
 function buildGame({ handOverrides = {}, currentTurnPlayerId = 'p1' } = {}) {
   const defaultHands = {
@@ -704,15 +704,15 @@ describe('executeTimedOutTurn with partial state', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 2: random assignment of unassigned cards in mid-declaration takeover
+// random assignment of unassigned cards in mid-declaration takeover
 // ---------------------------------------------------------------------------
 
-describe('Sub-AC 2: random assignment of unassigned cards — mid-declaration takeover', () => {
+describe('random assignment of unassigned cards — mid-declaration takeover', () => {
   // When the bot takes over a mid-declaration scenario, it must:
-  //   (a) leave already-assigned cards unchanged
-  //   (b) fill every remaining unassigned card
-  //   (c) assign only to members of the declaring team
-  //   (d) not duplicate card keys in the output assignment
+  // (a) leave already-assigned cards unchanged
+  // (b) fill every remaining unassigned card
+  // (c) assign only to members of the declaring team
+  // (d) not duplicate card keys in the output assignment
 
   it('30. cards not held by any teammate are randomly assigned to a valid team member', () => {
     // Team 1 (p1, p2, p3) holds only 1_s and 2_s from low_s.

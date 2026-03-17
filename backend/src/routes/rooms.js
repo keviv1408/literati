@@ -1,8 +1,8 @@
 /**
  * Rooms API routes
  *
- * POST /api/rooms            — Create a new private game room
- * GET  /api/rooms/:code      — Fetch room details by code
+ * POST /api/rooms — Create a new private game room
+ * GET /api/rooms/:code — Fetch room details by code
  * POST /api/rooms/:code/join — Join a room (blocked players receive 403)
  * POST /api/rooms/:code/kick — Host kicks a player (adds them to per-room blocklist)
  */
@@ -62,9 +62,9 @@ const VALID_PLAYER_COUNTS = [6, 8];
  * The host selects which rank is removed from the standard 52-card deck
  * to produce the 48-card Literature deck.
  *
- *   remove_2s  — remove all four 2s
- *   remove_7s  — remove all four 7s  (classic variant)
- *   remove_8s  — remove all four 8s
+ * remove_2s — remove all four 2s
+ * remove_7s — remove all four 7s (classic variant)
+ * remove_8s — remove all four 8s
  */
 const VALID_CARD_REMOVAL_VARIANTS = ['remove_2s', 'remove_7s', 'remove_8s'];
 
@@ -91,7 +91,7 @@ const ACTIVE_ROOM_STATUSES = new Set([
  * Resolve a private spectator token to room details.
  *
  * Private room spectator links embed a 32-char hex spectator_token as their
- * path parameter (e.g. /spectate/<TOKEN>).  This endpoint converts that token
+ * path parameter (e.g. /spectate/<TOKEN>). This endpoint converts that token
  * back to the room code and public room metadata so the frontend can navigate
  * to the correct lobby or game page as a spectator.
  *
@@ -158,32 +158,32 @@ router.get('/spectate/:token', async (req, res) => {
  * Create a new private game room.
  *
  * Request body:
- *   playerCount        {number}   6 or 8
- *   cardRemovalVariant {string}   'remove_2s' | 'remove_7s' | 'remove_8s'
+ * playerCount {number} 6 or 8
+ * cardRemovalVariant {string} 'remove_2s' | 'remove_7s' | 'remove_8s'
  *
  * The authenticated user becomes the room host. Host userId is derived from
  * the validated JWT (req.user.id) rather than the request body to prevent
  * spoofing.
  *
  * Response 201:
- *   {
- *     room: {
- *       id, code, invite_code, spectator_token,
- *       host_user_id, player_count, card_removal_variant,
- *       status, created_at, updated_at
- *     },
- *     inviteLink:    string  — ready-made player join URL
- *     spectatorLink: string  — ready-made private spectator URL (token-based)
- *   }
+ * {
+ * room: {
+ * id, code, invite_code, spectator_token,
+ * host_user_id, player_count, card_removal_variant,
+ * status, created_at, updated_at
+ * },
+ * inviteLink: string — ready-made player join URL
+ * spectatorLink: string — ready-made private spectator URL (token-based)
+ * }
  *
- * invite_code      — 16-char hex token for the player invite link (/join/:invite_code).
- * spectator_token  — 32-char hex token for the spectator view link (/spectate/:spectator_token).
- * spectatorLink    — full URL using the spectator_token (convenience field for the host).
+ * invite_code — 16-char hex token for the player invite link (/join/:invite_code).
+ * spectator_token — 32-char hex token for the spectator view link (/spectate/:spectator_token).
+ * spectatorLink — full URL using the spectator_token (convenience field for the host).
  *
  * Errors:
- *   400 — invalid input
- *   409 — host already has an active game
- *   500 — internal error
+ * 400 — invalid input
+ * 409 — host already has an active game
+ * 500 — internal error
  */
 router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
   const { playerCount, cardRemovalVariant } = req.body;
@@ -379,8 +379,8 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
  * Public endpoint — no auth required.
  *
  * Each returned room includes a `spectatorUrl` field:
- *   - Matchmaking rooms: `/room/<CODE>?spectate=1`  (public, no token)
- *   - Private rooms: `/spectate/<SPECTATOR_TOKEN>` (token-gated)
+ * - Matchmaking rooms: `/room/<CODE>?spectate=1` (public, no token)
+ * - Private rooms: `/spectate/<SPECTATOR_TOKEN>` (token-gated)
  *
  * Response 200: { rooms: [..., spectatorUrl: string] }
  * Response 500: { error: 'Failed to load active rooms' }
@@ -428,12 +428,12 @@ router.get('/active', async (req, res) => {
  * Public endpoint — no auth required (spectators need to look up rooms).
  *
  * Note: spectator_token is intentionally excluded from this public response.
- *       It is only returned to the host at room-creation time (POST 201).
- *       invite_code is included so the host can copy the join link from the
- *       lobby page after a browser refresh.
+ * It is only returned to the host at room-creation time (POST 201).
+ * invite_code is included so the host can copy the join link from the
+ * lobby page after a browser refresh.
  *
- * Response 200:  { room: { ... } }
- * Response 404:  { error: 'Room not found' }
+ * Response 200: { room: { ... } }
+ * Response 404: { error: 'Room not found' }
  */
 router.get('/:code', async (req, res) => {
   const { code } = req.params;
@@ -481,12 +481,12 @@ router.get('/:code', async (req, res) => {
  * This endpoint performs the eligibility gate; actual seat assignment is
  * handled by the WebSocket layer once the client connects.
  *
- * Response 200:  { allowed: true, roomCode: string }
- * Response 400:  { error: 'Invalid room code format' }
- * Response 401:  unauthenticated
- * Response 403:  { error: 'You have been removed from this room and cannot rejoin' }
- * Response 404:  { error: 'Room not found' }
- * Response 410:  { error: 'This room is no longer accepting players' }
+ * Response 200: { allowed: true, roomCode: string }
+ * Response 400: { error: 'Invalid room code format' }
+ * Response 401: unauthenticated
+ * Response 403: { error: 'You have been removed from this room and cannot rejoin' }
+ * Response 404: { error: 'Room not found' }
+ * Response 410: { error: 'This room is no longer accepting players' }
  */
 router.post('/:code/join', requireAuth, async (req, res) => {
   const { code } = req.params;
@@ -554,16 +554,16 @@ router.post('/:code/join', requireAuth, async (req, res) => {
  * POST /api/rooms/:code/join or via the WebSocket handshake.
  *
  * Request body:
- *   targetPlayerId {string}  The stable identifier of the player to kick.
- *                             For registered users this is their user UUID.
- *                             For guests this is their guest sessionId.
+ * targetPlayerId {string} The stable identifier of the player to kick.
+ * For registered users this is their user UUID.
+ * For guests this is their guest sessionId.
  *
- * Response 200:  { kicked: true, targetPlayerId: string }
- * Response 400:  { error: '...' }
- * Response 401:  unauthenticated
- * Response 403:  { error: 'Only the room host can kick players' }
- * Response 404:  { error: 'Room not found' }
- * Response 409:  { error: 'Cannot kick from a completed or cancelled room' }
+ * Response 200: { kicked: true, targetPlayerId: string }
+ * Response 400: { error: '...' }
+ * Response 401: unauthenticated
+ * Response 403: { error: 'Only the room host can kick players' }
+ * Response 404: { error: 'Room not found' }
+ * Response 409: { error: 'Cannot kick from a completed or cancelled room' }
  */
 router.post('/:code/kick', requireAuth, async (req, res) => {
   const { code } = req.params;
@@ -583,7 +583,7 @@ router.post('/:code/kick', requireAuth, async (req, res) => {
 
   // ── Guests cannot be hosts (no host_user_id mapping for guests) ──────────────
   // The rooms table stores host_user_id as a registered-user UUID; guests
-  // currently cannot own rooms in MVP.  Reject guest kick attempts early.
+  // currently cannot own rooms in MVP. Reject guest kick attempts early.
   if (req.user.isGuest) {
     return res.status(403).json({ error: 'Only the room host can kick players' });
   }
@@ -695,27 +695,27 @@ router.get('/:code/blocklist', requireAuth, async (req, res) => {
  *
  * This endpoint validates and processes the game-start request server-side,
  * enforcing:
- *   - Requester must be the room host (registered users only; guests cannot host).
- *   - Room must be in 'waiting' status.
- *   - Current connected human player count must not exceed the room's playerCount.
- *   - Neither team may have more than playerCount/2 human players (team-balance rule).
+ * - Requester must be the room host (registered users only; guests cannot host).
+ * - Room must be in 'waiting' status.
+ * - Current connected human player count must not exceed the room's playerCount.
+ * - Neither team may have more than playerCount/2 human players (team-balance rule).
  *
  * On success:
- *   - Remaining seats are filled with bots (alternating seatIndex layout).
- *   - In-memory GameState is created via gameSocketServer.createGame().
- *   - Room status is set to 'starting' in Supabase.
- *   - Initial game snapshot is persisted asynchronously (transitions → 'in_progress').
- *   - 'game_starting' event is broadcast to all /ws/room/<CODE> WebSocket clients.
+ * - Remaining seats are filled with bots (alternating seatIndex layout).
+ * - In-memory GameState is created via gameSocketServer.createGame().
+ * - Room status is set to 'starting' in Supabase.
+ * - Initial game snapshot is persisted asynchronously (transitions → 'in_progress').
+ * - 'game_starting' event is broadcast to all /ws/room/<CODE> WebSocket clients.
  *
  * Response 200:
- *   { started: true, roomCode, seats: LobbySeat[], botsAdded: string[] }
+ * { started: true, roomCode, seats: LobbySeat[], botsAdded: string[] }
  *
  * Errors:
- *   400 — player count / team balance validation failed
- *   403 — not the host (or guest user)
- *   404 — room not found
- *   409 — room is not in 'waiting' status
- *   500 — internal error
+ * 400 — player count / team balance validation failed
+ * 403 — not the host (or guest user)
+ * 404 — room not found
+ * 409 — room is not in 'waiting' status
+ * 500 — internal error
  */
 router.post('/:code/start', requireAuth, async (req, res) => {
   const { code } = req.params;
@@ -784,7 +784,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
 
   const clients = roomClients.get(roomCode) || new Map();
 
-  // ── Validate player count and team balance (Sub-AC 5.2) ───────────────────
+  // ── Validate player count and team balance ───────────────────
   const validation = validateStartGame(clients, playerCount);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error, code: validation.errorCode });
@@ -819,7 +819,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
       playerCount,
       seats:       allSeats,
     });
-    // Sub-AC 45b: clear any stored pending rematch snapshot now that the new
+    // clear any stored pending rematch snapshot now that the new
     // game has been created — prevents stale data bleeding into future rounds.
     clearPendingRematchSettings(roomCode);
   } catch (err) {

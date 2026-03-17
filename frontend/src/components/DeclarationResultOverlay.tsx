@@ -1,18 +1,18 @@
 'use client';
 
 /**
- * DeclarationResultOverlay — Sub-AC 26c
+ * DeclarationResultOverlay —
  *
  * Full-screen overlay shown to all players immediately after a
  * `declaration_result` WebSocket event is received.
  *
  * Features:
- *   • Shows ✅ / ❌ for correct / incorrect declaration
- *   • Names the winning team and the declared half-suit
- *   • Displays the `lastMove` summary string from the server
- *   • 3-second auto-dismiss countdown with a visible "N s" timer pill
- *   • Explicit "Dismiss" button cancels the countdown and dismisses immediately
- *   • `onDismiss` callback is called exactly once (auto or manual)
+ * • Shows ✅ / ❌ for correct / incorrect declaration
+ * • Names the winning team and the declared half-suit
+ * • Displays the `lastMove` summary string from the server
+ * • 3-second auto-dismiss countdown with a visible "N s" timer pill
+ * • Explicit "Dismiss" button cancels the countdown and dismisses immediately
+ * • `onDismiss` callback is called exactly once (auto or manual)
  *
  * After `onDismiss` fires the parent dispatches the game-advance action
  * (sends `{ type: 'game_advance' }` to the server) so the next turn can
@@ -39,7 +39,7 @@ export interface DeclarationResultOverlayProps {
    */
   onDismiss: () => void;
   /**
-   * Auto-dismiss delay in ms.  Defaults to 3 000 (3 seconds).
+   * Auto-dismiss delay in ms. Defaults to 3 000 (3 seconds).
    * Exposed for testing.
    */
   autoDismissMs?: number;
@@ -49,7 +49,7 @@ export interface DeclarationResultOverlayProps {
  * DeclarationResultOverlay
  *
  * Mounts as a fixed full-screen backdrop (z-50) so it renders above all other
- * game UI.  The inner card is centred and constrained to a readable width on
+ * game UI. The inner card is centred and constrained to a readable width on
  * both mobile and desktop.
  */
 export default function DeclarationResultOverlay({

@@ -1,45 +1,45 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for CardRequestWizard — Sub-AC 1: 3-step card request UI wizard.
+ * Tests for CardRequestWizard — 3-step card request UI wizard.
  *
  * Coverage:
- *   Step 1 — Half-suit selection
- *     • Renders the wizard dialog with step indicator at Step 1
- *     • Shows only half-suits where the player holds ≥1 card
- *     • Excludes already-declared half-suits
- *     • Shows "in hand" count per half-suit
- *     • Clicking a half-suit advances to Step 2
- *     • Cancel fires onCancel at Step 1
- *     • Shows "no available half-suits" message when hand is empty
+ * Step 1 — Half-suit selection
+ * • Renders the wizard dialog with step indicator at Step 1
+ * • Shows only half-suits where the player holds ≥1 card
+ * • Excludes already-declared half-suits
+ * • Shows "in hand" count per half-suit
+ * • Clicking a half-suit advances to Step 2
+ * • Cancel fires onCancel at Step 1
+ * • Shows "no available half-suits" message when hand is empty
  *
- *   Step 2 — Card selection
- *     • Shows all askable cards (those NOT in the player's hand)
- *     • Renders player's own cards as disabled / "in your hand" section
- *     • Clicking a card advances to Step 3
- *     • Back button returns to Step 1 with half-suit still highlighted
- *     • "No askable cards" message when all 6 are in player's hand
+ * Step 2 — Card selection
+ * • Shows all askable cards (those NOT in the player's hand)
+ * • Renders player's own cards as disabled / "in your hand" section
+ * • Clicking a card advances to Step 3
+ * • Back button returns to Step 1 with half-suit still highlighted
+ * • "No askable cards" message when all 6 are in player's hand
  *
- *   Step 3 — Opponent selection
- *     • Shows valid opponents (other team, cardCount > 0)
- *     • Excludes teammates
- *     • Excludes opponents with 0 cards
- *     • Auto-selects when only one valid opponent exists
- *     • Confirm fires onConfirm(targetPlayerId, cardId)
- *     • Confirm is disabled when no target selected
- *     • Back button returns to Step 2
- *     • Loading state disables Back and shows "Asking…"
+ * Step 3 — Opponent selection
+ * • Shows valid opponents (other team, cardCount > 0)
+ * • Excludes teammates
+ * • Excludes opponents with 0 cards
+ * • Auto-selects when only one valid opponent exists
+ * • Confirm fires onConfirm(targetPlayerId, cardId)
+ * • Confirm is disabled when no target selected
+ * • Back button returns to Step 2
+ * • Loading state disables Back and shows "Asking…"
  *
- *   Entry via initialCard
- *     • When initialCard is passed, wizard opens at Step 2
- *     • Card is pre-selected and opponent list is one step ahead
- *     • Back from Step 2 goes to Step 1 (half-suit pre-highlighted)
+ * Entry via initialCard
+ * • When initialCard is passed, wizard opens at Step 2
+ * • Card is pre-selected and opponent list is one step ahead
+ * • Back from Step 2 goes to Step 1 (half-suit pre-highlighted)
  *
- *   Visibility gate
- *     • Wizard renders a dialog accessible to the caller via role="dialog"
- *     • The wizard is only shown by the game page when isMyTurn is true
- *       (this component itself contains no isMyTurn logic — gating tested
- *        indirectly by verifying the dialog role is present when rendered)
+ * Visibility gate
+ * • Wizard renders a dialog accessible to the caller via role="dialog"
+ * • The wizard is only shown by the game page when isMyTurn is true
+ * (this component itself contains no isMyTurn logic — gating tested
+ * indirectly by verifying the dialog role is present when rendered)
  */
 
 import React from 'react';

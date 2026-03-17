@@ -1,31 +1,31 @@
 'use strict';
 
 /**
- * Tests for the 'reassign-team' WebSocket event handler (Sub-AC 3a).
+ * Tests for the 'reassign-team' WebSocket event handler.
  *
  * Covers:
- *   A. lobbyManager.reassignPlayerTeam unit tests
- *      — balance rule (no team exceeds playerCount/2)
- *      — player-not-found, room-not-found edge cases
- *      — no-op when team is already correct
- *      — 6-player and 8-player game variants
+ * A. lobbyManager.reassignPlayerTeam unit tests
+ * — balance rule (no team exceeds playerCount/2)
+ * — player-not-found, room-not-found edge cases
+ * — no-op when team is already correct
+ * — 6-player and 8-player game variants
  *
- *   B. handleReassignTeam integration tests (via mock WS + mock Supabase)
- *      — host-only authorization (FORBIDDEN for non-host)
- *      — room status enforcement (ROOM_NOT_WAITING for in_progress etc.)
- *      — team balance violation (TEAM_BALANCE_VIOLATION)
- *      — successful reassignment broadcasts team-reassigned to all room members
- *      — input validation errors (missing/invalid roomCode, targetPlayerId, newTeamId)
- *      — room not found (Supabase returns null)
- *      — internal DB error (Supabase throws)
- *      — handleMessage routing correctly dispatches 'reassign-team'
+ * B. handleReassignTeam integration tests (via mock WS + mock Supabase)
+ * — host-only authorization (FORBIDDEN for non-host)
+ * — room status enforcement (ROOM_NOT_WAITING for in_progress etc.)
+ * — team balance violation (TEAM_BALANCE_VIOLATION)
+ * — successful reassignment broadcasts team-reassigned to all room members
+ * — input validation errors (missing/invalid roomCode, targetPlayerId, newTeamId)
+ * — room not found (Supabase returns null)
+ * — internal DB error (Supabase throws)
+ * — handleMessage routing correctly dispatches 'reassign-team'
  *
  * Strategy:
- *   - No real DB or WebSocket ports are opened — everything is mocked.
- *   - Supabase is mocked via _setSupabaseClient (same pattern as rooms.test.js).
- *   - lobbyManager state is reset via _clearRooms() before each test.
- *   - lobbyStore (for broadcastToRoom) is reset via _clearAll() before each test.
- *   - handleReassignTeam is imported directly and called with fabricated args.
+ * - No real DB or WebSocket ports are opened — everything is mocked.
+ * - Supabase is mocked via _setSupabaseClient (same pattern as rooms.test.js).
+ * - lobbyManager state is reset via _clearRooms() before each test.
+ * - lobbyStore (for broadcastToRoom) is reset via _clearAll() before each test.
+ * - handleReassignTeam is imported directly and called with fabricated args.
  */
 
 const { WebSocket } = require('ws');
@@ -359,8 +359,8 @@ describe('handleReassignTeam', () => {
 
   /**
    * Set up a 6-player partial lobby:
-   *   - lobbyStore: host + 2 players (with mock WebSocket connections)
-   *   - lobbyManager: 3 seats (host=T1, player1=T2, player2=T1)
+   * - lobbyStore: host + 2 players (with mock WebSocket connections)
+   * - lobbyManager: 3 seats (host=T1, player1=T2, player2=T1)
    * Returns mock WS objects keyed by playerId.
    */
   function setupFullTestLobby() {

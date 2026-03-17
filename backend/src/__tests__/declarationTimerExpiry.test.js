@@ -8,35 +8,35 @@
  * declaration (in the DeclareModal) and their card assignment is incomplete
  * (fewer than all 6 cards assigned), the server treats the attempt as a
  * failed declaration:
- *   - The opposing team is unconditionally awarded the point.
- *   - All 6 half-suit cards are removed from play.
- *   - `declaration_result` is broadcast with `correct: false, timedOut: true`.
+ * - The opposing team is unconditionally awarded the point.
+ * - All 6 half-suit cards are removed from play.
+ * - `declaration_result` is broadcast with `correct: false, timedOut: true`.
  *
  * A DISCONNECTED player (in the reconnect window) falls through to the bot-
  * completion path instead (handled by the disconnect-midgame AC).
  *
  * Coverage:
  *
- *   applyForcedFailedDeclaration (gameEngine):
- *     1.  Awards point to the opposing team
- *     2.  Removes all 6 half-suit cards from every hand
- *     3.  Marks the half-suit as declared (winningTeam = opponents)
- *     4.  Sets a descriptive lastMove mentioning "ran out of time"
- *     5.  Records a move-history entry with timedOut: true
- *     6.  Updates the tiebreaker when the tiebreaker half-suit is declared
- *     7.  Advances the turn (declarer keeps turn if they still have cards)
- *     8.  Ends the game when the last half-suit is declared via forced failure
+ * applyForcedFailedDeclaration (gameEngine):
+ * 1. Awards point to the opposing team
+ * 2. Removes all 6 half-suit cards from every hand
+ * 3. Marks the half-suit as declared (winningTeam = opponents)
+ * 4. Sets a descriptive lastMove mentioning "ran out of time"
+ * 5. Records a move-history entry with timedOut: true
+ * 6. Updates the tiebreaker when the tiebreaker half-suit is declared
+ * 7. Advances the turn (declarer keeps turn if they still have cards)
+ * 8. Ends the game when the last half-suit is declared via forced failure
  *
- *   executeTimedOutTurn integration (connected player):
- *     9.  Timer expiry with NO assignment (only half-suit selected) → forced failure
- *    10.  Timer expiry with PARTIAL assignment (< 6 cards) → forced failure
- *    11.  Timer expiry with COMPLETE assignment (6 cards) → normal bot declaration
- *    12.  Forced failure broadcasts declaration_result with correct:false, timedOut:true
- *    13.  Forced failure broadcasts bot_takeover BEFORE declaration_result
- *    14.  Partial state and declaration selection are cleared after forced failure
+ * executeTimedOutTurn integration (connected player):
+ * 9. Timer expiry with NO assignment (only half-suit selected) → forced failure
+ * 10. Timer expiry with PARTIAL assignment (< 6 cards) → forced failure
+ * 11. Timer expiry with COMPLETE assignment (6 cards) → normal bot declaration
+ * 12. Forced failure broadcasts declaration_result with correct:false, timedOut:true
+ * 13. Forced failure broadcasts bot_takeover BEFORE declaration_result
+ * 14. Partial state and declaration selection are cleared after forced failure
  *
- *   executeTimedOutTurn integration (disconnected player):
- *    15.  Disconnected player with incomplete declaration → bot completion (not forced failure)
+ * executeTimedOutTurn integration (disconnected player):
+ * 15. Disconnected player with incomplete declaration → bot completion (not forced failure)
  */
 
 // ---------------------------------------------------------------------------
@@ -79,10 +79,10 @@ jest.mock('../game/rematchStore', () => ({
 /**
  * Builds a 6-player game state (remove_7s variant).
  *
- *   Team 1: p1, p2, p3
- *   Team 2: p4, p5, p6
+ * Team 1: p1, p2, p3
+ * Team 2: p4, p5, p6
  *
- * low_s  = 1_s, 2_s, 3_s, 4_s, 5_s, 6_s
+ * low_s = 1_s, 2_s, 3_s, 4_s, 5_s, 6_s
  * high_s = 8_s, 9_s, 10_s, 11_s, 12_s, 13_s
  */
 function buildGame({ handOverrides = {}, currentTurnPlayerId = 'p1', declaredSuits } = {}) {
@@ -359,7 +359,7 @@ describe('executeTimedOutTurn — declaration timer expiry (AC 24)', () => {
 
     await executeTimedOutTurn('DECLTO', 'p1');
 
-    // Sub-AC 3 of AC 41: bot takeover starts a 30-second countdown before submitting.
+    // bot takeover starts a 30-second countdown before submitting.
     // Advance fake timers to trigger the auto-submit.
     await jest.advanceTimersByTimeAsync(BOT_DECLARATION_TAKEOVER_MS);
 
@@ -467,7 +467,7 @@ describe('executeTimedOutTurn — declaration timer expiry (AC 24)', () => {
 
     await executeTimedOutTurn('DECLTO', 'p1');
 
-    // Sub-AC 3 of AC 41: bot takeover starts a 30-second countdown before submitting.
+    // bot takeover starts a 30-second countdown before submitting.
     // Advance fake timers to trigger the auto-submit.
     await jest.advanceTimersByTimeAsync(BOT_DECLARATION_TAKEOVER_MS);
 

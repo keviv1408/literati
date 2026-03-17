@@ -4,37 +4,37 @@
  * DeclareModal — lets the current-turn player declare a half-suit.
  *
  * Flow:
- *   1. Player clicks "Declare" button
- *   2. Selects which half-suit to declare (only undeclared ones shown)
- *   3. For each card in the half-suit, assigns it to a teammate (or themselves)
- *   4. Confirms — sends declare_suit message
+ * 1. Player clicks "Declare" button
+ * 2. Selects which half-suit to declare (only undeclared ones shown)
+ * 3. For each card in the half-suit, assigns it to a teammate (or themselves)
+ * 4. Confirms — sends declare_suit message
  *
  * Cards known by the player (in their hand) are pre-filled.
  * Unknown cards can be assigned to any teammate by the player.
  *
- * ### Seat-targeting interaction (Sub-AC 22c):
- *   In Step 2 (card assignment), the player can also assign cards via a two-tap
- *   seat-targeting flow instead of the dropdown:
+ * ### Seat-targeting interaction:
+ * In Step 2 (card assignment), the player can also assign cards via a two-tap
+ * seat-targeting flow instead of the dropdown:
  *
- *   1. Tap a card row to select it (the row highlights and a seat strip appears
- *      at the top of the assignment list).
- *   2. Tap a teammate chip in the seat strip to complete the assignment.
- *   3. The card row assignment updates, the selection clears, and the seat strip
- *      dismisses until the next card is tapped.
+ * 1. Tap a card row to select it (the row highlights and a seat strip appears
+ * at the top of the assignment list).
+ * 2. Tap a teammate chip in the seat strip to complete the assignment.
+ * 3. The card row assignment updates, the selection clears, and the seat strip
+ * dismisses until the next card is tapped.
  *
- *   Tapping the same selected card again deselects it.
- *   Changing the suit (Back → Step 1) also clears the selection.
- *   The dropdown is still present alongside the seat-targeting approach.
+ * Tapping the same selected card again deselects it.
+ * Changing the suit (Back → Step 1) also clears the selection.
+ * The dropdown is still present alongside the seat-targeting approach.
  *
- * Real-time broadcast (Sub-AC 21b):
- *   While in Step 2 (card assignment), the modal calls `onDeclareProgress`
- *   on every assignment change so the parent can forward it to the server
- *   as a `declare_progress` WebSocket message.  All other connected clients
- *   (players + spectators) then receive a live "X is declaring Low Spades
- *   (3/6 assigned)" progress banner via the server broadcast.
+ * Real-time broadcast:
+ * While in Step 2 (card assignment), the modal calls `onDeclareProgress`
+ * on every assignment change so the parent can forward it to the server
+ * as a `declare_progress` WebSocket message. All other connected clients
+ * (players + spectators) then receive a live "X is declaring Low Spades
+ * (3/6 assigned)" progress banner via the server broadcast.
  *
- *   `onDeclareProgress(null, {})` is called when the player goes back to
- *   Step 1 or cancels the modal, signalling a cancellation to observers.
+ * `onDeclareProgress(null, {})` is called when the player goes back to
+ * Step 1 or cancels the modal, signalling a cancellation to observers.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -62,7 +62,7 @@ interface DeclareModalProps {
   onCancel: () => void;
   isLoading?: boolean;
   /**
-   * Active server-side turn timer payload.  When provided, the modal renders
+   * Active server-side turn timer payload. When provided, the modal renders
    * a `TurnTimerStrip` so the countdown remains visible even though the modal
    * backdrop covers the full-width `TurnTimerBar` in the game page layout.
    * Ensures the 30-second timer is continuous across both declaration steps
@@ -70,25 +70,25 @@ interface DeclareModalProps {
    */
   turnTimer?: TurnTimerPayload | null;
   /**
-   * Called each time the in-progress card assignment changes (Sub-AC 21b).
+   * Called each time the in-progress card assignment changes.
    *
    * Pass to the parent so it can forward the progress to the server as a
    * `declare_progress` WebSocket message, which is then broadcast to all
    * OTHER connected clients (players + spectators) for a live progress banner.
    *
    * Signature:
-   *   `onDeclareProgress(halfSuitId, assignment)`
-   *     - halfSuitId: the half-suit being declared
-   *     - assignment: partial { cardId → playerId } map as assembled so far
+   * `onDeclareProgress(halfSuitId, assignment)`
+   * - halfSuitId: the half-suit being declared
+   * - assignment: partial { cardId → playerId } map as assembled so far
    *
-   *   `onDeclareProgress(null, {})` — declarant cancelled (back / modal close)
+   * `onDeclareProgress(null, {})` — declarant cancelled (back / modal close)
    *
    * If omitted, progress events are silently skipped (backward-compatible).
    */
   onDeclareProgress?: (halfSuitId: HalfSuitId | null, assignment: Record<CardId, string>) => void;
   /**
    * Called when the player picks a half-suit in Step 1 (suit picker phase)
-   * or clears their selection (Sub-AC 21a — private suit selection).
+   * or clears their selection.
    *
    * The parent forwards this as a `declare_selecting` WebSocket message.
    * The server stores the suit PRIVATELY — it is NEVER broadcast to other
@@ -102,7 +102,7 @@ interface DeclareModalProps {
    */
   onSuitSelect?: (halfSuitId: HalfSuitId | null) => void;
   /**
-   * Active 60-second declaration phase timer payload (Sub-AC 23a).
+   * Active 60-second declaration phase timer payload.
    *
    * When provided, `DeclarationTimerBar` is shown in Step 2 (card-assignment
    * form) displaying the 60-second countdown visible only to the declarant.
@@ -141,21 +141,21 @@ export default function DeclareModal({
   const [selectedSuit, setSelectedSuit] = useState<HalfSuitId | null>(null);
   const [assignment, setAssignment]     = useState<Record<CardId, string>>({});
   /**
-   * Card selected for seat-targeting assignment (Sub-AC 22c).
+   * Card selected for seat-targeting assignment.
    *
    * When non-null, a seat strip is shown at the top of the card assignment
-   * section with one chip per teammate.  Tapping a chip assigns this card to
-   * that teammate and clears the selection.  Tapping the same card row again
-   * deselects it.  Reset to null whenever the selected suit changes.
+   * section with one chip per teammate. Tapping a chip assigns this card to
+   * that teammate and clears the selection. Tapping the same card row again
+   * deselects it. Reset to null whenever the selected suit changes.
    */
   const [selectedCardForAssign, setSelectedCardForAssign] = useState<CardId | null>(null);
   /**
-   * Sub-AC 23b — Assignment locking.
+   * Assignment locking.
    *
    * Tracks which non-hand card assignments have been explicitly confirmed by
-   * the player.  Once a card is locked its row is visually distinguished
+   * the player. Once a card is locked its row is visually distinguished
    * (amber border, lock badge, disabled controls) and the assignment cannot
-   * be revised.  Cards in the player's own hand are always implicitly locked.
+   * be revised. Cards in the player's own hand are always implicitly locked.
    *
    * The set is reset whenever the player navigates back to Step 1 (suit
    * selection) or cancels the modal.
@@ -207,22 +207,22 @@ export default function DeclareModal({
   }, []);
 
   /**
-   * Sub-AC 22c — card row tap: select this card for seat-targeting.
+   * card row tap: select this card for seat-targeting.
    *
    * Tapping a non-mine card row toggles `selectedCardForAssign`:
-   *   • If the card is already selected → deselect (clear).
-   *   • If another card is selected → switch to this card.
-   *   • If nothing is selected → select this card.
+   * • If the card is already selected → deselect (clear).
+   * • If another card is selected → switch to this card.
+   * • If nothing is selected → select this card.
    */
   const handleCardTap = useCallback((cardId: CardId) => {
     setSelectedCardForAssign((prev) => (prev === cardId ? null : cardId));
   }, []);
 
   /**
-   * Sub-AC 22c — teammate seat chip tap: complete the assignment.
+   * teammate seat chip tap: complete the assignment.
    *
    * Assigns `selectedCardForAssign` to `playerId`, then clears the selection
-   * so the seat strip dismisses.  No-op if there is no card currently selected.
+   * so the seat strip dismisses. No-op if there is no card currently selected.
    */
   const handleSeatTargetClick = useCallback((playerId: string) => {
     if (!selectedCardForAssign) return;
@@ -231,10 +231,10 @@ export default function DeclareModal({
   }, [selectedCardForAssign, setCardAssignee]);
 
   /**
-   * Sub-AC 23b — Confirm (lock) a card assignment.
+   * Confirm (lock) a card assignment.
    *
    * Adds `cardId` to `lockedAssignments` so the row is visually distinguished
-   * and its controls are disabled.  Only non-hand cards can be explicitly
+   * and its controls are disabled. Only non-hand cards can be explicitly
    * locked this way; hand cards are always implicitly locked.
    *
    * Clears any active seat-targeting selection for that card so the strip
@@ -251,7 +251,7 @@ export default function DeclareModal({
   }, []);
 
   function handleBack() {
-    // Clear private server-side suit selection (Sub-AC 21a)
+    // Clear private server-side suit selection
     onSuitSelect?.(null);
     // Broadcast cancellation before resetting state so observers clear their banners
     onDeclareProgress?.(null, {});
@@ -261,7 +261,7 @@ export default function DeclareModal({
   }
 
   function handleCancel() {
-    // Clear private server-side suit selection if we were in Step 1 or Step 2 (Sub-AC 21a)
+    // Clear private server-side suit selection if we were in Step 1 or Step 2
     if (selectedSuit) {
       onSuitSelect?.(null);
       onDeclareProgress?.(null, {});
@@ -283,15 +283,15 @@ export default function DeclareModal({
   const isComplete = suitCards.every((c) => assignment[c]);
 
   /**
-   * Sub-AC 23d — Submitted state.
+   * Submitted state.
    *
    * True while the declaration is in-flight to the server (isLoading=true).
    * When true:
-   *   • The submit ("Declare!") button shows "Declaring…" and is disabled.
-   *   • All assignment dropdowns become read-only (disabled).
-   *   • Card-row tap-to-target interactions are suppressed.
-   *   • Seat-targeting chip buttons are disabled.
-   *   • The dialog exposes aria-busy=true for assistive technologies.
+   * • The submit ("Declare!") button shows "Declaring…" and is disabled.
+   * • All assignment dropdowns become read-only (disabled).
+   * • Card-row tap-to-target interactions are suppressed.
+   * • Seat-targeting chip buttons are disabled.
+   * • The dialog exposes aria-busy=true for assistive technologies.
    *
    * The parent page closes this modal once the server responds
    * (declaration_result) or the turn timer fires, so there is no need
@@ -346,7 +346,7 @@ export default function DeclareModal({
                       key={suitId}
                       onClick={() => {
                         if (noCards) return;
-                        // Notify server of the private suit selection (Sub-AC 21a)
+                        // Notify server of the private suit selection
                         onSuitSelect?.(suitId);
                         setSelectedSuit(suitId);
                       }}
@@ -398,7 +398,7 @@ export default function DeclareModal({
                 <h3 className="font-semibold text-white">{halfSuitLabel(selectedSuit)}</h3>
               </div>
 
-              {/* ── Declaration phase timer (Sub-AC 23a) ─────────────────────
+              {/* ── Declaration phase timer ─────────────────────
                   60-second countdown visible only to the declarant.  Replaces
                   the generic TurnTimerStrip once the server has started the
                   declaration-phase extension.  Auto-submits on expiry via
@@ -414,7 +414,7 @@ export default function DeclareModal({
                 />
               )}
 
-              {/* ── Seat-targeting strip (Sub-AC 22c) ────────────────────────
+              {/* ── Seat-targeting strip ────────────────────────
                   Appears when the player taps a card row to enter targeting mode.
                   Shows one chip per teammate; tapping a chip completes the
                   assignment and dismisses the strip.
@@ -483,9 +483,9 @@ export default function DeclareModal({
                   const isMine   = myHand.includes(cardId);
                   const assignee = assignment[cardId];
                   const isSelectedForTargeting = selectedCardForAssign === cardId;
-                  // Sub-AC 23b: is this non-hand card explicitly confirmed/locked?
+                  // is this non-hand card explicitly confirmed/locked?
                   const isLocked = !isMine && lockedAssignments.has(cardId);
-                  // Sub-AC 23b/23c: resolved assignee details (locked badge + revision badge)
+                  // /23c: resolved assignee details (locked badge + revision badge)
                   const assigneePlayer = assignee
                     ? teammates.find((p) => p.playerId === assignee) ?? null
                     : null;
@@ -496,7 +496,7 @@ export default function DeclareModal({
                       key={cardId}
                       className={[
                         'flex items-center gap-3 rounded-xl transition-all duration-100',
-                        // Sub-AC 23b: confirmed/locked rows use teal border to
+                        // confirmed/locked rows use teal border to
                         // visually distinguish them from still-editable rows
                         isLocked
                           ? 'bg-teal-900/20 border border-teal-700/50 rounded-lg p-1 -mx-1'
@@ -507,8 +507,8 @@ export default function DeclareModal({
                           ? 'cursor-pointer hover:bg-slate-700/30 rounded-lg p-1 -mx-1'
                           : '',
                       ].join(' ')}
-                      // Tap card row to enter seat-targeting mode (Sub-AC 22c).
-                      // Suppressed for locked rows (Sub-AC 23b) and in-flight state (Sub-AC 23d).
+                      // Tap card row to enter seat-targeting mode.
+                      // Suppressed for locked rows and in-flight state.
                       onClick={!isMine && !isLocked && !isSubmitted ? () => handleCardTap(cardId) : undefined}
                       role={!isMine && !isLocked ? 'button' : undefined}
                       tabIndex={!isMine && !isLocked && !isSubmitted ? 0 : undefined}
@@ -531,7 +531,7 @@ export default function DeclareModal({
                       data-selected={isSelectedForTargeting ? 'true' : undefined}
                       data-locked={isLocked ? 'true' : undefined}
                     >
-                      {/* Card preview — Sub-AC 22b: selected state lifts the
+                      {/* Card preview — selected state lifts the
                           card with an emerald ring to clearly indicate which
                           card is pending assignment.  Locked (in-hand or
                           confirmed) cards are never shown in the selected state. */}
@@ -546,12 +546,12 @@ export default function DeclareModal({
                       {/* Assignment selector */}
                       <div className="flex-1">
                         {isMine ? (
-                          /* Player's own hand — always locked (implicit, Sub-AC 22) */
+                          /* Player's own hand — always locked (implicit, ) */
                           <div className="flex items-center gap-2 px-3 py-2 bg-emerald-900/30 border border-emerald-700/50 rounded-lg">
                             <span className="text-xs text-emerald-400">In your hand ✓</span>
                           </div>
                         ) : isLocked ? (
-                          /* Sub-AC 23b: explicitly confirmed/locked — visually
+                          /* explicitly confirmed/locked — visually
                              distinguished with teal colour and a lock badge.
                              No dropdown or seat-targeting is rendered, so the
                              assignment cannot be revised. */
@@ -568,10 +568,10 @@ export default function DeclareModal({
                             </span>
                           </div>
                         ) : (
-                          /* Unconfirmed — editable: revision badge (Sub-AC 23c)
-                             + dropdown (Sub-AC 22c) + confirm (Sub-AC 23b) */
+                          /* Unconfirmed — editable: revision badge
+                             + dropdown  + confirm  */
                           <>
-                          {/* ── Sub-AC 23c: Revision badge ───────────────────
+                          {/* ── Revision badge ───────────────────
                               Displayed when a teammate is currently selected for
                               this card.  Shows the assignee's avatar + name and
                               a subtle "✎ change" hint.
@@ -646,7 +646,7 @@ export default function DeclareModal({
                                 })}
                               </select>
                             </div>
-                            {/* Sub-AC 23b: Confirm (lock) button.
+                            {/* Confirm (lock) button.
                                 Shown when a teammate is selected; hidden while
                                 declaration is in-flight (isSubmitted).
                                 Clicking permanently locks this card's assignment

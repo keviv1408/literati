@@ -2,10 +2,10 @@
  * Game type definitions for the Literati Literature card game.
  *
  * Cards are represented as "{rank}_{suit}" strings:
- *   rank: 1=Ace, 2-9, 10, 11=Jack, 12=Queen, 13=King
- *   suit: s=Spades, h=Hearts, d=Diamonds, c=Clubs
+ * rank: 1=Ace, 2-9, 10, 11=Jack, 12=Queen, 13=King
+ * suit: s=Spades, h=Hearts, d=Diamonds, c=Clubs
  *
- * Half-suit IDs: "{low|high}_{s|h|d|c}"  e.g. "low_s", "high_d"
+ * Half-suit IDs: "{low|high}_{s|h|d|c}" e.g. "low_s", "high_d"
  */
 
 export type CardSuit = 's' | 'h' | 'd' | 'c';
@@ -33,7 +33,7 @@ export interface GamePlayer {
   seatIndex: number;
   cardCount: number;
   /**
-   * Per-half-suit card count map.  Keys are HalfSuitId strings (e.g. "low_s").
+   * Per-half-suit card count map. Keys are HalfSuitId strings (e.g. "low_s").
    * Populated by the server in every game_players / game_init broadcast.
    * Used by CardRequestWizard to grey out opponents with 0 cards in the
    * currently selected half-suit so the player can't ask them.
@@ -44,7 +44,7 @@ export interface GamePlayer {
   isGuest: boolean;
   isCurrentTurn: boolean;
   /**
-   * Sub-AC 27b: true when this player's hand was emptied by a declaration
+   * true when this player's hand was emptied by a declaration
    * and they can no longer ask, be asked, or declare.
    */
   isEliminated?: boolean;
@@ -126,17 +126,17 @@ export interface DeclarationResultPayload {
   assignment: Record<CardId, string>; // cardId → playerId
   lastMove: string;
   /**
-   * Sub-AC 28a: IDs of all non-eliminated players who still have at least one
+   * IDs of all non-eliminated players who still have at least one
    * card remaining after the declaration, ordered by seatIndex.
    *
    * Includes the declarant if they still hold cards after the 6 half-suit
-   * cards are removed.  Clients use this to update their game state immediately
+   * cards are removed. Clients use this to update their game state immediately
    * on receiving the message — before the subsequent `game_players` broadcast
    * arrives — so the table layout can reflect who is still an active participant.
    *
    * Always present for both correct and incorrect declarations (including
-   * forced-failed timer-expiry declarations).  Optional here for backward
-   * compatibility with legacy client snapshots that pre-date Sub-AC 28a.
+   * forced-failed timer-expiry declarations). Optional here for backward
+   * compatibility with legacy client snapshots that pre-date
    */
   eligibleNextTurnPlayerIds?: string[];
 }
@@ -235,7 +235,7 @@ export interface RematchPreviousTeamEntry {
 /**
  * Broadcast when a majority of players (including bots) voted yes.
  *
- * Includes cloned settings from the finished game (Sub-AC 45b) so the
+ * Includes cloned settings from the finished game so the
  * lobby page can immediately show the correct teams, variant, and settings
  * without waiting for players to reconnect.
  */
@@ -252,7 +252,7 @@ export interface RematchStartPayload {
 
 /**
  * Broadcast when majority yes is reached and a new game has been created
- * server-side with the same team assignments and seat order (Sub-AC 46c).
+ * server-side with the same team assignments and seat order.
  *
  * After receiving this event clients should clear any post-game UI state.
  * The server immediately follows this event with personalised `game_init`
@@ -272,7 +272,7 @@ export interface RematchDeclinedPayload {
 
 /**
  * Broadcast to all clients when the room is permanently dissolved after a
- * declined rematch vote.  Clients should stop trying to reconnect and show
+ * declined rematch vote. Clients should stop trying to reconnect and show
  * a dissolution notice with a "Back to Home" call-to-action.
  *
  * Emitted shortly after `rematch_declined` so that clients have a moment to
@@ -289,12 +289,12 @@ export interface RoomDissolvedPayload {
  * filling out the card-assignment form (Step 2 of the DeclareModal).
  *
  * Sent for every change in the in-progress assignment so all observers
- * see live updates.  halfSuitId === null signals that the declaration
+ * see live updates. halfSuitId === null signals that the declaration
  * was cancelled (declarant went back or closed the modal) — clients
  * should clear the progress banner when they receive this.
  *
  * The server broadcasts this message as fire-and-forget: no state is
- * persisted.  Clients that connect mid-declaration will not see earlier
+ * persisted. Clients that connect mid-declaration will not see earlier
  * progress, but will receive the next progress event when the declarant
  * makes the next assignment change.
  */
@@ -335,12 +335,12 @@ export interface BotTakeoverPayload {
    * null → player had not reported any selection (wizard not opened).
    *
    * When present, shape mirrors the partialSelectionStore contract:
-   *   Ask step 2 entered (half-suit chosen):
-   *     { flow: 'ask', halfSuitId: string }
-   *   Ask step 3 entered (card also chosen):
-   *     { flow: 'ask', halfSuitId: string, cardId: string }
-   *   Declare flow:
-   *     { flow: 'declare', halfSuitId: string, assignment?: Record<string, string> }
+   * Ask step 2 entered (half-suit chosen):
+   * { flow: 'ask', halfSuitId: string }
+   * Ask step 3 entered (card also chosen):
+   * { flow: 'ask', halfSuitId: string, cardId: string }
+   * Declare flow:
+   * { flow: 'declare', halfSuitId: string, assignment?: Record<string, string> }
    */
   partialState: {
     flow: 'ask' | 'declare';
@@ -350,14 +350,14 @@ export interface BotTakeoverPayload {
   } | null;
 }
 
-// ── Reconnect window events (Sub-AC 3 of AC 39) ──────────────────────────────
+// ── Reconnect window events ──────────────────────────────
 
 /**
  * Broadcast to all connected clients (except the disconnected player, who is
  * no longer connected) when a human player disconnects during an active game.
  *
  * The seat is temporarily filled by a bot for the duration of the reconnect
- * window.  Clients should show a "disconnected — reconnecting…" badge on the
+ * window. Clients should show a "disconnected — reconnecting…" badge on the
  * affected seat with a countdown to `expiresAt`.
  */
 export interface PlayerDisconnectedPayload {
@@ -387,7 +387,7 @@ export interface PlayerReconnectedPayload {
 
 /**
  * Broadcast to all connected clients when the 60-second reconnect window
- * expires without the player returning.  The bot that replaced them takes
+ * expires without the player returning. The bot that replaced them takes
  * over the seat permanently for the rest of the game.
  */
 export interface ReconnectExpiredPayload {
@@ -396,11 +396,11 @@ export interface ReconnectExpiredPayload {
   playerId: string;
 }
 
-// ── Player elimination (Sub-AC 27b) ──────────────────────────────────────────
+// ── Player elimination ──────────────────────────────────────────
 
 /**
  * Broadcast to all connected clients when a player's hand is emptied by a
- * declaration.  Also included in the updated `game_players` broadcast (via
+ * declaration. Also included in the updated `game_players` broadcast (via
  * the `isEliminated` flag), but this explicit event lets clients show a toast
  * or animation immediately on elimination.
  */
@@ -415,7 +415,7 @@ export interface PlayerEliminatedPayload {
 }
 
 /**
- * Sent ONLY to the eliminated human player.  Prompts them to choose which
+ * Sent ONLY to the eliminated human player. Prompts them to choose which
  * teammate should receive future turns on their behalf.
  *
  * The game continues regardless of whether/when the player responds.

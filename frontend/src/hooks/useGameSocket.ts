@@ -4,14 +4,14 @@
  * useGameSocket — manages the WebSocket connection to /ws/game/<ROOMCODE>.
  *
  * Provides:
- *   - myHand: CardId[]  (personalized, from game_init / hand_update)
- *   - myPlayerId: string | null
- *   - players: GamePlayer[]
- *   - gameState: PublicGameState | null
- *   - wsStatus: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
- *   - sendAsk(targetId, cardId): void
- *   - sendDeclare(halfSuitId, assignment): void
- *   - lastAskResult / lastDeclareResult: for animations
+ * - myHand: CardId[] (personalized, from game_init / hand_update)
+ * - myPlayerId: string | null
+ * - players: GamePlayer[]
+ * - gameState: PublicGameState | null
+ * - wsStatus: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
+ * - sendAsk(targetId, cardId): void
+ * - sendDeclare(halfSuitId, assignment): void
+ * - lastAskResult / lastDeclareResult: for animations
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -58,7 +58,7 @@ interface UseGameSocketOptions {
   spectatorToken?: string | null;
   onGameOver?: (payload: GameOverPayload) => void;
   onRematchStart?: (payload: RematchStartPayload) => void;
-  /** Sub-AC 46c: called when a new game is spun up in-place after a rematch vote. */
+  /** called when a new game is spun up in-place after a rematch vote. */
   onRematchStarting?: (payload: RematchStartingPayload) => void;
 }
 
@@ -70,7 +70,7 @@ export interface TurnTimerPayload {
 }
 
 /**
- * Payload for the declaration-phase timer (Sub-AC 23a).
+ * Payload for the declaration-phase timer.
  *
  * Sent by the server directly to the declaring player only (not broadcast to
  * the room) when they enter Step 2 of the DeclareModal card-assignment form.
@@ -88,11 +88,11 @@ export interface DeclarationTimerPayload {
 }
 
 /**
- * Post-declaration turn-selection timer (AC 28 / Sub-AC 28c).
+ * Post-declaration turn-selection timer (AC 28).
  *
  * Broadcast to ALL clients after a human player makes a CORRECT declaration.
  * The declaring team has 30 seconds to choose which eligible teammate takes
- * the next turn.  On expiry the server auto-selects a random eligible player
+ * the next turn. On expiry the server auto-selects a random eligible player
  * and broadcasts `post_declaration_turn_selected`.
  */
 export interface PostDeclarationTimerPayload {
@@ -136,7 +136,7 @@ export interface UseGameSocketReturn {
   declarationFailed: DeclarationFailedPayload | null;
   turnTimer: TurnTimerPayload | null;
   /**
-   * Active declaration-phase timer for the local player (Sub-AC 23a).
+   * Active declaration-phase timer for the local player.
    * Non-null when the server has started a 60-second declaration phase timer
    * for the current player (they entered Step 2 of DeclareModal).
    * Cleared when the turn ends (ask_result / declaration_result / bot_takeover).
@@ -147,7 +147,7 @@ export interface UseGameSocketReturn {
   /**
    * Non-null once the server has broadcast `room_dissolved`.
    * After dissolution the room is permanently gone — clients should show a
-   * notice and offer a "Back to Home" link.  Emitted shortly after
+   * notice and offer a "Back to Home" link. Emitted shortly after
    * `rematch_declined` so the timeline is: game_over → rematch vote →
    * rematch_declined → room_dissolved.
    */
@@ -164,11 +164,11 @@ export interface UseGameSocketReturn {
    * is waiting for them to reconnect within the 60-second window.
    *
    * Value shape: { expiresAt: number, reconnectWindowMs: number }
-   *   - expiresAt: epoch ms timestamp when the window closes
-   *   - reconnectWindowMs: total window duration (always 60 000)
+   * - expiresAt: epoch ms timestamp when the window closes
+   * - reconnectWindowMs: total window duration (always 60 000)
    *
    * Populated on `player_disconnected`, cleared on `player_reconnected` or
-   * `reconnect_expired`.  Components use this to render a "disconnected" badge
+   * `reconnect_expired`. Components use this to render a "disconnected" badge
    * with a countdown on the affected seat.
    */
   reconnectWindows: Record<string, { expiresAt: number; reconnectWindowMs: number }>;
@@ -176,7 +176,7 @@ export interface UseGameSocketReturn {
    * Live card-assignment progress from another player's in-progress declaration.
    * Non-null while someone else is filling out the DeclareModal Step 2 form.
    * Cleared automatically when declaration_result or a cancel (halfSuitId: null)
-   * arrives.  Components render a live "X is declaring Low Spades (3/6)" banner.
+   * arrives. Components render a live "X is declaring Low Spades (3/6)" banner.
    */
   declareProgress: DeclareProgressPayload | null;
   sendAsk: (targetPlayerId: string, cardId: CardId) => void;
@@ -193,14 +193,14 @@ export interface UseGameSocketReturn {
   sendDeclareProgress: (halfSuitId: HalfSuitId | null, assignment: Record<CardId, string>) => void;
   sendRematchVote: (vote: boolean) => void;
   /**
-   * Sub-AC 45a: Host-only rematch initiation for private rooms.
+   * Host-only rematch initiation for private rooms.
    *
    * Sends `rematch_initiate` to the server with the current room code.
    * Only visible and callable for the registered host of a non-matchmaking room.
    * The server validates host identity via DB lookup and immediately broadcasts
    * `rematch_start` to all connected clients without requiring a majority vote.
    *
-   * @param roomCode  The current room code (6-char upper-case).
+   * @param roomCode The current room code (6-char upper-case).
    */
   sendRematchInitiate: (roomCode: string) => void;
   /**
@@ -209,12 +209,12 @@ export interface UseGameSocketReturn {
    * complete the player's action if the turn timer expires.
    *
    * For the ask flow, call after:
-   *   • Step 1 completion (half-suit chosen): { flow: 'ask', halfSuitId }
-   *   • Step 2 completion (card chosen):      { flow: 'ask', halfSuitId, cardId }
+   * • Step 1 completion (half-suit chosen): { flow: 'ask', halfSuitId }
+   * • Step 2 completion (card chosen): { flow: 'ask', halfSuitId, cardId }
    *
    * For the declare flow, call after:
-   *   • Suit selection (and on each assignment change):
-   *     { flow: 'declare', halfSuitId, assignment }
+   * • Suit selection (and on each assignment change):
+   * { flow: 'declare', halfSuitId, assignment }
    *
    * Only valid for the active player — the server silently ignores messages
    * from non-active players.
@@ -222,7 +222,7 @@ export interface UseGameSocketReturn {
   sendPartialSelection: (partial: PartialSelectionPayload) => void;
   /**
    * Notify the server of the half-suit chosen in Step 1 of the DeclareModal
-   * suit picker (private — Sub-AC 21a).  Fire-and-forget.
+   * suit picker (private). Fire-and-forget.
    *
    * The server stores this privately for bot-takeover purposes only.
    * It is NEVER broadcast to other players.
@@ -232,16 +232,16 @@ export interface UseGameSocketReturn {
   sendDeclareSelecting: (halfSuitId?: string) => void;
   /**
    * Notify the server that the local player has dismissed the declaration
-   * result overlay and is ready to continue to the next turn (Sub-AC 26c).
+   * result overlay and is ready to continue to the next turn.
    *
-   * Fire-and-forget — the server does not respond.  The turn has already
+   * Fire-and-forget — the server does not respond. The turn has already
    * advanced on the server when `declaration_result` was broadcast; this
    * message is a lightweight acknowledgement that allows the client UI to
    * cleanly transition away from the overlay and render the new turn state.
    */
   sendGameAdvance: () => void;
   /**
-   * Sub-AC 27b: Non-null when this player has just been eliminated (hand
+   * Non-null when this player has just been eliminated (hand
    * emptied by a declaration) and the server is prompting them to choose
    * a teammate to receive future turns.
    *
@@ -249,19 +249,19 @@ export interface UseGameSocketReturn {
    */
   eliminationPrompt: ChooseTurnRecipientPromptPayload | null;
   /**
-   * Sub-AC 27b: Notify the server of which teammate this eliminated player
-   * has chosen to receive future turns.  Fire-and-forget.
+   * Notify the server of which teammate this eliminated player
+   * has chosen to receive future turns. Fire-and-forget.
    *
    * Only meaningful when `eliminationPrompt` is non-null.
    * Pass the `playerId` of the chosen teammate.
    */
   sendChooseTurnRecipient: (recipientId: string) => void;
   /**
-   * Sub-AC 28a: IDs of all non-eliminated players with at least one card
+   * IDs of all non-eliminated players with at least one card
    * remaining, as of the most recent declaration.
    *
-   * Updated on every `declaration_result` message.  The list is ordered by
-   * seatIndex (matching the server's player list order).  Empty array until
+   * Updated on every `declaration_result` message. The list is ordered by
+   * seatIndex (matching the server's player list order). Empty array until
    * the first declaration is processed.
    *
    * Components use this to immediately reflect eligibility changes in the UI
@@ -269,7 +269,7 @@ export interface UseGameSocketReturn {
    */
   eligibleNextTurnPlayerIds: string[];
   /**
-   * Sub-AC 28b: Non-null after a CORRECT declaration.
+   * Non-null after a CORRECT declaration.
    *
    * Indicates that the current turn player (the declarant or whoever
    * `_resolveValidTurn` assigned) may redirect the turn to a same-team
@@ -279,14 +279,14 @@ export interface UseGameSocketReturn {
    * cards (a client-side subset of `eligibleNextTurnPlayerIds`).
    *
    * Cleared when:
-   *   - `sendChooseNextTurn` is called (player made a choice), or
-   *   - A new `ask_result` arrives (turn was taken without choosing), or
-   *   - A new `declaration_result` arrives (next declaration).
+   * - `sendChooseNextTurn` is called (player made a choice), or
+   * - A new `ask_result` arrives (turn was taken without choosing), or
+   * - A new `declaration_result` arrives (next declaration).
    */
   postDeclarationHighlight: PostDeclarationHighlight | null;
   /**
-   * Sub-AC 28b: Redirect the current turn to a same-team teammate after a
-   * correct declaration.  Sends `choose_next_turn` to the server and
+   * Redirect the current turn to a same-team teammate after a
+   * correct declaration. Sends `choose_next_turn` to the server and
    * immediately clears `postDeclarationHighlight`.
    *
    * Only callable when `postDeclarationHighlight` is non-null and the local
@@ -296,7 +296,7 @@ export interface UseGameSocketReturn {
    */
   sendChooseNextTurn: (chosenPlayerId: string) => void;
   /**
-   * Sub-AC 28c: Non-null while the 30-second post-declaration turn-selection
+   * Non-null while the 30-second post-declaration turn-selection
    * window is active (after a human made a correct declaration).
    *
    * Cleared when `post_declaration_turn_selected` arrives (either because a
@@ -307,7 +307,7 @@ export interface UseGameSocketReturn {
    */
   postDeclarationTimer: PostDeclarationTimerPayload | null;
   /**
-   * Sub-AC 56c: True after `sendChooseNextTurn` is called and before the
+   * True after `sendChooseNextTurn` is called and before the
    * server sends `post_declaration_turn_selected` acknowledging the selection.
    *
    * While true, all Ask/Declare controls should be disabled so the declarant
@@ -315,16 +315,16 @@ export interface UseGameSocketReturn {
    * been passed to the chosen player.
    *
    * Cleared when:
-   *   - `post_declaration_turn_selected` arrives (server acked the choice), or
-   *   - `ask_result` arrives (safety reset — turn moved on), or
-   *   - `declaration_result` arrives (safety reset — new declaration happened).
+   * - `post_declaration_turn_selected` arrives (server acked the choice), or
+   * - `ask_result` arrives (safety reset — turn moved on), or
+   * - `declaration_result` arrives (safety reset — new declaration happened).
    */
   pendingTurnPassAck: boolean;
   error: string | null;
 }
 
 /**
- * State set after a correct declaration (Sub-AC 28b).
+ * State set after a correct declaration.
  *
  * Drives the seat-highlight overlay on the game table so the current turn
  * player (the declarant, or whoever `_resolveValidTurn` assigned) can tap a
@@ -340,7 +340,7 @@ export interface PostDeclarationHighlight {
   declarerTeamId: 1 | 2;
   /**
    * Player IDs on the declarant's team who still have cards and can receive
-   * the turn.  Subset of the server's `eligibleNextTurnPlayerIds` filtered to
+   * the turn. Subset of the server's `eligibleNextTurnPlayerIds` filtered to
    * the declarant's team only.
    */
   eligibleSameTeamIds: string[];
@@ -390,15 +390,15 @@ export function useGameSocket({
   const [reconnectWindows, setReconnectWindows] = useState<
     Record<string, { expiresAt: number; reconnectWindowMs: number }>
   >({});
-  // Sub-AC 27b: non-null when this player was eliminated and should choose a turn recipient
+  // non-null when this player was eliminated and should choose a turn recipient
   const [eliminationPrompt, setEliminationPrompt] = useState<ChooseTurnRecipientPromptPayload | null>(null);
-  // Sub-AC 28a: IDs of all non-eliminated players with cards remaining (updated on declaration_result)
+  // IDs of all non-eliminated players with cards remaining (updated on declaration_result)
   const [eligibleNextTurnPlayerIds, setEligibleNextTurnPlayerIds] = useState<string[]>([]);
-  // Sub-AC 28b: non-null after a correct declaration — lets the turn player click a seat to redirect
+  // non-null after a correct declaration — lets the turn player click a seat to redirect
   const [postDeclarationHighlight, setPostDeclarationHighlight] = useState<PostDeclarationHighlight | null>(null);
-  // Sub-AC 28c: non-null while the 30-second post-declaration turn-selection window is active
+  // non-null while the 30-second post-declaration turn-selection window is active
   const [postDeclarationTimer, setPostDeclarationTimer] = useState<PostDeclarationTimerPayload | null>(null);
-  // Sub-AC 56c: true between sendChooseNextTurn and the server's post_declaration_turn_selected ack
+  // true between sendChooseNextTurn and the server's post_declaration_turn_selected ack
   const [pendingTurnPassAck, setPendingTurnPassAck] = useState<boolean>(false);
   const [error, setError]                   = useState<string | null>(null);
 
@@ -550,15 +550,15 @@ export function useGameSocket({
           setTurnTimer(null);
           // The bot executed the timed-out player's turn — clear takeover indicator
           setBotTakeover(null);
-          // Turn ended — clear any active declaration phase timer (Sub-AC 23a)
+          // Turn ended — clear any active declaration phase timer
           setDeclarationTimer(null);
           // New turn started — clear any lingering failed-declaration overlay
           setDeclarationFailed(null);
-          // Sub-AC 28b: a player took an ask action — clear the post-declaration highlight
+          // a player took an ask action — clear the post-declaration highlight
           setPostDeclarationHighlight(null);
-          // Sub-AC 28c: clear post-declaration timer (turn is now in progress)
+          // clear post-declaration timer (turn is now in progress)
           setPostDeclarationTimer(null);
-          // Sub-AC 56c: safety reset — turn moved on, no longer waiting for ack
+          // safety reset — turn moved on, no longer waiting for ack
           setPendingTurnPassAck(false);
           break;
         }
@@ -568,7 +568,7 @@ export function useGameSocket({
           setLastDeclareResult(payload);
           // Declaration completed; clear the previous turn timer immediately.
           setTurnTimer(null);
-          // Sub-AC 28a: update eligible next-turn players list from the server payload
+          // update eligible next-turn players list from the server payload
           if (Array.isArray(payload.eligibleNextTurnPlayerIds)) {
             setEligibleNextTurnPlayerIds(payload.eligibleNextTurnPlayerIds);
           }
@@ -576,16 +576,16 @@ export function useGameSocket({
           setBotTakeover(null);
           // Declaration is now complete — clear any in-progress declaration banner
           setDeclareProgress(null);
-          // Turn ended — clear declaration phase timer (Sub-AC 23a)
+          // Turn ended — clear declaration phase timer
           setDeclarationTimer(null);
           // If the declaration was correct, there will be no `declarationFailed`
           // event — proactively clear any stale diff from a previous round.
           if (payload.correct) setDeclarationFailed(null);
-          // Sub-AC 56c: safety reset — a new declaration result means any previous
+          // safety reset — a new declaration result means any previous
           // pending ack is moot (another declaration happened in the meantime).
           setPendingTurnPassAck(false);
 
-          // Sub-AC 28b: after a CORRECT declaration, compute the same-team
+          // after a CORRECT declaration, compute the same-team
           // eligible players so the declarant can choose who gets the turn.
           // Skip for timed-out forced failures (timedOut: true) and incorrect
           // declarations — in those cases we clear any stale highlight instead.
@@ -648,7 +648,7 @@ export function useGameSocket({
           // Turn timer has already expired once takeover begins.
           setTurnTimer(null);
           // Bot is taking over — clear the declaration phase timer so the
-          // UI doesn't show a stale countdown (Sub-AC 23a)
+          // UI doesn't show a stale countdown
           setDeclarationTimer(null);
           break;
         }
@@ -660,9 +660,9 @@ export function useGameSocket({
         }
 
         case 'declaration_timer': {
-          // Sub-AC 23a / 36: 60-second declaration phase timer broadcast to ALL
+          // 36: 60-second declaration phase timer broadcast to ALL
           // connected clients (players + spectators) so the entire table can follow
-          // the declarant's countdown.  Drives DeclarationTimerBar in DeclareModal
+          // the declarant's countdown. Drives DeclarationTimerBar in DeclareModal
           // (for the declaring player) and in SpectatorView (for spectators).
           const payload = msg as unknown as DeclarationTimerPayload;
           setDeclarationTimer(payload);
@@ -704,8 +704,8 @@ export function useGameSocket({
         }
 
         case 'rematch_starting': {
-          // Sub-AC 46c: majority yes — new game created server-side with same
-          // teams/seats.  Clear vote state and notify the page so it can clear
+          // majority yes — new game created server-side with same
+          // teams/seats. Clear vote state and notify the page so it can clear
           // the post-game screen before the incoming game_init arrives.
           const payload = msg as unknown as RematchStartingPayload;
           setRematchVote(null);
@@ -729,7 +729,7 @@ export function useGameSocket({
           break;
         }
 
-        // ── Reconnect window events (Sub-AC 3 of AC 39) ──────────────────────
+        // ── Reconnect window events ──────────────────────
         case 'player_disconnected': {
           const payload = msg as unknown as PlayerDisconnectedPayload;
           setReconnectWindows((prev) => ({
@@ -763,7 +763,7 @@ export function useGameSocket({
         }
         // ─────────────────────────────────────────────────────────────────────
 
-        // ── Sub-AC 27b: Player elimination events ────────────────────────────
+        // ── Player elimination events ────────────────────────────
         case 'player_eliminated': {
           // Broadcast to all: a player's hand just reached 0 cards.
           // The `game_players` broadcast that follows this message will also
@@ -787,7 +787,7 @@ export function useGameSocket({
         // ─────────────────────────────────────────────────────────────────────
 
         case 'post_declaration_timer': {
-          // Sub-AC 28c: Broadcast to ALL after a human makes a correct declaration.
+          // Broadcast to ALL after a human makes a correct declaration.
           // Gives the declaring team 30 seconds to choose who takes the next turn.
           // Renders a countdown bar visible to all players and spectators.
           const payload = msg as unknown as PostDeclarationTimerPayload;
@@ -796,12 +796,12 @@ export function useGameSocket({
         }
 
         case 'post_declaration_turn_selected': {
-          // Sub-AC 28c: Sent to ALL when the declaring team's choice is made
+          // Sent to ALL when the declaring team's choice is made
           // (either manually via choose_next_turn or by server auto-selection on expiry).
           // Clears the countdown bar and any seat-highlight overlay.
           setPostDeclarationTimer(null);
           setPostDeclarationHighlight(null);
-          // Sub-AC 56c: server has acknowledged the turn-pass selection —
+          // server has acknowledged the turn-pass selection —
           // re-enable normal Ask/Declare interaction for the new turn player.
           setPendingTurnPassAck(false);
           break;
@@ -849,7 +849,7 @@ export function useGameSocket({
   }, []);
 
   /**
-   * Sub-AC 45a: Host-only rematch initiation for private rooms.
+   * Host-only rematch initiation for private rooms.
    * Sends `rematch_initiate` with the room code so the server can
    * validate host identity and immediately trigger rematch_start.
    */
@@ -894,7 +894,7 @@ export function useGameSocket({
 
   /**
    * Notify the server of the half-suit chosen in Step 1 of the DeclareModal
-   * suit picker — fire-and-forget (Sub-AC 21a).
+   * suit picker — fire-and-forget.
    *
    * The server stores this PRIVATELY and NEVER broadcasts it to other players.
    * It is used exclusively by bot-takeover logic if the turn timer fires before
@@ -917,7 +917,7 @@ export function useGameSocket({
   }, []);
 
   /**
-   * Acknowledge the declaration result overlay has been dismissed (Sub-AC 26c).
+   * Acknowledge the declaration result overlay has been dismissed.
    * Fire-and-forget — the server ignores this message but it signals the client
    * is ready for the next turn.
    */
@@ -928,8 +928,8 @@ export function useGameSocket({
   }, []);
 
   /**
-   * Sub-AC 27b: Notify the server which teammate should receive future turns
-   * on behalf of this eliminated player.  Fire-and-forget.
+   * Notify the server which teammate should receive future turns
+   * on behalf of this eliminated player. Fire-and-forget.
    *
    * Also clears the local `eliminationPrompt` state so the modal is dismissed.
    */
@@ -942,8 +942,8 @@ export function useGameSocket({
   }, []);
 
   /**
-   * Sub-AC 28b / 56c: Redirect the current turn to a same-team teammate after
-   * a correct declaration.  Sends `choose_next_turn` to the server,
+   * 56c: Redirect the current turn to a same-team teammate after
+   * a correct declaration. Sends `choose_next_turn` to the server,
    * immediately clears the post-declaration highlight so the seat glow
    * disappears without waiting for a server round-trip, and sets
    * `pendingTurnPassAck` to block further Ask/Declare interaction until the
@@ -955,7 +955,7 @@ export function useGameSocket({
     ws.send(JSON.stringify({ type: 'choose_next_turn', chosenPlayerId }));
     // Optimistically clear the highlight so the UI responds immediately
     setPostDeclarationHighlight(null);
-    // Sub-AC 56c: block further interaction until server ack arrives
+    // block further interaction until server ack arrives
     setPendingTurnPassAck(true);
   }, []);
 

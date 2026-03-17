@@ -3,20 +3,20 @@
 /**
  * Unit tests for matchmaking/botFiller.js — balanced bot team assignment.
  *
- * Sub-AC 6.2: Balanced bot team assignment algorithm.
+ * Balanced bot team assignment algorithm.
  *
  * Coverage:
- *   A. Empty room          — correct count, equal team split
- *   B. Partial humans      — bots respect human distribution; final teams balanced
- *   C. Full T1 humans      — all bots assigned to T2
- *   D. Full T2 humans      — all bots assigned to T1
- *   E. Mixed distributions — parameterised balance guarantee over all valid inputs
- *   F. Full room           — zero bots when all seats are occupied
- *   G. Seat properties     — seatIndex, playerId format, isBot, displayName
- *   H. Name uniqueness     — no two bots share a display name
- *   I. 8-player rooms      — correct behaviour for the larger variant
- *   J. Edge: non-standard seat layout — balance still achieved when human seat
- *      indices don't match the even=T1 / odd=T2 convention (robustness)
+ * A. Empty room — correct count, equal team split
+ * B. Partial humans — bots respect human distribution; final teams balanced
+ * C. Full T1 humans — all bots assigned to T2
+ * D. Full T2 humans — all bots assigned to T1
+ * E. Mixed distributions — parameterised balance guarantee over all valid inputs
+ * F. Full room — zero bots when all seats are occupied
+ * G. Seat properties — seatIndex, playerId format, isBot, displayName
+ * H. Name uniqueness — no two bots share a display name
+ * I. 8-player rooms — correct behaviour for the larger variant
+ * J. Edge: non-standard seat layout — balance still achieved when human seat
+ * indices don't match the even=T1 / odd=T2 convention (robustness)
  */
 
 const { fillWithBots, _keyToDisplayName } = require('../matchmaking/botFiller');

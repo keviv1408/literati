@@ -1,5 +1,5 @@
 /**
- * Tests for HalfSuitGrid component (Sub-AC 34b).
+ * Tests for HalfSuitGrid component.
  *
  * Verifies:
  * - Renders 8 slots for all half-suits

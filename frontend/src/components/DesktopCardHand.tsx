@@ -4,7 +4,7 @@
  * DesktopCardHand — desktop row/spread layout for the local player's hand.
  *
  * Displays sorted cards in a clean horizontal row grouped by suit:
- *   ♠ Spades → ♥ Hearts → ♦ Diamonds → ♣ Clubs
+ * ♠ Spades → ♥ Hearts → ♦ Diamonds → ♣ Clubs
  *
  * Within each suit group cards are sorted by rank (A–K, omitting the removed
  * rank for the chosen variant). A subtle divider and suit label separates each
@@ -12,10 +12,10 @@
  * marks the Low/High half-suit boundary when the variant is known.
  *
  * Interaction mirrors CardHand:
- *   • Click / Enter / Space selects a card for the ask flow.
- *   • Selected card lifts with an emerald ring.
- *   • Non-selectable cards are dimmed (disabled prop).
- *   • Hover lifts interactive cards slightly.
+ * • Click / Enter / Space selects a card for the ask flow.
+ * • Selected card lifts with an emerald ring.
+ * • Non-selectable cards are dimmed (disabled prop).
+ * • Hover lifts interactive cards slightly.
  *
  * This component is intentionally desktop-only (visible only on sm+ screens).
  * CardHand renders this on desktop and its fan layout on mobile.
@@ -49,7 +49,7 @@ export interface DesktopCardHandProps {
   /** Extra className forwarded to the root element. */
   className?: string;
   /**
-   * Card ID that just arrived via a successful ask.  When set, that specific
+   * Card ID that just arrived via a successful ask. When set, that specific
    * card is rendered with a CardFlipWrapper (back → face flip animation)
    * instead of a plain PlayingCard.
    * Ignored when `faceDown` is true (deal animation already handles that path).
@@ -225,7 +225,7 @@ export default function DesktopCardHand({
                       }}
                       data-testid={`card-wrapper-${cardId}`}
                     >
-                      {/* Flip animation for newly-arrived cards (Sub-AC 2 of AC 33) */}
+                      {/* Flip animation for newly-arrived cards */}
                       {!faceDown && cardId === newlyArrivedCardId ? (
                       <CardFlipWrapper
                         cardId={cardId}

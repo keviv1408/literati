@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * Unit tests for seat reclaim within 60-second reconnect window (Sub-AC 3 of AC 39).
+ * Unit tests for seat reclaim within 60-second reconnect window.
  *
  * When a human player disconnects during an active game:
- *   1. A 60-second reconnect window starts immediately.
- *   2. The player's slot is temporarily bot-controlled (isBot: true).
- *   3. `player_disconnected` is broadcast to all remaining connections.
- *   4. If it's the disconnected player's turn, a bot turn is scheduled.
- *   5. If the player reconnects within 60s, the bot is evicted (isBot: false).
- *   6. `player_reconnected` is broadcast to all OTHER clients on reclaim.
- *   7. Any pending bot turn timer is cancelled on reclaim.
- *   8. After 60s without reconnect, `reconnect_expired` is broadcast and
- *      the bot controls the seat permanently.
- *   9. Reconnect window does NOT start for bot players.
- *  10. Reconnect window does NOT start for spectators.
- *  11. Reconnect window does NOT start when the game is not active.
- *  12. A second disconnect by the same player before the window expires
- *      replaces the existing timer (no duplicate windows).
+ * 1. A 60-second reconnect window starts immediately.
+ * 2. The player's slot is temporarily bot-controlled (isBot: true).
+ * 3. `player_disconnected` is broadcast to all remaining connections.
+ * 4. If it's the disconnected player's turn, a bot turn is scheduled.
+ * 5. If the player reconnects within 60s, the bot is evicted (isBot: false).
+ * 6. `player_reconnected` is broadcast to all OTHER clients on reclaim.
+ * 7. Any pending bot turn timer is cancelled on reclaim.
+ * 8. After 60s without reconnect, `reconnect_expired` is broadcast and
+ * the bot controls the seat permanently.
+ * 9. Reconnect window does NOT start for bot players.
+ * 10. Reconnect window does NOT start for spectators.
+ * 11. Reconnect window does NOT start when the game is not active.
+ * 12. A second disconnect by the same player before the window expires
+ * replaces the existing timer (no duplicate windows).
  */
 
 const {

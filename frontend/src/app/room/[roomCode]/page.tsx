@@ -5,35 +5,35 @@
  *
  * The host lands here immediately after creating a private room.
  * Other players will join by entering the 6-character room code or following
- * a share link.  Spectators append ?spectate=1 to the URL.
+ * a share link. Spectators append ?spectate=1 to the URL.
  *
- * Sub-AC 2: Fetch + display room details (code, settings, share link).
- * Sub-AC 2c: Fast-path for the host — CreateRoomModal caches the room in
- *            sessionStorage; the page consumes it immediately so there is no
- *            loading spinner and both the invite link and spectator link are
- *            visible the instant the host lands here.
- * Sub-AC 3b: Two labelled team columns with player cards for each seat.
- *            Seats alternate T1-T2-T1-T2; empty seats show "Waiting…".
- *            Real-time WebSocket seat updates arrive in Sub-AC 4.
- * Sub-AC 4d: Kicked-player handling —
- *            • On mount checks localStorage to see if this browser was
- *              previously kicked from this room; if so, shows the dismissal
- *              notice immediately without even fetching room details.
- *            • Connects to the backend WebSocket and listens for
- *              "player-kicked" events targeting the current session.
- *            • When kicked, persists the room code to localStorage and
- *              renders the dismissal notice, blocking re-entry.
- * Sub-AC 47c: Auto-reconnect on page refresh —
- *            • useReconnect validates the stored session (guest token or
- *              Supabase JWT) against the backend before the WebSocket opens.
- *            • Shows "Reconnecting…" spinner while session is being validated.
- *            • Shows "Session Expired" notice for registered users whose
- *              tokens are fully expired (sign-in redirect provided).
- *            • Guest stale-token recovery is transparent: the hook creates a
- *              fresh guest session silently when the old one is no longer
- *              in the server's in-memory store.
- *            • Shows a retryable "Connection Error" screen when the backend
- *              is unreachable.
+ * Fetch + display room details (code, settings, share link).
+ * Fast-path for the host — CreateRoomModal caches the room in
+ * sessionStorage; the page consumes it immediately so there is no
+ * loading spinner and both the invite link and spectator link are
+ * visible the instant the host lands here.
+ * Two labelled team columns with player cards for each seat.
+ * Seats alternate T1-T2-T1-T2; empty seats show "Waiting…".
+ * Real-time WebSocket seat updates arrive in
+ * Kicked-player handling —
+ * • On mount checks localStorage to see if this browser was
+ * previously kicked from this room; if so, shows the dismissal
+ * notice immediately without even fetching room details.
+ * • Connects to the backend WebSocket and listens for
+ * "player-kicked" events targeting the current session.
+ * • When kicked, persists the room code to localStorage and
+ * renders the dismissal notice, blocking re-entry.
+ * Auto-reconnect on page refresh —
+ * • useReconnect validates the stored session (guest token or
+ * Supabase JWT) against the backend before the WebSocket opens.
+ * • Shows "Reconnecting…" spinner while session is being validated.
+ * • Shows "Session Expired" notice for registered users whose
+ * tokens are fully expired (sign-in redirect provided).
+ * • Guest stale-token recovery is transparent: the hook creates a
+ * fresh guest session silently when the old one is no longer
+ * in the server's in-memory store.
+ * • Shows a retryable "Connection Error" screen when the backend
+ * is unreachable.
  *
  * The page is a Client Component so it can access window.location for the
  * share link and react to room state changes when WebSocket support is added.
@@ -76,9 +76,9 @@ interface PageProps {
 export default function RoomLobbyPage({ params }: PageProps) {
   const router = useRouter();
 
-  // ── Sub-AC 47c: Session validation / auto-reconnect ────────────────────────
+  // ── Session validation / auto-reconnect ────────────────────────
   // useReconnect validates the stored session (guest bearer token or Supabase
-  // JWT) against the backend before the WebSocket can connect.  This prevents
+  // JWT) against the backend before the WebSocket can connect. This prevents
   // the socket hook from attempting a connection with a stale or expired token.
   const {
     status: reconnectStatus,
@@ -104,15 +104,14 @@ export default function RoomLobbyPage({ params }: PageProps) {
    *
    * The room WS server (/ws/room/<CODE>) broadcasts a full `room_players`
    * snapshot after every state change (join, leave, kick, team switch).
-   * Each player has a `teamId` (1 or 2).  We map T1 players to even seat
+   * Each player has a `teamId` (1 or 2). We map T1 players to even seat
    * indices and T2 players to odd seat indices, preserving server-side order
    * within each team so the layout is deterministic for all clients.
    */
   const [seats, setSeats] = useState<Array<LobbyPlayer | null>>([]);
 
   /**
-   * True when the current browser session created this room (Sub-AC 2c
-   * sessionStorage fast-path).  Used to decide whether to render draggable
+   * True when the current browser session created this room. Used to decide whether to render draggable
    * team columns so only the host can reassign players between teams.
    */
   const [isHostUser, setIsHostUser] = useState(false);
@@ -120,7 +119,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // Resolve async params (Next.js 15+ params are Promises)
   const [roomCode, setRoomCode] = useState<string | null>(null);
 
-  // ── Sub-AC 4d: Kicked-player state ────────────────────────────────────────
+  // ── Kicked-player state ────────────────────────────────────────
   /**
    * True when localStorage already marks this browser as kicked from this
    * room — checked synchronously on mount so the notice shows before any
@@ -132,11 +131,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
    * Bearer token used for WebSocket authentication.
    *
    * Derived from two sources (first available wins):
-   *   1. loadRoomMembership(roomCode).bearerToken — the exact token that was
-   *      accepted by the WS server on a previous visit to this room URL.
-   *      Re-using it ensures the server recognises the same player identity.
-   *   2. useReconnect().bearerToken — the validated base session token
-   *      (guest bearer or Supabase JWT) when no room membership is stored.
+   * 1. loadRoomMembership(roomCode).bearerToken — the exact token that was
+   * accepted by the WS server on a previous visit to this room URL.
+   * Re-using it ensures the server recognises the same player identity.
+   * 2. useReconnect().bearerToken — the validated base session token
+   * (guest bearer or Supabase JWT) when no room membership is stored.
    *
    * Only populated once reconnectStatus === 'ready' so the WebSocket hook
    * never attempts to connect with an unvalidated or expired token.
@@ -176,10 +175,10 @@ export default function RoomLobbyPage({ params }: PageProps) {
     }
   }, [roomCode]);
 
-  // ── Sub-AC 47c: Derive WebSocket bearer token from validated session ────────
+  // ── Derive WebSocket bearer token from validated session ────────
   //
   // Only runs once the session has been validated by useReconnect (status ===
-  // 'ready').  Prefers the room-specific membership token (same identity that
+  // 'ready'). Prefers the room-specific membership token (same identity that
   // was used on the last visit) over the generic base session token.
   //
   // Setting bearerToken to null when the session is not yet ready prevents
@@ -207,7 +206,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // Connects once a bearer token is available so the host can receive the
   // 'room-created' event if they happened to be connected when the room was
   // created (e.g. they opened the socket before submitting the create-room
-  // form).  The server emits this event with server-authoritative links
+  // form). The server emits this event with server-authoritative links
   // (using the FRONTEND_URL env var) which may differ from window.location.origin
   // in production.
   useEffect(() => {
@@ -237,7 +236,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── Live kick listener ────────────────────────────────────────────────────
   //
   // sessionId is the server-assigned identity returned by useReconnect once
-  // the session is validated.  Passing null while reconnecting prevents
+  // the session is validated. Passing null while reconnecting prevents
   // useRoomSocket from opening a WebSocket before auth is confirmed.
   const sessionId = reconnectStatus === 'ready' ? reconnectSessionId : null;
 
@@ -271,7 +270,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   });
 
   // Derive whether the current user is the host by finding their entry in the
-  // live WebSocket player list returned by the server.  The `isHost` flag is
+  // live WebSocket player list returned by the server. The `isHost` flag is
   // set server-side based on the Supabase rooms.host_user_id field, so no
   // client-side spoofing is possible.
   const myWsPlayer = wsPlayers.find((p) => p.playerId === myPlayerId);
@@ -296,7 +295,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
   /**
    * True from the moment the host clicks "Start Game" until the server
-   * broadcasts 'lobby-starting' (or an error arrives).  Used to show a
+   * broadcasts 'lobby-starting' (or an error arrives). Used to show a
    * spinner on the button and prevent double-submission.
    */
   const [isStarting, setIsStarting] = useState(false);
@@ -313,7 +312,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
   // ── Navigate to game board when the server triggers lobby-starting ──────────
   // Fires for ALL connected clients (host + players + spectators) when the
-  // host starts the game.  The redirect goes to /game/<CODE> which is the
+  // host starts the game. The redirect goes to /game/<CODE> which is the
   // main game board page.
   useEffect(() => {
     if (!lobbyStarting || !roomCode) return;
@@ -329,7 +328,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── Persist room membership binding ───────────────────────────────────────
   // Once the WS server confirms authentication (myPlayerId is set) and the
   // room is not in a kicked state, save the session-to-room binding in
-  // localStorage.  This allows the page to restore the WebSocket connection
+  // localStorage. This allows the page to restore the WebSocket connection
   // on a page reload using the same backend session — see the bearer-token
   // resolution effect above.
   //
@@ -370,7 +369,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           seatIndex: idx,
           playerId: p.playerId,
           displayName: p.displayName,
-          // Sub-AC 6.3: read isBot from the server snapshot so bot seats
+          // read isBot from the server snapshot so bot seats
           // correctly render BotBadge indicators (e.g. after lobby-starting).
           isBot: p.isBot ?? false,
           isHost: p.isHost,
@@ -388,7 +387,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           seatIndex: idx,
           playerId: p.playerId,
           displayName: p.displayName,
-          // Sub-AC 6.3: read isBot from the server snapshot so bot seats
+          // read isBot from the server snapshot so bot seats
           // correctly render BotBadge indicators (e.g. after lobby-starting).
           isBot: p.isBot ?? false,
           isHost: p.isHost,
@@ -401,7 +400,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     setSeats(newSeats);
   }, [wsPlayers, room, myPlayerId]);
 
-  // ── Fetch room data (with Sub-AC 2c sessionStorage fast-path) ────────────
+  // ── Fetch room data (with sessionStorage fast-path) ────────────
   useEffect(() => {
     if (!roomCode) return;
     // Skip the network fetch if we already know the player is kicked.
@@ -415,7 +414,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
       return;
     }
 
-    // Sub-AC 2c: consume the room data cached by CreateRoomModal so the host
+    // consume the room data cached by CreateRoomModal so the host
     // sees the lobby instantly without an additional API round-trip.
     // When a cached room is found the current browser session CREATED this
     // room — mark it as the host view so drag-and-drop is enabled.
@@ -448,7 +447,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           }
           setRoom(fetched);
           // Initialise empty seat array sized to the room's player count.
-          // Sub-AC 4 will fill these via WebSocket join events.
+          // will fill these via WebSocket join events.
           setSeats(buildEmptySeats(fetched.player_count));
           setLoading(false);
         }
@@ -467,19 +466,19 @@ export default function RoomLobbyPage({ params }: PageProps) {
     };
   }, [roomCode, kickedOnEntry, isKicked]);
 
-  // ── Seat reassignment (Sub-AC 3c: DnD drag-and-drop) ─────────────────────
+  // ── Seat reassignment ─────────────────────
   /**
    * Called by DraggableLobbyTeamColumns when the host drops a player card
    * onto the opposite team column.
    *
    * Resolves the player's server identity (playerId) from the seats array and
    * emits a `reassign_team` WebSocket message to the room WS server
-   * (/ws/room/<CODE>).  The server validates host authority, enforces team
+   * (/ws/room/<CODE>). The server validates host authority, enforces team
    * capacity limits, and broadcasts an updated `room_players` snapshot to all
    * connected clients.
    *
-   * @param seatIndex  0-based index of the seat being reassigned.
-   * @param toTeam     The team the seat was dropped onto (1 or 2).
+   * @param seatIndex 0-based index of the seat being reassigned.
+   * @param toTeam The team the seat was dropped onto (1 or 2).
    */
   const handleReassign = useCallback(
     (seatIndex: number, toTeam: Team) => {
@@ -513,7 +512,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     });
   }, [roomCode]);
 
-  // ── Sub-AC 47c: Session-validation render gates ──────────────────────────
+  // ── Session-validation render gates ──────────────────────────
   // These are evaluated AFTER the kicked check (handled below) to avoid
   // delaying the kicked notice with a session-validation spinner.
 
@@ -1000,10 +999,10 @@ export default function RoomLobbyPage({ params }: PageProps) {
             <>
               {/*
                * Two labelled team columns — seats alternate T1-T2-T1-T2.
-               * All seats start empty (null). Sub-AC 4 fills them via
+               * All seats start empty (null). fills them via
                * WebSocket join events by calling setSeats(updatedSeats).
                *
-               * Sub-AC 3c: DnD-enabled version — the host (isHostUser) can
+               * DnD-enabled version — the host (isHostUser) can
                * drag player cards between team columns; each successful drop
                * calls handleReassign which emits a `reassign_team` socket event.
                * Non-host clients (isHostUser=false) see static columns only.
@@ -1015,7 +1014,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                 onReassign={handleReassign}
               />
 
-              {/* ── Switch Team button (Sub-AC 3d) ────────────────────────
+              {/* ── Switch Team button ────────────────────────
                   Visible ONLY to the current connected player (not spectators)
                   and NOT in matchmaking rooms (teams are auto-assigned there).
                   Sends change_team to the room WS server; the server enforces
@@ -1041,7 +1040,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* ── Host Kick Controls (Sub-AC 4c) ────────────────────────
+              {/* ── Host Kick Controls ────────────────────────
                   Visible ONLY when the current user is the room host AND
                   at least one player is connected via WebSocket.
                   Kick button is rendered next to every non-host player.
@@ -1112,7 +1111,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* ── Host: Start Game controls (Sub-AC 5.1) ───────────────────────
+        {/* ── Host: Start Game controls ───────────────────────
             Visible ONLY when the current user is the room host AND is not a
             spectator.  Empty seats will be filled with bots server-side when
             the host starts the game.

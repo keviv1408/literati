@@ -19,7 +19,7 @@
   --team-a-pill-bg:      rgba(5,  150, 105, 0.40); /* emerald-600/40 */
 
   /* ── Team B colour tokens (Blue / Team 2) ───────────────────────────── */
-  /* Raw values mirror the Tailwind `blue-*` palette used in TEAM_STYLES   */
+  /* Raw values mirror the Tailwind `blue-*` palette used in TEAM_STYLES */
   --team-b-dot:          #3b82f6; /* blue-500             */
   --team-b-text:         #60a5fa; /* blue-400             */
   --team-b-text-dim:     rgba(59, 130, 246, 0.70); /* blue-500/70    */
@@ -86,11 +86,11 @@ body:has([role="dialog"]) {
   animation: seat-glow 1.4s ease-in-out infinite;
 }
 
-/* ── Card deal animations (Sub-AC 10b) ─────────────────────────────────────── */
+/* ── Card deal animations ─────────────────────────────────────── */
 
 /**
  * Deck shuffle — the stacked face-down cards wobble left/right.
- * Duration applied via .animate-deck-shuffle (0.4 s).
+ * Duration applied via.animate-deck-shuffle (0.4 s).
  */
 @keyframes deck-shuffle {
   0%,  100% { transform: translate(   0,    0) rotate(  0deg); }
@@ -120,7 +120,7 @@ body:has([role="dialog"]) {
   animation: card-deal-out 0.6s ease-in forwards;
 }
 
-/* ── Card flight animation (AC 33 Sub-AC 1) ─────────────────────────────────── */
+/* ── Card flight animation (AC 33) ─────────────────────────────────── */
 
 /**
  * Card transfer flight — a face-up card flies from the card-giver's seat to
@@ -234,20 +234,20 @@ body:has([role="dialog"]) {
   animation: ask-denied-pulse 2s ease-out forwards;
 }
 
-/* ── Card flip reveal animation (Sub-AC 2 of AC 33) ────────────────────────── */
+/* ── Card flip reveal animation ────────────────────────── */
 
 /**
  * 3-D flip from card-back to card-face.
  *
  * Applied to the `transform-style: preserve-3d` inner wrapper inside
- * CardFlipWrapper.  The inner div starts rotated 180 ° (card-back facing the
+ * CardFlipWrapper. The inner div starts rotated 180 ° (card-back facing the
  * viewer because the back-face has an additional 180 ° rotation) and animates
  * to 0 ° (card-face facing the viewer) over 550 ms.
  *
  * Both the front-face div and the back-face div carry backface-visibility:hidden
  * so only the correct face is visible at any moment in time:
- *   • inner at 180 °:  front face is edge-on / hidden → back face is visible
- *   • inner at   0 °:  front face is visible → back face is edge-on / hidden
+ * • inner at 180 °: front face is edge-on / hidden → back face is visible
+ * • inner at 0 °: front face is visible → back face is edge-on / hidden
  */
 @keyframes flip-card-reveal {
   from { transform: rotateY(180deg); }
@@ -259,7 +259,7 @@ body:has([role="dialog"]) {
   transform-style: preserve-3d;
 }
 
-/* ── FailedDeclarationReveal overlay animations (Sub-AC 26b) ───────────────── */
+/* ── FailedDeclarationReveal overlay animations ───────────────── */
 
 /**
  * Fade-in for the backdrop overlay.
@@ -276,7 +276,7 @@ body:has([role="dialog"]) {
 
 /**
  * Auto-dismiss progress bar — shrinks from full-width to zero over the
- * AUTO_DISMISS_MS duration (6 000 ms by default).  Applied inline via
+ * AUTO_DISMISS_MS duration (6 000 ms by default). Applied inline via
  * style={{ animation: `shrink-width ${ms}ms linear forwards` }}.
  */
 @keyframes shrink-width {

@@ -1,55 +1,54 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for FailedDeclarationReveal — Sub-AC 26b:
- *   Frontend overlay that receives the `declarationFailed` diff payload and
- *   renders each half-suit card with the claimed holder crossed out and the
- *   actual holder highlighted.
+ * Tests for FailedDeclarationReveal — * Frontend overlay that receives the `declarationFailed` diff payload and
+ * renders each half-suit card with the claimed holder crossed out and the
+ * actual holder highlighted.
  *
  * Coverage:
  *
- *   Rendering:
- *     • Renders the overlay wrapper (data-testid="failed-declaration-reveal")
- *     • Renders the panel (data-testid="failed-declaration-reveal-panel")
- *     • Renders a title including "Declaration Failed"
- *     • Shows the declarant's name in the header
- *     • Shows the half-suit name in the header
- *     • Shows which team scores the point
- *     • Renders one row per card in the half-suit (6 rows for 6 cards)
- *     • Each row has correct data-testid
+ * Rendering:
+ * • Renders the overlay wrapper (data-testid="failed-declaration-reveal")
+ * • Renders the panel (data-testid="failed-declaration-reveal-panel")
+ * • Renders a title including "Declaration Failed"
+ * • Shows the declarant's name in the header
+ * • Shows the half-suit name in the header
+ * • Shows which team scores the point
+ * • Renders one row per card in the half-suit (6 rows for 6 cards)
+ * • Each row has correct data-testid
  *
- *   Wrong assignments (claimedPlayerId ≠ actualPlayerId):
- *     • Card row has data-wrong="true"
- *     • Claimed holder is rendered with strikethrough
- *     • Actual holder is rendered highlighted (testid "actual-holder-*")
- *     • Status icon is "✗"
+ * Wrong assignments (claimedPlayerId ≠ actualPlayerId):
+ * • Card row has data-wrong="true"
+ * • Claimed holder is rendered with strikethrough
+ * • Actual holder is rendered highlighted (testid "actual-holder-*")
+ * • Status icon is "✗"
  *
- *   Correct assignments (card NOT in wrongAssignmentDiffs):
- *     • Card row has data-wrong="false"
- *     • Only correct-holder element is rendered (no claimed-holder-* testid)
- *     • Status icon is "✓"
+ * Correct assignments (card NOT in wrongAssignmentDiffs):
+ * • Card row has data-wrong="false"
+ * • Only correct-holder element is rendered (no claimed-holder-* testid)
+ * • Status icon is "✓"
  *
- *   Dismiss behaviour:
- *     • Clicking the dismiss button calls onDismiss
- *     • Clicking the backdrop (outside the panel) calls onDismiss
- *     • onDismiss is NOT called immediately on render (before any interaction)
+ * Dismiss behaviour:
+ * • Clicking the dismiss button calls onDismiss
+ * • Clicking the backdrop (outside the panel) calls onDismiss
+ * • onDismiss is NOT called immediately on render (before any interaction)
  *
- *   Auto-dismiss:
- *     • onDismiss is called after AUTO_DISMISS_MS (via fake timers)
- *     • Clears the timeout on unmount (no stale callback)
+ * Auto-dismiss:
+ * • onDismiss is called after AUTO_DISMISS_MS (via fake timers)
+ * • Clears the timeout on unmount (no stale callback)
  *
- *   Accessibility:
- *     • role="dialog" with aria-modal="true"
- *     • aria-labelledby points to the title element
- *     • role="list" on the card rows container
- *     • Each row has role="listitem"
- *     • Dismiss button has aria-label
+ * Accessibility:
+ * • role="dialog" with aria-modal="true"
+ * • aria-labelledby points to the title element
+ * • role="list" on the card rows container
+ * • Each row has role="listitem"
+ * • Dismiss button has aria-label
  *
- *   Edge cases:
- *     • All 6 cards wrong (entire declaration incorrect)
- *     • All 6 cards correct (shouldn't happen in practice, but no crash)
- *     • Unknown player IDs fall back to the raw playerId string
- *     • Card chip shows correct rank and suit symbol
+ * Edge cases:
+ * • All 6 cards wrong (entire declaration incorrect)
+ * • All 6 cards correct (shouldn't happen in practice, but no crash)
+ * • Unknown player IDs fall back to the raw playerId string
+ * • Card chip shows correct rank and suit symbol
  */
 
 import React from 'react';

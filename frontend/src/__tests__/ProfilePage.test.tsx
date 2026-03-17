@@ -1,14 +1,14 @@
 /**
  * @jest-environment jsdom
  *
- * Sub-AC 2 (AC 50) — Public profile page at /profile/[username]
+ * (AC 50) — Public profile page at /profile/[username]
  *
  * Tests that the /profile/[username] page:
- *   - Fetches profile data via getProfileByUsername
- *   - Renders all required stats:
- *       total games (gamesCompleted), win rate, total declarations, declaration success rate
- *   - Shows appropriate loading and error states
- *   - Shows a "not found" message on 404
+ * - Fetches profile data via getProfileByUsername
+ * - Renders all required stats:
+ * total games (gamesCompleted), win rate, total declarations, declaration success rate
+ * - Shows appropriate loading and error states
+ * - Shows a "not found" message on 404
  */
 
 import React, { Suspense, act } from 'react';

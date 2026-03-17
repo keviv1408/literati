@@ -1,24 +1,24 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 23c: Revision broadcast via handleDeclareProgress.
+ * Tests for Revision broadcast via handleDeclareProgress.
  *
  * When the declarant changes (revises) a card assignment before submitting,
  * the frontend calls onDeclareProgress with the updated assignment map.
  * The server broadcasts the revised state to all other connected clients.
  *
  * These tests verify that:
- *   1. A second declare_progress broadcast (revision) correctly overwrites the
- *      first from all non-declarant clients' perspective
- *   2. The revised assignment map is fully reflected in the broadcast payload
- *   3. Revising a single card in a 6-card assignment is broadcast correctly
- *   4. Revising back to the original assignment is broadcast correctly
- *   5. Sequential revisions produce independent broadcasts (server is stateless
- *      for progress — no caching of previous assignment)
- *   6. A revision with a different halfSuitId (back → different suit) after
- *      cancellation re-starts the progress correctly
- *   7. Broadcast continues to exclude the declarant across all revisions
- *   8. assignedCount reflects the revised assignment count correctly
+ * 1. A second declare_progress broadcast (revision) correctly overwrites the
+ * first from all non-declarant clients' perspective
+ * 2. The revised assignment map is fully reflected in the broadcast payload
+ * 3. Revising a single card in a 6-card assignment is broadcast correctly
+ * 4. Revising back to the original assignment is broadcast correctly
+ * 5. Sequential revisions produce independent broadcasts (server is stateless
+ * for progress — no caching of previous assignment)
+ * 6. A revision with a different halfSuitId (back → different suit) after
+ * cancellation re-starts the progress correctly
+ * 7. Broadcast continues to exclude the declarant across all revisions
+ * 8. assignedCount reflects the revised assignment count correctly
  */
 
 const { setGame, getGame, registerConnection, _clearAll } = require('../game/gameStore');
@@ -95,7 +95,7 @@ afterEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('declare_progress revision broadcast (Sub-AC 23c)', () => {
+describe('declare_progress revision broadcast ', () => {
   // p1 = current-turn player (seat 0)
 
   test('1. second broadcast (revision) reflects updated assignment on receiver side', () => {

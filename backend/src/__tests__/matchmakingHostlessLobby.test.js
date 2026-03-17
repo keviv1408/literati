@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * Unit tests for the hostless matchmaking lobby — Sub-AC 9.1
+ * Unit tests for the hostless matchmaking lobby —
  *
  * Coverage:
- *   A. isHost is always false for all players in matchmaking rooms
- *   B. room_players broadcast carries isMatchmaking: true
- *   C. kick_player is rejected in matchmaking rooms
- *   D. reassign_team is rejected in matchmaking rooms
- *   E. start_game is rejected in matchmaking rooms
- *   F. handleAutoStartMatchmaking broadcasts 'lobby-starting' with isMatchmaking: true
- *   G. handleAutoStartMatchmaking skips rooms that are not in 'waiting'/'starting' status
- *   H. handleAutoStartMatchmaking fills empty seats with bots
- *   I. Auto-start fires immediately when all players join (via matchmakingTimers logic)
- *   J. Auto-start fires via 30-second timer when room is not full (timer fires)
+ * A. isHost is always false for all players in matchmaking rooms
+ * B. room_players broadcast carries isMatchmaking: true
+ * C. kick_player is rejected in matchmaking rooms
+ * D. reassign_team is rejected in matchmaking rooms
+ * E. start_game is rejected in matchmaking rooms
+ * F. handleAutoStartMatchmaking broadcasts 'lobby-starting' with isMatchmaking: true
+ * G. handleAutoStartMatchmaking skips rooms that are not in 'waiting'/'starting' status
+ * H. handleAutoStartMatchmaking fills empty seats with bots
+ * I. Auto-start fires immediately when all players join (via matchmakingTimers logic)
+ * J. Auto-start fires via 30-second timer when room is not full (timer fires)
  */
 
 jest.useFakeTimers();

@@ -1,29 +1,29 @@
 'use strict';
 
 /**
- * Unit tests for Sub-AC 46b: 30-second rematch vote timer and room dissolution.
+ * Unit tests for 30-second rematch vote timer and room dissolution.
  *
  * Coverage:
- *   REMATCH_VOTE_TIMEOUT_MS constant:
- *     1. Timer is exactly 30 seconds (30_000 ms)
+ * REMATCH_VOTE_TIMEOUT_MS constant:
+ * 1. Timer is exactly 30 seconds (30_000 ms)
  *
- *   _handleRematchTimeout (room dissolution on timer expiry):
- *     2. Broadcasts `rematch_declined` with reason 'timeout'
- *     3. Deletes the in-memory game state from gameStore
- *     4. Clears partial declaration selections for the room
- *     5. Clears the disconnect queue for the room
- *     6. Broadcasts `room_dissolved` with reason 'timeout' after 3-second delay
- *     7. `room_dissolved` is NOT broadcast before the 3-second delay elapses
+ * _handleRematchTimeout (room dissolution on timer expiry):
+ * 2. Broadcasts `rematch_declined` with reason 'timeout'
+ * 3. Deletes the in-memory game state from gameStore
+ * 4. Clears partial declaration selections for the room
+ * 5. Clears the disconnect queue for the room
+ * 6. Broadcasts `room_dissolved` with reason 'timeout' after 3-second delay
+ * 7. `room_dissolved` is NOT broadcast before the 3-second delay elapses
  *
- *   rematchStore timer integration:
- *     8. onTimeout callback fires exactly at REMATCH_VOTE_TIMEOUT_MS (30 s)
- *     9. onTimeout does NOT fire before REMATCH_VOTE_TIMEOUT_MS elapses
- *    10. If clearRematch is called before expiry, onTimeout never fires
+ * rematchStore timer integration:
+ * 8. onTimeout callback fires exactly at REMATCH_VOTE_TIMEOUT_MS (30 s)
+ * 9. onTimeout does NOT fire before REMATCH_VOTE_TIMEOUT_MS elapses
+ * 10. If clearRematch is called before expiry, onTimeout never fires
  *
- *   Room state is fully cleaned up after dissolution:
- *    11. hasGame returns false after dissolution
- *    12. clearRoomPartialSelections is called for the correct room
- *    13. clearDisconnectRoom is called for the correct room
+ * Room state is fully cleaned up after dissolution:
+ * 11. hasGame returns false after dissolution
+ * 12. clearRoomPartialSelections is called for the correct room
+ * 13. clearDisconnectRoom is called for the correct room
  */
 
 jest.useFakeTimers();

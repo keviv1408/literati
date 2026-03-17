@@ -1,44 +1,44 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for DesktopCardHand — Sub-AC 11b: desktop card hand display
+ * Tests for DesktopCardHand — desktop card hand display
  *
  * Coverage:
- *   Rendering
- *   • Renders the desktop hand container (data-testid="desktop-card-hand")
- *   • Shows empty-state message when hand is empty
- *   • Renders all cards in the hand
- *   • Renders suit-group containers for each suit present
- *   • Shows suit symbol labels (♠ ♥ ♦ ♣) above each group
+ * Rendering
+ * • Renders the desktop hand container (data-testid="desktop-card-hand")
+ * • Shows empty-state message when hand is empty
+ * • Renders all cards in the hand
+ * • Renders suit-group containers for each suit present
+ * • Shows suit symbol labels (♠ ♥ ♦ ♣) above each group
  *
- *   Sorting
- *   • Cards are sorted by suit: spades → hearts → diamonds → clubs
- *   • Within a suit, cards are sorted low-to-high (A first)
- *   • Sorted order respects the remove_7s variant (7 excluded from ranks)
- *   • Sorted order respects the remove_2s variant (2 excluded from ranks)
- *   • Sorted order respects the remove_8s variant (8 excluded from ranks)
+ * Sorting
+ * • Cards are sorted by suit: spades → hearts → diamonds → clubs
+ * • Within a suit, cards are sorted low-to-high (A first)
+ * • Sorted order respects the remove_7s variant (7 excluded from ranks)
+ * • Sorted order respects the remove_2s variant (2 excluded from ranks)
+ * • Sorted order respects the remove_8s variant (8 excluded from ranks)
  *
- *   Half-suit boundary
- *   • Renders half-suit boundary notch when variant provided and suit has cards spanning the boundary
- *   • Does NOT render boundary notch when all cards are in the same half-suit
- *   • Does NOT render boundary notch when variant is not provided
+ * Half-suit boundary
+ * • Renders half-suit boundary notch when variant provided and suit has cards spanning the boundary
+ * • Does NOT render boundary notch when all cards are in the same half-suit
+ * • Does NOT render boundary notch when variant is not provided
  *
- *   Selection
- *   • No card is selected by default
- *   • Selected card has aria "selected" in its label
- *   • Clicking a card calls onSelectCard with the correct cardId
- *   • onSelectCard is not called when disabled
- *   • onSelectCard is not called when isMyTurn is false
- *   • onSelectCard is not called when canInteract is false (no callback provided)
+ * Selection
+ * • No card is selected by default
+ * • Selected card has aria "selected" in its label
+ * • Clicking a card calls onSelectCard with the correct cardId
+ * • onSelectCard is not called when disabled
+ * • onSelectCard is not called when isMyTurn is false
+ * • onSelectCard is not called when canInteract is false (no callback provided)
  *
- *   Card count
- *   • Card count badge shown for hands with ≥8 cards
- *   • Card count badge NOT shown for hands with <8 cards
+ * Card count
+ * • Card count badge shown for hands with ≥8 cards
+ * • Card count badge NOT shown for hands with <8 cards
  *
- *   Accessibility
- *   • Root has aria-label "Your hand: N cards"
- *   • Each suit group has a descriptive aria-label
- *   • Each card wrapper is a listitem
+ * Accessibility
+ * • Root has aria-label "Your hand: N cards"
+ * • Each suit group has a descriptive aria-label
+ * • Each card wrapper is a listitem
  */
 
 import React from 'react';

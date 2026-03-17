@@ -7,115 +7,115 @@
  * bot turn processing, and broadcasting state updates.
  *
  * Connection URL format:
- *   ws(s)://host/ws/game/<ROOMCODE>?token=<bearer>
+ * ws(s)://host/ws/game/<ROOMCODE>?token=<bearer>
  *
  * ── Client → Server messages ──────────────────────────────────────────────
- *   { type: 'ask_card',          targetPlayerId: string, cardId: string }
- *   { type: 'declare_suit',      halfSuitId: string, assignment: { [cardId]: playerId } }
- *   { type: 'rematch_vote',      vote: boolean }    — cast after game_over
- *   { type: 'partial_selection', flow: 'ask'|'declare', halfSuitId?: string,
- *                                cardId?: string, assignment?: { [cardId]: playerId } }
- *     — fire-and-forget: active player reports wizard progress so the server
- *       can complete the action deterministically on turn timer expiry.
- *   { type: 'declare_selecting', halfSuitId: string|null }
- *     — fire-and-forget (Sub-AC 21a): active player sends the suit they chose
- *       in Step 1 of DeclareModal (suit picker).  PRIVATE — stored server-side
- *       but NEVER broadcast to other players.  halfSuitId === null clears the
- *       stored selection when the player presses "Back" or dismisses the modal.
- *   { type: 'declare_progress',  halfSuitId: string|null,
- *                                assignment: { [cardId]: playerId } }
- *     — fire-and-forget: active player streams in-progress card assignment
- *       from Step 2 of the DeclareModal.  Server broadcasts to all OTHER
- *       connected clients (excluding the declarant) so they can show a live
- *       "declaration in progress" banner.  halfSuitId === null signals that
- *       the declaration was cancelled (back-button or modal close).
+ * { type: 'ask_card', targetPlayerId: string, cardId: string }
+ * { type: 'declare_suit', halfSuitId: string, assignment: { [cardId]: playerId } }
+ * { type: 'rematch_vote', vote: boolean } — cast after game_over
+ * { type: 'partial_selection', flow: 'ask'|'declare', halfSuitId?: string,
+ * cardId?: string, assignment?: { [cardId]: playerId } }
+ * — fire-and-forget: active player reports wizard progress so the server
+ * can complete the action deterministically on turn timer expiry.
+ * { type: 'declare_selecting', halfSuitId: string|null }
+ * — fire-and-forget: active player sends the suit they chose
+ * in Step 1 of DeclareModal (suit picker). PRIVATE — stored server-side
+ * but NEVER broadcast to other players. halfSuitId === null clears the
+ * stored selection when the player presses "Back" or dismisses the modal.
+ * { type: 'declare_progress', halfSuitId: string|null,
+ * assignment: { [cardId]: playerId } }
+ * — fire-and-forget: active player streams in-progress card assignment
+ * from Step 2 of the DeclareModal. Server broadcasts to all OTHER
+ * connected clients (excluding the declarant) so they can show a live
+ * "declaration in progress" banner. halfSuitId === null signals that
+ * the declaration was cancelled (back-button or modal close).
  *
  * ── Card-request privacy guarantee ────────────────────────────────────────
- *   The "in-progress selection" phase (player picks a card and selects a
- *   target opponent in the AskCardModal) is LOCAL to the active player's
- *   browser.  The server NEVER learns about partial selections.
+ * The "in-progress selection" phase (player picks a card and selects a
+ * target opponent in the AskCardModal) is LOCAL to the active player's
+ * browser. The server NEVER learns about partial selections.
  *
- *   Only the final `ask_card` message is processed.  The server guarantees:
- *     • Validation errors (NOT_YOUR_TURN, ALREADY_HELD, SAME_TEAM, …) are
- *       returned ONLY to the sending WebSocket connection — never broadcast.
- *     • Spectator game-action attempts return a SPECTATOR error ONLY to the
- *       spectator's connection — never broadcast to player connections.
- *     • Unrecognised message types (e.g. any "preview" message) are rejected
- *       with UNKNOWN_TYPE ONLY to the sender.
- *     • `ask_result`, `game_state`, `game_players` are broadcast to ALL
- *       connected clients (players + spectators) ONLY after a valid ask.
- *     • `hand_update` is sent ONLY to the two players whose hands changed.
+ * Only the final `ask_card` message is processed. The server guarantees:
+ * • Validation errors (NOT_YOUR_TURN, ALREADY_HELD, SAME_TEAM, …) are
+ * returned ONLY to the sending WebSocket connection — never broadcast.
+ * • Spectator game-action attempts return a SPECTATOR error ONLY to the
+ * spectator's connection — never broadcast to player connections.
+ * • Unrecognised message types (e.g. any "preview" message) are rejected
+ * with UNKNOWN_TYPE ONLY to the sender.
+ * • `ask_result`, `game_state`, `game_players` are broadcast to ALL
+ * connected clients (players + spectators) ONLY after a valid ask.
+ * • `hand_update` is sent ONLY to the two players whose hands changed.
  * ──────────────────────────────────────────────────────────────────────────
  *
  * ── Server → Client (targeted) ────────────────────────────────────────────
- *   { type: 'game_init',   roomCode, variant, playerCount, myPlayerId,
- *                          myHand: string[], players: [...], gameState: {...} }
- *   { type: 'hand_update', hand: string[] }   — sent after hand changes
- *   { type: 'error',       message, code }
+ * { type: 'game_init', roomCode, variant, playerCount, myPlayerId,
+ * myHand: string[], players: [...], gameState: {...} }
+ * { type: 'hand_update', hand: string[] } — sent after hand changes
+ * { type: 'error', message, code }
  *
  * ── Server → Room (broadcast) ─────────────────────────────────────────────
- *   { type: 'game_state',  state: { status, currentTurnPlayerId, scores,
- *                                   lastMove, declaredSuits, winner } }
- *   { type: 'game_players', players: [...] }
- *   { type: 'ask_result',  askerId, targetId, cardId, success, newTurnPlayerId }
- *   { type: 'declaration_result', declarerId, halfSuitId, correct, winningTeam,
- *                                  newTurnPlayerId, assignment }
- *   { type: 'game_over',   winner: 1|2|null, tiebreakerWinner, scores }
- *   { type: 'rematch_vote_update', yesCount, noCount, totalCount, humanCount,
- *                                   majority, majorityReached, majorityDeclined,
- *                                   votes, playerVotes }
- *   { type: 'rematch_starting',     roomCode }
- *     — majority yes reached; new game created with same teams/seats; clients
- *       should clear post-game state and render the incoming game_init.
- *   { type: 'rematch_declined',     reason: 'timeout'|'majority_no' }
- *   { type: 'room_dissolved',      reason: 'timeout'|'majority_no' }
- *     — broadcast shortly after rematch_declined; signals that the room has been
- *       permanently closed and clients should stop attempting reconnections.
- *   { type: 'bot_takeover',         playerId: string,
- *                                   partialState: { halfSuitId?: string, cardId?: string } | null }
- *     — broadcast when a human player's turn timer expires; includes any
- *       partial wizard state they reported via `partial_selection` messages.
- *   { type: 'declare_progress',    declarerId: string, halfSuitId: string|null,
- *                                   assignedCount: number, totalCards: number,
- *                                   assignment: { [cardId]: playerId } }
- *     — broadcast to ALL EXCEPT the declarant while they are filling out
- *       the card-assignment form.  halfSuitId === null = cancelled.
- *       Clients use this to render a live "X is declaring Low Spades (3/6)" banner.
+ * { type: 'game_state', state: { status, currentTurnPlayerId, scores,
+ * lastMove, declaredSuits, winner } }
+ * { type: 'game_players', players: [...] }
+ * { type: 'ask_result', askerId, targetId, cardId, success, newTurnPlayerId }
+ * { type: 'declaration_result', declarerId, halfSuitId, correct, winningTeam,
+ * newTurnPlayerId, assignment }
+ * { type: 'game_over', winner: 1|2|null, tiebreakerWinner, scores }
+ * { type: 'rematch_vote_update', yesCount, noCount, totalCount, humanCount,
+ * majority, majorityReached, majorityDeclined,
+ * votes, playerVotes }
+ * { type: 'rematch_starting', roomCode }
+ * — majority yes reached; new game created with same teams/seats; clients
+ * should clear post-game state and render the incoming game_init.
+ * { type: 'rematch_declined', reason: 'timeout'|'majority_no' }
+ * { type: 'room_dissolved', reason: 'timeout'|'majority_no' }
+ * — broadcast shortly after rematch_declined; signals that the room has been
+ * permanently closed and clients should stop attempting reconnections.
+ * { type: 'bot_takeover', playerId: string,
+ * partialState: { halfSuitId?: string, cardId?: string } | null }
+ * — broadcast when a human player's turn timer expires; includes any
+ * partial wizard state they reported via `partial_selection` messages.
+ * { type: 'declare_progress', declarerId: string, halfSuitId: string|null,
+ * assignedCount: number, totalCards: number,
+ * assignment: { [cardId]: playerId } }
+ * — broadcast to ALL EXCEPT the declarant while they are filling out
+ * the card-assignment form. halfSuitId === null = cancelled.
+ * Clients use this to render a live "X is declaring Low Spades (3/6)" banner.
  *
  * ── Disconnect / reconnect timer events ───────────────────────────────────
- *   { type: 'player_disconnected',  playerId: string }
- *     — broadcast to all OTHER connected clients when a player loses their
- *       WebSocket connection.  Triggers the concurrent timer sequence.
- *   { type: 'player_reconnected',   playerId: string }
- *     — broadcast to all OTHER connected clients when a previously-disconnected
- *       player successfully re-establishes their WebSocket connection and
- *       cancels the running reconnect window.
- *   { type: 'reconnect_timer',      playerId: string,
- *                                   durationMs: number, expiresAt: number }
- *     — broadcast to ALL when the 60-second reconnect window starts.  Clients
- *       use expiresAt to render a countdown indicator for the absent player.
- *   { type: 'reconnect_tick',       playerId: string,
- *                                   remainingMs: number, expiresAt: number }
- *     — broadcast every TIMER_TICK_INTERVAL_MS (5 s) during the reconnect window
- *       so clients can resync their countdown without relying solely on local
- *       clock drift correction.
- *   { type: 'reconnect_expired',    playerId: string }
- *     — broadcast to ALL when the 60-second reconnect window closes without the
- *       player returning.  The bot now holds the seat permanently.
- *   { type: 'seat_reclaimed',       playerId: string, displayName: string }
- *     — broadcast to ALL when the original human player reconnects AFTER the
- *       60-second window expired and regains control of their seat at the next
- *       turn boundary. (Sub-AC 4)
+ * { type: 'player_disconnected', playerId: string }
+ * — broadcast to all OTHER connected clients when a player loses their
+ * WebSocket connection. Triggers the concurrent timer sequence.
+ * { type: 'player_reconnected', playerId: string }
+ * — broadcast to all OTHER connected clients when a previously-disconnected
+ * player successfully re-establishes their WebSocket connection and
+ * cancels the running reconnect window.
+ * { type: 'reconnect_timer', playerId: string,
+ * durationMs: number, expiresAt: number }
+ * — broadcast to ALL when the 60-second reconnect window starts. Clients
+ * use expiresAt to render a countdown indicator for the absent player.
+ * { type: 'reconnect_tick', playerId: string,
+ * remainingMs: number, expiresAt: number }
+ * — broadcast every TIMER_TICK_INTERVAL_MS (5 s) during the reconnect window
+ * so clients can resync their countdown without relying solely on local
+ * clock drift correction.
+ * { type: 'reconnect_expired', playerId: string }
+ * — broadcast to ALL when the 60-second reconnect window closes without the
+ * player returning. The bot now holds the seat permanently.
+ * { type: 'seat_reclaimed', playerId: string, displayName: string }
+ * — broadcast to ALL when the original human player reconnects AFTER the
+ * 60-second window expired and regains control of their seat at the next
+ * turn boundary.
  *
- * ── Seat reclaim (Sub-AC 4) — targeted to the reconnecting player ──────────
- *   { type: 'reclaim_queued',  playerId: string }
- *     — sent ONLY to the original player who reconnected after permanent bot
- *       assignment.  Tells them they are queued for the next turn boundary.
+ * ── Seat reclaim — targeted to the reconnecting player ──────────
+ * { type: 'reclaim_queued', playerId: string }
+ * — sent ONLY to the original player who reconnected after permanent bot
+ * assignment. Tells them they are queued for the next turn boundary.
  * ──────────────────────────────────────────────────────────────────────────
- *   { type: 'turn_timer_tick',      playerId: string,
- *                                   remainingMs: number, expiresAt: number }
- *     — broadcast every TIMER_TICK_INTERVAL_MS (5 s) during an active human
- *       turn timer so clients can resync their turn-countdown display.
+ * { type: 'turn_timer_tick', playerId: string,
+ * remainingMs: number, expiresAt: number }
+ * — broadcast every TIMER_TICK_INTERVAL_MS (5 s) during an active human
+ * turn timer so clients can resync their turn-countdown display.
  */
 
 const { WebSocketServer, WebSocket } = require('ws');
@@ -227,7 +227,7 @@ const HUMAN_TURN_TIMEOUT_MS = 60_000;
 
 /**
  * Time the declaring team has to choose which teammate takes the next turn
- * after a correct declaration (AC 28 / Sub-AC 28c).
+ * after a correct declaration (AC 28).
  *
  * Starts when a human player makes a correct declaration and there are
  * multiple eligible teammates (with cards) on their team.
@@ -242,7 +242,7 @@ const POST_DECLARATION_TURN_SELECTION_MS = 30_000;
  * broadcasts a `declaration_timer` event visible only to the declarant.
  * The new timer still calls `executeTimedOutTurn` on expiry.
  *
- * Sub-AC 23a: 60-second declaration phase countdown with 10-second warning.
+ * 60-second declaration phase countdown with 10-second warning.
  */
 const DECLARATION_PHASE_TIMEOUT_MS = 120_000;
 
@@ -250,7 +250,7 @@ const DECLARATION_PHASE_TIMEOUT_MS = 120_000;
  * How long the server waits after broadcasting `bot_takeover` for a
  * declaration before auto-submitting the completed assignment.
  *
- * Sub-AC 3 of AC 41: 30-second server-side countdown timer shown to ALL
+ * 30-second server-side countdown timer shown to ALL
  * clients so they can display a "bot is declaring" progress bar.
  * The assignment is pre-computed immediately on takeover; the timer is purely
  * cosmetic from a logic perspective but must fire authoritatively server-side.
@@ -259,24 +259,24 @@ const BOT_DECLARATION_TAKEOVER_MS = 30_000;
 
 /**
  * Window after disconnect for a player to reconnect before the server treats
- * them as permanently gone.  Runs concurrently with the turn timer when the
+ * them as permanently gone. Runs concurrently with the turn timer when the
  * disconnected player holds the active turn.
  */
 const RECONNECT_WINDOW_MS = 60_000;
 
 /**
  * How often tick events are emitted for both the turn timer and the reconnect
- * window.  Clients use tick events to keep their countdown UI accurate without
+ * window. Clients use tick events to keep their countdown UI accurate without
  * having to drift-correct the initial expiresAt value on their own.
  */
 const TIMER_TICK_INTERVAL_MS = 5_000;
 
 /**
  * How long players from the previous game have to reconnect to the room lobby
- * after the rematch vote reaches majority (Sub-AC 45c).
+ * after the rematch vote reaches majority.
  *
  * When majority YES is reached the server broadcasts `rematch_start` and
- * immediately begins this 30-second gathering window.  Players who rejoin
+ * immediately begins this 30-second gathering window. Players who rejoin
  * the room WS (/ws/room/<CODE>) within the window are marked as "back".
  * At expiry, absent human players are replaced by bots and the game starts.
  *
@@ -287,21 +287,21 @@ const TIMER_TICK_INTERVAL_MS = 5_000;
 const REMATCH_GATHER_TIMEOUT_MS = 30_000;
 
 /**
- * Active rematch-gathering countdowns (Sub-AC 45c).
+ * Active rematch-gathering countdowns.
  *
- * Key:   roomCode (upper-cased)
+ * Key: roomCode (upper-cased)
  * Value: {
- *   expectedPlayerIds: string[],  — human playerIds from the finished game
- *   reconnectedIds:    Set<string>,— playerIds that have rejoined the room WS
- *   timerId:           NodeJS.Timeout,
- *   tickId:            NodeJS.Timeout,
- *   expiresAt:         number,     — epoch ms
- *   durationMs:        number,
+ * expectedPlayerIds: string[], — human playerIds from the finished game
+ * reconnectedIds: Set<string>,— playerIds that have rejoined the room WS
+ * timerId: NodeJS.Timeout,
+ * tickId: NodeJS.Timeout,
+ * expiresAt: number, — epoch ms
+ * durationMs: number,
  * }
  *
  * Lifecycle:
- *   - Set:     _startRematchGatheringCountdown (called in handleRematchVote when majority YES)
- *   - Cleared: _cancelRematchGathering (called when countdown ends or all players rejoin)
+ * - Set: _startRematchGatheringCountdown (called in handleRematchVote when majority YES)
+ * - Cleared: _cancelRematchGathering (called when countdown ends or all players rejoin)
  */
 const _rematchGatheringState = new Map();
 
@@ -309,7 +309,7 @@ const _rematchGatheringState = new Map();
 const _botTimers = new Map();
 
 /**
- * Active bot-declaration-takeover countdown timers (Sub-AC 3 of AC 41).
+ * Active bot-declaration-takeover countdown timers.
  * roomCode → { timerId, tickId, expiresAt }
  *
  * Set when a human's declaration is taken over by the bot.
@@ -321,7 +321,7 @@ const _botDeclarationTimers = new Map();
 const _turnTimers = new Map();
 
 /**
- * Active post-declaration turn-selection timers (AC 28 / Sub-AC 28c).
+ * Active post-declaration turn-selection timers (AC 28).
  * roomCode → { timerId, expiresAt, eligiblePlayers: string[] }
  *
  * Set when a human makes a correct declaration and multiple teammates are eligible.
@@ -330,8 +330,8 @@ const _turnTimers = new Map();
 const _postDeclarationTimers = new Map();
 
 /**
- * Rooms where the declaration-phase timer (Sub-AC 23a) has already been
- * started for the current turn.  Prevents the 60-second extension from
+ * Rooms where the declaration-phase timer has already been
+ * started for the current turn. Prevents the 60-second extension from
  * firing multiple times when the active player sends several consecutive
  * `partial_selection` messages while filling in the card-assignment form.
  *
@@ -343,21 +343,21 @@ const _declarationPhaseStarted = new Set();
 /**
  * Active reconnect windows for disconnected human players.
  *
- * Key:   playerId (the original human player)
+ * Key: playerId (the original human player)
  * Value: {
- *   roomCode:            string,
- *   originalDisplayName: string,
- *   originalAvatarId:    string|null,
- *   originalIsGuest:     boolean,
- *   timerId:             NodeJS.Timeout,
- *   expiresAt:           number   // epoch ms
+ * roomCode: string,
+ * originalDisplayName: string,
+ * originalAvatarId: string|null,
+ * originalIsGuest: boolean,
+ * timerId: NodeJS.Timeout,
+ * expiresAt: number // epoch ms
  * }
  */
 const _reconnectWindows = new Map();
 
 /**
  * Active concurrent reconnect timers (tick-emitting, per-player).
- * Key:   `${roomCode}:${playerId}`
+ * Key: `${roomCode}:${playerId}`
  * Value: `{ timerId, tickId, expiresAt }`
  */
 const _reconnectTimers = new Map();
@@ -365,15 +365,15 @@ const _reconnectTimers = new Map();
 // Partial selection state is managed by partialSelectionStore (imported above).
 
 /**
- * Private declaration suit-selection state (Sub-AC 21a).
+ * Private declaration suit-selection state.
  *
  * Tracks which half-suit the active player has chosen in Step 1 of the
- * DeclareModal BEFORE they click "Declare!".  This selection is:
- *   - stored server-side so bot-takeover logic can continue the same suit
- *   - NEVER broadcast to other players or included in `bot_takeover` payload
- *   - cleared when the turn ends (valid action OR timer expiry)
+ * DeclareModal BEFORE they click "Declare!". This selection is:
+ * - stored server-side so bot-takeover logic can continue the same suit
+ * - NEVER broadcast to other players or included in `bot_takeover` payload
+ * - cleared when the turn ends (valid action OR timer expiry)
  *
- * Key:   `${roomCode}:${playerId}`
+ * Key: `${roomCode}:${playerId}`
  * Value: `{ halfSuitId: string }` — the suit selected in Step 1
  */
 const _declarationSelections = new Map();
@@ -385,17 +385,17 @@ const _declarationSelections = new Map();
  * server marks the declaration as bot-controlled and preserves the partial
  * card-assignment state so the bot can continue from where the human left off.
  *
- * Key:   roomCode (upper-cased)
+ * Key: roomCode (upper-cased)
  * Value: {
- *   playerId:   string,                   — the original human declarant
- *   halfSuitId: string|null,              — suit chosen in Step 1 (null if not yet chosen)
- *   assignment: Record<string, string>,   — already-assigned card→player mappings
+ * playerId: string, — the original human declarant
+ * halfSuitId: string|null, — suit chosen in Step 1 (null if not yet chosen)
+ * assignment: Record<string, string>, — already-assigned card→player mappings
  * }
  *
  * Lifecycle:
- *   - Set:     handlePlayerDisconnect (when active declarer disconnects mid-declaration)
- *   - Cleared: handleDeclare / handleForcedFailedDeclaration / handleAskCard
- *              (any action that ends the current declaration or supersedes it)
+ * - Set: handlePlayerDisconnect (when active declarer disconnects mid-declaration)
+ * - Cleared: handleDeclare / handleForcedFailedDeclaration / handleAskCard
+ * (any action that ends the current declaration or supersedes it)
  */
 const _botControlledDeclarations = new Map();
 
@@ -445,12 +445,12 @@ async function resolveUser(token) {
  *
  * The spectator token is the 32-char hex value stored in rooms.spectator_token.
  * It is included in the spectator link shared by the host:
- *   /spectate/<TOKEN>  →  frontend resolves roomCode  →  WS ?spectatorToken=<TOKEN>
+ * /spectate/<TOKEN> → frontend resolves roomCode → WS ?spectatorToken=<TOKEN>
  *
  * Returns the minimal room record { id, code, status } if valid, null otherwise.
  *
- * @param {string} roomCode        The 6-char room code from the WS URL path.
- * @param {string} spectatorToken  The token to validate (case-insensitive).
+ * @param {string} roomCode The 6-char room code from the WS URL path.
+ * @param {string} spectatorToken The token to validate (case-insensitive).
  * @returns {Promise<{id: string, code: string, status: string}|null>}
  */
 async function resolveSpectatorToken(roomCode, spectatorToken) {
@@ -622,13 +622,13 @@ function scheduleBotTurnIfNeeded(gs) {
   const currentPlayer = gs.players.find((p) => p.playerId === gs.currentTurnPlayerId);
   if (!currentPlayer || !currentPlayer.isBot) return;
 
-  // ── Sub-AC 4: Seat reclaim at turn boundary ───────────────────────────────
+  // ── Seat reclaim at turn boundary ───────────────────────────────
   // If the original human player reconnected after the 60s grace period expired,
-  // they are in the reclaim queue.  Execute the reclaim now (at this turn boundary)
-  // instead of scheduling a bot turn.  After _executeReclaim returns:
-  //   - player.isBot === false
-  //   - The calling action handler will call scheduleTurnTimerIfNeeded(gs) next,
-  //     which will detect isBot=false and schedule the 60-second human turn timer.
+  // they are in the reclaim queue. Execute the reclaim now (at this turn boundary)
+  // instead of scheduling a bot turn. After _executeReclaim returns:
+  // - player.isBot === false
+  // - The calling action handler will call scheduleTurnTimerIfNeeded(gs) next,
+  // which will detect isBot=false and schedule the 60-second human turn timer.
   if (isInReclaimQueue(gs.roomCode, currentPlayer.playerId)) {
     _executeReclaim(gs, currentPlayer.playerId);
     return; // Do NOT schedule a bot turn — human resumes control.
@@ -655,11 +655,11 @@ function scheduleBotTurnIfNeeded(gs) {
  * When it fires without action, the server auto-executes a move via bot logic.
  *
  * Broadcasts two event families so clients can display a countdown:
- *   - Legacy `turn_timer` (start event) for backward compatibility with
- *     existing client code that reads { playerId, durationMs, expiresAt }.
- *   - `timer_start` / `timer_tick` / `timer_threshold` (every 1 s, plus a
- *     one-time threshold event at ≤10 s) via timerService — broadcast to ALL
- *     players AND spectators in the room.
+ * - Legacy `turn_timer` (start event) for backward compatibility with
+ * existing client code that reads { playerId, durationMs, expiresAt }.
+ * - `timer_start` / `timer_tick` / `timer_threshold` (every 1 s, plus a
+ * one-time threshold event at ≤10 s) via timerService — broadcast to ALL
+ * players AND spectators in the room.
  *
  * @param {Object} gs
  */
@@ -708,7 +708,7 @@ function scheduleTurnTimerIfNeeded(gs) {
 /**
  * Cancel the human turn timer (and its tick interval) for a room.
  * Call when a valid move is made or the room is torn down.
- * Also clears the declaration-phase-started flag (Sub-AC 23a).
+ * Also clears the declaration-phase-started flag.
  * @param {string} roomCode
  */
 function cancelTurnTimer(roomCode) {
@@ -728,20 +728,20 @@ function cancelTurnTimer(roomCode) {
  * the DeclareModal card-assignment form).
  *
  * Behaviour:
- *   1. Cancels the existing 60-second turn timer.
- *   2. Starts a 60-second DECLARATION_PHASE_TIMEOUT_MS timer that calls
- *      `executeTimedOutTurn` on expiry (same as the original turn timer).
- *   3. Emits real-time `timer_tick` events every 1 second AND a `timer_threshold`
- *      event at ≤10 s via timerService — broadcast to ALL players and spectators.
- *      (Only the timer countdown is broadcast; the card-assignment choices remain
- *      private until the player submits or times out.)
- *   4. Broadcasts a `declaration_timer` event to ALL connections (players +
- *      spectators) so the entire table sees the declaration countdown.
+ * 1. Cancels the existing 60-second turn timer.
+ * 2. Starts a 60-second DECLARATION_PHASE_TIMEOUT_MS timer that calls
+ * `executeTimedOutTurn` on expiry (same as the original turn timer).
+ * 3. Emits real-time `timer_tick` events every 1 second AND a `timer_threshold`
+ * event at ≤10 s via timerService — broadcast to ALL players and spectators.
+ * (Only the timer countdown is broadcast; the card-assignment choices remain
+ * private until the player submits or times out.)
+ * 4. Broadcasts a `declaration_timer` event to ALL connections (players +
+ * spectators) so the entire table sees the declaration countdown.
  *
- * Sub-AC 23a / 36.1.
+ * Uses the shared countdown timer service for start, tick, and expiry events.
  *
  * @param {string} roomCode
- * @param {string} playerId  — The declaring player who entered Step 2.
+ * @param {string} playerId — The declaring player who entered Step 2.
  */
 function startDeclarationPhaseTimer(roomCode, playerId) {
   // Cancel the existing 60-second turn timer (via timerService + metadata map).
@@ -769,7 +769,7 @@ function startDeclarationPhaseTimer(roomCode, playerId) {
 
   // Broadcast the legacy `declaration_timer` event to ALL connections
   // (players + spectators) so everyone on the table can show the 60-second
-  // countdown.  Only the assignment details remain private — this event only
+  // countdown. Only the assignment details remain private — this event only
   // carries { playerId, durationMs, expiresAt }.
   broadcastToGame(roomCode, {
     type:       'declaration_timer',
@@ -810,7 +810,7 @@ function cancelBotDeclarationTimer(roomCode) {
 }
 
 // ---------------------------------------------------------------------------
-// Post-declaration turn-selection timer (AC 28 / Sub-AC 28c)
+// Post-declaration turn-selection timer (AC 28)
 // ---------------------------------------------------------------------------
 
 /**
@@ -924,19 +924,19 @@ async function _abandonGameIfAllBots(roomCode) {
 }
 
 /**
- * Start the 30-second post-declaration turn-selection timer (Sub-AC 28c).
+ * Start the 30-second post-declaration turn-selection timer.
  *
- * Called after a HUMAN player makes a CORRECT declaration.  The declaring
+ * Called after a HUMAN player makes a CORRECT declaration. The declaring
  * team has POST_DECLARATION_TURN_SELECTION_MS (30 s) to choose which
- * eligible teammate takes the next turn.  If no player sends a valid
+ * eligible teammate takes the next turn. If no player sends a valid
  * `choose_next_turn` message, the server auto-selects a random eligible
  * player.
  *
  * Broadcasts `post_declaration_timer` to ALL connected clients (players +
  * spectators) so the entire table sees the countdown.
  *
- * @param {string}   roomCode       - Room the game is running in
- * @param {string}   declarerId     - The player who just made the declaration
+ * @param {string} roomCode - Room the game is running in
+ * @param {string} declarerId - The player who just made the declaration
  * @param {string[]} eligiblePlayers - Player IDs on the declaring team with cards
  */
 function startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers) {
@@ -1003,22 +1003,22 @@ function startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers) {
  * Handle a `choose_next_turn` message from a human player on the declaring team.
  *
  * Validates that:
- *   1. A post-declaration timer is currently active for the room.
- *   2. The chooser belongs to the declaring team.
- *   3. The recipient is in the eligible player list AND still has cards.
+ * 1. A post-declaration timer is currently active for the room.
+ * 2. The chooser belongs to the declaring team.
+ * 3. The recipient is in the eligible player list AND still has cards.
  *
  * On success: cancels the timer, updates `currentTurnPlayerId`, broadcasts
  * `post_declaration_turn_selected`, and schedules the selected player's turn.
  *
  * @param {string} roomCode
- * @param {string} chooserId   - The player who sent the message
+ * @param {string} chooserId - The player who sent the message
  * @param {string} recipientId - The teammate they chose
  * @param {import('ws').WebSocket|null} ws
  */
 /**
  * Sanitize a partial selection for inclusion in a `bot_takeover` broadcast.
  *
- * Privacy guarantee (Sub-AC 21a): The `halfSuitId` and `assignment` chosen
+ * Privacy guarantee: The `halfSuitId` and `assignment` chosen
  * during the declaration flow are PRIVATE to the declaring player — they must
  * NOT be broadcast to other players before the final `declare_suit` is sent.
  *
@@ -1027,7 +1027,7 @@ function startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers) {
  * already auto-executing the move; the card choice is public at that point.
  *
  * @param {Object|null} partialState
- * @returns {Object|null}  Sanitized version safe to broadcast.
+ * @returns {Object|null} Sanitized version safe to broadcast.
  */
 function sanitizePartialStateForBroadcast(partialState) {
   if (!partialState) return null;
@@ -1041,7 +1041,7 @@ function sanitizePartialStateForBroadcast(partialState) {
 }
 
 // ---------------------------------------------------------------------------
-// Bot-declaration takeover countdown (Sub-AC 3 of AC 41)
+// Bot-declaration takeover countdown
 // ---------------------------------------------------------------------------
 
 /**
@@ -1049,20 +1049,20 @@ function sanitizePartialStateForBroadcast(partialState) {
  * declaration from a human player.
  *
  * Sequence:
- *   1. Pre-compute the completed assignment using completeBotFromPartial.
- *   2. Broadcast bot_declaration_timer to ALL players so the UI can show
- *      a visible countdown bar (distinct from the private human declarant timer).
- *   3. Emit bot_declaration_timer_tick every TIMER_TICK_INTERVAL_MS to ALL
- *      players for countdown re-sync.
- *   4. After BOT_DECLARATION_TAKEOVER_MS, auto-submit the declaration via
- *      handleDeclare and broadcast the result to all players.
+ * 1. Pre-compute the completed assignment using completeBotFromPartial.
+ * 2. Broadcast bot_declaration_timer to ALL players so the UI can show
+ * a visible countdown bar (distinct from the private human declarant timer).
+ * 3. Emit bot_declaration_timer_tick every TIMER_TICK_INTERVAL_MS to ALL
+ * players for countdown re-sync.
+ * 4. After BOT_DECLARATION_TAKEOVER_MS, auto-submit the declaration via
+ * handleDeclare and broadcast the result to all players.
  *
  * Privacy: The assignment is NOT included in the timer broadcast — only the
- * duration/expiresAt fields are sent.  The result is revealed when handleDeclare
+ * duration/expiresAt fields are sent. The result is revealed when handleDeclare
  * emits declaration_result as usual.
  *
- * @param {string}      roomCode
- * @param {string}      playerId       - Original human declarant (now bot-controlled)
+ * @param {string} roomCode
+ * @param {string} playerId - Original human declarant (now bot-controlled)
  * @param {Object|null} effectivePartial - Partial state to complete from
  */
 async function startBotDeclarationCountdown(roomCode, playerId, effectivePartial) {
@@ -1164,14 +1164,14 @@ function _clearAllReconnectWindows() {
  * Called from `scheduleBotTurnIfNeeded` when the current-turn player is
  * bot-flagged but has a pending reclaim entry in disconnectStore.
  * Restores the human flag, removes the reclaim entry, broadcasts updates,
- * and persists the change.  After this returns, the calling code falls
+ * and persists the change. After this returns, the calling code falls
  * through to `scheduleTurnTimerIfNeeded` which will see `isBot = false`
  * and start the 60-second human turn timer.
  *
- * Sub-AC 4: Mid-game reclaim at next turn boundary.
+ * Mid-game reclaim at next turn boundary.
  *
- * @param {Object} gs        - Current GameState (mutated in place)
- * @param {string} playerId  - The original human player reclaiming their seat
+ * @param {Object} gs - Current GameState (mutated in place)
+ * @param {string} playerId - The original human player reclaiming their seat
  */
 function _executeReclaim(gs, playerId) {
   const player = gs.players.find((p) => p.playerId === playerId);
@@ -1212,15 +1212,15 @@ function _executeReclaim(gs, playerId) {
  * Start the 60-second reconnect window for a disconnected human player.
  *
  * Immediately marks the player's game slot as bot-controlled so the game can
- * continue.  Broadcasts `player_disconnected` to all remaining connections.
+ * continue. Broadcasts `player_disconnected` to all remaining connections.
  * Schedules a bot turn if it is currently the disconnected player's turn.
  *
  * After RECONNECT_WINDOW_MS, if the player has not reconnected:
- *   - The reconnect window entry is removed (bot keeps the slot permanently).
- *   - `reconnect_expired` is broadcast to all remaining connections.
+ * - The reconnect window entry is removed (bot keeps the slot permanently).
+ * - `reconnect_expired` is broadcast to all remaining connections.
  *
- * @param {Object} gs      - Current GameState (mutated in-place)
- * @param {Object} player  - The player entry in gs.players (mutated in-place)
+ * @param {Object} gs - Current GameState (mutated in-place)
+ * @param {Object} player - The player entry in gs.players (mutated in-place)
  */
 function _startReconnectWindow(gs, player) {
   const playerId = player.playerId;
@@ -1239,7 +1239,7 @@ function _startReconnectWindow(gs, player) {
   // ── 60-second turn timer (concurrent) ────────────────────────────────────
   // Start the turn timer BEFORE marking the player as bot so that
   // scheduleTurnTimerIfNeeded sees isBot === false and sets the 30-second
-  // timer (rather than skipping it).  This timer runs concurrently with
+  // timer (rather than skipping it). This timer runs concurrently with
   // the 60-second reconnect window below.
   if (gs.currentTurnPlayerId === playerId) {
     scheduleTurnTimerIfNeeded(gs);
@@ -1258,7 +1258,7 @@ function _startReconnectWindow(gs, player) {
       '— bot takes over permanently'
     );
 
-    // ── Sub-AC 4: Mark permanent bot assignment ───────────────────────────
+    // ── Mark permanent bot assignment ───────────────────────────
     // Stamp the player object so late reconnects can be detected and queued
     // for the next turn boundary reclaim.
     const currentGs = getGame(roomCode);
@@ -1320,7 +1320,7 @@ function _startReconnectWindow(gs, player) {
   }, playerId);
 
   // 2. reconnect_timer: new canonical start event with standardised shape,
-  //    broadcast to ALL clients (including the disconnected one if reconnecting).
+  // broadcast to ALL clients (including the disconnected one if reconnecting).
   broadcastToGame(roomCode, {
     type:       'reconnect_timer',
     playerId,
@@ -1353,13 +1353,13 @@ function _startReconnectWindow(gs, player) {
  *
  * This is a lightweight public API that emits events via _reconnectTimers (as
  * opposed to the full-featured _startReconnectWindow which also manages player
- * state).  Use this when you only need the timer+event infrastructure without
+ * state). Use this when you only need the timer+event infrastructure without
  * the bot-slot logic.
  *
  * Emits:
- *   `reconnect_timer`  — start event broadcast to all clients
- *   `reconnect_tick`   — every TIMER_TICK_INTERVAL_MS (5 s)
- *   `reconnect_expired`— when window closes without reconnect
+ * `reconnect_timer` — start event broadcast to all clients
+ * `reconnect_tick` — every TIMER_TICK_INTERVAL_MS (5 s)
+ * `reconnect_expired`— when window closes without reconnect
  *
  * @param {string} roomCode
  * @param {string} playerId
@@ -1439,22 +1439,22 @@ function cancelReconnectWindow(roomCode, playerId) {
 
 /**
  * Handle a player disconnect — single public entry point for disconnect-triggered
- * timer logic.  Unlike _startReconnectWindow this function does NOT mutate the
+ * timer logic. Unlike _startReconnectWindow this function does NOT mutate the
  * game state (no bot marking) — it only starts the timer infrastructure and
  * emits events.
  *
  * Orchestrates the concurrent timer sequence:
- *   1. Broadcasts `player_disconnected` to all OTHER connected clients.
- *   2. If the game is active: starts the 60-second reconnect window
- *      (`reconnect_timer` → `reconnect_tick` → `reconnect_expired`).
- *   3. If the disconnected player holds the active turn: ALSO starts the
- *      60-second turn timer concurrently (`turn_timer` → `turn_timer_tick`
- *      → `bot_takeover`).
+ * 1. Broadcasts `player_disconnected` to all OTHER connected clients.
+ * 2. If the game is active: starts the 60-second reconnect window
+ * (`reconnect_timer` → `reconnect_tick` → `reconnect_expired`).
+ * 3. If the disconnected player holds the active turn: ALSO starts the
+ * 60-second turn timer concurrently (`turn_timer` → `turn_timer_tick`
+ * → `bot_takeover`).
  *
  * Spectators disconnecting are silently ignored.
  *
- * @param {string}  roomCode
- * @param {string}  playerId
+ * @param {string} roomCode
+ * @param {string} playerId
  * @param {boolean} isSpectator
  */
 function handlePlayerDisconnect(roomCode, playerId, isSpectator) {
@@ -1477,9 +1477,9 @@ function handlePlayerDisconnect(roomCode, playerId, isSpectator) {
     const declSel    = _declarationSelections.get(declKey) ?? null;
 
     // Three signals that indicate the player is mid-declaration:
-    //   1. partialSelectionStore has a 'declare'-flow entry (player reached Step 2)
-    //   2. _declarationSelections has an entry (player chose a suit in Step 1)
-    //   3. _declarationPhaseStarted has the roomCode (declaration phase timer fired)
+    // 1. partialSelectionStore has a 'declare'-flow entry (player reached Step 2)
+    // 2. _declarationSelections has an entry (player chose a suit in Step 1)
+    // 3. _declarationPhaseStarted has the roomCode (declaration phase timer fired)
     const isMidDeclaration =
       partial?.flow === 'declare' ||
       declSel !== null ||
@@ -1521,15 +1521,15 @@ function handlePlayerDisconnect(roomCode, playerId, isSpectator) {
  * Store a private suit selection for the declaring player (Step 1 of DeclareModal).
  *
  * Called when the active player sends `declare_selecting` — they have picked
- * a half-suit to declare but have not yet confirmed.  This selection is stored
+ * a half-suit to declare but have not yet confirmed. This selection is stored
  * server-side so `executeTimedOutTurn` can continue the correct suit if the
- * timer fires.  It is NEVER broadcast to other players.
+ * timer fires. It is NEVER broadcast to other players.
  *
  * Pass `halfSuitId = null | undefined` to clear the stored selection (player
  * pressed "Back" to return to Step 1 or closed the modal).
  *
- * @param {string}      roomCode
- * @param {string}      playerId
+ * @param {string} roomCode
+ * @param {string} playerId
  * @param {string|null} halfSuitId
  */
 function handleDeclareSelecting(roomCode, playerId, halfSuitId) {
@@ -1551,15 +1551,15 @@ function handleDeclareSelecting(roomCode, playerId, halfSuitId) {
  * Uses bot logic to pick the best available action.
  *
  * Before executing the move, broadcasts a `bot_takeover` event to all clients
- * in the room so they can display a takeover animation.  The event includes any
+ * in the room so they can display a takeover animation. The event includes any
  * partial card-selection state the player reported via `partial_selection`
  * messages while navigating the 3-step wizard.
  *
- * ── Privacy boundary (Sub-AC 21a) ───────────────────────────────────────────
+ * ── Privacy boundary ───────────────────────────────────────────
  * The `bot_takeover` broadcast uses a SANITIZED version of the partial state:
- *   • For the ask flow: includes halfSuitId/cardId (already-public intent).
- *   • For the declare flow: only `{ flow: 'declare' }` — never the halfSuitId
- *     or assignment, which remain private until `declare_suit` is submitted.
+ * • For the ask flow: includes halfSuitId/cardId (already-public intent).
+ * • For the declare flow: only `{ flow: 'declare' }` — never the halfSuitId
+ * or assignment, which remain private until `declare_suit` is submitted.
  * The full partial state (with halfSuitId) is passed to `completeBotFromPartial`
  * internally so the bot can continue the correct declaration.
  * ────────────────────────────────────────────────────────────────────────────
@@ -1581,18 +1581,18 @@ async function executeTimedOutTurn(roomCode, playerId) {
   const declarationKey       = `${roomCode}:${playerId}`;
   const declarationSelection = _declarationSelections.get(declarationKey) ?? null;
   _declarationSelections.delete(declarationKey);
-  // Clear declaration-phase-started flag so the next turn starts fresh (Sub-AC 23a).
+  // Clear declaration-phase-started flag so the next turn starts fresh.
   _declarationPhaseStarted.delete(roomCode);
 
   // Broadcast bot_takeover with SANITIZED partial state — never reveals which
-  // half-suit the declaring player had selected before confirmation (Sub-AC 21a).
+  // half-suit the declaring player had selected before confirmation.
   broadcastToGame(roomCode, {
     type:         'bot_takeover',
     playerId,
     partialState: sanitizePartialStateForBroadcast(partialState),
   });
 
-  // For bot logic, use the full partial state.  If only a Step-1 suit was
+  // For bot logic, use the full partial state. If only a Step-1 suit was
   // chosen (declare_selecting but no Step-2 assignment yet), synthesize a
   // minimal declare partial so the bot continues with the same suit.
   const effectivePartial = partialState
@@ -1625,11 +1625,11 @@ async function executeTimedOutTurn(roomCode, playerId) {
     }
   }
 
-  // ── Sub-AC 3 of AC 41: Bot declaration takeover countdown ────────────────
+  // ── Bot declaration takeover countdown ────────────────
   // When the human timed out mid-declaration (either with a complete 6-card
   // assignment OR while disconnected), start a 30-second visible countdown
-  // before the bot auto-submits.  This gives all clients time to show a
-  // "bot is declaring" progress bar.  The assignment is pre-computed now
+  // before the bot auto-submits. This gives all clients time to show a
+  // "bot is declaring" progress bar. The assignment is pre-computed now
   // but not revealed until the timer fires and handleDeclare broadcasts the result.
   if (effectivePartial?.flow === 'declare') {
     await startBotDeclarationCountdown(roomCode, playerId, effectivePartial);
@@ -1650,26 +1650,26 @@ async function executeTimedOutTurn(roomCode, playerId) {
  * Store a partial card-selection state reported by the active player.
  *
  * Only accepted if:
- *   - The game is active.
- *   - The sender is the current-turn player.
+ * - The game is active.
+ * - The sender is the current-turn player.
  *
  * The stored partial is used by `executeTimedOutTurn` to deterministically
  * complete the move from where the player left off.
  *
  * Partial selection shapes (mirroring partialSelectionStore contract):
- *   Ask step 2 (half-suit chosen):
- *     { flow: 'ask', halfSuitId: string }
- *   Ask step 3 (card also chosen):
- *     { flow: 'ask', halfSuitId: string, cardId: string }
- *   Declare (suit chosen + current assignment):
- *     { flow: 'declare', halfSuitId: string, assignment: Record<string,string> }
+ * Ask step 2 (half-suit chosen):
+ * { flow: 'ask', halfSuitId: string }
+ * Ask step 3 (card also chosen):
+ * { flow: 'ask', halfSuitId: string, cardId: string }
+ * Declare (suit chosen + current assignment):
+ * { flow: 'declare', halfSuitId: string, assignment: Record<string,string> }
  *
  * @param {string} roomCode
- * @param {string} playerId    - The player reporting their partial state.
- * @param {string} flow        - 'ask' or 'declare'
- * @param {string|undefined}  halfSuitId
- * @param {string|undefined}  cardId       - Only for 'ask' flow (step 3)
- * @param {Object|undefined}  assignment   - Only for 'declare' flow
+ * @param {string} playerId - The player reporting their partial state.
+ * @param {string} flow - 'ask' or 'declare'
+ * @param {string|undefined} halfSuitId
+ * @param {string|undefined} cardId - Only for 'ask' flow (step 3)
+ * @param {Object|undefined} assignment - Only for 'declare' flow
  */
 function handlePartialSelection(roomCode, playerId, flow, halfSuitId, cardId, assignment) {
   const gs = getGame(roomCode);
@@ -1688,7 +1688,7 @@ function handlePartialSelection(roomCode, playerId, flow, halfSuitId, cardId, as
 
   setPartialSelection(roomCode, playerId, partial);
 
-  // ── Declaration phase timer extension (Sub-AC 23a) ───────────────────────
+  // ── Declaration phase timer extension ───────────────────────
   // The first time the active player reports Step 2 of the declaration flow
   // (flow: 'declare' with a non-empty assignment), extend the turn timer to
   // 60 seconds so the player has enough time to assign all 6 cards.
@@ -1719,7 +1719,7 @@ async function executeBotTurn(roomCode, botId) {
   if (gs.currentTurnPlayerId !== botId) return; // Turn changed since scheduled
 
   // Guard: if a disconnected human player reclaimed their seat while this
-  // timer was in flight, their isBot flag is now false.  Do not execute.
+  // timer was in flight, their isBot flag is now false. Do not execute.
   const currentPlayer = gs.players.find((p) => p.playerId === botId);
   if (!currentPlayer || !currentPlayer.isBot) return;
 
@@ -1750,29 +1750,29 @@ async function executeBotTurn(roomCode, botId) {
  * at which point a single `ask_card` message is sent here.
  *
  * Server-side enforcement:
- *   1. validateAsk() rejects any message from a non-active player with
- *      NOT_YOUR_TURN — the error is returned ONLY to the sender's WS (`ws`),
- *      not broadcast to the room.  No other player learns about the attempt.
- *   2. If validation fails for any other reason (ALREADY_HELD, SAME_TEAM, etc.)
- *      the error is similarly returned ONLY to `ws` and the function returns
- *      immediately without touching game state or broadcasting anything.
- *   3. Only after a VALID ask is applied does `broadcastToGame` fire for
- *      `ask_result`, `game_state`, and `game_players`.
- *   4. `hand_update` is sent only to the two affected players (asker and
- *      target) via `broadcastStateUpdate(gs, changedHands)`.
- *   5. Spectators are blocked one layer up: the `ws.on('message')` handler
- *      returns a SPECTATOR error to the spectator's WS only if they try to
- *      send any message, never reaching this function.
- *   6. Unrecognised message types (e.g. any future "preview" event) are
- *      rejected with UNKNOWN_TYPE at the switch-default handler — only to
- *      the sender.  They never reach this function.
+ * 1. validateAsk() rejects any message from a non-active player with
+ * NOT_YOUR_TURN — the error is returned ONLY to the sender's WS (`ws`),
+ * not broadcast to the room. No other player learns about the attempt.
+ * 2. If validation fails for any other reason (ALREADY_HELD, SAME_TEAM, etc.)
+ * the error is similarly returned ONLY to `ws` and the function returns
+ * immediately without touching game state or broadcasting anything.
+ * 3. Only after a VALID ask is applied does `broadcastToGame` fire for
+ * `ask_result`, `game_state`, and `game_players`.
+ * 4. `hand_update` is sent only to the two affected players (asker and
+ * target) via `broadcastStateUpdate(gs, changedHands)`.
+ * 5. Spectators are blocked one layer up: the `ws.on('message')` handler
+ * returns a SPECTATOR error to the spectator's WS only if they try to
+ * send any message, never reaching this function.
+ * 6. Unrecognised message types (e.g. any future "preview" event) are
+ * rejected with UNKNOWN_TYPE at the switch-default handler — only to
+ * the sender. They never reach this function.
  * ──────────────────────────────────────────────────────────────────────────
  *
  * @param {string} roomCode
  * @param {string} askerId
  * @param {string} targetId
  * @param {string} cardId
- * @param {import('ws').WebSocket|null} ws  - The asker's WS (null for bots)
+ * @param {import('ws').WebSocket|null} ws - The asker's WS (null for bots)
  * @param {boolean} isBot
  */
 async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = false) {
@@ -1837,19 +1837,19 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = fa
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Player elimination (Sub-AC 27b)
+// Player elimination
 // ---------------------------------------------------------------------------
 
 /**
  * Process players who were newly eliminated (hand dropped to 0) after a
- * declaration.  For each eliminated player:
- *   - Broadcasts `player_eliminated` to ALL connections in the room.
- *   - If the player is a bot: auto-picks first eligible teammate as turn
- *     recipient and stores it in `gs.turnRecipients`.
- *   - If the player is human: sends a targeted `choose_turn_recipient_prompt`
- *     with the list of eligible teammates so the client can show a modal.
+ * declaration. For each eliminated player:
+ * - Broadcasts `player_eliminated` to ALL connections in the room.
+ * - If the player is a bot: auto-picks first eligible teammate as turn
+ * recipient and stores it in `gs.turnRecipients`.
+ * - If the player is human: sends a targeted `choose_turn_recipient_prompt`
+ * with the list of eligible teammates so the client can show a modal.
  *
- * @param {Object}   gs              - Live GameState (already mutated with eliminations)
+ * @param {Object} gs - Live GameState (already mutated with eliminations)
  * @param {string[]} newlyEliminated - Player IDs whose hands just reached 0
  */
 function _processNewlyEliminatedPlayers(gs, newlyEliminated) {
@@ -1908,11 +1908,11 @@ function _processNewlyEliminatedPlayers(gs, newlyEliminated) {
 /**
  * Handle a `choose_turn_recipient` message from an eliminated human player.
  *
- * Validates the choice and stores it in `gs.turnRecipients`.  Any future call
+ * Validates the choice and stores it in `gs.turnRecipients`. Any future call
  * to `_resolveValidTurn(gs, eliminatedPlayerId)` will prefer this recipient.
  *
  * @param {string} roomCode
- * @param {string} playerId    - The eliminated player making the choice
+ * @param {string} playerId - The eliminated player making the choice
  * @param {string} recipientId - The teammate they chose
  */
 function handleChooseTurnRecipient(roomCode, playerId, recipientId) {
@@ -1934,28 +1934,28 @@ function handleChooseTurnRecipient(roomCode, playerId, recipientId) {
 
 /**
  * Handle a `choose_next_turn` message from the current turn player after a
- * correct declaration (Sub-AC 28b).
+ * correct declaration.
  *
- * After a successful declaration the declaring team keeps the turn.  The
+ * After a successful declaration the declaring team keeps the turn. The
  * current turn player (the declarant, or whoever `_resolveValidTurn` assigned)
  * may redirect the turn to any same-team teammate who still has cards before
  * they take an ask/declare action.
  *
  * Validation:
- *   - Game must be active.
- *   - requesterId must be `gs.currentTurnPlayerId`.
- *   - chosenPlayerId must be on the same team as the requester.
- *   - chosenPlayerId must not be eliminated (has ≥1 card).
+ * - Game must be active.
+ * - requesterId must be `gs.currentTurnPlayerId`.
+ * - chosenPlayerId must be on the same team as the requester.
+ * - chosenPlayerId must not be eliminated (has ≥1 card).
  *
  * On success:
- *   - `gs.currentTurnPlayerId` is updated to `chosenPlayerId`.
- *   - Updated `game_state` is broadcast to all clients.
- *   - Any active turn timer is cancelled and restarted for the new player.
+ * - `gs.currentTurnPlayerId` is updated to `chosenPlayerId`.
+ * - Updated `game_state` is broadcast to all clients.
+ * - Any active turn timer is cancelled and restarted for the new player.
  *
- * @param {string}          roomCode
- * @param {string}          requesterId    - The current turn player redirecting the turn
- * @param {string}          chosenPlayerId - The teammate chosen to receive the turn
- * @param {WebSocket|null}  ws
+ * @param {string} roomCode
+ * @param {string} requesterId - The current turn player redirecting the turn
+ * @param {string} chosenPlayerId - The teammate chosen to receive the turn
+ * @param {WebSocket|null} ws
  */
 function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
   const gs = getGame(roomCode);
@@ -1994,7 +1994,7 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
   // Broadcast updated game state so all clients immediately see the new turn.
   broadcastStateUpdate(gs, new Set());
 
-  // Sub-AC 28c: If a post-declaration turn-selection timer is active (the
+  // If a post-declaration turn-selection timer is active (the
   // player chose before the 30-second window expired), broadcast the
   // selection event and cancel the timer.
   if (_postDeclarationTimers.has(roomCode)) {
@@ -2022,25 +2022,25 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
  * The target is identified by their **seat index** so the client does not need
  * to expose internal player IDs.
  *
- * Validation (Sub-AC 56a):
- *   1. Game must be active.
- *   2. requesterId must be `gs.currentTurnPlayerId` ("declarant eligibility").
- *   3. targetSeatIndex must resolve to an existing player.
- *   4. Target player must be on the same team as the requester.
- *   5. Target player must not be eliminated (holds ≥1 card).
- *   6. Requester and target may not be the same seat.
+ * Validation:
+ * 1. Game must be active.
+ * 2. requesterId must be `gs.currentTurnPlayerId` ("declarant eligibility").
+ * 3. targetSeatIndex must resolve to an existing player.
+ * 4. Target player must be on the same team as the requester.
+ * 5. Target player must not be eliminated (holds ≥1 card).
+ * 6. Requester and target may not be the same seat.
  *
  * On success:
- *   - `gs.currentTurnPlayerId` is updated to the target player's id.
- *   - Updated `game_state` is broadcast to all connected clients.
- *   - A `turn-passed` event is emitted to all clients with the new active seat.
- *   - Any active turn or post-declaration timer is cancelled and a fresh timer
- *     is scheduled for the target player.
+ * - `gs.currentTurnPlayerId` is updated to the target player's id.
+ * - Updated `game_state` is broadcast to all connected clients.
+ * - A `turn-passed` event is emitted to all clients with the new active seat.
+ * - Any active turn or post-declaration timer is cancelled and a fresh timer
+ * is scheduled for the target player.
  *
- * @param {string}          roomCode
- * @param {string}          requesterId      - The current turn player passing the turn
- * @param {number}          targetSeatIndex  - Seat index of the intended recipient
- * @param {import('ws').WebSocket|null} ws   - Requester's socket (for error replies)
+ * @param {string} roomCode
+ * @param {string} requesterId - The current turn player passing the turn
+ * @param {number} targetSeatIndex - Seat index of the intended recipient
+ * @param {import('ws').WebSocket|null} ws - Requester's socket (for error replies)
  */
 function handlePassTurn(roomCode, requesterId, targetSeatIndex, ws) {
   const gs = getGame(roomCode);
@@ -2117,7 +2117,7 @@ function handlePassTurn(roomCode, requesterId, targetSeatIndex, ws) {
  * `correct: false, timedOut: true`.
  *
  * Only called for CONNECTED players whose timer expired mid-declaration
- * (i.e. player is NOT in `_reconnectWindows`).  Disconnected players in
+ * (i.e. player is NOT in `_reconnectWindows`). Disconnected players in
  * the reconnect window fall through to the bot-completion path instead
  * (handled by the disconnect-midgame AC).
  *
@@ -2145,7 +2145,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
   // Update bot knowledge — cards are gone; no assignment to record
   updateKnowledgeAfterDeclaration(gs, halfSuitId, {}, false);
 
-  // Sub-AC 28a: compute eligible next-turn players AFTER cards are removed
+  // compute eligible next-turn players AFTER cards are removed
   // (applyForcedFailedDeclaration has already mutated gs).
   const eligibleNextTurnPlayerIds = getEligibleNextTurnPlayers(gs);
 
@@ -2160,7 +2160,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
     newTurnPlayerId,
     assignment:               null,
     lastMove,
-    // Sub-AC 28a: IDs of all non-eliminated players with cards remaining,
+    // IDs of all non-eliminated players with cards remaining,
     // ordered by seatIndex.
     eligibleNextTurnPlayerIds,
   });
@@ -2168,7 +2168,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
   // Broadcast updated state + personalized hands
   broadcastStateUpdate(gs, changedHands);
 
-  // ── Sub-AC 27b: handle newly eliminated players ───────────────────────────
+  // ── handle newly eliminated players ───────────────────────────
   _processNewlyEliminatedPlayers(gs, newlyEliminated ?? []);
 
   // Update live games store with new scores
@@ -2189,7 +2189,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
     const supabase = getSupabaseClient();
     await persistGameState(gs, supabase);
     await updateStats(gs);
-    // Sub-AC 46c: pass game metadata so the rematch store can recreate the
+    // pass game metadata so the rematch store can recreate the
     // game with the same team assignments and seat order on majority yes.
     const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout, {
       roomId:      gs.roomId,
@@ -2218,7 +2218,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
  * @param {string} roomCode
  * @param {string} declarerId
  * @param {string} halfSuitId
- * @param {Object} assignment  - { [cardId]: playerId }
+ * @param {Object} assignment - { [cardId]: playerId }
  * @param {import('ws').WebSocket|null} ws
  * @param {boolean} isBot
  */
@@ -2256,7 +2256,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   // Update bot knowledge
   updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct);
 
-  // Sub-AC 28a: compute eligible next-turn players AFTER cards are removed
+  // compute eligible next-turn players AFTER cards are removed
   // (applyDeclaration has already mutated gs — hands are updated, newly
   // eliminated players have been added to gs.eliminatedPlayerIds).
   const eligibleNextTurnPlayerIds = getEligibleNextTurnPlayers(gs);
@@ -2271,8 +2271,8 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     newTurnPlayerId,
     assignment,
     lastMove,
-    // Sub-AC 28a: IDs of all non-eliminated players with cards remaining,
-    // ordered by seatIndex.  Includes declarant if they still hold cards.
+    // IDs of all non-eliminated players with cards remaining,
+    // ordered by seatIndex. Includes declarant if they still hold cards.
     eligibleNextTurnPlayerIds,
   });
 
@@ -2294,7 +2294,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   // Broadcast updated state + personalized hands
   broadcastStateUpdate(gs, changedHands);
 
-  // ── Sub-AC 27b: handle newly eliminated players ───────────────────────────
+  // ── handle newly eliminated players ───────────────────────────
   _processNewlyEliminatedPlayers(gs, newlyEliminated ?? []);
 
   // ── Update live games store with new scores ──────────────────────────────
@@ -2314,7 +2314,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     // ── Remove game from live games store (game has ended) ─────────────────
     liveGamesStore.removeGame(roomCode);
 
-    // ── Sub-AC 4: Clean up all pending disconnect timers and reclaim queue ──
+    // ── Clean up all pending disconnect timers and reclaim queue ──
     // Cancel any outstanding reconnect windows (avoids dangling setTimeout
     // references after the game completes).
     clearDisconnectRoom(roomCode);
@@ -2327,7 +2327,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     await updateStats(gs);
 
     // Initiate rematch vote — bots auto-vote yes, humans vote within timeout
-    // Sub-AC 46c: pass game metadata so the rematch store can recreate the
+    // pass game metadata so the rematch store can recreate the
     // game with the same team assignments and seat order on majority yes.
     const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout, {
       roomId:      gs.roomId,
@@ -2346,16 +2346,16 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   const supabase = getSupabaseClient();
   await persistGameState(gs, supabase);
 
-  // ── AC 28 / Sub-AC 28c: Post-declaration turn-selection timer ──────────────
+  // ── AC 28: Post-declaration turn-selection timer ──────────────
   // After a CORRECT declaration by a HUMAN, give the declaring team 30 seconds
   // to choose which eligible teammate takes the next turn.
   // If no one chooses within the window, the server picks a random eligible player.
   //
   // Conditions for starting the timer:
-  //   1. The declaration was correct (declaring team keeps the turn).
-  //   2. The game is still active (not just ended by this declaration).
-  //   3. The declarer is human (bots auto-choose immediately).
-  //   4. There are eligible players on the declaring team (at least 1 with cards).
+  // 1. The declaration was correct (declaring team keeps the turn).
+  // 2. The game is still active (not just ended by this declaration).
+  // 3. The declarer is human (bots auto-choose immediately).
+  // 4. There are eligible players on the declaring team (at least 1 with cards).
   if (correct && gs.status === 'active' && !isBot) {
     const declaringPlayer = gs.players.find((p) => p.playerId === declarerId);
     if (declaringPlayer) {
@@ -2389,16 +2389,16 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
  *
  * ── Why we broadcast to spectators ──────────────────────────────────────────
  * In physical Literature the declaration is announced aloud for everyone in
- * the room to hear.  Spectators therefore have the same right to observe the
- * declaration in progress as the opposing team does.  The assignment being
+ * the room to hear. Spectators therefore have the same right to observe the
+ * declaration in progress as the opposing team does. The assignment being
  * streamed here is the SAME information that will appear in the final
  * `declaration_result` broadcast, so no extra information is leaked.
  * ──────────────────────────────────────────────────────────────────────────
  *
- * @param {string}      roomCode    The room the game is running in.
- * @param {string}      declarerId  Player ID of the sender.
- * @param {string|null} halfSuitId  Half-suit being declared, or null if cancelled.
- * @param {Object}      assignment  Partial { cardId: playerId } map.
+ * @param {string} roomCode The room the game is running in.
+ * @param {string} declarerId Player ID of the sender.
+ * @param {string|null} halfSuitId Half-suit being declared, or null if cancelled.
+ * @param {Object} assignment Partial { cardId: playerId } map.
  */
 function handleDeclareProgress(roomCode, declarerId, halfSuitId, assignment) {
   const gs = getGame(roomCode);
@@ -2461,21 +2461,21 @@ function _handleRematchTimeout(roomCode) {
 /**
  * Handle a `rematch_initiate` message from the host of a private room.
  *
- * Only the host of a non-matchmaking room may call this.  The server
+ * Only the host of a non-matchmaking room may call this. The server
  * validates host identity and room type against Supabase, then
  * immediately triggers a rematch without requiring a majority vote:
- *   1. Clears the active vote (if any) to stop the auto-decline timer.
- *   2. Resets room status to 'waiting' and clears game_state in Supabase.
- *   3. Broadcasts `rematch_start` to all connected clients.
+ * 1. Clears the active vote (if any) to stop the auto-decline timer.
+ * 2. Resets room status to 'waiting' and clears game_state in Supabase.
+ * 3. Broadcasts `rematch_start` to all connected clients.
  *
  * Error codes sent back to the caller:
- *   HOST_ONLY         — sender is not the room's host_user_id
- *   NOT_PRIVATE_ROOM  — room is a matchmaking room (no host authority)
- *   ROOM_NOT_FOUND    — DB lookup failed
- *   REMATCH_RESET_FAILED — Supabase update failed
+ * HOST_ONLY — sender is not the room's host_user_id
+ * NOT_PRIVATE_ROOM — room is a matchmaking room (no host authority)
+ * ROOM_NOT_FOUND — DB lookup failed
+ * REMATCH_RESET_FAILED — Supabase update failed
  *
  * @param {string} roomCode
- * @param {string} playerId  The calling player's ID (must equal host_user_id)
+ * @param {string} playerId The calling player's ID (must equal host_user_id)
  * @param {import('ws').WebSocket|null} ws
  */
 async function handleRematchInitiate(roomCode, playerId, ws) {
@@ -2510,7 +2510,7 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
   // Clear any active rematch vote (stops the auto-decline timer)
   clearRematch(roomCode);
 
-  // ── Sub-AC 45b: Clone previous room settings into a pending rematch ─────
+  // ── Clone previous room settings into a pending rematch ─────
   const gs = getGame(roomCode);
   let previousSettings = null;
   if (gs) {
@@ -2559,10 +2559,10 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
 
   console.log(`[game-ws] Host ${playerId} initiated rematch for room ${roomCode}`);
   broadcastToGame(roomCode, rematchStartPayload);
-  // Sub-AC 45c: Start 30-second gathering countdown to track reconnecting players.
+  // Start 30-second gathering countdown to track reconnecting players.
   if (gs) { _startRematchGatheringCountdown(roomCode, gs.players); }
 
-  // Sub-AC 45d: Start the 30-second bot-fill window in the room socket server.
+  // Start the 30-second bot-fill window in the room socket server.
   // After REMATCH_BOT_FILL_TIMEOUT_MS, absent player slots are auto-filled with
   // bots at the inherited difficulty and the new game starts automatically.
   // pendingRematchStore is already populated (line above), so roomSocketServer
@@ -2575,7 +2575,7 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
 
 
 // ---------------------------------------------------------------------------
-// Rematch gathering countdown (Sub-AC 45c)
+// Rematch gathering countdown
 // ---------------------------------------------------------------------------
 
 /**
@@ -2584,13 +2584,13 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
  *
  * @param {string} roomCode
  * @returns {{
- *   roomCode:              string,
- *   expiresAt:             number,
- *   durationMs:            number,
- *   reconnectedCount:      number,
- *   totalCount:            number,
- *   reconnectedPlayerIds:  string[],
- *   pendingPlayerIds:      string[],
+ * roomCode: string,
+ * expiresAt: number,
+ * durationMs: number,
+ * reconnectedCount: number,
+ * totalCount: number,
+ * reconnectedPlayerIds: string[],
+ * pendingPlayerIds: string[],
  * }|null}
  */
 function _getGatheringSummary(roomCode) {
@@ -2649,10 +2649,10 @@ function _clearAllRematchGatherings() {
  * `notifyRematchPlayerJoined` which updates the reconnected set and re-broadcasts.
  *
  * On expiry the state is cleaned up and a final broadcast goes out with
- * `expired: true`.  The room lobby's auto-start logic proceeds independently.
+ * `expired: true`. The room lobby's auto-start logic proceeds independently.
  *
- * @param {string}   roomCode
- * @param {Array}    players  — full player list from the finished GameState
+ * @param {string} roomCode
+ * @param {Array} players — full player list from the finished GameState
  */
 function _startRematchGatheringCountdown(roomCode, players) {
   const code = roomCode.toUpperCase();
@@ -2721,7 +2721,7 @@ function _startRematchGatheringCountdown(roomCode, players) {
  * early and a final broadcast is sent with `allRejoined: true`.
  *
  * @param {string} roomCode
- * @param {string} playerId  — the userId from the room socket connection
+ * @param {string} playerId — the userId from the room socket connection
  */
 function notifyRematchPlayerJoined(roomCode, playerId) {
   const code  = roomCode.toUpperCase();
@@ -2784,14 +2784,14 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
   });
 
   if (summary.majorityReached) {
-    // ── Sub-AC 46c: Rematch room creation preserving teams and seat order ─────
+    // ── Rematch room creation preserving teams and seat order ─────
     // getRematchGameConfig must be called BEFORE clearRematch destroys the store.
     const config = getRematchGameConfig(roomCode);
 
     // Clear rematch vote state (stops the timeout timer).
     clearRematch(roomCode);
 
-    // Build the seat list.  Prefer the config from the rematch store (captured
+    // Build the seat list. Prefer the config from the rematch store (captured
     // at game-over time) and fall back to the live game state if needed.
     const finishedGs = getGame(roomCode);
     const sourcePlayers = config?.players ?? finishedGs?.players ?? [];
@@ -2904,12 +2904,12 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
  * Called by wsServer._handleGameStart after 'starting' status is set.
  *
  * @param {{
- *   roomCode:    string,
- *   roomId:      string,
- *   variant:     string,
- *   playerCount: number,
- *   spectatorUrl?: string,
- *   seats:       Array<Object>,
+ * roomCode: string,
+ * roomId: string,
+ * variant: string,
+ * playerCount: number,
+ * spectatorUrl?: string,
+ * seats: Array<Object>,
  * }} options
  * @returns {Object} The created GameState
  */
@@ -3030,8 +3030,8 @@ function attachGameSocketServer(httpServer) {
 
     // ── Authentication ──────────────────────────────────────────────────────
     // Priority:
-    //   1. Bearer token (registered user or guest) — full identity resolution.
-    //   2. Spectator token — anonymous read-only access via the spectator link.
+    // 1. Bearer token (registered user or guest) — full identity resolution.
+    // 2. Spectator token — anonymous read-only access via the spectator link.
     // If neither is present/valid the connection is rejected with 4001.
 
     let user = await resolveUser(token);
@@ -3125,14 +3125,14 @@ function attachGameSocketServer(httpServer) {
     const playerInGame = gs.players.find((p) => p.playerId === playerId);
     const isSpectator  = !playerInGame;
 
-    // ── Seat reclaim (Sub-AC 3 of AC 39) ──────────────────────────────────
+    // ── Seat reclaim ──────────────────────────────────
     // If this player has an active reconnect window, they are reclaiming their
     // seat from the temporary bot that filled in while they were disconnected.
     const reconnectEntry = _reconnectWindows.get(playerId);
     if (!isSpectator && reconnectEntry && reconnectEntry.roomCode === roomCode) {
       _cancelReconnectWindow(playerId);
       // Also cancel the tick-based reconnect timer if one was started via
-      // startReconnectWindow (Sub-AC 1 of AC 39 concurrent timer infrastructure).
+      // startReconnectWindow.
       cancelReconnectWindow(roomCode, playerId);
 
       // Restore the player's human identity in the game state.
@@ -3174,10 +3174,10 @@ function attachGameSocketServer(httpServer) {
         console.warn('[game-ws] Failed to persist after seat reclaim:', err.message);
       }
     }
-    // ── Sub-AC 4: Late reconnect after permanent bot assignment ──────────────
+    // ── Late reconnect after permanent bot assignment ──────────────
     // If the reconnect window has already expired (no _reconnectWindows entry)
     // but the player slot is stamped with `botReplacedAt`, the original human
-    // is reconnecting after permanent bot assignment.  Add them to the reclaim
+    // is reconnecting after permanent bot assignment. Add them to the reclaim
     // queue so they regain their seat at the next turn boundary.
     //
     // This also handles crash recovery: if the server restarted after permanent
@@ -3207,8 +3207,8 @@ function attachGameSocketServer(httpServer) {
     if (isSpectator) {
       // Spectators receive the current public snapshot plus the full hand map
       // for God mode. serializePublicState() still includes only:
-      //   status, currentTurnPlayerId, scores, lastMove, winner,
-      //   tiebreakerWinner, declaredSuits.
+      // status, currentTurnPlayerId, scores, lastMove, winner,
+      // tiebreakerWinner, declaredSuits.
       // moveHistory is intentionally excluded.
       sendJson(ws, {
         type:          'spectator_init',
@@ -3223,7 +3223,7 @@ function attachGameSocketServer(httpServer) {
     } else {
       sendGameInit(gs, playerId, ws);
 
-      // ── Sub-AC 4: Notify a reclaim-queued player that they are waiting ──────
+      // ── Notify a reclaim-queued player that they are waiting ──────
       // If this player is now in the reclaim queue (just added above, or was
       // already queued from a previous connection attempt), send them a targeted
       // `reclaim_queued` message so the UI can show a "Waiting to reclaim" banner
@@ -3299,7 +3299,7 @@ function attachGameSocketServer(httpServer) {
         }
 
         case 'rematch_initiate': {
-          // ── Sub-AC 45a: Host-only rematch initiation for private rooms ───────
+          // ── Host-only rematch initiation for private rooms ───────
           // Only the registered host of a non-matchmaking room may send this.
           // Bypasses the vote window and immediately triggers rematch_start.
           // The server validates host identity and room type via DB lookup.
@@ -3330,7 +3330,7 @@ function attachGameSocketServer(httpServer) {
 
         case 'declare_progress': {
           // The active player streams their in-progress card assignment from
-          // Step 2 of DeclareModal.  The server re-broadcasts to all OTHER
+          // Step 2 of DeclareModal. The server re-broadcasts to all OTHER
           // connected clients (players + spectators) so they can show a live
           // "declaration in progress" banner.
           // halfSuitId === null means the player cancelled (went back to
@@ -3347,9 +3347,9 @@ function attachGameSocketServer(httpServer) {
         }
 
         case 'declare_selecting': {
-          // ── Sub-AC 21a: Private half-suit selection ────────────────────────
+          // ── Private half-suit selection ────────────────────────
           // The active player sends this when they pick a half-suit in Step 1
-          // of the DeclareModal (suit picker).  The selected suit is stored
+          // of the DeclareModal (suit picker). The selected suit is stored
           // server-side ONLY — it is NEVER broadcast to other players.
           //
           // This gives `executeTimedOutTurn` the information it needs to
@@ -3369,7 +3369,7 @@ function attachGameSocketServer(httpServer) {
         }
 
         case 'game_advance': {
-          // ── Sub-AC 26c: Declaration result overlay dismissed ───────────────
+          // ── Declaration result overlay dismissed ───────────────
           // The client sends this fire-and-forget acknowledgement after the
           // player dismisses (or auto-dismisses) the declaration result overlay.
           // The turn has already advanced server-side when `declaration_result`
@@ -3379,7 +3379,7 @@ function attachGameSocketServer(httpServer) {
         }
 
         case 'choose_turn_recipient': {
-          // ── Sub-AC 27b: Eliminated player designates their turn recipient ──
+          // ── Eliminated player designates their turn recipient ──
           // Sent by a human player after they are eliminated (hand is empty).
           // The server stores the choice in `gs.turnRecipients` so that
           // `_resolveValidTurn` can prefer this teammate when passing the turn.
@@ -3392,10 +3392,10 @@ function attachGameSocketServer(httpServer) {
         }
 
         case 'choose_next_turn': {
-          // ── Sub-AC 28b: Current turn player redirects turn to a teammate ──
+          // ── Current turn player redirects turn to a teammate ──
           // Sent by the current turn player (typically the declarant after a
           // correct declaration) to pass their turn to a same-team teammate
-          // with cards.  The server validates, updates currentTurnPlayerId,
+          // with cards. The server validates, updates currentTurnPlayerId,
           // broadcasts game_state, and restarts the turn timer.
           const { chosenPlayerId: nextPlayerId } = msg;
           if (typeof nextPlayerId === 'string') {
@@ -3405,10 +3405,10 @@ function attachGameSocketServer(httpServer) {
         }
 
         case 'pass_turn': {
-          // ── Sub-AC 56a: Active player passes turn to a teammate by seat index ──
+          // ── Active player passes turn to a teammate by seat index ──
           // The current turn player ("declarant") identifies the recipient by
           // their seat index (not player ID) so the client doesn't need to
-          // expose internal IDs.  The server validates eligibility and emits
+          // expose internal IDs. The server validates eligibility and emits
           // a `turn-passed` event with the new active seat.
           const { targetSeatIndex: seatIdx } = msg;
           if (typeof seatIdx === 'number') {
@@ -3467,7 +3467,7 @@ module.exports = {
   handleDeclareProgress,
   /**
    * Store the declaring player's Step-1 suit selection privately.
-   * Never broadcast to other players (Sub-AC 21a).
+   * Never broadcast to other players.
    */
   handleDeclareSelecting,
   scheduleBotTurnIfNeeded,
@@ -3481,40 +3481,40 @@ module.exports = {
   resolveSpectatorToken,
   executeTimedOutTurn,
   sanitizePartialStateForBroadcast,
-  // Seat reclaim (Sub-AC 3 of AC 39):
+  // Seat reclaim:
   _startReconnectWindow,
   _cancelReconnectWindow,
   _clearAllReconnectWindows,
-  // Concurrent timer infrastructure (Sub-AC 1 of AC 39):
+  // Concurrent timer infrastructure:
   startReconnectWindow,
   cancelReconnectWindow,
   handlePlayerDisconnect,
-  // Permanent bot seat + mid-game reclaim (Sub-AC 4 of AC 39):
+  // Permanent bot seat + mid-game reclaim:
   _executeReclaim,
   // Forced-failed declaration (AC 24):
   handleForcedFailedDeclaration,
-  // Player elimination (Sub-AC 27b):
+  // Player elimination:
   _processNewlyEliminatedPlayers,
   handleChooseTurnRecipient,
-  // Sub-AC 28b: declarant redirects turn to a same-team player after correct declaration
+  // declarant redirects turn to a same-team player after correct declaration
   handleChooseNextTurn,
-  // Sub-AC 56a: active (declarant) player passes turn to a teammate by seat index
+  // active (declarant) player passes turn to a teammate by seat index
   handlePassTurn,
-  // Declaration phase timer (Sub-AC 23a):
+  // Declaration phase timer:
   startDeclarationPhaseTimer,
-  // Bot declaration takeover countdown (Sub-AC 3 of AC 41):
+  // Bot declaration takeover countdown:
   startBotDeclarationCountdown,
   cancelBotDeclarationTimer,
-  // Post-declaration turn-selection timer (AC 28 / Sub-AC 28c):
+  // Post-declaration turn-selection timer (AC 28):
   startPostDeclarationTimer,
   cancelPostDeclarationTimer,
   _postDeclarationTimers,
   POST_DECLARATION_TURN_SELECTION_MS,
-  // Countdown timer service (Sub-AC 36.1): 1-second ticks + threshold events
+  // Countdown timer service: 1-second ticks + threshold events
   timerService,
-  // Stats persistence (exported for unit testing — Sub-AC 44c):
+  // Stats persistence (exported for unit testing — ):
   updateStats,
-  // Pending rematch settings (Sub-AC 45b): clear after new game starts
+  // Pending rematch settings: clear after new game starts
   clearPendingRematchSettings,
   // Exposed for test inspection only — do NOT mutate from outside this module:
   _declarationSelections,
@@ -3529,7 +3529,7 @@ module.exports = {
   TIMER_TICK_INTERVAL_MS,
   DECLARATION_PHASE_TIMEOUT_MS,
   BOT_DECLARATION_TAKEOVER_MS,
-  // Rematch gathering countdown (Sub-AC 45c):
+  // Rematch gathering countdown:
   _startRematchGatheringCountdown,
   notifyRematchPlayerJoined,
   _cancelRematchGathering,

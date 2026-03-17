@@ -1,39 +1,39 @@
 /**
  * @jest-environment jsdom
  *
- * Sub-AC 34a: ScoreboardPanel — side scoreboard panel shell tests.
+ * ScoreboardPanel — side scoreboard panel shell tests.
  *
  * Coverage:
- *   1.  Renders with default data-testid="scoreboard-panel"
- *   2.  Custom testId override works
- *   3.  Renders both team sections (team1 and team2 data-testids)
- *   4.  Displays Team 1 name label
- *   5.  Displays Team 2 name label
- *   6.  Displays Team 1 score as a number
- *   7.  Displays Team 2 score as a number
- *   8.  Score shows correct value for team1 (e.g. 3)
- *   9.  Score shows correct value for team2 (e.g. 5)
- *  10.  "No books yet" placeholder shown when team has no declared suits
- *  11.  Suit badges rendered for each declared suit
- *  12.  Team 1 declared suits appear in Team 1 section only
- *  13.  Team 2 declared suits appear in Team 2 section only
- *  14.  "(You)" suffix shown on Team 1 when myTeamId=1
- *  15.  "(You)" suffix shown on Team 2 when myTeamId=2
- *  16.  "(You)" suffix NOT shown when myTeamId is null
- *  17.  Score flash: team1 score has yellow class when scoreFlash=1
- *  18.  Score flash: team2 score has yellow class when scoreFlash=2
- *  19.  Score flash: no yellow class when scoreFlash is null
- *  20.  aria-label="Scoreboard" on root element
- *  21.  aria-label on team1 section describes team correctly
- *  22.  aria-label on team2 section describes team correctly
- *  23.  Declared suit badge has correct title attribute (human-readable half-suit label)
- *  24.  Skeleton rendered when ConnectedScoreboardPanel has no gameState
- *  25.  ConnectedScoreboardPanel shows scores from GameContext
- *  26.  Score totals header shows combined count (e.g. "3/8")
- *  27.  Zero scores displayed correctly (0 for both teams at game start)
- *  28.  Maximum scores displayed correctly (8 total books)
- *  29.  ScoreboardPanel accepts and applies extra className
- *  30.  Suit badge data-testid follows pattern "scoreboard-suit-badge-{halfSuitId}"
+ * 1. Renders with default data-testid="scoreboard-panel"
+ * 2. Custom testId override works
+ * 3. Renders both team sections (team1 and team2 data-testids)
+ * 4. Displays Team 1 name label
+ * 5. Displays Team 2 name label
+ * 6. Displays Team 1 score as a number
+ * 7. Displays Team 2 score as a number
+ * 8. Score shows correct value for team1 (e.g. 3)
+ * 9. Score shows correct value for team2 (e.g. 5)
+ * 10. "No books yet" placeholder shown when team has no declared suits
+ * 11. Suit badges rendered for each declared suit
+ * 12. Team 1 declared suits appear in Team 1 section only
+ * 13. Team 2 declared suits appear in Team 2 section only
+ * 14. "(You)" suffix shown on Team 1 when myTeamId=1
+ * 15. "(You)" suffix shown on Team 2 when myTeamId=2
+ * 16. "(You)" suffix NOT shown when myTeamId is null
+ * 17. Score flash: team1 score has yellow class when scoreFlash=1
+ * 18. Score flash: team2 score has yellow class when scoreFlash=2
+ * 19. Score flash: no yellow class when scoreFlash is null
+ * 20. aria-label="Scoreboard" on root element
+ * 21. aria-label on team1 section describes team correctly
+ * 22. aria-label on team2 section describes team correctly
+ * 23. Declared suit badge has correct title attribute (human-readable half-suit label)
+ * 24. Skeleton rendered when ConnectedScoreboardPanel has no gameState
+ * 25. ConnectedScoreboardPanel shows scores from GameContext
+ * 26. Score totals header shows combined count (e.g. "3/8")
+ * 27. Zero scores displayed correctly (0 for both teams at game start)
+ * 28. Maximum scores displayed correctly (8 total books)
+ * 29. ScoreboardPanel accepts and applies extra className
+ * 30. Suit badge data-testid follows pattern "scoreboard-suit-badge-{halfSuitId}"
  */
 
 import React from 'react';
@@ -88,7 +88,7 @@ function makeContextValue(gameState: PublicGameState | null): Omit<GameContextVa
     sendPartialSelection: () => {},
     sendAsk: () => {},
     sendDeclare: () => {},
-    // Sub-AC 28a: eligible next-turn players (empty until first declaration)
+    // eligible next-turn players (empty until first declaration)
     eligibleNextTurnPlayerIds: [],
   };
 }

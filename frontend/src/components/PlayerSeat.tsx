@@ -8,23 +8,22 @@
  * and a subtle team-coloured border accent.
  *
  * Renders two states:
- *  • Occupied: avatar, display name (or BotBadge), host crown, "You" pill,
- *              team-colour dot, card-count badge, active-turn glow ring.
- *  • Empty:    pulsing hourglass with "Waiting…" and a dashed border.
+ * • Occupied: avatar, display name (or BotBadge), host crown, "You" pill,
+ * team-colour dot, card-count badge, active-turn glow ring.
+ * • Empty: pulsing hourglass with "Waiting…" and a dashed border.
  *
- * New in Sub-AC 13c:
- *  • `cardCount` — renders a small amber badge overlaid on the avatar showing
- *    how many cards this player holds.  Hidden when undefined.
- *  • `isActiveTurn` — applies an animated amber glow / ring to the outer
- *    container so the current-turn player is immediately visible at a glance.
+ * New in * • `cardCount` — renders a small amber badge overlaid on the avatar showing
+ * how many cards this player holds. Hidden when undefined.
+ * • `isActiveTurn` — applies an animated amber glow / ring to the outer
+ * container so the current-turn player is immediately visible at a glance.
  *
  * @example
  * // Occupied — host seat (Team 1, bottom of table), active turn, 6 cards
  * <PlayerSeat
- *   seatIndex={0}
- *   player={{ displayName: "Alice", isBot: false, isHost: true, isCurrentUser: true, seatIndex: 0 }}
- *   cardCount={6}
- *   isActiveTurn={true}
+ * seatIndex={0}
+ * player={{ displayName: "Alice", isBot: false, isHost: true, isCurrentUser: true, seatIndex: 0 }}
+ * cardCount={6}
+ * isActiveTurn={true}
  * />
  *
  * @example

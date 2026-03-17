@@ -3,29 +3,29 @@
  *
  * Integration tests for the 30-second turn timer across the card-request flow.
  *
- * Sub-AC 3: Implement a continuous 30-second server-side turn timer for the
+ * Implement a continuous 30-second server-side turn timer for the
  * card request flow that persists across step navigation and triggers an
  * auto-forfeit/skip on expiry.
  *
  * Coverage:
- *   AskCardModal with timer:
- *     • Renders TurnTimerStrip when turnTimer prop is provided
- *     • Does NOT render TurnTimerStrip when turnTimer is null/undefined
- *     • Timer strip shows "Your turn" for the local player
- *     • Timer strip shows "Turn timer" for another player's timer
- *     • Timer strip is visible inside the modal (not obscured by backdrop)
- *   DeclareModal with timer:
- *     • Renders TurnTimerStrip when turnTimer prop is provided
- *     • Does NOT render TurnTimerStrip when turnTimer is null/undefined
- *     • Timer strip shows "Your turn" for the local player
- *   CardRequestWizard with timer:
- *     • Renders TurnTimerStrip at Step 1 when turnTimer prop is provided
- *     • Timer strip persists to Step 2 (card selection)
- *     • Timer strip persists to Step 3 (opponent selection)
- *     • Does NOT render TurnTimerStrip when turnTimer is null
- *   Timer expiry seconds display:
- *     • Correct seconds shown for a 30 s timer with 20 s remaining
- *     • Correct seconds shown for a 30 s timer with 5 s remaining (danger zone)
+ * AskCardModal with timer:
+ * • Renders TurnTimerStrip when turnTimer prop is provided
+ * • Does NOT render TurnTimerStrip when turnTimer is null/undefined
+ * • Timer strip shows "Your turn" for the local player
+ * • Timer strip shows "Turn timer" for another player's timer
+ * • Timer strip is visible inside the modal (not obscured by backdrop)
+ * DeclareModal with timer:
+ * • Renders TurnTimerStrip when turnTimer prop is provided
+ * • Does NOT render TurnTimerStrip when turnTimer is null/undefined
+ * • Timer strip shows "Your turn" for the local player
+ * CardRequestWizard with timer:
+ * • Renders TurnTimerStrip at Step 1 when turnTimer prop is provided
+ * • Timer strip persists to Step 2 (card selection)
+ * • Timer strip persists to Step 3 (opponent selection)
+ * • Does NOT render TurnTimerStrip when turnTimer is null
+ * Timer expiry seconds display:
+ * • Correct seconds shown for a 30 s timer with 20 s remaining
+ * • Correct seconds shown for a 30 s timer with 5 s remaining (danger zone)
  */
 
 import React from 'react';
@@ -79,7 +79,7 @@ function makePlayer(overrides: Partial<GamePlayer> = {}): GamePlayer {
   };
 }
 
-/** A minimal 6-player roster: T1 = p1,p2,p3  T2 = p4,p5,p6 */
+/** A minimal 6-player roster: T1 = p1,p2,p3 T2 = p4,p5,p6 */
 function make6Players(): GamePlayer[] {
   return [
     makePlayer({ playerId: 'p1', displayName: 'Me',    teamId: 1, seatIndex: 0 }),

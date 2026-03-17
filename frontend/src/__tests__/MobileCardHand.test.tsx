@@ -1,30 +1,30 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for MobileCardHand (Sub-AC 11c) — mobile-optimised card hand display.
+ * Tests for MobileCardHand — mobile-optimised card hand display.
  *
  * Covers:
- *  • Empty hand renders the "no cards" waiting message
- *  • Non-empty hand renders the root container with correct aria-label
- *  • Cards are sorted by suit (S→H→D→C) then ascending rank
- *  • Mobile scroll container and desktop fan container are both rendered in DOM
- *  • Selected card receives the selected prop and is highlighted
- *  • Tapping a card calls onSelectCard with the correct cardId
- *  • Tapping a selected card re-calls onSelectCard (deselect is caller's responsibility)
- *  • When isMyTurn=false, cards are not clickable (disabled)
- *  • When disabled=true, cards are not clickable
- *  • When onSelectCard is undefined, cards are not clickable
- *  • faceDown prop passes through to PlayingCard (face-down cards have blue back class)
- *  • Card count badge is NOT shown for hands ≤ 9 cards
- *  • Card count badge IS shown for hands with 10+ cards and displays the count
- *  • Mobile scroll container has data-testid="mobile-hand-scroll"
- *  • Desktop fan container has data-testid="desktop-hand-fan"
- *  • All card elements have role="listitem" inside the correct role="list" container
- *  • Single-card hand renders without errors
- *  • Maximum-hand (8 cards) renders all cards
- *  • Right-fade element has data-testid="mobile-hand-right-fade"
- *  • Left-fade element has data-testid="mobile-hand-left-fade"
- *  • computeFanParams exported function returns correct spread for varying hand sizes
+ * • Empty hand renders the "no cards" waiting message
+ * • Non-empty hand renders the root container with correct aria-label
+ * • Cards are sorted by suit (S→H→D→C) then ascending rank
+ * • Mobile scroll container and desktop fan container are both rendered in DOM
+ * • Selected card receives the selected prop and is highlighted
+ * • Tapping a card calls onSelectCard with the correct cardId
+ * • Tapping a selected card re-calls onSelectCard (deselect is caller's responsibility)
+ * • When isMyTurn=false, cards are not clickable (disabled)
+ * • When disabled=true, cards are not clickable
+ * • When onSelectCard is undefined, cards are not clickable
+ * • faceDown prop passes through to PlayingCard (face-down cards have blue back class)
+ * • Card count badge is NOT shown for hands ≤ 9 cards
+ * • Card count badge IS shown for hands with 10+ cards and displays the count
+ * • Mobile scroll container has data-testid="mobile-hand-scroll"
+ * • Desktop fan container has data-testid="desktop-hand-fan"
+ * • All card elements have role="listitem" inside the correct role="list" container
+ * • Single-card hand renders without errors
+ * • Maximum-hand (8 cards) renders all cards
+ * • Right-fade element has data-testid="mobile-hand-right-fade"
+ * • Left-fade element has data-testid="mobile-hand-left-fade"
+ * • computeFanParams exported function returns correct spread for varying hand sizes
  */
 
 import React from 'react';

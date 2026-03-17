@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Sub-AC 32c — 4-4 tie-breaking rule
+ * 4-4 tie-breaking rule
  *
  * The team that declared the high-diamonds half-suit ("high_d") wins any
  * 4-4 tie, regardless of which variant is active (remove_2s, remove_7s,
@@ -9,18 +9,18 @@
  * ranks after the variant's removal is applied.
  *
  * Coverage:
- *   1. TIEBREAKER_HALF_SUIT constant equals "high_d" for all three variants.
- *   2. 4-4 tie: team 1 declared high_d → team 1 wins.
- *   3. 4-4 tie: team 2 declared high_d → team 2 wins.
- *   4. high_d declared early (not last suit) — tiebreakerWinner is set
- *      immediately and used when the game later ends 4-4.
- *   5. Incorrect high_d declaration awards tiebreaker to opposing team.
- *   6. Forced-failed (timer-expired) high_d declaration awards tiebreaker
- *      to opposing team.
- *   7. Each variant has a distinct high_d card set that correctly contains
- *      the "tiebreaker" half-suit cards.
- *   8. Non-tie outcome (5-3, 6-2, …) ignores tiebreakerWinner for winner.
- *   9. tiebreakerWinner survives game-state serialisation round-trip.
+ * 1. TIEBREAKER_HALF_SUIT constant equals "high_d" for all three variants.
+ * 2. 4-4 tie: team 1 declared high_d → team 1 wins.
+ * 3. 4-4 tie: team 2 declared high_d → team 2 wins.
+ * 4. high_d declared early (not last suit) — tiebreakerWinner is set
+ * immediately and used when the game later ends 4-4.
+ * 5. Incorrect high_d declaration awards tiebreaker to opposing team.
+ * 6. Forced-failed (timer-expired) high_d declaration awards tiebreaker
+ * to opposing team.
+ * 7. Each variant has a distinct high_d card set that correctly contains
+ * the "tiebreaker" half-suit cards.
+ * 8. Non-tie outcome (5-3, 6-2, …) ignores tiebreakerWinner for winner.
+ * 9. tiebreakerWinner survives game-state serialisation round-trip.
  */
 
 const {
@@ -231,10 +231,10 @@ describe('high_d declared early — tiebreakerWinner set mid-game', () => {
 
   it('tiebreakerWinner set early persists to final winner when score ends 4-4', () => {
     // Scenario:
-    //   1. Game starts; team 1 correctly declares high_d early (score 1-0).
-    //   2. Game continues; 6 more suits are declared (alternating, 3 each) → score 4-3.
-    //   3. Team 2 declares the 8th suit correctly → score 4-4.
-    //   4. Because tiebreakerWinner was set to 1 when high_d was declared, team 1 wins.
+    // 1. Game starts; team 1 correctly declares high_d early (score 1-0).
+    // 2. Game continues; 6 more suits are declared (alternating, 3 each) → score 4-3.
+    // 3. Team 2 declares the 8th suit correctly → score 4-4.
+    // 4. Because tiebreakerWinner was set to 1 when high_d was declared, team 1 wins.
 
     const gs = buildGame('remove_7s');
     const halfSuits = buildHalfSuitMap('remove_7s');

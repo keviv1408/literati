@@ -3,36 +3,36 @@
  *
  * Tests for DeclareModal.
  *
- * Also covers Sub-AC 22c: seat-targeting interaction — selecting a card row
+ * Also covers seat-targeting interaction — selecting a card row
  * opens a teammate seat strip; tapping a seat chip completes the assignment
  * and clears the selection state.
  *
  * Coverage:
- *   • Renders the half-suit selection step on open
- *   • Shows all 8 undeclared half-suit options
- *   • Already-declared suits are excluded from the selection grid
- *   • Shows "you hold N/6" for each half-suit
- *   • Selecting a suit navigates to the card assignment step
- *   • Back button returns to the suit selection step
- *   • Pre-fills cards the player holds in their hand
- *   • Unknown cards show a teammate dropdown selector
- *   • Confirm is disabled until all 6 cards are assigned
- *   • Confirm is enabled once all cards are assigned
- *   • Fires onConfirm with halfSuitId and assignment when confirmed
- *   • Fires onCancel when Cancel is clicked
- *   • Works with a 6-player roster (bots in teammates)
- *   • Works with an 8-player roster
- *   • Confirm shows "Declaring…" and is disabled while isLoading
- *   [Sub-AC 22c — Seat-targeting]
- *   • Tapping a non-mine card row shows the seat-targeting strip
- *   • Seat strip shows all teammates as chips
- *   • Tapping a seat chip assigns the card and clears the strip
- *   • Assigned card chip reflects current assignee (aria-pressed)
- *   • Tapping same card row again deselects (dismisses strip)
- *   • Switching suit clears any pending selection (no stale strip)
- *   • Keyboard Enter on card row triggers seat-targeting selection
- *   • Dropdown change while card is selected clears the selection
- *   • "In your hand" card rows are NOT selectable for seat targeting
+ * • Renders the half-suit selection step on open
+ * • Shows all 8 undeclared half-suit options
+ * • Already-declared suits are excluded from the selection grid
+ * • Shows "you hold N/6" for each half-suit
+ * • Selecting a suit navigates to the card assignment step
+ * • Back button returns to the suit selection step
+ * • Pre-fills cards the player holds in their hand
+ * • Unknown cards show a teammate dropdown selector
+ * • Confirm is disabled until all 6 cards are assigned
+ * • Confirm is enabled once all cards are assigned
+ * • Fires onConfirm with halfSuitId and assignment when confirmed
+ * • Fires onCancel when Cancel is clicked
+ * • Works with a 6-player roster (bots in teammates)
+ * • Works with an 8-player roster
+ * • Confirm shows "Declaring…" and is disabled while isLoading
+ * [Seat-targeting]
+ * • Tapping a non-mine card row shows the seat-targeting strip
+ * • Seat strip shows all teammates as chips
+ * • Tapping a seat chip assigns the card and clears the strip
+ * • Assigned card chip reflects current assignee (aria-pressed)
+ * • Tapping same card row again deselects (dismisses strip)
+ * • Switching suit clears any pending selection (no stale strip)
+ * • Keyboard Enter on card row triggers seat-targeting selection
+ * • Dropdown change while card is selected clears the selection
+ * • "In your hand" card rows are NOT selectable for seat targeting
  */
 
 import React from 'react';
@@ -368,10 +368,10 @@ describe('DeclareModal — 8-player game', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 22c — Seat-targeting interaction
+// Seat-targeting interaction
 // ---------------------------------------------------------------------------
 
-describe('DeclareModal — seat-targeting interaction (Sub-AC 22c)', () => {
+describe('DeclareModal — seat-targeting interaction ', () => {
   /**
    * Open Low Spades and return the first assignable (non-mine) card row.
    * Player holds only 1_s so the remaining 5 cards (2_s–6_s) are assignable.
@@ -598,14 +598,14 @@ describe('DeclareModal — seat-targeting interaction (Sub-AC 22c)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 22b — Card tap-to-select visual state
+// Card tap-to-select visual state
 //
 // Verifies that the PlayingCard component itself reflects the selected state
 // (emerald ring + lift) when its container row is tapped, and that the
 // interaction correctly toggles selected/deselected states.
 // ---------------------------------------------------------------------------
 
-describe('DeclareModal — card tap-to-select interaction (Sub-AC 22b)', () => {
+describe('DeclareModal — card tap-to-select interaction ', () => {
   /**
    * Open Low Spades (player holds 1_s → 5 assignable cards) and return
    * the assignable card rows for interaction.
@@ -750,13 +750,13 @@ describe('DeclareModal — card tap-to-select interaction (Sub-AC 22b)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 23d — Submit button: enabled only when complete, disables edits
+// Submit button: enabled only when complete, disables edits
 // ---------------------------------------------------------------------------
 
-describe('DeclareModal — Sub-AC 23d submit button and form lock-down', () => {
+describe('DeclareModal —  submit button and form lock-down', () => {
   /**
    * Renders the modal in Step 2 (card assignment) with the player holding
-   * one card (1_s).  The remaining 5 slots start pre-filled with p2's id
+   * one card (1_s). The remaining 5 slots start pre-filled with p2's id
    * (first teammate), so isComplete is true from the start.
    */
   function setupStep2(overrides: Partial<Parameters<typeof renderModal>[0]> = {}) {
@@ -875,7 +875,7 @@ describe('DeclareModal — Sub-AC 23d submit button and form lock-down', () => {
     // Since the strip only shows when selectedCardForAssign is set (internal state),
     // and card rows are non-interactive when isLoading, we test the strip in a
     // controlled way by rendering with a pre-selected state cannot be injected
-    // from outside.  Instead, verify the chip button disabled attribute is set
+    // from outside. Instead, verify the chip button disabled attribute is set
     // by rendering with isLoading=false, selecting a card row, then simulating
     // the loading state via re-render.
     const { rerender, props } = renderModal({
@@ -923,10 +923,10 @@ describe('DeclareModal — Sub-AC 23d submit button and form lock-down', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 23b — Assignment locking: confirm button + locked visual state
+// Assignment locking: confirm button + locked visual state
 // ---------------------------------------------------------------------------
 
-describe('DeclareModal — Sub-AC 23b assignment locking', () => {
+describe('DeclareModal —  assignment locking', () => {
   /**
    * Renders the modal in Step 2 for Low Spades (remove_7s variant).
    * p1 holds only 1_s; the remaining 5 cards (2_s…6_s) are assignable.

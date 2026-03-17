@@ -103,21 +103,21 @@ function _generateUniqueBotKey(usedKeys) {
  * BALANCE GUARANTEE
  * -----------------
  * The algorithm guarantees that the final game will have exactly
- * Math.floor(playerCount / 2) players on each team, regardless of how
+ * Math.floor(playerCount 2) players on each team, regardless of how
  * many humans are present or which teams they chose:
  *
- *   1. Count existing players per team from occupiedSeats (both humans and
- *      any pre-placed bots).
- *   2. Compute the per-team deficit: target − current (clamped to ≥ 0).
- *   3. For each empty seat, prefer the "natural" team (even → T1, odd → T2)
- *      to maintain the T1-T2-T1-T2 clockwise table-layout alternation.
- *      If the natural team's deficit is already satisfied, cross-assign to
- *      the other team so the overall count still reaches the target.
+ * 1. Count existing players per team from occupiedSeats (both humans and
+ * any pre-placed bots).
+ * 2. Compute the per-team deficit: target − current (clamped to ≥ 0).
+ * 3. For each empty seat, prefer the "natural" team (even → T1, odd → T2)
+ * to maintain the T1-T2-T1-T2 clockwise table-layout alternation.
+ * If the natural team's deficit is already satisfied, cross-assign to
+ * the other team so the overall count still reaches the target.
  *
  * This approach respects the existing human distribution: if humans are
  * skewed toward one team, bots fill the under-represented team first.
  *
- * @param {number}              playerCount   - Total seats in the room (6 or 8).
+ * @param {number} playerCount - Total seats in the room (6 or 8).
  * @param {Map<number, Object>} occupiedSeats - seatIndex → LobbySeat (with teamId).
  * @returns {Array<Object>} Bot LobbySeat descriptors for every empty seat.
  */

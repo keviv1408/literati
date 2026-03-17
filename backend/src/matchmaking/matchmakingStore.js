@@ -4,19 +4,19 @@
  * In-memory matchmaking queue store.
  *
  * Queues are keyed by a "filter key" string:
- *   "{playerCount}:{cardRemovalVariant}"
- *   e.g. "6:remove_7s", "8:remove_2s", "6:remove_8s"
+ * "{playerCount}:{cardRemovalVariant}"
+ * e.g. "6:remove_7s", "8:remove_2s", "6:remove_8s"
  *
  * Shape of a stored QueuedPlayer:
  * {
- *   playerId     : string  — registered userId or guest sessionId
- *   displayName  : string
- *   avatarId     : string | null
- *   isGuest      : boolean
- *   connectionId : string  — UUID unique to this WebSocket connection
- *   ws           : WebSocket  — the live socket object
- *   filterKey    : string  — the filter key they queued under
- *   joinedAt     : number  — Date.now() when they joined (for FIFO ordering)
+ * playerId : string — registered userId or guest sessionId
+ * displayName : string
+ * avatarId : string | null
+ * isGuest : boolean
+ * connectionId: string — UUID unique to this WebSocket connection
+ * ws : WebSocket — the live socket object
+ * filterKey : string — the filter key they queued under
+ * joinedAt : number — Date.now() when they joined (for FIFO ordering)
  * }
  */
 

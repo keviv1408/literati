@@ -5,19 +5,19 @@
  *
  * Shows the local player's sorted cards in two display modes:
  *
- *   Mobile  (<640 px) — Horizontal-scroll row with overlapping cards.
- *     Each card has an enlarged tap-target wrapper (≥44×44 px per Apple HIG).
- *     A right-side scroll-fade hint shows when more cards are off-screen.
- *     Selected card lifts above the row with an emerald ring highlight.
- *     Scrolls automatically to keep the selected card in view.
+ * Mobile (<640 px) — Horizontal-scroll row with overlapping cards.
+ * Each card has an enlarged tap-target wrapper (≥44×44 px per Apple HIG).
+ * A right-side scroll-fade hint shows when more cards are off-screen.
+ * Selected card lifts above the row with an emerald ring highlight.
+ * Scrolls automatically to keep the selected card in view.
  *
- *   Desktop (≥640 px) — Fan/arc layout.
- *     Cards spread in an arc by rotating around a virtual origin
- *     (ARC_ORIGIN_OFFSET_PX) below each card's bottom-centre.  Because all
- *     cards share the same offset, they radiate from the same distant point,
- *     creating a uniform arc rather than simple individual rotations.
- *     Spread angle adapts to hand size so cards never overflow the container.
- *     Selected card lifts cleanly above the fan.
+ * Desktop (≥640 px) — Fan/arc layout.
+ * Cards spread in an arc by rotating around a virtual origin
+ * (ARC_ORIGIN_OFFSET_PX) below each card's bottom-centre. Because all
+ * cards share the same offset, they radiate from the same distant point,
+ * creating a uniform arc rather than simple individual rotations.
+ * Spread angle adapts to hand size so cards never overflow the container.
+ * Selected card lifts cleanly above the fan.
  *
  * Cards are always sorted by suit (Spades → Hearts → Diamonds → Clubs) then
  * by ascending rank for easy readability.
@@ -58,7 +58,7 @@ export interface MobileCardHandProps {
    */
   variant?: CardVariant;
   /**
-   * Card ID that just arrived via a successful ask.  When set, that specific
+   * Card ID that just arrived via a successful ask. When set, that specific
    * card is rendered with a CardFlipWrapper (back → face flip animation)
    * instead of a plain PlayingCard.
    * Ignored when `faceDown` is true (deal animation already handles that path).
@@ -73,7 +73,7 @@ const SUIT_ORDER: Record<string, number> = { s: 0, h: 1, d: 2, c: 3 };
 
 /**
  * The virtual arc origin is placed this many pixels below the bottom-centre
- * of each card.  Rotating around a distant common point creates a gentle,
+ * of each card. Rotating around a distant common point creates a gentle,
  * natural-looking arc rather than a tight pivot fan.
  */
 const ARC_ORIGIN_OFFSET_PX = 320;
@@ -97,7 +97,7 @@ const SELECTED_LIFT_PX = 22;
 
 /**
  * How many pixels each card overlaps the previous card in the mobile
- * horizontal-scroll row.  Larger overlap = more cards visible at once.
+ * horizontal-scroll row. Larger overlap = more cards visible at once.
  */
 const MOBILE_CARD_OVERLAP_PX = 32;
 
@@ -107,7 +107,7 @@ const MOBILE_CARD_OVERLAP_PX = 32;
  * Sort a hand for display.
  *
  * When `variant` is provided, uses half-suit grouping (Low→High within each
- * suit) matching the canonical Literature display order.  When variant is
+ * suit) matching the canonical Literature display order. When variant is
  * unknown, falls back to suit order (S→H→D→C) then ascending rank.
  */
 function sortHand(hand: CardId[], variant?: CardVariant): CardId[] {
@@ -124,9 +124,9 @@ function sortHand(hand: CardId[], variant?: CardVariant): CardId[] {
  * Compute the fan-spread parameters for a given hand size.
  *
  * Returns:
- *   - `spreadDeg`  — total angular width of the fan in degrees
- *   - `stepDeg`    — degrees between adjacent cards
- *   - `startDeg`   — rotation angle for the leftmost card
+ * - `spreadDeg` — total angular width of the fan in degrees
+ * - `stepDeg` — degrees between adjacent cards
+ * - `startDeg` — rotation angle for the leftmost card
  */
 function computeFanParams(count: number): {
   spreadDeg: number;
@@ -296,7 +296,7 @@ export default function MobileCardHand({
                   style={{ paddingTop: '4px', paddingBottom: '4px' }}
                   aria-label={isSelected ? 'Selected card' : undefined}
                 >
-                  {/* Flip animation for newly-arrived cards (Sub-AC 2 of AC 33) */}
+                  {/* Flip animation for newly-arrived cards */}
                   {!faceDown && cardId === newlyArrivedCardId ? (
                     <CardFlipWrapper
                       cardId={cardId}
@@ -366,7 +366,7 @@ export default function MobileCardHand({
                 transition: 'transform 150ms ease, z-index 0ms',
               }}
             >
-              {/* Flip animation for newly-arrived cards (Sub-AC 2 of AC 33) */}
+              {/* Flip animation for newly-arrived cards */}
               {!faceDown && cardId === newlyArrivedCardId ? (
                 <CardFlipWrapper
                   cardId={cardId}

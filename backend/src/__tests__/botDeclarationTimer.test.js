@@ -1,8 +1,7 @@
 'use strict';
 
 /**
- * Unit tests for Sub-AC 3 of AC 41:
- * 30-second server-side countdown timer on bot takeover of a declaration.
+ * Unit tests for * 30-second server-side countdown timer on bot takeover of a declaration.
  *
  * When a human player's turn timer fires while they are mid-declaration, the
  * server broadcasts `bot_takeover`, then starts a BOT_DECLARATION_TAKEOVER_MS
@@ -10,25 +9,25 @@
  *
  * Coverage:
  *
- *   startBotDeclarationCountdown:
- *     1.  Broadcasts `bot_declaration_timer` to ALL clients with duration/expiresAt
- *     2.  Timer duration is exactly BOT_DECLARATION_TAKEOVER_MS (30 000 ms)
- *     3.  Emits `bot_declaration_timer_tick` events to ALL clients every TIMER_TICK_INTERVAL_MS
- *     4.  Does NOT include the assignment in the `bot_declaration_timer` broadcast (privacy)
- *     5.  After 30 s, calls handleDeclare and broadcasts `declaration_result`
- *     6.  `declaration_result` arrives AFTER `bot_declaration_timer` in message queue
- *     7.  Does nothing if game is no longer active when timer fires
- *     8.  Does nothing if turn has passed to another player when timer fires
+ * startBotDeclarationCountdown:
+ * 1. Broadcasts `bot_declaration_timer` to ALL clients with duration/expiresAt
+ * 2. Timer duration is exactly BOT_DECLARATION_TAKEOVER_MS (30 000 ms)
+ * 3. Emits `bot_declaration_timer_tick` events to ALL clients every TIMER_TICK_INTERVAL_MS
+ * 4. Does NOT include the assignment in the `bot_declaration_timer` broadcast (privacy)
+ * 5. After 30 s, calls handleDeclare and broadcasts `declaration_result`
+ * 6. `declaration_result` arrives AFTER `bot_declaration_timer` in message queue
+ * 7. Does nothing if game is no longer active when timer fires
+ * 8. Does nothing if turn has passed to another player when timer fires
  *
- *   executeTimedOutTurn → startBotDeclarationCountdown integration:
- *     9.  Declaration with complete 6-card assignment → countdown starts (not immediate)
- *    10.  Declaration with disconnected player → countdown starts (not immediate)
- *    11.  `bot_takeover` is broadcast BEFORE `bot_declaration_timer`
- *    12.  `bot_declaration_timer` is broadcast BEFORE `declaration_result`
+ * executeTimedOutTurn → startBotDeclarationCountdown integration:
+ * 9. Declaration with complete 6-card assignment → countdown starts (not immediate)
+ * 10. Declaration with disconnected player → countdown starts (not immediate)
+ * 11. `bot_takeover` is broadcast BEFORE `bot_declaration_timer`
+ * 12. `bot_declaration_timer` is broadcast BEFORE `declaration_result`
  *
- *   cancelBotDeclarationTimer:
- *    13.  Cancels an active bot-declaration timer so handleDeclare does not fire
- *    14.  No-op when no timer is active (safe to call unconditionally)
+ * cancelBotDeclarationTimer:
+ * 13. Cancels an active bot-declaration timer so handleDeclare does not fire
+ * 14. No-op when no timer is active (safe to call unconditionally)
  */
 
 const {
@@ -88,11 +87,11 @@ jest.mock('../game/rematchStore', () => ({
 /**
  * Builds a 6-player game (remove_7s variant).
  *
- *   Team 1: p1(seat 0), p2(seat 2), p3(seat 4)
- *   Team 2: p4(seat 1), p5(seat 3), p6(seat 5)
+ * Team 1: p1(seat 0), p2(seat 2), p3(seat 4)
+ * Team 2: p4(seat 1), p5(seat 3), p6(seat 5)
  *
- * low_s  = 1_s, 2_s, 3_s, 4_s, 5_s, 6_s
- *          p1 holds 1_s,2_s,3_s  |  p2 holds 4_s,5_s,6_s
+ * low_s = 1_s, 2_s, 3_s, 4_s, 5_s, 6_s
+ * p1 holds 1_s,2_s,3_s | p2 holds 4_s,5_s,6_s
  *
  * All 6 low_s cards are on Team 1, so a correct full assignment is possible.
  */

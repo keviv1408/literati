@@ -11,11 +11,11 @@
  * lives in Supabase; lobby membership is ephemeral.
  *
  * Seat layout: seats alternate Team 1 / Team 2 clockwise.
- *   - even seatIndex (0, 2, 4, ...) → Team 1 (default)
- *   - odd  seatIndex (1, 3, 5, ...) → Team 2 (default)
+ * - even seatIndex (0, 2, 4, ...) → Team 1 (default)
+ * - odd seatIndex (1, 3, 5, ...) → Team 2 (default)
  *
  * The host may override individual team assignments via lobby:reassign_team,
- * subject to team-balance validation (no team may exceed playerCount / 2).
+ * subject to team-balance validation (no team may exceed playerCount 2).
  */
 
 // ---------------------------------------------------------------------------
@@ -24,24 +24,24 @@
 
 /**
  * @typedef {Object} LobbySeat
- * @property {number}  seatIndex   - 0-based position around the table
- * @property {string}  playerId    - userId (registered) or sessionId (guest)
- * @property {string}  displayName - human-readable name
- * @property {string}  [avatarId]  - optional avatar identifier
- * @property {1|2}     teamId      - current team assignment
- * @property {boolean} isBot       - whether this is a bot player
- * @property {boolean} isGuest     - whether this is a guest player
+ * @property {number} seatIndex - 0-based position around the table
+ * @property {string} playerId - userId (registered) or sessionId (guest)
+ * @property {string} displayName - human-readable name
+ * @property {string} [avatarId] - optional avatar identifier
+ * @property {1|2} teamId - current team assignment
+ * @property {boolean} isBot - whether this is a bot player
+ * @property {boolean} isGuest - whether this is a guest player
  */
 
 /**
  * @typedef {Object} LobbyRoom
- * @property {string}                              roomId        - UUID from Supabase
- * @property {string}                              roomCode      - 6-char display code
- * @property {string}                              hostPlayerId  - playerId of the host
- * @property {number}                              playerCount   - 6 or 8
- * @property {string}                              status        - mirrors rooms.status
- * @property {Map<number, LobbySeat>}              seats         - seatIndex → LobbySeat
- * @property {Map<string, import('ws').WebSocket>} connections   - playerId → WebSocket
+ * @property {string} roomId - UUID from Supabase
+ * @property {string} roomCode - 6-char display code
+ * @property {string} hostPlayerId - playerId of the host
+ * @property {number} playerCount - 6 or 8
+ * @property {string} status - mirrors rooms.status
+ * @property {Map<number, LobbySeat>} seats - seatIndex → LobbySeat
+ * @property {Map<string, import('ws').WebSocket>} connections - playerId → WebSocket
  */
 
 // ---------------------------------------------------------------------------
@@ -61,10 +61,10 @@ const _rooms = new Map();
  *
  * @param {Object} opts
  * @param {string} opts.roomId
- * @param {string} opts.roomCode        - must be uppercase
+ * @param {string} opts.roomCode - must be uppercase
  * @param {string} opts.hostPlayerId
- * @param {number} opts.playerCount     - 6 or 8
- * @param {string} [opts.status]        - defaults to 'waiting'
+ * @param {number} opts.playerCount - 6 or 8
+ * @param {string} [opts.status] - defaults to 'waiting'
  * @returns {LobbyRoom}
  */
 function initLobbyRoom({ roomId, roomCode, hostPlayerId, playerCount, status = 'waiting' }) {
@@ -120,7 +120,7 @@ function deleteLobbyRoom(roomCode) {
  * Assign a player to a seat in the lobby.
  * Overwrites any previous occupant at that seat index.
  *
- * @param {string}    roomCode
+ * @param {string} roomCode
  * @param {LobbySeat} seat
  * @returns {LobbyRoom}
  * @throws {Error} if the room is not tracked
@@ -158,8 +158,8 @@ function removePlayerFromLobby(roomCode, playerId) {
 /**
  * Register (or replace) the WebSocket connection for a player in a room.
  *
- * @param {string}             roomCode
- * @param {string}             playerId
+ * @param {string} roomCode
+ * @param {string} playerId
  * @param {import('ws').WebSocket} ws
  */
 function setPlayerConnection(roomCode, playerId, ws) {
@@ -182,29 +182,29 @@ function removePlayerConnection(roomCode, playerId) {
 }
 
 // ---------------------------------------------------------------------------
-// Team reassignment (core logic for Sub-AC 3a)
+// Team reassignment (core logic for )
 // ---------------------------------------------------------------------------
 
 /**
  * Reassign a single player to a new team, subject to balance validation.
  *
  * Balance rule: after the change, no team may have more than
- * `Math.floor(playerCount / 2)` members.  This prevents the host from
+ * `Math.floor(playerCount 2)` members. This prevents the host from
  * creating an unbalanced split in a full lobby (e.g. 4 vs 2 in a 6-player
  * room), while still allowing flexible assignments in partially-filled lobbies.
  *
  * Edge cases:
- *   - Player already on newTeamId → treated as a no-op success.
- *   - Player not found in room    → error.
- *   - Full balanced lobby         → any single move would exceed the per-team
- *     cap, so the operation is rejected (a swap via two sequential calls is
- *     needed once an imbalance is temporarily permitted in a partial lobby).
+ * - Player already on newTeamId → treated as a no-op success.
+ * - Player not found in room → error.
+ * - Full balanced lobby → any single move would exceed the per-team
+ * cap, so the operation is rejected (a swap via two sequential calls is
+ * needed once an imbalance is temporarily permitted in a partial lobby).
  *
  * @param {string} roomCode
  * @param {string} targetPlayerId
- * @param {1|2}    newTeamId
- * @returns {{ success: true,  seats: LobbySeat[] } |
- *           { success: false, error: string }}
+ * @param {1|2} newTeamId
+ * @returns {{ success: true, seats: LobbySeat[] } |
+ * { success: false, error: string }}
  */
 function reassignPlayerTeam(roomCode, targetPlayerId, newTeamId) {
   const room = _rooms.get(roomCode.toUpperCase());
@@ -283,7 +283,7 @@ function getLobbySnapshot(roomCode) {
  * Broadcast a JSON message to all currently-connected players in a room.
  *
  * @param {string} roomCode
- * @param {object} message  - will be JSON-stringified
+ * @param {object} message - will be JSON-stringified
  */
 function broadcastToRoom(roomCode, message) {
   const room = _rooms.get(roomCode.toUpperCase());
@@ -318,7 +318,7 @@ function _getLobbyRoomOrThrow(roomCode) {
  * Find the LobbySeat for a playerId within a room.
  *
  * @param {LobbyRoom} room
- * @param {string}    playerId
+ * @param {string} playerId
  * @returns {LobbySeat|null}
  */
 function _findSeatByPlayerId(room, playerId) {
@@ -337,12 +337,12 @@ function _seatsArray(room) {
 // Test helpers
 // ---------------------------------------------------------------------------
 
-/** Wipe all tracked rooms.  Used in tests to reset state between cases. */
+/** Wipe all tracked rooms. Used in tests to reset state between cases. */
 function _clearRooms() {
   _rooms.clear();
 }
 
-/** Direct read of the raw store.  Used in tests to inspect internal state. */
+/** Direct read of the raw store. Used in tests to inspect internal state. */
 function _getRawRooms() {
   return _rooms;
 }

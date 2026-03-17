@@ -1,41 +1,41 @@
 'use strict';
 
 /**
- * Integration tests for the lobby fill timer (Sub-AC 8c).
+ * Integration tests for the lobby fill timer.
  *
  * Tests the full timer lifecycle as triggered by handleJoinRoom:
  *
- *   A. Timer start
- *      — First player joining a room starts the 2-minute timer.
- *      — 'lobby-timer-started' is broadcast to the room with an expiresAt timestamp.
- *      — Second player joining does NOT restart the timer.
- *      — Reconnecting player (already in lobby) does NOT restart the timer.
+ * A. Timer start
+ * — First player joining a room starts the 2-minute timer.
+ * — 'lobby-timer-started' is broadcast to the room with an expiresAt timestamp.
+ * — Second player joining does NOT restart the timer.
+ * — Reconnecting player (already in lobby) does NOT restart the timer.
  *
- *   B. Early cancellation (lobby fills)
- *      — When the last human seat is filled the timer is cancelled.
- *      — 'lobby-starting' is broadcast with the full seats list and botsAdded=[].
+ * B. Early cancellation (lobby fills)
+ * — When the last human seat is filled the timer is cancelled.
+ * — 'lobby-starting' is broadcast with the full seats list and botsAdded=[].
  *
- *   C. Timer expiry (bot fill)
- *      — When the timer fires, empty seats are filled with bot players.
- *      — 'lobby-starting' is broadcast with the bots listed in botsAdded.
- *      — Supabase room status is updated to 'starting'.
- *      — Bot IDs start with 'bot_'.
- *      — Bot seatIndex values match the empty seats.
+ * C. Timer expiry (bot fill)
+ * — When the timer fires, empty seats are filled with bot players.
+ * — 'lobby-starting' is broadcast with the bots listed in botsAdded.
+ * — Supabase room status is updated to 'starting'.
+ * — Bot IDs start with 'bot_'.
+ * — Bot seatIndex values match the empty seats.
  *
- *   D. _handleGameStart directly
- *      — Bots are generated for the correct number of empty seats.
- *      — Supabase update is called with status='starting'.
+ * D. _handleGameStart directly
+ * — Bots are generated for the correct number of empty seats.
+ * — Supabase update is called with status='starting'.
  *
- *   E. _handleTimerExpiry directly
- *      — No-ops when room is not in 'waiting' status.
- *      — No-ops when room is not found in DB.
+ * E. _handleTimerExpiry directly
+ * — No-ops when room is not in 'waiting' status.
+ * — No-ops when room is not found in DB.
  *
  * Strategy:
- *   - No real DB or WebSocket ports are opened — everything is mocked.
- *   - Supabase is injected via _setSupabaseClient.
- *   - lobbyStore and lobbyManager state are reset between tests.
- *   - handleJoinRoom / _handleGameStart / _handleTimerExpiry are imported directly.
- *   - Jest fake timers are used in Section C so tests run instantly.
+ * - No real DB or WebSocket ports are opened — everything is mocked.
+ * - Supabase is injected via _setSupabaseClient.
+ * - lobbyStore and lobbyManager state are reset between tests.
+ * - handleJoinRoom / _handleGameStart / _handleTimerExpiry are imported directly.
+ * - Jest fake timers are used in Section C so tests run instantly.
  */
 
 const { WebSocket } = require('ws');
@@ -341,7 +341,7 @@ describe('B. Early cancellation — lobby fills before timer fires', () => {
 // C. Timer expiry — bots fill empty seats
 //
 // These tests call _handleTimerExpiry directly (bypassing the actual timer
-// mechanism) to avoid fake-timer / Promise-flushing complexity.  The timer
+// mechanism) to avoid fake-timer / Promise-flushing complexity. The timer
 // module's own unit tests (lobbyTimer.test.js) already verify that the
 // callback fires after the correct delay.
 // ---------------------------------------------------------------------------

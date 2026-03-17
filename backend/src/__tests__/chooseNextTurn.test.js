@@ -1,29 +1,29 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 28b: handleChooseNextTurn
+ * Tests for handleChooseNextTurn
  *
- * After a correct declaration the declaring team keeps the turn.  The current
+ * After a correct declaration the declaring team keeps the turn. The current
  * turn player may redirect the turn to any same-team teammate with cards by
- * sending `choose_next_turn`.  The server validates, updates
+ * sending `choose_next_turn`. The server validates, updates
  * `gs.currentTurnPlayerId`, and broadcasts the updated game_state.
  *
  * Coverage:
- *   handleChooseNextTurn validation:
- *     1.  Happy path: declarant redirects turn to a teammate
- *     2.  Not your turn: requesterId ≠ currentTurnPlayerId → error
- *     3.  Target player not found → error
- *     4.  Chosen player is on the opposing team → WRONG_TEAM error
- *     5.  Chosen player has an empty hand → TARGET_EMPTY_HAND error
- *     6.  Chosen player is in eliminatedPlayerIds → TARGET_EMPTY_HAND error
- *     7.  Declarant redirects turn to themselves → valid (no-op redirect)
- *     8.  Game not found (roomCode unknown) → silently returns
- *     9.  Game status === 'completed' → silently returns
- *    10.  broadcastStateUpdate is called on success
- *    11.  cancelTurnTimer + scheduleBotTurnIfNeeded + scheduleTurnTimerIfNeeded called on success
- *    12.  Error response sent via ws on NOT_YOUR_TURN
- *    13.  Error response sent via ws on WRONG_TEAM
- *    14.  Error response sent via ws on TARGET_EMPTY_HAND
+ * handleChooseNextTurn validation:
+ * 1. Happy path: declarant redirects turn to a teammate
+ * 2. Not your turn: requesterId ≠ currentTurnPlayerId → error
+ * 3. Target player not found → error
+ * 4. Chosen player is on the opposing team → WRONG_TEAM error
+ * 5. Chosen player has an empty hand → TARGET_EMPTY_HAND error
+ * 6. Chosen player is in eliminatedPlayerIds → TARGET_EMPTY_HAND error
+ * 7. Declarant redirects turn to themselves → valid (no-op redirect)
+ * 8. Game not found (roomCode unknown) → silently returns
+ * 9. Game status === 'completed' → silently returns
+ * 10. broadcastStateUpdate is called on success
+ * 11. cancelTurnTimer + scheduleBotTurnIfNeeded + scheduleTurnTimerIfNeeded called on success
+ * 12. Error response sent via ws on NOT_YOUR_TURN
+ * 13. Error response sent via ws on WRONG_TEAM
+ * 14. Error response sent via ws on TARGET_EMPTY_HAND
  */
 
 const {
@@ -108,7 +108,7 @@ function mockWs() {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('handleChooseNextTurn — Sub-AC 28b', () => {
+describe('handleChooseNextTurn — ', () => {
   const ROOM = 'ROOM28B';
 
   afterEach(() => {

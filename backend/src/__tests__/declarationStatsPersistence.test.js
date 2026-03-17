@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Sub-AC 44c — Declaration stats persistence
+ * Declaration stats persistence
  *
  * Verifies that updateStats (called after every completed game) correctly
  * computes and persists declarations_attempted, declarations_correct, and
@@ -9,21 +9,21 @@
  *
  * Coverage:
  *
- *   updateStats — declaration counting:
- *    1.  Player who never declared has declarations_attempted === 0
- *    2.  One correct declaration → attempted=1, correct=1, incorrect=0
- *    3.  One incorrect (manual) declaration → attempted=1, correct=0, incorrect=1
- *    4.  Timer-expired (forced-failed) declaration counted as incorrect attempt
- *    5.  Mixed history: 2 correct + 1 incorrect → attempted=3, correct=2, incorrect=1
- *    6.  Only declarations by THIS player are counted (not teammates'/opponents')
- *    7.  Guest players are skipped entirely (rpc not called)
- *    8.  Bot players are skipped entirely (rpc not called)
- *    9.  p_declarations_attempted is passed to the RPC
- *   10.  p_declarations_attempted equals p_declarations_correct + p_declarations_incorrect
+ * updateStats — declaration counting:
+ * 1. Player who never declared has declarations_attempted === 0
+ * 2. One correct declaration → attempted=1, correct=1, incorrect=0
+ * 3. One incorrect (manual) declaration → attempted=1, correct=0, incorrect=1
+ * 4. Timer-expired (forced-failed) declaration counted as incorrect attempt
+ * 5. Mixed history: 2 correct + 1 incorrect → attempted=3, correct=2, incorrect=1
+ * 6. Only declarations by THIS player are counted (not teammates'/opponents')
+ * 7. Guest players are skipped entirely (rpc not called)
+ * 8. Bot players are skipped entirely (rpc not called)
+ * 9. p_declarations_attempted is passed to the RPC
+ * 10. p_declarations_attempted equals p_declarations_correct + p_declarations_incorrect
  *
- *   Profile route — declarationsAttempted field:
- *   11.  GET /api/stats/profile/:userId returns declarationsAttempted in body
- *   12.  declarationsAttempted falls back to correct+incorrect when column is null
+ * Profile route — declarationsAttempted field:
+ * 11. GET /api/stats/profile/:userId returns declarationsAttempted in body
+ * 12. declarationsAttempted falls back to correct+incorrect when column is null
  */
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ function rpcArgsFor(playerId) {
 // Tests 1–10: updateStats declaration counting
 // ---------------------------------------------------------------------------
 
-describe('updateStats — declaration stat counting (Sub-AC 44c)', () => {
+describe('updateStats — declaration stat counting ', () => {
   beforeEach(() => {
     mockRpc.mockClear();
   });
@@ -289,7 +289,7 @@ describe('updateStats — declaration stat counting (Sub-AC 44c)', () => {
 // Tests 11–12: Profile route — declarationsAttempted field
 // ---------------------------------------------------------------------------
 
-describe('GET /api/stats/profile/:userId — declarationsAttempted (Sub-AC 44c)', () => {
+describe('GET /api/stats/profile/:userId — declarationsAttempted ', () => {
   let app;
 
   beforeAll(() => {

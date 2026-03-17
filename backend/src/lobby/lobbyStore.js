@@ -6,25 +6,25 @@
  * Tracks which players are connected to which room lobby (pre-game waiting
  * room). Players are added when they send a 'join-room' WebSocket message and
  * are removed when they:
- *   - Disconnect (WebSocket close event)
- *   - Are kicked by the host
- *   - The game starts
+ * - Disconnect (WebSocket close event)
+ * - Are kicked by the host
+ * - The game starts
  *
  * Shape of a stored lobby:
  * {
- *   roomCode : string  — uppercase 6-char room code
- *   hostId   : string  — playerId of the host (registered userId or guest sessionId)
- *   players  : Map<playerId, LobbyPlayer>
+ * roomCode: string — uppercase 6-char room code
+ * hostId : string — playerId of the host (registered userId or guest sessionId)
+ * players : Map<playerId, LobbyPlayer>
  * }
  *
  * Shape of a LobbyPlayer:
  * {
- *   connectionId : string  — UUIDv4 unique to this WebSocket connection
- *   playerId     : string  — registered userId or guest sessionId
- *   displayName  : string
- *   avatarId     : string | null
- *   isGuest      : boolean
- *   ws           : WebSocket  — the live socket object
+ * connectionId: string — UUIDv4 unique to this WebSocket connection
+ * playerId : string — registered userId or guest sessionId
+ * displayName : string
+ * avatarId : string | null
+ * isGuest : boolean
+ * ws : WebSocket — the live socket object
  * }
  */
 
@@ -52,8 +52,8 @@ const _connectionIndex = new Map();
  *
  * Called when the first player (the host) joins the WebSocket for a room.
  *
- * @param {string} roomCode  - Uppercase 6-char room code.
- * @param {string} hostId    - playerId of the room host.
+ * @param {string} roomCode - Uppercase 6-char room code.
+ * @param {string} hostId - playerId of the room host.
  * @returns {LobbyRoom}
  */
 function getOrCreateLobby(roomCode, hostId) {
@@ -132,8 +132,8 @@ function removePlayerFromLobby(roomCode, playerId) {
  *
  * @param {string} connectionId
  * @returns {{ roomCode: string, playerId: string, displayName: string, avatarId: string|null, isGuest: boolean }|null}
- *   The removed player augmented with the room code, or null if the connection
- *   was not tracked (already removed / never joined a room).
+ * The removed player augmented with the room code, or null if the connection
+ * was not tracked (already removed / never joined a room).
  */
 function removeConnectionFromLobby(connectionId) {
   const entry = _connectionIndex.get(connectionId);

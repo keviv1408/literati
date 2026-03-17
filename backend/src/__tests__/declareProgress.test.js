@@ -1,20 +1,20 @@
 'use strict';
 
 /**
- * Tests for real-time declaration-progress broadcast (Sub-AC 21b).
+ * Tests for real-time declaration-progress broadcast.
  *
  * Coverage:
- *   handleDeclareProgress:
- *     1. Broadcasts declare_progress to all OTHER connections (excludes declarant)
- *     2. Broadcasts to spectator connections too
- *     3. Does nothing if game not found for roomCode
- *     4. Does nothing if game status is not 'active'
- *     5. Does nothing if sender is not the current-turn player
- *     6. Broadcast includes correct declarerId, halfSuitId, assignedCount, totalCards, assignment
- *     7. assignedCount reflects the number of entries in the assignment object
- *     8. Handles null halfSuitId (cancellation signal) — broadcasts with halfSuitId: null
- *     9. Handles empty assignment gracefully (assignedCount = 0)
- *    10. Does NOT send back to the declarant's own connection
+ * handleDeclareProgress:
+ * 1. Broadcasts declare_progress to all OTHER connections (excludes declarant)
+ * 2. Broadcasts to spectator connections too
+ * 3. Does nothing if game not found for roomCode
+ * 4. Does nothing if game status is not 'active'
+ * 5. Does nothing if sender is not the current-turn player
+ * 6. Broadcast includes correct declarerId, halfSuitId, assignedCount, totalCards, assignment
+ * 7. assignedCount reflects the number of entries in the assignment object
+ * 8. Handles null halfSuitId (cancellation signal) — broadcasts with halfSuitId: null
+ * 9. Handles empty assignment gracefully (assignedCount = 0)
+ * 10. Does NOT send back to the declarant's own connection
  */
 
 const { setGame, getGame, registerConnection, _clearAll } = require('../game/gameStore');

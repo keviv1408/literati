@@ -3,35 +3,35 @@
 /**
  * nextEligibleHostCandidate.test.js
  *
- * Sub-AC 40b: Utility function that traverses the player list clockwise from
+ * Utility function that traverses the player list clockwise from
  * the current host to find the next eligible host candidate.
  *
  * Eligibility rules:
- *   - NOT a bot  (isBot === false)
- *   - NOT eliminated  (playerId not in gs.eliminatedPlayerIds)
+ * - NOT a bot (isBot === false)
+ * - NOT eliminated (playerId not in gs.eliminatedPlayerIds)
  *
  * "Clockwise" = ascending seatIndex with wrap-around.
  *
  * Coverage:
- *   1.  Basic: next clockwise human (non-bot, non-eliminated) is returned
- *   2.  Skips bots; returns first human after the host
- *   3.  Skips eliminated players; returns first non-eliminated human
- *   4.  Skips both bots AND eliminated players together
- *   5.  Wrap-around: host is at the last seat, candidate wraps to seat 0
- *   6.  Multiple candidates available: returns the CLOCKWISE-NEAREST one
- *   7.  All other players are bots → returns null
- *   8.  All other players are eliminated → returns null
- *   9.  All other players are bots or eliminated → returns null
- *  10.  currentHostId not in player list → starts from seat 0 (defensive)
- *  11.  gs.eliminatedPlayerIds is undefined (older state shape) → treated as empty
- *  12.  gs.eliminatedPlayerIds is null → treated as empty (no crash)
- *  13.  Empty players array → returns null
- *  14.  gs is null/undefined → returns null
- *  15.  8-player game: correct clockwise traversal across all 8 seats
- *  16.  Host itself is eliminated and is a bot — should NOT be returned
- *  17.  Host is eliminated; next clockwise human (non-eliminated) is returned
- *  18.  Only one player in the list (the host) → returns null
- *  19.  All players are bots (including the host) → returns null
+ * 1. Basic: next clockwise human (non-bot, non-eliminated) is returned
+ * 2. Skips bots; returns first human after the host
+ * 3. Skips eliminated players; returns first non-eliminated human
+ * 4. Skips both bots AND eliminated players together
+ * 5. Wrap-around: host is at the last seat, candidate wraps to seat 0
+ * 6. Multiple candidates available: returns the CLOCKWISE-NEAREST one
+ * 7. All other players are bots → returns null
+ * 8. All other players are eliminated → returns null
+ * 9. All other players are bots or eliminated → returns null
+ * 10. currentHostId not in player list → starts from seat 0 (defensive)
+ * 11. gs.eliminatedPlayerIds is undefined (older state shape) → treated as empty
+ * 12. gs.eliminatedPlayerIds is null → treated as empty (no crash)
+ * 13. Empty players array → returns null
+ * 14. gs is null/undefined → returns null
+ * 15. 8-player game: correct clockwise traversal across all 8 seats
+ * 16. Host itself is eliminated and is a bot — should NOT be returned
+ * 17. Host is eliminated; next clockwise human (non-eliminated) is returned
+ * 18. Only one player in the list (the host) → returns null
+ * 19. All players are bots (including the host) → returns null
  */
 
 const { nextEligibleHostCandidate } = require('../game/gameEngine');
@@ -44,7 +44,7 @@ const { nextEligibleHostCandidate } = require('../game/gameEngine');
  * Build a 6-player GameState stub.
  *
  * Clockwise seat order:
- *   host(T1,0) → bot1(T2,1) → p2(T1,2) → p3(T2,3) → p4(T1,4) → p5(T2,5)
+ * host(T1,0) → bot1(T2,1) → p2(T1,2) → p3(T2,3) → p4(T1,4) → p5(T2,5)
  */
 function buildGs6(overrides = {}) {
   const players = [
@@ -73,8 +73,8 @@ function buildGs6(overrides = {}) {
  * Build an 8-player GameState stub.
  *
  * Clockwise seat order:
- *   p0(T1,0) → p1(T2,1) → p2(T1,2) → p3(T2,3)
- *   p4(T1,4) → p5(T2,5) → p6(T1,6) → p7(T2,7)
+ * p0(T1,0) → p1(T2,1) → p2(T1,2) → p3(T2,3)
+ * p4(T1,4) → p5(T2,5) → p6(T1,6) → p7(T2,7)
  *
  * p1, p3, p5, p7 are bots.
  */
@@ -107,11 +107,11 @@ function buildGs8(overrides = {}) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('nextEligibleHostCandidate — Sub-AC 40b', () => {
+describe('nextEligibleHostCandidate — ', () => {
   // ── Basic happy-path ────────────────────────────────────────────────────
 
   it('1. returns the next clockwise human player when they are immediately adjacent', () => {
-    // All players are humans.  Clockwise from host(0): bot1(1) skipped, p2(2) is first human.
+    // All players are humans. Clockwise from host(0): bot1(1) skipped, p2(2) is first human.
     const gs = buildGs6();
     // Make all players human for this test (override bot1)
     gs.players[1].isBot = false;
@@ -206,7 +206,7 @@ describe('nextEligibleHostCandidate — Sub-AC 40b', () => {
 
   it('10. currentHostId not found → starts search from seat 0, returns first eligible', () => {
     const gs = buildGs6();
-    // 'unknown-id' is not in the player list.  startIdx defaults to 0.
+    // 'unknown-id' is not in the player list. startIdx defaults to 0.
     // From index 0 we search i=1..5: bot1(1)=skip, p2(2)=eligible.
     // But wait — startIdx=0 means we start from host(seat 0) notionally,
     // so the loop starts at i=1 → seat 1 (bot1) skip → seat 2 (p2) eligible.

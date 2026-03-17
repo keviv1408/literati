@@ -1,42 +1,41 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for DeclarationResultOverlay — Sub-AC 26c:
- * 3-second auto-dismiss countdown with visible timer, cancellable by an
- * explicit Dismiss button.  On dismiss, parent dispatches game-advance.
+ * Tests for DeclarationResultOverlay — * 3-second auto-dismiss countdown with visible timer, cancellable by an
+ * explicit Dismiss button. On dismiss, parent dispatches game-advance.
  *
  * Coverage:
- *   Rendering:
- *     • Mounts with data-testid="declaration-result-overlay"
- *     • Renders the result card wrapper
- *     • Shows ✅ icon for correct declaration
- *     • Shows ❌ icon for incorrect declaration
- *     • Shows "Correct Declaration!" headline for correct result
- *     • Shows "Incorrect Declaration!" headline for incorrect result
- *     • Shows declarer's display name
- *     • Shows the half-suit label
- *     • Shows the lastMove text
- *     • Renders the countdown pill with the initial countdown value
- *     • Renders the Dismiss button
- *   Countdown display:
- *     • Countdown pill shows "3s" initially (default 3 000 ms)
- *     • Countdown pill shows "2s" after 1 tick
- *     • Countdown pill shows "1s" after 2 ticks
- *   Auto-dismiss:
- *     • onDismiss NOT called on initial render
- *     • onDismiss called after countdown reaches 0
- *     • onDismiss called exactly once (no double-fire)
- *   Manual dismiss:
- *     • Pressing Dismiss calls onDismiss immediately
- *     • Pressing Dismiss cancels the interval (onDismiss not called again)
- *   Team display:
- *     • Shows "Your team scores! 🎉" when myTeamId matches winningTeam
- *     • Shows "Opponent team scores" when myTeamId does not match winningTeam
- *     • Shows generic "Team N scores!" for spectators (myTeamId null)
- *   Accessibility:
- *     • Overlay has role="dialog" and aria-modal="true"
- *     • Countdown pill has aria-live="polite"
- *     • Dismiss button has accessible aria-label
+ * Rendering:
+ * • Mounts with data-testid="declaration-result-overlay"
+ * • Renders the result card wrapper
+ * • Shows ✅ icon for correct declaration
+ * • Shows ❌ icon for incorrect declaration
+ * • Shows "Correct Declaration!" headline for correct result
+ * • Shows "Incorrect Declaration!" headline for incorrect result
+ * • Shows declarer's display name
+ * • Shows the half-suit label
+ * • Shows the lastMove text
+ * • Renders the countdown pill with the initial countdown value
+ * • Renders the Dismiss button
+ * Countdown display:
+ * • Countdown pill shows "3s" initially (default 3 000 ms)
+ * • Countdown pill shows "2s" after 1 tick
+ * • Countdown pill shows "1s" after 2 ticks
+ * Auto-dismiss:
+ * • onDismiss NOT called on initial render
+ * • onDismiss called after countdown reaches 0
+ * • onDismiss called exactly once (no double-fire)
+ * Manual dismiss:
+ * • Pressing Dismiss calls onDismiss immediately
+ * • Pressing Dismiss cancels the interval (onDismiss not called again)
+ * Team display:
+ * • Shows "Your team scores! 🎉" when myTeamId matches winningTeam
+ * • Shows "Opponent team scores" when myTeamId does not match winningTeam
+ * • Shows generic "Team N scores!" for spectators (myTeamId null)
+ * Accessibility:
+ * • Overlay has role="dialog" and aria-modal="true"
+ * • Countdown pill has aria-live="polite"
+ * • Dismiss button has accessible aria-label
  */
 
 import React from 'react';

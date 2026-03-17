@@ -1,29 +1,29 @@
 'use strict';
 
 /**
- * Unit tests for the countdown timer service (Sub-AC 36.1).
+ * Unit tests for the countdown timer service.
  *
  * Validates that timerService:
- *   1.  startCountdownTimer broadcasts `timer_start` immediately with correct fields
- *   2.  startCountdownTimer broadcasts `timer_tick` every TICK_INTERVAL_MS (1 second)
- *   3.  `timer_tick` carries remainingMs, remainingS, phase, playerId, expiresAt
- *   4.  `timer_threshold` fires exactly once when remainingS <= TIMER_THRESHOLD_S (10)
- *   5.  `timer_threshold` is NOT fired again on subsequent ticks
- *   6.  `timer_threshold` carries the correct fields (remainingMs, remainingS, etc.)
- *   7.  onExpiry is called when the timer fires
- *   8.  cancelCountdownTimer cancels the timer before onExpiry fires
- *   9.  cancelCountdownTimer is idempotent (safe to call when no timer exists)
- *  10.  Starting a second timer for the same room cancels the first
- *  11.  tick events stop once the timer expires
- *  12.  getTimerRemaining returns null when no timer, > 0 when active
- *  13.  isTimerActive returns false initially, true after start, false after cancel
- *  14.  getTimerExpiry returns null when inactive, epoch ms when active
- *  15.  getTimerPhase returns null when inactive, 'turn'/'declaration' when active
- *  16.  broadcastFn receives ALL three event types (timer_start, timer_tick, timer_threshold)
- *  17.  declaration phase timer uses phase: 'declaration'
- *  18.  turn phase timer uses phase: 'turn'
- *  19.  _clearAllTimers cancels all active timers (test cleanup helper)
- *  20.  broadcastFn is called with (roomCode, data) signature
+ * 1. startCountdownTimer broadcasts `timer_start` immediately with correct fields
+ * 2. startCountdownTimer broadcasts `timer_tick` every TICK_INTERVAL_MS (1 second)
+ * 3. `timer_tick` carries remainingMs, remainingS, phase, playerId, expiresAt
+ * 4. `timer_threshold` fires exactly once when remainingS <= TIMER_THRESHOLD_S (10)
+ * 5. `timer_threshold` is NOT fired again on subsequent ticks
+ * 6. `timer_threshold` carries the correct fields (remainingMs, remainingS, etc.)
+ * 7. onExpiry is called when the timer fires
+ * 8. cancelCountdownTimer cancels the timer before onExpiry fires
+ * 9. cancelCountdownTimer is idempotent (safe to call when no timer exists)
+ * 10. Starting a second timer for the same room cancels the first
+ * 11. tick events stop once the timer expires
+ * 12. getTimerRemaining returns null when no timer, > 0 when active
+ * 13. isTimerActive returns false initially, true after start, false after cancel
+ * 14. getTimerExpiry returns null when inactive, epoch ms when active
+ * 15. getTimerPhase returns null when inactive, 'turn'/'declaration' when active
+ * 16. broadcastFn receives ALL three event types (timer_start, timer_tick, timer_threshold)
+ * 17. declaration phase timer uses phase: 'declaration'
+ * 18. turn phase timer uses phase: 'turn'
+ * 19. _clearAllTimers cancels all active timers (test cleanup helper)
+ * 20. broadcastFn is called with (roomCode, data) signature
  */
 
 const timerService = require('../game/timerService');

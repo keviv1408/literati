@@ -1,33 +1,33 @@
 'use strict';
 
 /**
- * Unit tests for Sub-AC 46c: Rematch room creation preserving teams and seat order.
+ * Unit tests for Rematch room creation preserving teams and seat order.
  *
  * Coverage:
- *   rematchStore.js — getRematchGameConfig:
- *     1. Returns null when no active vote
- *     2. Returns null fields when initRematch called without gameConfig
- *     3. Returns stored roomId, variant, playerCount when provided
- *     4. Returns a copy of the players array (mutation-safe)
- *     5. Is cleared by clearRematch
- *     6. Survives castVote calls unchanged
+ * rematchStore.js — getRematchGameConfig:
+ * 1. Returns null when no active vote
+ * 2. Returns null fields when initRematch called without gameConfig
+ * 3. Returns stored roomId, variant, playerCount when provided
+ * 4. Returns a copy of the players array (mutation-safe)
+ * 5. Is cleared by clearRematch
+ * 6. Survives castVote calls unchanged
  *
- *   rematchStore.js — initRematch backward compatibility:
- *     7. 3-arg call (no gameConfig) still works; config fields are null
- *     8. 4-arg call with partial config stores only provided fields
+ * rematchStore.js — initRematch backward compatibility:
+ * 7. 3-arg call (no gameConfig) still works; config fields are null
+ * 8. 4-arg call with partial config stores only provided fields
  *
- *   gameSocketServer.js — handleRematchVote majority-reached path:
- *     9.  createGame called with same seats, variant, playerCount on majority yes
- *    10.  rematch_starting is broadcast after game creation
- *    11.  game_init is sent to each connected player
- *    12.  spectator_init is sent to spectators
- *    13.  scheduleBotTurnIfNeeded called for the new game
- *    14.  scheduleTurnTimerIfNeeded called for the new game
- *    15.  Supabase room updated to in_progress
- *    16.  persistGameState called for crash recovery
- *    17.  rematch_declined broadcast when config is missing (roomId null)
- *    18.  rematch_declined broadcast when createGame throws
- *    19.  clearRematch called before createGame (vote state cleaned up)
+ * gameSocketServer.js — handleRematchVote majority-reached path:
+ * 9. createGame called with same seats, variant, playerCount on majority yes
+ * 10. rematch_starting is broadcast after game creation
+ * 11. game_init is sent to each connected player
+ * 12. spectator_init is sent to spectators
+ * 13. scheduleBotTurnIfNeeded called for the new game
+ * 14. scheduleTurnTimerIfNeeded called for the new game
+ * 15. Supabase room updated to in_progress
+ * 16. persistGameState called for crash recovery
+ * 17. rematch_declined broadcast when config is missing (roomId null)
+ * 18. rematch_declined broadcast when createGame throws
+ * 19. clearRematch called before createGame (vote state cleaned up)
  */
 
 jest.useFakeTimers();
@@ -196,14 +196,14 @@ describe('initRematch backward compatibility', () => {
 
 /**
  * We isolate handleRematchVote by mocking its external dependencies:
- *   - createGame (gameState creation)
- *   - broadcastToGame
- *   - getRoomConnections
- *   - sendJson / sendGameInit
- *   - getSupabaseClient → supabase.from().update()
- *   - persistGameState
- *   - scheduleBotTurnIfNeeded / scheduleTurnTimerIfNeeded
- *   - getGame (returns the finished game state snapshot)
+ * - createGame (gameState creation)
+ * - broadcastToGame
+ * - getRoomConnections
+ * - sendJson / sendGameInit
+ * - getSupabaseClient → supabase.from().update()
+ * - persistGameState
+ * - scheduleBotTurnIfNeeded / scheduleTurnTimerIfNeeded
+ * - getGame (returns the finished game state snapshot)
  */
 describe('handleRematchVote — majority reached creates new game', () => {
   // ── Stubs ──────────────────────────────────────────────────────────────

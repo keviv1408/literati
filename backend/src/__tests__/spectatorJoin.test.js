@@ -1,24 +1,24 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 42b: Backend Spectator Join Handler
+ * Tests for Backend Spectator Join Handler
  *
  * Covers:
- *   1. GET /api/rooms/spectate/:token (REST validation endpoint)
- *      - Validates spectator token format (must be 32 hex chars)
- *      - Returns 400 for invalid token format
- *      - Returns 404 for unknown tokens
- *      - Returns 200 with room info for valid token
- *   2. resolveSpectatorToken() helper (unit tests)
- *      - Returns null for invalid tokens
- *      - Returns room record for valid tokens
- *      - Normalises token to uppercase
- *   3. Game WebSocket spectator connection (integration tests)
- *      - Valid spectator token → spectator_init with public snapshot only
- *      - spectator_init.gameState has no moveHistory / hands / botKnowledge
- *      - Invalid / missing token → rejected
- *      - Spectator cannot send game messages (receives SPECTATOR error)
- *      - Lowercase token also accepted (case-insensitive)
+ * 1. GET /api/rooms/spectate/:token (REST validation endpoint)
+ * - Validates spectator token format (must be 32 hex chars)
+ * - Returns 400 for invalid token format
+ * - Returns 404 for unknown tokens
+ * - Returns 200 with room info for valid token
+ * 2. resolveSpectatorToken() helper (unit tests)
+ * - Returns null for invalid tokens
+ * - Returns room record for valid tokens
+ * - Normalises token to uppercase
+ * 3. Game WebSocket spectator connection (integration tests)
+ * - Valid spectator token → spectator_init with public snapshot only
+ * - spectator_init.gameState has no moveHistory / hands / botKnowledge
+ * - Invalid / missing token → rejected
+ * - Spectator cannot send game messages (receives SPECTATOR error)
+ * - Lowercase token also accepted (case-insensitive)
  */
 
 const supertest = require('supertest');
@@ -391,7 +391,7 @@ describe('Game WebSocket spectator connection', () => {
   }
 
   // ── Helper: open WS, wait for spectator_init, send a message, wait for
-  //            a message matching predicate, then close. ────────────────────────
+  // a message matching predicate, then close. ────────────────────────
   function spectatorSendAndWait(sendPayload, predicate, timeoutMs = 8000) {
     return new Promise((resolve, reject) => {
       const wsUrl = `ws://localhost:${port}/ws/game/${VALID_ROOM_CODE}?spectatorToken=${VALID_SPECTATOR_TOKEN}`;

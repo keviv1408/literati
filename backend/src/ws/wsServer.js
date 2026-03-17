@@ -4,41 +4,41 @@
  * WebSocket server for Literati.
  *
  * Lifecycle:
- *   1. Client opens ws://host/ws?token=<bearer_token>
- *   2. Server authenticates token → resolves { playerId, displayName, ... }
- *   3. Client sends 'join-room' → added to in-memory lobby
- *   4. Host sends 'kick-player' → target removed + broadcast 'player-kicked'
- *   5. Disconnect → player removed + broadcast 'player-left'
+ * 1. Client opens ws://host/ws?token=<bearer_token>
+ * 2. Server authenticates token → resolves { playerId, displayName, ... }
+ * 3. Client sends 'join-room' → added to in-memory lobby
+ * 4. Host sends 'kick-player' → target removed + broadcast 'player-kicked'
+ * 5. Disconnect → player removed + broadcast 'player-left'
  *
- * Lobby fill timer (Sub-AC 8c):
- *   When the first human player joins a room lobby a 2-minute countdown starts.
- *   If the lobby reaches capacity before the timer fires, the timer is cancelled
- *   and the game starts immediately.  If the timer fires first, any remaining
- *   open seats are filled with bot players and the game starts.
+ * Lobby fill timer:
+ * When the first human player joins a room lobby a 2-minute countdown starts.
+ * If the lobby reaches capacity before the timer fires, the timer is cancelled
+ * and the game starts immediately. If the timer fires first, any remaining
+ * open seats are filled with bot players and the game starts.
  *
  * Message schema (all JSON):
  *
- *   Client → Server
- *   ───────────────
- *   { type: 'join-room',     roomCode: string }
- *   { type: 'kick-player',   roomCode: string, targetPlayerId: string }
- *   { type: 'reassign-team', roomCode: string, targetPlayerId: string, newTeamId: 1|2 }
+ * Client → Server
+ * ───────────────
+ * { type: 'join-room', roomCode: string }
+ * { type: 'kick-player', roomCode: string, targetPlayerId: string }
+ * { type: 'reassign-team', roomCode: string, targetPlayerId: string, newTeamId: 1|2 }
  *
- *   Server → Client (targeted)
- *   ───────────────────────────
- *   { type: 'connected',          playerId, displayName }
- *   { type: 'room-joined',        roomCode, playerId, players: [...] }
- *   { type: 'kick-confirmed',     roomCode, playerId }
- *   { type: 'you-were-kicked',    roomCode }
- *   { type: 'error',              message, code? }
+ * Server → Client (targeted)
+ * ───────────────────────────
+ * { type: 'connected', playerId, displayName }
+ * { type: 'room-joined', roomCode, playerId, players: [...] }
+ * { type: 'kick-confirmed', roomCode, playerId }
+ * { type: 'you-were-kicked', roomCode }
+ * { type: 'error', message, code? }
  *
- *   Server → Room (broadcast)
- *   ─────────────────────────
- *   { type: 'player-joined',      roomCode, player: { playerId, displayName, avatarId, isGuest } }
- *   { type: 'player-kicked',      roomCode, playerId, displayName }
- *   { type: 'player-left',        roomCode, playerId, displayName }
- *   { type: 'lobby-timer-started',roomCode, expiresAt }
- *   { type: 'lobby-starting',     roomCode, seats, botsAdded: string[] }
+ * Server → Room (broadcast)
+ * ─────────────────────────
+ * { type: 'player-joined', roomCode, player: { playerId, displayName, avatarId, isGuest } }
+ * { type: 'player-kicked', roomCode, playerId, displayName }
+ * { type: 'player-left', roomCode, playerId, displayName }
+ * { type: 'lobby-timer-started',roomCode, expiresAt }
+ * { type: 'lobby-starting', roomCode, seats, botsAdded: string[] }
  */
 
 const { WebSocketServer, WebSocket } = require('ws');
@@ -82,8 +82,8 @@ function _getGameServer() {
  * Resolve an opaque bearer token to a minimal user identity object.
  *
  * Resolution order mirrors auth.js:
- *   1. In-memory guest session store (no DB round-trip)
- *   2. Supabase JWT verification
+ * 1. In-memory guest session store (no DB round-trip)
+ * 2. Supabase JWT verification
  *
  * @param {string|null|undefined} token
  * @returns {Promise<{ playerId: string, displayName: string, avatarId: string|null, isGuest: boolean }|null>}
@@ -151,7 +151,7 @@ function broadcastToRoom(roomCode, data, excludeConnectionId) {
 }
 
 // ---------------------------------------------------------------------------
-// Game-start helpers (Sub-AC 8c)
+// Game-start helpers
 // ---------------------------------------------------------------------------
 
 /**
@@ -159,8 +159,8 @@ function broadcastToRoom(roomCode, data, excludeConnectionId) {
  *
  * Scans 0 … playerCount-1 for the first index not already in the seats Map.
  *
- * @param {Map<number, Object>} seats      - Current lobbyManager seats.
- * @param {number}              playerCount
+ * @param {Map<number, Object>} seats - Current lobbyManager seats.
+ * @param {number} playerCount
  * @returns {number} Next available 0-based seat index, or -1 if the room is full.
  */
 function _nextAvailableSeat(seats, playerCount) {
@@ -174,17 +174,17 @@ function _nextAvailableSeat(seats, playerCount) {
  * Trigger the game start sequence.
  *
  * Steps:
- *   1. Cancel any pending lobby fill timer (safe to call even if already fired).
- *   2. Retrieve the current seats from lobbyManager.
- *   3. Generate bot players for every empty seat.
- *   4. Add the bots to lobbyManager (so the full seat map is consistent).
- *   5. Update the room status in Supabase to 'starting'.
- *   6. Broadcast 'lobby-starting' to all connected human players.
+ * 1. Cancel any pending lobby fill timer (safe to call even if already fired).
+ * 2. Retrieve the current seats from lobbyManager.
+ * 3. Generate bot players for every empty seat.
+ * 4. Add the bots to lobbyManager (so the full seat map is consistent).
+ * 5. Update the room status in Supabase to 'starting'.
+ * 6. Broadcast 'lobby-starting' to all connected human players.
  *
  * This function is safe to call multiple times for the same room; subsequent
  * calls are no-ops once the status transitions away from 'waiting'.
  *
- * @param {string} roomCode   - Uppercase 6-char room code.
+ * @param {string} roomCode - Uppercase 6-char room code.
  * @param {number} playerCount - Total seats (6 or 8).
  * @returns {Promise<void>}
  */
@@ -301,7 +301,7 @@ async function _handleGameStart(roomCode, playerCount) {
  * Handler invoked when the lobby fill timer fires.
  *
  * Fetches the room from Supabase to confirm it is still in 'waiting' status
- * before triggering the game start.  Guards against races where the room
+ * before triggering the game start. Guards against races where the room
  * was cancelled or already started between the timer being set and firing.
  *
  * @param {string} roomCode - Uppercase room code (passed by lobbyTimer).
@@ -375,7 +375,7 @@ async function handleMessage(ws, connectionId, user, rawData) {
       await handleReassignTeam(ws, connectionId, user, msg);
       break;
 
-    // ── Matchmaking queue messages (Sub-AC 8b) ──────────────────────────────
+    // ── Matchmaking queue messages ──────────────────────────────
     case 'join-queue':
       await handleJoinQueue(ws, connectionId, user, msg);
       break;
@@ -402,14 +402,14 @@ async function handleMessage(ws, connectionId, user, rawData) {
  * Expected payload: { type: 'join-room', roomCode: string }
  *
  * Steps:
- *   1. Validate roomCode format
- *   2. Look up room in DB (must exist and be in 'waiting' status)
- *   3. Add player to in-memory lobby (lobbyStore + lobbyManager)
- *   4. Confirm to the joining player ('room-joined')
- *   5. Notify all other players in the room ('player-joined')
- *   6a. If room is now full → cancel timer and start game immediately.
- *   6b. If this is the first player → start the 2-minute fill timer and
- *       broadcast 'lobby-timer-started' to the room.
+ * 1. Validate roomCode format
+ * 2. Look up room in DB (must exist and be in 'waiting' status)
+ * 3. Add player to in-memory lobby (lobbyStore + lobbyManager)
+ * 4. Confirm to the joining player ('room-joined')
+ * 5. Notify all other players in the room ('player-joined')
+ * 6a. If room is now full → cancel timer and start game immediately.
+ * 6b. If this is the first player → start the 2-minute fill timer and
+ * broadcast 'lobby-timer-started' to the room.
  *
  * @param {WebSocket} ws
  * @param {string} connectionId
@@ -554,7 +554,7 @@ async function handleJoinRoom(ws, connectionId, user, msg) {
     connectionId,
   );
 
-  // ── Lobby fill timer logic (Sub-AC 8c) ─────────────────────────────────────
+  // ── Lobby fill timer logic ─────────────────────────────────────
   // Only run timer logic when a genuinely new player joined (not a reconnect).
   if (!alreadyInLobby) {
     const currentCount = getLobbyPlayers(upperCode).length;
@@ -592,20 +592,20 @@ async function handleJoinRoom(ws, connectionId, user, msg) {
  * Expected payload: { type: 'kick-player', roomCode: string, targetPlayerId: string }
  *
  * Server-enforced rules:
- *   - Requester must be the room's host.
- *   - Target must currently be in the lobby.
- *   - Cannot kick oneself.
- *   - Only valid during 'waiting' status (lobby phase).
+ * - Requester must be the room's host.
+ * - Target must currently be in the lobby.
+ * - Cannot kick oneself.
+ * - Only valid during 'waiting' status (lobby phase).
  *
  * Steps:
- *   1. Validate payload
- *   2. Look up room in DB — verify requester is host, status is 'waiting'
- *   3. Look up target in lobby
- *   4. Send 'you-were-kicked' to the target
- *   5. Remove target from lobby state (both stores)
- *   6. Close the kicked player's WebSocket connection
- *   7. Broadcast 'player-kicked' to all remaining room participants
- *   8. Send 'kick-confirmed' to the host
+ * 1. Validate payload
+ * 2. Look up room in DB — verify requester is host, status is 'waiting'
+ * 3. Look up target in lobby
+ * 4. Send 'you-were-kicked' to the target
+ * 5. Remove target from lobby state (both stores)
+ * 6. Close the kicked player's WebSocket connection
+ * 7. Broadcast 'player-kicked' to all remaining room participants
+ * 8. Send 'kick-confirmed' to the host
  *
  * @param {WebSocket} ws
  * @param {string} connectionId
@@ -735,32 +735,32 @@ async function handleKickPlayer(ws, connectionId, user, msg) {
 }
 
 // ---------------------------------------------------------------------------
-// reassign-team handler (Sub-AC 3a)
+// reassign-team handler
 // ---------------------------------------------------------------------------
 
 /**
  * Handle a 'reassign-team' message.
  *
  * Expected payload:
- *   { type: 'reassign-team', roomCode: string, targetPlayerId: string, newTeamId: 1|2 }
+ * { type: 'reassign-team', roomCode: string, targetPlayerId: string, newTeamId: 1|2 }
  *
  * Server-enforced rules:
- *   - Requester must be the room's host (verified against Supabase host_user_id).
- *   - Room must be in 'waiting' status.
- *   - targetPlayerId must exist in the lobbyManager seat map.
- *   - After the move, no team may have more than `playerCount / 2` members
- *     (team-balance validation).
+ * - Requester must be the room's host (verified against Supabase host_user_id).
+ * - Room must be in 'waiting' status.
+ * - targetPlayerId must exist in the lobbyManager seat map.
+ * - After the move, no team may have more than `playerCount 2` members
+ * (team-balance validation).
  *
  * Steps:
- *   1. Validate payload fields
- *   2. Look up room in DB — verify status is 'waiting', get host_user_id and player_count
- *   3. Host-only authorization: requester's playerId must equal host_user_id
- *   4. Apply team reassignment via lobbyManager (includes balance check)
- *   5. On success: broadcast 'team-reassigned' to all players in the room
- *   6. On failure: send error back to the requester only
+ * 1. Validate payload fields
+ * 2. Look up room in DB — verify status is 'waiting', get host_user_id and player_count
+ * 3. Host-only authorization: requester's playerId must equal host_user_id
+ * 4. Apply team reassignment via lobbyManager (includes balance check)
+ * 5. On success: broadcast 'team-reassigned' to all players in the room
+ * 6. On failure: send error back to the requester only
  *
  * @param {WebSocket} ws
- * @param {string}   connectionId
+ * @param {string} connectionId
  * @param {{ playerId: string, displayName: string, avatarId: string|null, isGuest: boolean }} user
  * @param {{ type: string, roomCode: string, targetPlayerId: string, newTeamId: 1|2 }} msg
  */

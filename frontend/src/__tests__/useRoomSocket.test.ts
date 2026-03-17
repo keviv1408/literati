@@ -5,28 +5,28 @@
  * exactly which events fire and when, without needing a real backend.
  *
  * Tested scenarios:
- *   • Hook stays idle when roomCode or sessionId is null
- *   • WebSocket URL is correctly constructed (ws:// prefix, token param)
- *   • Status transitions: connecting → connected → disconnected
- *   • 'connected' event sets myPlayerId and triggers join-room message
- *   • 'room-joined' snapshot populates players array
- *   • 'player-joined' appends new player to the list
- *   • 'player-joined' deduplicates if same playerId already present
- *   • 'player-kicked' (broadcast) removes the player from the list
- *   • 'player-left' removes the player from the list
- *   • 'you-were-kicked' sets isKicked (does NOT affect players list)
- *   • player-kicked message matching the caller's sessionId sets isKicked
- *   • player-kicked with sentinel "*" also sets isKicked
- *   • player-kicked targeting a DIFFERENT sessionId is ignored
- *   • addKickedRoom is called when kicked
- *   • onKicked callback fires once
- *   • Socket is closed on unmount
- *   • kickReason reflects the server's reason string
- *   • Default reason is used when server omits the reason field
- *   • emit() sends JSON when the socket is OPEN
- *   • emit() is a no-op when the socket is not OPEN
- *   • kickPlayer() sends kick-player message when socket is OPEN
- *   • kickPlayer() is a no-op when the socket is not OPEN
+ * • Hook stays idle when roomCode or sessionId is null
+ * • WebSocket URL is correctly constructed (ws:// prefix, token param)
+ * • Status transitions: connecting → connected → disconnected
+ * • 'connected' event sets myPlayerId and triggers join-room message
+ * • 'room-joined' snapshot populates players array
+ * • 'player-joined' appends new player to the list
+ * • 'player-joined' deduplicates if same playerId already present
+ * • 'player-kicked' (broadcast) removes the player from the list
+ * • 'player-left' removes the player from the list
+ * • 'you-were-kicked' sets isKicked (does NOT affect players list)
+ * • player-kicked message matching the caller's sessionId sets isKicked
+ * • player-kicked with sentinel "*" also sets isKicked
+ * • player-kicked targeting a DIFFERENT sessionId is ignored
+ * • addKickedRoom is called when kicked
+ * • onKicked callback fires once
+ * • Socket is closed on unmount
+ * • kickReason reflects the server's reason string
+ * • Default reason is used when server omits the reason field
+ * • emit() sends JSON when the socket is OPEN
+ * • emit() is a no-op when the socket is not OPEN
+ * • kickPlayer() sends kick-player message when socket is OPEN
+ * • kickPlayer() is a no-op when the socket is not OPEN
  */
 
 import { renderHook, act } from '@testing-library/react';
@@ -658,13 +658,13 @@ describe('useRoomSocket', () => {
     });
   });
 
-  // ── Bot indicator support (Sub-AC 6.3) ──────────────────────────────────
+  // ── Bot indicator support ──────────────────────────────────
   //
   // The `lobby-starting` / `game_starting` events carry the final seat list
-  // including bot players.  The hook must propagate the `isBot` flag so the
+  // including bot players. The hook must propagate the `isBot` flag so the
   // lobby UI can render BotBadge indicators for bot-occupied seats.
 
-  describe('bot indicator support (Sub-AC 6.3)', () => {
+  describe('bot indicator support ', () => {
     const BOT_SEAT = {
       playerId:    'bot-quirky-turing',
       displayName: 'Quirky Turing',

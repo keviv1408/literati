@@ -4,21 +4,21 @@
  * Tests for GET /api/profile/:username
  *
  * Verifies that the endpoint correctly:
- *  - Returns 400 for a missing / empty username
- *  - Returns 400 for a username longer than 20 characters
- *  - Returns 404 when no user_profiles row matches the display name
- *  - Returns 500 when the user_profiles query errors
- *  - Returns 500 when the user_stats query errors
- *  - Returns 200 with correct aggregated stats for a known user
- *  - Computes winPercentage = wins / gamesCompleted (rounded to 4 d.p.)
- *  - Computes declarationSuccessRate = correct / attempted (rounded to 4 d.p.)
- *  - Falls back to correct+incorrect when declarations_attempted is null (pre-008 rows)
- *  - Returns 0 for winPercentage when gamesCompleted = 0
- *  - Returns 0 for declarationSuccessRate when declarationsMade = 0
- *  - Performs a case-insensitive lookup (ilike)
- *  - Does not require an Authorization header (public endpoint)
- *  - Returns exact username as stored in DB (not the URL param casing)
- *  - Handles null avatarId gracefully
+ * - Returns 400 for a missing / empty username
+ * - Returns 400 for a username longer than 20 characters
+ * - Returns 404 when no user_profiles row matches the display name
+ * - Returns 500 when the user_profiles query errors
+ * - Returns 500 when the user_stats query errors
+ * - Returns 200 with correct aggregated stats for a known user
+ * - Computes winPercentage = wins / gamesCompleted (rounded to 4 d.p.)
+ * - Computes declarationSuccessRate = correct / attempted (rounded to 4 d.p.)
+ * - Falls back to correct+incorrect when declarations_attempted is null (pre-008 rows)
+ * - Returns 0 for winPercentage when gamesCompleted = 0
+ * - Returns 0 for declarationSuccessRate when declarationsMade = 0
+ * - Performs a case-insensitive lookup (ilike)
+ * - Does not require an Authorization header (public endpoint)
+ * - Returns exact username as stored in DB (not the URL param casing)
+ * - Handles null avatarId gracefully
  */
 
 const request = require('supertest');
@@ -29,8 +29,8 @@ const { _setSupabaseClient } = require('../db/supabase');
 /**
  * Build a minimal fluent Supabase mock supporting two chained queries:
  *
- *   query 1 (user_profiles):  from → select → ilike → maybeSingle
- *   query 2 (user_stats):     from → select → eq    → maybeSingle
+ * query 1 (user_profiles): from → select → ilike → maybeSingle
+ * query 2 (user_stats): from → select → eq → maybeSingle
  *
  * Both chains share the same mock functions but we queue return values via
  * `mockResolvedValueOnce`, so the first call to maybeSingle() resolves query 1
@@ -186,7 +186,7 @@ describe('GET /api/profile/:username', () => {
     const res = await request(app).get('/api/profile/Alice');
 
     expect(res.status).toBe(200);
-    // 7 / 13 = 0.538461… → rounded to 4 d.p. = 0.5385
+    // 7 13 = 0.538461… → rounded to 4 d.p. = 0.5385
     expect(res.body.profile.winPercentage).toBe(Math.round((7 / 13) * 10000) / 10000);
   });
 
@@ -219,7 +219,7 @@ describe('GET /api/profile/:username', () => {
     const res = await request(app).get('/api/profile/Alice');
 
     expect(res.status).toBe(200);
-    // 5 / 9 = 0.5555… → 0.5556 (4 d.p.)
+    // 5 9 = 0.5555… → 0.5556 (4 d.p.)
     expect(res.body.profile.declarationSuccessRate).toBe(Math.round((5 / 9) * 10000) / 10000);
     expect(res.body.profile.declarationsMade).toBe(9);
   });
@@ -260,7 +260,7 @@ describe('GET /api/profile/:username', () => {
     expect(res.status).toBe(200);
     // Fallback: 6 + 2 = 8
     expect(res.body.profile.declarationsMade).toBe(8);
-    // Success rate: 6 / 8 = 0.75
+    // Success rate: 6 8 = 0.75
     expect(res.body.profile.declarationSuccessRate).toBe(0.75);
   });
 

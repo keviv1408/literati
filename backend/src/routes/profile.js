@@ -4,36 +4,36 @@
  * Public profile API routes
  *
  * GET /api/profile/:username
- *   Returns aggregated stats for a registered player looked up by display name.
- *   This is the public-facing profile endpoint used by the frontend profile pages
- *   and the leaderboard deep-link flow.
+ * Returns aggregated stats for a registered player looked up by display name.
+ * This is the public-facing profile endpoint used by the frontend profile pages
+ * and the leaderboard deep-link flow.
  *
  * The endpoint performs a two-step Supabase query:
- *   1. Resolve the display name to a userId via user_profiles (case-insensitive).
- *   2. Fetch aggregated stats from user_stats for that userId.
+ * 1. Resolve the display name to a userId via user_profiles (case-insensitive).
+ * 2. Fetch aggregated stats from user_stats for that userId.
  *
  * Response shape (200):
- *   {
- *     profile: {
- *       userId,
- *       username,          // display_name as stored in DB
- *       avatarId,
- *       gamesPlayed,       // total games joined (may include abandoned games)
- *       gamesCompleted,    // fully completed games only
- *       wins,
- *       losses,
- *       winPercentage,     // wins / gamesCompleted, rounded to 4 decimal places (0–1)
- *       declarationsMade,  // declarations_attempted (total initiations)
- *       declarationsCorrect,
- *       declarationsIncorrect,
- *       declarationSuccessRate  // declarationsCorrect / declarationsMade (0–1), or 0 if none
- *     }
- *   }
+ * {
+ * profile: {
+ * userId,
+ * username, // display_name as stored in DB
+ * avatarId,
+ * gamesPlayed, // total games joined (may include abandoned games)
+ * gamesCompleted, // fully completed games only
+ * wins,
+ * losses,
+ * winPercentage, // wins / gamesCompleted, rounded to 4 decimal places (0–1)
+ * declarationsMade, // declarations_attempted (total initiations)
+ * declarationsCorrect,
+ * declarationsIncorrect,
+ * declarationSuccessRate // declarationsCorrect / declarationsMade (0–1), or 0 if none
+ * }
+ * }
  *
  * Errors:
- *   400 — Username parameter is empty or too long (> 20 chars)
- *   404 — No registered user found with this display name
- *   500 — Internal / Supabase error
+ * 400 — Username parameter is empty or too long (> 20 chars)
+ * 404 — No registered user found with this display name
+ * 500 — Internal / Supabase error
  */
 
 const express = require('express');

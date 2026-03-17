@@ -1,18 +1,18 @@
 /**
  * @jest-environment jsdom
  *
- * Unit tests for /hooks/useTurnIndicator.ts — Sub-AC 14-3.
+ * Unit tests for /hooks/useTurnIndicator.ts —
  *
  * Coverage:
- *   • `indicatorActive` starts as false
- *   • Transitions false → true when `isMyTurn` becomes true
- *   • Does NOT re-activate if `isMyTurn` is already true across re-renders
- *   • `clearIndicator()` sets `indicatorActive` to false immediately
- *   • No periodic reminder chime fires while waiting on your turn
- *   • When `isMyTurn` becomes false, indicator is cleared automatically
- *   • `playTurnChime` is called exactly once when the turn starts
- *   • `playTurnChime` does NOT fire repeatedly while `isMyTurn` remains true
- *   • Cleanup: no extra chimes fire after unmount
+ * • `indicatorActive` starts as false
+ * • Transitions false → true when `isMyTurn` becomes true
+ * • Does NOT re-activate if `isMyTurn` is already true across re-renders
+ * • `clearIndicator()` sets `indicatorActive` to false immediately
+ * • No periodic reminder chime fires while waiting on your turn
+ * • When `isMyTurn` becomes false, indicator is cleared automatically
+ * • `playTurnChime` is called exactly once when the turn starts
+ * • `playTurnChime` does NOT fire repeatedly while `isMyTurn` remains true
+ * • Cleanup: no extra chimes fire after unmount
  */
 
 import { renderHook, act } from '@testing-library/react';

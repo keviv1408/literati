@@ -3,10 +3,10 @@
 /**
  * Authentication routes (guest-only MVP).
  *
- * POST   /api/auth/guest   — Create a temporary guest session (no DB writes)
- * DELETE /api/auth/guest   — Destroy the caller's guest session
- * GET    /api/auth/me      — Return the current session's public identity
- * GET    /api/auth/avatars — Return valid avatar IDs (public)
+ * POST /api/auth/guest — Create a temporary guest session (no DB writes)
+ * DELETE /api/auth/guest — Destroy the caller's guest session
+ * GET /api/auth/me — Return the current session's public identity
+ * GET /api/auth/avatars — Return valid avatar IDs (public)
  */
 
 const express = require('express');
@@ -49,33 +49,33 @@ const guestCreateLimiter = rateLimit({
  * Create a temporary, non-persisted guest session.
  *
  * Request body:
- *   displayName  {string}  required — 1–20 characters
- *   avatarId     {string}  optional — one of VALID_AVATAR_IDS; defaults to 'avatar-1'
+ * displayName {string} required — 1–20 characters
+ * avatarId {string} optional — one of VALID_AVATAR_IDS; defaults to 'avatar-1'
  *
  * Response 201:
- *   {
- *     token   : string  — opaque bearer token; must be sent as
- *                         "Authorization: Bearer <token>" on every subsequent request
- *     session : {
- *       sessionId   : string
- *       displayName : string
- *       avatarId    : string
- *       isGuest     : true
- *       expiresAt   : number   — Unix ms; client should re-create the session before this
- *     }
- *     validAvatarIds : string[]  — complete list of allowed avatar identifiers
- *   }
+ * {
+ * token : string — opaque bearer token; must be sent as
+ * "Authorization: Bearer <token>" on every subsequent request
+ * session: {
+ * sessionId : string
+ * displayName: string
+ * avatarId : string
+ * isGuest : true
+ * expiresAt : number — Unix ms; client should re-create the session before this
+ * }
+ * validAvatarIds: string[] — complete list of allowed avatar identifiers
+ * }
  *
  * Errors:
- *   400 — missing or invalid displayName / avatarId
- *   429 — rate limit exceeded
+ * 400 — missing or invalid displayName / avatarId
+ * 429 — rate limit exceeded
  *
  * Implementation notes:
- *   - The session is stored ONLY in the server's in-memory Map.
- *   - No rows are written to Supabase.
- *   - Stats tracking is explicitly disabled for guests throughout the
- *     application; any code that writes stats MUST check req.user.isGuest
- *     (or _noDbWrites) before attempting a database write.
+ * - The session is stored ONLY in the server's in-memory Map.
+ * - No rows are written to Supabase.
+ * - Stats tracking is explicitly disabled for guests throughout the
+ * application; any code that writes stats MUST check req.user.isGuest
+ * (or _noDbWrites) before attempting a database write.
  */
 router.post('/guest', guestCreateLimiter, (req, res) => {
   const { displayName, avatarId } = req.body || {};
@@ -181,21 +181,21 @@ router.delete('/guest', requireAuth, (req, res) => {
  * Returns null body fields for the identity type that does not apply.
  *
  * Response 200 (guest):
- *   {
- *     isGuest     : true
- *     sessionId   : string
- *     displayName : string
- *     avatarId    : string
- *   }
+ * {
+ * isGuest : true
+ * sessionId : string
+ * displayName: string
+ * avatarId : string
+ * }
  *
  * Response 200 (registered):
- *   {
- *     isGuest     : false
- *     id          : string   — Supabase user UUID
- *     email       : string
- *     displayName : string
- *     avatarId    : string | null
- *   }
+ * {
+ * isGuest : false
+ * id : string — Supabase user UUID
+ * email : string
+ * displayName: string
+ * avatarId : string | null
+ * }
  *
  * Response 401: No valid session
  */

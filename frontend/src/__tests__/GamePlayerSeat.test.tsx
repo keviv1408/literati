@@ -1,21 +1,21 @@
 /**
  * @jest-environment jsdom
  *
- * Unit tests for GamePlayerSeat — Sub-AC 13b.
+ * Unit tests for GamePlayerSeat —
  *
  * Covers:
- *  • Empty seat rendering (null player)
- *  • Occupied seat: avatar initials fallback, display name, team colour
- *  • Bot player: BotBadge rendered instead of plain name
- *  • "You" pill: shown only for myPlayerId match
- *  • Current-turn ring: shown when currentTurnPlayerId matches
- *  • isCurrentTurn flag on GamePlayer also triggers turn ring
- *  • Card count badge (value + zero state)
- *  • Team dot colour attribute (data-team)
- *  • Aria-label composition (name, you, bot, turn)
- *  • data-seat-index and data-player-id attributes
- *  • className forwarding
- *  • Team 2 (violet) style applied correctly
+ * • Empty seat rendering (null player)
+ * • Occupied seat: avatar initials fallback, display name, team colour
+ * • Bot player: BotBadge rendered instead of plain name
+ * • "You" pill: shown only for myPlayerId match
+ * • Current-turn ring: shown when currentTurnPlayerId matches
+ * • isCurrentTurn flag on GamePlayer also triggers turn ring
+ * • Card count badge (value + zero state)
+ * • Team dot colour attribute (data-team)
+ * • Aria-label composition (name, you, bot, turn)
+ * • data-seat-index and data-player-id attributes
+ * • className forwarding
+ * • Team 2 (violet) style applied correctly
  */
 
 import React from 'react';
@@ -717,7 +717,7 @@ describe('GamePlayerSeat — aria-label composition', () => {
   });
 });
 
-// ── Eliminated player (Sub-AC 27b) ────────────────────────────────────────────
+// ── Eliminated player ────────────────────────────────────────────
 
 describe('GamePlayerSeat — eliminated player', () => {
   it('renders the eliminated badge when isEliminated is true', () => {
@@ -889,9 +889,9 @@ describe('GamePlayerSeat — eliminated player', () => {
   });
 });
 
-// ── Sub-AC 28b: post-declaration seat highlight ─────────────────────────────
+// ── post-declaration seat highlight ─────────────────────────────
 
-describe('GamePlayerSeat — Sub-AC 28b highlight ring', () => {
+describe('GamePlayerSeat —  highlight ring', () => {
   it('renders a cyan highlight ring when isHighlighted=true', () => {
     render(
       <GamePlayerSeat
@@ -1059,12 +1059,12 @@ describe('GamePlayerSeat — Sub-AC 28b highlight ring', () => {
 // compact oval-table layout is preserved.
 //
 // Spec requirements:
-//  • min-h-[2.75rem]  → guarantees ≥44 px height on all viewports
-//  • scale-110        → mobile: seat is statically enlarged
-//  • md:scale-100     → desktop: base scale reset to 1.0
-//  • md:hover:scale-105 → desktop: subtle hover feedback only
-//  • Avatar size 'md' (w-10 h-10 = 40 px) when isClickable
-//  • data-mobile-tap-target="true" for e2e / a11y tooling
+// • min-h-[2.75rem] → guarantees ≥44 px height on all viewports
+// • scale-110 → mobile: seat is statically enlarged
+// • md:scale-100 → desktop: base scale reset to 1.0
+// • md:hover:scale-105 → desktop: subtle hover feedback only
+// • Avatar size 'md' (w-10 h-10 = 40 px) when isClickable
+// • data-mobile-tap-target="true" for e2e / a11y tooling
 
 describe('GamePlayerSeat — AC 55 mobile tap-target enlargement', () => {
   it('applies min-h-[2.75rem] to guaranteed ≥44px tap-target height when highlighted+clickable', () => {

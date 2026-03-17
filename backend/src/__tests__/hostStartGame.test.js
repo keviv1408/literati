@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * Unit tests for handleStartGame — Sub-AC 5.3
+ * Unit tests for handleStartGame —
  *
  * Tests the host-initiated game-start flow that fills empty lobby seats with
  * smart bots and broadcasts 'lobby-starting' to all connected clients.
  *
  * Coverage:
- *   A. Authorisation — only the host may start the game
- *   B. Status guard  — room must be in 'waiting' state
- *   C. Bot filling   — empty seats are filled with bots; occupied kept
- *   D. Broadcast     — 'lobby-starting' sent to all connected WS clients
- *   E. Supabase      — room status updated to 'starting'
- *   F. Idempotency   — concurrent duplicate calls are serialised / rejected
- *   G. Edge cases    — solo host (all bots), full room (no bots), 8-player
+ * A. Authorisation — only the host may start the game
+ * B. Status guard — room must be in 'waiting' state
+ * C. Bot filling — empty seats are filled with bots; occupied kept
+ * D. Broadcast — 'lobby-starting' sent to all connected WS clients
+ * E. Supabase — room status updated to 'starting'
+ * F. Idempotency — concurrent duplicate calls are serialised / rejected
+ * G. Edge cases — solo host (all bots), full room (no bots), 8-player
  */
 
 const {

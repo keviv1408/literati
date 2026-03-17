@@ -3,10 +3,10 @@
 /**
  * Matchmaking API routes
  *
- * POST   /api/matchmaking/join   — Join the matchmaking queue (REST — legacy)
- * DELETE /api/matchmaking/leave  — Leave the matchmaking queue (REST — legacy)
- * GET    /api/matchmaking/status — Current queue status for the caller (REST — legacy)
- * GET    /api/matchmaking/queues — Public overview of active WebSocket queues
+ * POST /api/matchmaking/join — Join the matchmaking queue (REST — legacy)
+ * DELETE /api/matchmaking/leave — Leave the matchmaking queue (REST — legacy)
+ * GET /api/matchmaking/status — Current queue status for the caller (REST — legacy)
+ * GET /api/matchmaking/queues — Public overview of active WebSocket queues
  */
 
 const express = require('express');
@@ -21,7 +21,7 @@ const {
   VALID_PLAYER_COUNTS,
 } = require('../matchmaking/matchmakingQueue');
 
-// WebSocket-based queue store (used for real-time matchmaking via Sub-AC 8b)
+// WebSocket-based queue store (used for real-time matchmaking via )
 const {
   getAllQueueStats,
   parseFilterKey,
@@ -35,26 +35,26 @@ const {
  * Add the authenticated player to the matchmaking queue.
  *
  * Request body:
- *   cardVariant  {string}  'remove_2s' | 'remove_7s' | 'remove_8s'
- *   playerCount  {number}  6 | 7 | 8
+ * cardVariant {string} 'remove_2s' | 'remove_7s' | 'remove_8s'
+ * playerCount {number} 6 | 7 | 8
  *
  * Response 200 (already in queue, TTL refreshed):
- *   {
- *     queued: true,
- *     refreshed: true,
- *     entry: { playerId, isGuest, displayName, avatarId, cardVariant, playerCount, joinedAt, expiresAt },
- *     position: number,
- *     queueSize: number
- *   }
+ * {
+ * queued: true,
+ * refreshed: true,
+ * entry: { playerId, isGuest, displayName, avatarId, cardVariant, playerCount, joinedAt, expiresAt },
+ * position: number,
+ * queueSize: number
+ * }
  *
  * Response 201 (newly joined):
- *   {
- *     queued: true,
- *     refreshed: false,
- *     entry: { ... },
- *     position: number,
- *     queueSize: number
- *   }
+ * {
+ * queued: true,
+ * refreshed: false,
+ * entry: { ... },
+ * position: number,
+ * queueSize: number
+ * }
  *
  * Response 400: validation error
  * Response 401: unauthenticated
@@ -120,8 +120,8 @@ router.post('/join', requireAuth, (req, res) => {
  * Remove the authenticated player from the matchmaking queue.
  *
  * Optional request body (to target a specific queue):
- *   cardVariant  {string}
- *   playerCount  {number}
+ * cardVariant {string}
+ * playerCount {number}
  *
  * Response 200: { left: true }
  * Response 200: { left: false, message: 'Not currently in any queue' }
@@ -174,16 +174,16 @@ router.delete('/leave', requireAuth, (req, res) => {
  * Return the caller's current queue status.
  *
  * Response 200 (in queue):
- *   {
- *     inQueue: true,
- *     entry: { playerId, isGuest, displayName, avatarId, cardVariant, playerCount, joinedAt, expiresAt },
- *     position: number,
- *     queueSize: number,
- *     queueKey: string
- *   }
+ * {
+ * inQueue: true,
+ * entry: { playerId, isGuest, displayName, avatarId, cardVariant, playerCount, joinedAt, expiresAt },
+ * position: number,
+ * queueSize: number,
+ * queueKey: string
+ * }
  *
  * Response 200 (not in queue):
- *   { inQueue: false }
+ * { inQueue: false }
  *
  * Response 401: unauthenticated
  */
@@ -212,24 +212,24 @@ router.get('/status', requireAuth, (req, res) => {
 /**
  * Return a public overview of all active WebSocket matchmaking queues.
  *
- * Reads from the WebSocket-backed matchmakingStore (Sub-AC 8b) which holds
- * live connections.  Only non-empty queues are returned.
+ * Reads from the WebSocket-backed matchmakingStore which holds
+ * live connections. Only non-empty queues are returned.
  *
  * No auth required — spectators and prospective players can see queue sizes.
  *
  * Response 200:
- *   {
- *     queues: [
- *       {
- *         filterKey:          string,  // "{playerCount}:{cardRemovalVariant}"
- *         playerCount:        number,
- *         cardRemovalVariant: string,
- *         queueSize:          number
- *       },
- *       ...
- *     ],
- *     totalWaiting: number
- *   }
+ * {
+ * queues: [
+ * {
+ * filterKey: string, // "{playerCount}:{cardRemovalVariant}"
+ * playerCount: number,
+ * cardRemovalVariant: string,
+ * queueSize: number
+ * },
+ * ...
+ * ],
+ * totalWaiting: number
+ * }
  */
 router.get('/queues', (req, res) => {
   /** @type {Record<string, { count: number, cardVariant: string, playerCount: number }>} */

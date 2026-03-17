@@ -1,38 +1,38 @@
 'use strict';
 
 /**
- * Sub-AC 32b: Winner determination logic
+ * Winner determination logic
  *
  * Tests that verify the game correctly counts each team's declared
  * half-suits and awards victory to the team with 5 or more.
  *
  * Coverage:
- *   _endGame (direct unit tests):
- *     1. team1 wins 5-3 → gs.winner === 1
- *     2. team1 wins 6-2 → gs.winner === 1
- *     3. team1 wins 7-1 → gs.winner === 1
- *     4. team1 wins 8-0 → gs.winner === 1
- *     5. team2 wins 3-5 → gs.winner === 2
- *     6. team2 wins 2-6 → gs.winner === 2
- *     7. team2 wins 1-7 → gs.winner === 2
- *     8. team2 wins 0-8 → gs.winner === 2
- *     9. 4-4 tie: team1 declared high_d → gs.winner === 1 (tiebreaker)
- *    10. 4-4 tie: team2 declared high_d → gs.winner === 2 (tiebreaker)
- *    11. 4-4 tie: no high_d declared → gs.winner === null
- *    12. sets gs.status === 'completed'
+ * _endGame (direct unit tests):
+ * 1. team1 wins 5-3 → gs.winner === 1
+ * 2. team1 wins 6-2 → gs.winner === 1
+ * 3. team1 wins 7-1 → gs.winner === 1
+ * 4. team1 wins 8-0 → gs.winner === 1
+ * 5. team2 wins 3-5 → gs.winner === 2
+ * 6. team2 wins 2-6 → gs.winner === 2
+ * 7. team2 wins 1-7 → gs.winner === 2
+ * 8. team2 wins 0-8 → gs.winner === 2
+ * 9. 4-4 tie: team1 declared high_d → gs.winner === 1 (tiebreaker)
+ * 10. 4-4 tie: team2 declared high_d → gs.winner === 2 (tiebreaker)
+ * 11. 4-4 tie: no high_d declared → gs.winner === null
+ * 12. sets gs.status === 'completed'
  *
- *   applyDeclaration (end-to-end game completion):
- *    13. team1 gets 5th half-suit → game completes, gs.winner === 1
- *    14. team2 gets 5th half-suit → game completes, gs.winner === 2
- *    15. applyDeclaration with full 8-suit game → correct winner
- *    16. winner is included in returned gs state (not in function return)
+ * applyDeclaration (end-to-end game completion):
+ * 13. team1 gets 5th half-suit → game completes, gs.winner === 1
+ * 14. team2 gets 5th half-suit → game completes, gs.winner === 2
+ * 15. applyDeclaration with full 8-suit game → correct winner
+ * 16. winner is included in returned gs state (not in function return)
  *
- *   applyForcedFailedDeclaration (end-to-end):
- *    17. forced-failed declaration that awards team2 their 5th suit → game ends, team2 wins
+ * applyForcedFailedDeclaration (end-to-end):
+ * 17. forced-failed declaration that awards team2 their 5th suit → game ends, team2 wins
  *
- *   Tiebreaker variant sensitivity:
- *    18. TIEBREAKER_HALF_SUIT constant is 'high_d' regardless of variant
- *    19. 4-4 tie where high_d was declared early (not last suit) → still uses it
+ * Tiebreaker variant sensitivity:
+ * 18. TIEBREAKER_HALF_SUIT constant is 'high_d' regardless of variant
+ * 19. 4-4 tie where high_d was declared early (not last suit) → still uses it
  */
 
 const { applyDeclaration, applyForcedFailedDeclaration, _endGame } = require('../game/gameEngine');

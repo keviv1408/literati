@@ -1,48 +1,48 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for CountdownTimer — Sub-AC 36.2: reusable countdown timer component
+ * Tests for CountdownTimer — reusable countdown timer component
  * that subscribes to countdown WebSocket events and renders the current
  * remaining seconds, displayed in the game UI for every connected client.
  *
  * Coverage:
- *   Rendering:
- *     • Renders the data-testid="countdown-timer" wrapper
- *     • Renders a progress bar fill element (data-testid="countdown-timer-fill")
- *     • Renders a timer role element (data-testid="countdown-timer-bar")
- *     • Renders a seconds label element (data-testid="countdown-timer-seconds")
- *     • Renders a label text element (data-testid="countdown-timer-label")
- *   Seconds display:
- *     • Shows correct ceiling of remaining seconds (e.g. 20000ms → 20s)
- *     • Shows full duration seconds when timer is fresh
- *     • Rounds up partial seconds (e.g. 15500ms → 16s)
- *   Timer content — my timer (isMyTimer=true):
- *     • Fill element uses emerald colour class when plenty of time remains
- *     • Label renders the provided label prop text
- *   Timer content — other player / spectator (isMyTimer=false):
- *     • Fill element uses slate colour class when time > warning threshold
- *     • Seconds text is rendered with base slate colour above warning threshold
- *   Warning state (≤ WARNING_THRESHOLD_S seconds remaining):
- *     • Fill switches to red colour class in warning zone
- *     • Seconds label gains animate-pulse class in warning zone
- *     • Label gains animate-pulse class in warning zone
- *     • Fill uses red even when isMyTimer=false in warning zone
- *   Already-expired timer:
- *     • Renders without crashing when expiresAt is already in the past
- *     • Shows "0s" countdown
- *     • Fill width is 0%
- *   onExpiry callback:
- *     • onExpiry is NOT called immediately when timer is rendered with time remaining
- *     • onExpiry IS called when timer is already expired on mount
- *   Accessibility:
- *     • timer element has correct aria-valuenow in seconds
- *     • timer element aria-valuemin is 0
- *     • timer element aria-valuemax matches durationMs/1000
- *     • seconds label has aria-label with remaining seconds
- *   Custom className:
- *     • Extra className is forwarded to the outer wrapper
- *   WARNING_THRESHOLD_S export:
- *     • Exported constant has the expected value
+ * Rendering:
+ * • Renders the data-testid="countdown-timer" wrapper
+ * • Renders a progress bar fill element (data-testid="countdown-timer-fill")
+ * • Renders a timer role element (data-testid="countdown-timer-bar")
+ * • Renders a seconds label element (data-testid="countdown-timer-seconds")
+ * • Renders a label text element (data-testid="countdown-timer-label")
+ * Seconds display:
+ * • Shows correct ceiling of remaining seconds (e.g. 20000ms → 20s)
+ * • Shows full duration seconds when timer is fresh
+ * • Rounds up partial seconds (e.g. 15500ms → 16s)
+ * Timer content — my timer (isMyTimer=true):
+ * • Fill element uses emerald colour class when plenty of time remains
+ * • Label renders the provided label prop text
+ * Timer content — other player / spectator (isMyTimer=false):
+ * • Fill element uses slate colour class when time > warning threshold
+ * • Seconds text is rendered with base slate colour above warning threshold
+ * Warning state (≤ WARNING_THRESHOLD_S seconds remaining):
+ * • Fill switches to red colour class in warning zone
+ * • Seconds label gains animate-pulse class in warning zone
+ * • Label gains animate-pulse class in warning zone
+ * • Fill uses red even when isMyTimer=false in warning zone
+ * Already-expired timer:
+ * • Renders without crashing when expiresAt is already in the past
+ * • Shows "0s" countdown
+ * • Fill width is 0%
+ * onExpiry callback:
+ * • onExpiry is NOT called immediately when timer is rendered with time remaining
+ * • onExpiry IS called when timer is already expired on mount
+ * Accessibility:
+ * • timer element has correct aria-valuenow in seconds
+ * • timer element aria-valuemin is 0
+ * • timer element aria-valuemax matches durationMs/1000
+ * • seconds label has aria-label with remaining seconds
+ * Custom className:
+ * • Extra className is forwarded to the outer wrapper
+ * WARNING_THRESHOLD_S export:
+ * • Exported constant has the expected value
  */
 
 import React from 'react';

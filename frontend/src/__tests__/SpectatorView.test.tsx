@@ -1,20 +1,20 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for SpectatorView — Sub-AC 42c (spectator view component).
+ * Tests for SpectatorView — (spectator view component).
  *
  * Coverage:
- *   • Connecting state shows spinner, not the main game table.
- *   • Error/disconnected state shows "Connection Lost" message.
- *   • Connected state renders spectator-view + spectator-banner (read-only marker).
- *   • Turn indicator shows whose turn it is.
- *   • Last move text is rendered when present.
- *   • Score display shows team scores.
- *   • Both team rows are rendered.
- *   • Spectator footer shows the read-only note.
- *   • Declared suit badges are rendered when suits are declared.
- *   • No ask/declare controls are rendered (read-only enforcement).
- *   • Room code is shown in the header.
+ * • Connecting state shows spinner, not the main game table.
+ * • Error/disconnected state shows "Connection Lost" message.
+ * • Connected state renders spectator-view + spectator-banner (read-only marker).
+ * • Turn indicator shows whose turn it is.
+ * • Last move text is rendered when present.
+ * • Score display shows team scores.
+ * • Both team rows are rendered.
+ * • Spectator footer shows the read-only note.
+ * • Declared suit badges are rendered when suits are declared.
+ * • No ask/declare controls are rendered (read-only enforcement).
+ * • Room code is shown in the header.
  */
 
 import React from 'react';

@@ -1,40 +1,40 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for CardFlipWrapper — Sub-AC 2 of AC 33.
+ * Tests for CardFlipWrapper —
  *
  * CardFlipWrapper renders a playing card with a 3-D flip animation that
  * transitions from card-back (face-down) to card-face (face-up) on mount.
  *
  * Coverage:
  *
- *   Structure
- *   • Renders the perspective container (data-testid="card-flip-wrapper")
- *   • Renders the inner flip div (data-testid="card-flip-inner")
- *   • Renders a front face (data-testid="card-flip-front")
- *   • Renders a back face (data-testid="card-flip-back")
+ * Structure
+ * • Renders the perspective container (data-testid="card-flip-wrapper")
+ * • Renders the inner flip div (data-testid="card-flip-inner")
+ * • Renders a front face (data-testid="card-flip-front")
+ * • Renders a back face (data-testid="card-flip-back")
  *
- *   Front face
- *   • Renders a face-up PlayingCard (has rank/suit text, NOT aria "face down")
- *   • Forwards the `selected` prop to the front-face PlayingCard
- *   • Forwards `disabled` and `onClick` to the front-face PlayingCard
- *   • Forwards `size` to the front-face PlayingCard
+ * Front face
+ * • Renders a face-up PlayingCard (has rank/suit text, NOT aria "face down")
+ * • Forwards the `selected` prop to the front-face PlayingCard
+ * • Forwards `disabled` and `onClick` to the front-face PlayingCard
+ * • Forwards `size` to the front-face PlayingCard
  *
- *   Back face
- *   • Renders a face-down PlayingCard (aria-label contains "face down")
- *   • Back face has aria-hidden="true" (excluded from accessibility tree)
- *   • Back face div has transform: rotateY(180deg)
+ * Back face
+ * • Renders a face-down PlayingCard (aria-label contains "face down")
+ * • Back face has aria-hidden="true" (excluded from accessibility tree)
+ * • Back face div has transform: rotateY(180deg)
  *
- *   Animation class
- *   • Inner flip div carries the animate-card-flip-reveal CSS class
+ * Animation class
+ * • Inner flip div carries the animate-card-flip-reveal CSS class
  *
- *   Perspective container
- *   • Root div has inline perspective style applied
+ * Perspective container
+ * • Root div has inline perspective style applied
  *
- *   Default props
- *   • selected defaults to false (no "(selected)" in front aria-label)
- *   • disabled defaults to false (no opacity-40 class on front card)
- *   • size defaults to "md" (w-12 class on front card)
+ * Default props
+ * • selected defaults to false (no "(selected)" in front aria-label)
+ * • disabled defaults to false (no opacity-40 class on front card)
+ * • size defaults to "md" (w-12 class on front card)
  */
 
 import React from 'react';

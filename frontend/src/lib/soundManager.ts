@@ -5,18 +5,18 @@
  * No external audio files are required — all sounds are generated procedurally.
  *
  * Supported events:
- *  • card_deal         — brief soft "swoosh" when cards are distributed
- *  • ask_success       — cheerful ascending arpeggio when card request succeeds
- *  • ask_fail          — descending minor tone when card request is denied
- *  • declaration_fanfare — triumphant ascending run when a half-suit is declared
+ * • card_deal — brief soft "swoosh" when cards are distributed
+ * • ask_success — cheerful ascending arpeggio when card request succeeds
+ * • ask_fail — descending minor tone when card request is denied
+ * • declaration_fanfare — triumphant ascending run when a half-suit is declared
  *
  * Features:
- *  • Volume control (0.0 – 1.0) persisted to localStorage
- *  • preload() — call once on a user-gesture to unlock audio on mobile browsers
- *  • Respects the global mute preference from audio.ts
- *  • Lazy AudioContext — created on first use, reused thereafter
- *  • SSR-safe — all methods are no-ops when AudioContext is unavailable
- *  • Fail-silent — any synthesis error is swallowed; audio is non-critical
+ * • Volume control (0.0 – 1.0) persisted to localStorage
+ * • preload() — call once on a user-gesture to unlock audio on mobile browsers
+ * • Respects the global mute preference from audio.ts
+ * • Lazy AudioContext — created on first use, reused thereafter
+ * • SSR-safe — all methods are no-ops when AudioContext is unavailable
+ * • Fail-silent — any synthesis error is swallowed; audio is non-critical
  *
  * @example
  * import { soundManager } from '@/lib/soundManager';
@@ -32,7 +32,7 @@
  *
  * // Adjust volume (0 = silent, 1 = full)
  * soundManager.setVolume(0.5);
- * console.log(soundManager.volume); // 0.5
+ * console.log(soundManager.volume); /0.5
  */
 
 import { isMuted } from '@/lib/audio';
@@ -113,8 +113,8 @@ export class SoundManager {
   /**
    * Set volume level and persist the preference.
    *
-   * @param level A number in the range [0.0, 1.0].  Values outside this
-   *   range are clamped automatically.
+   * @param level A number in the range [0.0, 1.0]. Values outside this
+   * range are clamped automatically.
    */
   setVolume(level: number): void {
     this._volume = clamp(level, 0, 1);
@@ -135,7 +135,7 @@ export class SoundManager {
    * Attempt to unlock / warm-up the AudioContext.
    *
    * Mobile browsers (iOS Safari in particular) require a user-gesture before
-   * audio can play.  Call `preload()` inside a click or touch handler as early
+   * audio can play. Call `preload()` inside a click or touch handler as early
    * as possible in the session so the first game sound is never suppressed.
    *
    * It is safe to call multiple times — subsequent calls are no-ops once the
@@ -164,9 +164,9 @@ export class SoundManager {
    * Play a sound cue by event name.
    *
    * No-ops silently when:
-   *  • The global mute preference is enabled
-   *  • AudioContext is unavailable (SSR or unsupported browser)
-   *  • Any synthesis error occurs
+   * • The global mute preference is enabled
+   * • AudioContext is unavailable (SSR or unsupported browser)
+   * • Any synthesis error occurs
    */
   play(event: SoundEvent): void {
     switch (event) {
@@ -193,7 +193,7 @@ export class SoundManager {
    *
    * Synthesised from a short burst of band-pass filtered noise followed by
    * a quick pitch-descending triangle tone, giving the impression of a card
-   * being slid across a table surface.  Total duration ≈ 120 ms.
+   * being slid across a table surface. Total duration ≈ 120 ms.
    */
   playCardDeal(): void {
     if (isMuted() || this._volume === 0) return;
@@ -452,7 +452,7 @@ export class SoundManager {
 
   /**
    * If the context is suspended (e.g. due to autoplay policy), attempt to
-   * resume it.  Fire-and-forget — failure is acceptable.
+   * resume it. Fire-and-forget — failure is acceptable.
    */
   private _ensureRunning(ctx: AudioContext): void {
     if (ctx.state === 'suspended') {
@@ -474,7 +474,7 @@ export class SoundManager {
  * Import this wherever game audio cues need to be triggered:
  * ```ts
  * import { soundManager } from '@/lib/soundManager';
- * soundManager.preload();          // call once on first user interaction
+ * soundManager.preload(); // call once on first user interaction
  * soundManager.play('ask_success');
  * soundManager.setVolume(0.5);
  * ```

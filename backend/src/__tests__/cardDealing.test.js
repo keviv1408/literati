@@ -1,17 +1,17 @@
 'use strict';
 
 /**
- * Sub-AC 10a: Card Dealing Tests
+ * Card Dealing Tests
  *
  * Verifies that the server-side card dealing logic:
- *   1. Builds a correct 48-card deck for each variant (remove_2s, remove_7s, remove_8s)
- *   2. Distributes 8 cards to each of 6 players (6-player game)
- *   3. Distributes 6 cards to each of 8 players (8-player game)
- *   4. Produces no duplicate cards across all hands
- *   5. Emits each player's dealt hand in the `game_init` WebSocket message
- *   6. Emits only the requesting player's hand (not others')
- *   7. createGame stores the dealt state and sendGameInit sends correct hand
- *   8. All 48 variant cards are present across the full set of hands
+ * 1. Builds a correct 48-card deck for each variant (remove_2s, remove_7s, remove_8s)
+ * 2. Distributes 8 cards to each of 6 players (6-player game)
+ * 3. Distributes 6 cards to each of 8 players (8-player game)
+ * 4. Produces no duplicate cards across all hands
+ * 5. Emits each player's dealt hand in the `game_init` WebSocket message
+ * 6. Emits only the requesting player's hand (not others')
+ * 7. createGame stores the dealt state and sendGameInit sends correct hand
+ * 8. All 48 variant cards are present across the full set of hands
  */
 
 const {

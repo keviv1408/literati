@@ -1,19 +1,19 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for DealAnimation (Sub-AC 10b) — client-side shuffle + deal animation.
+ * Tests for DealAnimation — client-side shuffle + deal animation.
  *
  * Covers:
- *  • Component renders with correct data-testid and aria-hidden attribute
- *  • Overlay is pointer-events-none (does not block game controls)
- *  • In the shuffle phase (0–400 ms) no flying cards are visible
- *  • After ~400 ms the deal phase begins and the correct number of flying cards appear
- *  • 6-player game → 6 flying cards
- *  • 8-player game → 8 flying cards
- *  • onComplete fires after the full animation (~1400 ms)
- *  • Component unmounts (renders null) once onComplete is called
- *  • Each flying card carries the deal-animation-card testid
- *  • Cleanup: pending timers are cancelled when the component unmounts early
+ * • Component renders with correct data-testid and aria-hidden attribute
+ * • Overlay is pointer-events-none (does not block game controls)
+ * • In the shuffle phase (0–400 ms) no flying cards are visible
+ * • After ~400 ms the deal phase begins and the correct number of flying cards appear
+ * • 6-player game → 6 flying cards
+ * • 8-player game → 8 flying cards
+ * • onComplete fires after the full animation (~1400 ms)
+ * • Component unmounts (renders null) once onComplete is called
+ * • Each flying card carries the deal-animation-card testid
+ * • Cleanup: pending timers are cancelled when the component unmounts early
  */
 
 import React from 'react';

@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * Sub-AC 25a — Server-side declaration correctness validation
+ * Server-side declaration correctness validation
  *
  * Tests that applyDeclaration() correctly:
- *   1. Awards the half-suit point to the declaring team when every card is
- *      assigned to the player who actually holds it.
- *   2. Awards the half-suit point to the OPPOSING team when any card is
- *      assigned to the wrong player — including a wrong player on the same team.
- *   3. Records the correct/incorrect status in moveHistory.
- *   4. Works correctly for all three variants (remove_2s, remove_7s, remove_8s).
- *   5. Handles the tiebreaker (high_d) for each variant.
+ * 1. Awards the half-suit point to the declaring team when every card is
+ * assigned to the player who actually holds it.
+ * 2. Awards the half-suit point to the OPPOSING team when any card is
+ * assigned to the wrong player — including a wrong player on the same team.
+ * 3. Records the correct/incorrect status in moveHistory.
+ * 4. Works correctly for all three variants (remove_2s, remove_7s, remove_8s).
+ * 5. Handles the tiebreaker (high_d) for each variant.
  */
 
 const { applyDeclaration } = require('../game/gameEngine');

@@ -4,53 +4,53 @@
  * Room WebSocket server — /ws/room/<ROOMCODE>
  *
  * Connection URL format:
- *   ws(s)://host/ws/room/<ROOMCODE>?token=<bearer>
+ * ws(s)://host/ws/room/<ROOMCODE>?token=<bearer>
  *
  * Authentication:
- *   Bearer token is resolved against the in-memory guest-session store first,
- *   then against Supabase JWT (same order as auth middleware).
+ * Bearer token is resolved against the in-memory guest-session store first,
+ * then against Supabase JWT (same order as auth middleware).
  *
  * Server → Client messages:
- *   { type: 'connected',    userId: string }
- *     Sent immediately after a valid connection is established.
+ * { type: 'connected', userId: string }
+ * Sent immediately after a valid connection is established.
  *
- *   { type: 'room_players', players: RoomPlayer[] }
- *     Broadcast to ALL clients in the room whenever the player list or
- *     team assignments change (join, leave, kick, change_team).
+ * { type: 'room_players', players: RoomPlayer[] }
+ * Broadcast to ALL clients in the room whenever the player list or
+ * team assignments change (join, leave, kick, change_team).
  *
- *   { type: 'kicked', by: string }
- *     Sent to a player just before the server closes their connection.
+ * { type: 'kicked', by: string }
+ * Sent to a player just before the server closes their connection.
  *
- *   { type: 'error', message: string }
- *     Non-fatal error response for invalid host commands.
+ * { type: 'error', message: string }
+ * Non-fatal error response for invalid host commands.
  *
- *   { type: 'lobby-starting', seats: LobbySeat[], roomCode: string }
- *     Broadcast to ALL clients when the host starts the game.
- *     Contains the final seat list (human players + bots for empty seats).
- *     Clients should navigate to the game board upon receiving this message.
+ * { type: 'lobby-starting', seats: LobbySeat[], roomCode: string }
+ * Broadcast to ALL clients when the host starts the game.
+ * Contains the final seat list (human players + bots for empty seats).
+ * Clients should navigate to the game board upon receiving this message.
  *
  * Client → Server messages:
- *   { type: 'kick_player', targetId: string }
- *     Only accepted from the room host. Kicks the player with the given userId.
+ * { type: 'kick_player', targetId: string }
+ * Only accepted from the room host. Kicks the player with the given userId.
  *
- *   { type: 'change_team', teamId: 1|2 }
- *     Any player may switch their own team, subject to capacity constraints.
- *     On success the server broadcasts room_players to everyone.
+ * { type: 'change_team', teamId: 1|2 }
+ * Any player may switch their own team, subject to capacity constraints.
+ * On success the server broadcasts room_players to everyone.
  *
- *   { type: 'start_game' }
- *     Only accepted from the room host. Fills any empty seats with bots,
- *     updates the room status to 'in_progress' in Supabase, and broadcasts
- *     'lobby-starting' with the final seat list to all connected clients.
+ * { type: 'start_game' }
+ * Only accepted from the room host. Fills any empty seats with bots,
+ * updates the room status to 'in_progress' in Supabase, and broadcasts
+ * 'lobby-starting' with the final seat list to all connected clients.
  *
  * RoomPlayer wire shape (serialised to clients):
- *   { userId, displayName, isGuest, isHost, teamId: 1|2 }
+ * { userId, displayName, isGuest, isHost, teamId: 1|2 }
  *
  * Close codes:
- *   4000 — Invalid room code format
- *   4001 — Unauthorized (missing or invalid token)
- *   4004 — Room not found
- *   4005 — Room not accepting connections
- *   4010 — Kicked by host
+ * 4000 — Invalid room code format
+ * 4001 — Unauthorized (missing or invalid token)
+ * 4004 — Room not found
+ * 4005 — Room not accepting connections
+ * 4010 — Kicked by host
  */
 
 const { WebSocketServer } = require('ws');
@@ -110,7 +110,7 @@ let _supabaseClientFactory = null;
 
 /**
  * Override the Supabase client factory — used in tests only.
- * @param {Function|null} factory  () => supabaseClient  — pass null to reset.
+ * @param {Function|null} factory () => supabaseClient — pass null to reset.
  */
 function _setSupabaseClientFactory(factory) {
   _supabaseClientFactory = factory;
@@ -129,12 +129,12 @@ function getSupabase() {
  * Map<roomCode, Map<userId, ClientEntry>>
  *
  * ClientEntry:
- *   ws          — live WebSocket
- *   userId      — backend identity (Supabase UUID or guest sessionId)
- *   displayName — player display name
- *   isGuest     — true for guest sessions
- *   isHost      — true for the room creator
- *   teamId      — 1 or 2 (auto-assigned on join, changeable by player)
+ * ws — live WebSocket
+ * userId — backend identity (Supabase UUID or guest sessionId)
+ * displayName — player display name
+ * isGuest — true for guest sessions
+ * isHost — true for the room creator
+ * teamId — 1 or 2 (auto-assigned on join, changeable by player)
  *
  * NOTE: spectators are NOT stored here — see roomSpectators below.
  */
@@ -144,18 +144,18 @@ const roomClients = new Map();
  * Map<roomCode, Map<userId, SpectatorEntry>>
  *
  * SpectatorEntry:
- *   ws          — live WebSocket
- *   userId      — backend identity (same resolution order as player tokens)
- *   displayName — spectator display name
- *   isGuest     — true for guest sessions
- *   role        — always 'spectator'
+ * ws — live WebSocket
+ * userId — backend identity (same resolution order as player tokens)
+ * displayName — spectator display name
+ * isGuest — true for guest sessions
+ * role — always 'spectator'
  *
  * Spectators are stored separately from players so that:
- *   – They are never counted toward team sizes or player-count limits.
- *   – They receive all broadcast messages (room_players, lobby-starting, etc.).
- *   – Their presence is NOT exposed in room_players snapshots sent to players.
- *   – Permission checks (kick, change_team, start_game) operate only on
- *     the roomClients map, so spectators automatically cannot perform them.
+ * – They are never counted toward team sizes or player-count limits.
+ * – They receive all broadcast messages (room_players, lobby-starting, etc.).
+ * – Their presence is NOT exposed in room_players snapshots sent to players.
+ * – Permission checks (kick, change_team, start_game) operate only on
+ * the roomClients map, so spectators automatically cannot perform them.
  */
 const roomSpectators = new Map();
 
@@ -177,7 +177,7 @@ const MATCHMAKING_LOBBY_TIMEOUT_MS = 30 * 1000;
 
 /**
  * Map<roomCode, { previousHostId: string }>
- * Tracks pending host-disconnect reconnect windows.  An entry is created when
+ * Tracks pending host-disconnect reconnect windows. An entry is created when
  * the current room host disconnects from the lobby; it is removed if the same
  * host reconnects before the 60-second window elapses (or when the timer fires
  * and host authority is transferred to the next player).
@@ -191,11 +191,11 @@ const hostTransferTimers = new Map();
 /**
  * Map<roomCode, ReturnType<typeof setTimeout>>
  *
- * Sub-AC 45d — Rematch bot-fill timers.
+ * Rematch bot-fill timers.
  *
  * Started by startRematchBotFillTimer() immediately after a rematch is agreed
- * (rematch_start broadcast).  Fires after REMATCH_BOT_FILL_TIMEOUT_MS (30 s)
- * if not all original human players have rejoined the room lobby.  On expiry,
+ * (rematch_start broadcast). Fires after REMATCH_BOT_FILL_TIMEOUT_MS (30 s)
+ * if not all original human players have rejoined the room lobby. On expiry,
  * _executeRematchBotFill() fills absent slots with bots and starts the game.
  *
  * Cancelled by cancelRematchBotFillTimer() if all original humans reconnect
@@ -208,7 +208,7 @@ const _rematchBotFillTimers = new Map();
  * How long to wait for rematch players to reconnect to the lobby before
  * auto-filling absent slots with bots and starting the new game (30 s).
  *
- * Sub-AC 45d: "After the 30-second window, automatically fill any still-absent
+ * "After the 30-second window, automatically fill any still-absent
  * player slots with bots at the inherited difficulty and start the new game."
  */
 const REMATCH_BOT_FILL_TIMEOUT_MS = 30_000;
@@ -241,12 +241,12 @@ function getRoomSpectatorMap(roomCode) {
  * Auto-assign a team for a newly-joining player.
  *
  * Rules:
- *   - Count current T1 and T2 members in the room.
- *   - Assign to the team with fewer members; tie → Team 1.
- *   - Never exceed playerCount / 2 per team.
+ * - Count current T1 and T2 members in the room.
+ * - Assign to the team with fewer members; tie → Team 1.
+ * - Never exceed playerCount 2 per team.
  *
- * @param {Map<string, Object>} clients  - current room clients
- * @param {number} playerCount           - max players for the room
+ * @param {Map<string, Object>} clients - current room clients
+ * @param {number} playerCount - max players for the room
  * @returns {1|2}
  */
 function autoAssignTeam(clients, playerCount) {
@@ -292,16 +292,16 @@ function getRoomPlayers(roomCode) {
  * against network-flap scenarios where disconnect fires twice).
  *
  * @param {string} roomCode
- * @param {string} currentHostId  userId of the host who just disconnected
+ * @param {string} currentHostId userId of the host who just disconnected
  */
 /**
  * Start the 60-second host-reconnect countdown for a private room.
  *
  * Uses the hostDisconnectTimer module for the actual timer/tick machinery.
  * Broadcasts:
- *   { type: 'host_disconnected', roomCode, expiresAt } — immediately
- *   { type: 'host_disconnect_tick', roomCode, remainingMs, expiresAt } — every 5 s
- *   { type: 'host_timeout', roomCode } — when 60 s elapses without reconnect
+ * { type: 'host_disconnected', roomCode, expiresAt } — immediately
+ * { type: 'host_disconnect_tick', roomCode, remainingMs, expiresAt } — every 5 s
+ * { type: 'host_timeout', roomCode } — when 60 s elapses without reconnect
  *
  * @param {string} roomCode
  * @param {string} currentHostId
@@ -373,12 +373,12 @@ function _cancelHostTransferTimer(roomCode) {
  * Called when the host-transfer timer expires with no reconnect.
  *
  * Algorithm:
- *   1. Select the first remaining player in Map insertion order as new host.
- *   2. Set `isHost = false` on every existing in-memory entry.
- *   3. Set `isHost = true` on the selected entry.
- *   4. Persist the new `host_user_id` to Supabase (best-effort).
- *   5. Broadcast `host_changed` to notify all clients of the new authority.
- *   6. Broadcast `room_players` so all isHost badges refresh.
+ * 1. Select the first remaining player in Map insertion order as new host.
+ * 2. Set `isHost = false` on every existing in-memory entry.
+ * 3. Set `isHost = true` on the selected entry.
+ * 4. Persist the new `host_user_id` to Supabase (best-effort).
+ * 5. Broadcast `host_changed` to notify all clients of the new authority.
+ * 6. Broadcast `room_players` so all isHost badges refresh.
  *
  * If no players remain the function is a silent no-op.
  *
@@ -437,7 +437,7 @@ async function _executeHostTransfer(roomCode) {
 
 /**
  * Send a JSON message to every OPEN client in a room — both players AND
- * spectators.  All lobby state transitions (room_players updates, game start)
+ * spectators. All lobby state transitions (room_players updates, game start)
  * are visible to spectators so they can follow the lobby and navigate to the
  * game page when it starts.
  *
@@ -492,8 +492,8 @@ function broadcastToSpectators(roomCode, message) {
  * Resolve a bearer token to a user identity.
  *
  * Resolution order (mirrors auth middleware):
- *   1. Guest session store — cheap in-memory lookup.
- *   2. Supabase JWT — for registered users.
+ * 1. Guest session store — cheap in-memory lookup.
+ * 2. Supabase JWT — for registered users.
  *
  * @param {string|null} token
  * @returns {Promise<{userId: string, displayName: string, isGuest: boolean}|null>}
@@ -584,12 +584,12 @@ async function fetchRoomMeta(roomCode) {
  * Fetch full room metadata needed for game creation.
  * @param {string} roomCode
  * @returns {Promise<{
- *   id: string,
- *   host_user_id: string,
- *   status: string,
- *   player_count: number,
- *   card_removal_variant: string,
- *   spectator_token: string,
+ * id: string,
+ * host_user_id: string,
+ * status: string,
+ * player_count: number,
+ * card_removal_variant: string,
+ * spectator_token: string,
  * }|null>}
  */
 async function fetchRoomMetaFull(roomCode) {
@@ -616,17 +616,17 @@ async function fetchRoomMetaFull(roomCode) {
  * Process a kick_player message from a connected client.
  *
  * Rules:
- *   - Only the host may kick.
- *   - Host cannot kick themselves.
- *   - Target must be present in the room.
+ * - Only the host may kick.
+ * - Host cannot kick themselves.
+ * - Target must be present in the room.
  *
  * @param {{
- *   ws: import('ws'),
- *   userId: string,
- *   displayName: string,
- *   isHost: boolean,
- *   roomCode: string,
- *   clients: Map<string, Object>
+ * ws: import('ws'),
+ * userId: string,
+ * displayName: string,
+ * isHost: boolean,
+ * roomCode: string,
+ * clients: Map<string, Object>
  * }} ctx
  * @param {{ type: string, targetId?: string, payload?: { targetId?: string } }} message
  */
@@ -692,18 +692,18 @@ function handleKickPlayer(ctx, message) {
  * Process a change_team message from a connected client.
  *
  * Rules:
- *   - Any player may request a team change for themselves.
- *   - The target team must not already be at capacity (playerCount / 2 members).
+ * - Any player may request a team change for themselves.
+ * - The target team must not already be at capacity (playerCount 2 members).
  *
  * On success:
- *   - Updates the in-memory teamId for the requesting player.
- *   - Broadcasts room_players to ALL clients in the room (including the sender).
+ * - Updates the in-memory teamId for the requesting player.
+ * - Broadcasts room_players to ALL clients in the room (including the sender).
  *
  * @param {{
- *   ws: import('ws'),
- *   userId: string,
- *   roomCode: string,
- *   clients: Map<string, Object>
+ * ws: import('ws'),
+ * userId: string,
+ * roomCode: string,
+ * clients: Map<string, Object>
  * }} ctx
  * @param {{ type: string, teamId?: number, payload?: { teamId?: number } }} message
  */
@@ -763,7 +763,7 @@ function handleChangeTeam(ctx, message) {
 }
 
 // ---------------------------------------------------------------------------
-// Reassign-team handler (host-driven, Sub-AC 3c)
+// Reassign-team handler (host-driven, )
 // ---------------------------------------------------------------------------
 
 /**
@@ -773,17 +773,17 @@ function handleChangeTeam(ctx, message) {
  * to the same per-team capacity constraint used by handleChangeTeam.
  *
  * Rules:
- *   - Only the host may reassign.
- *   - Host cannot reassign themselves (use change_team instead).
- *   - Target must be present in the room.
- *   - Target team must not already be at capacity (playerCount / 2).
+ * - Only the host may reassign.
+ * - Host cannot reassign themselves (use change_team instead).
+ * - Target must be present in the room.
+ * - Target team must not already be at capacity (playerCount 2).
  *
  * @param {{
- *   ws: import('ws'),
- *   userId: string,
- *   isHost: boolean,
- *   roomCode: string,
- *   clients: Map<string, Object>
+ * ws: import('ws'),
+ * userId: string,
+ * isHost: boolean,
+ * roomCode: string,
+ * clients: Map<string, Object>
  * }} ctx
  * @param {{ type: string, targetId?: string, teamId?: number, payload?: { targetId?: string, teamId?: number } }} message
  */
@@ -868,24 +868,24 @@ function handleReassignTeam(ctx, message) {
 }
 
 // ---------------------------------------------------------------------------
-// Game-start validation helpers (Sub-AC 5.2)
+// Game-start validation helpers
 // ---------------------------------------------------------------------------
 
 /**
  * Validate whether the current player state permits starting the game.
  *
  * Server-enforced rules:
- *   1. At least one human player must be present (host must be connected).
- *   2. Total human player count must not exceed the configured playerCount (6 or 8).
- *   3. Neither team may have more than Math.floor(playerCount / 2) human
- *      players — remaining seats are filled by bots in the alternating layout,
- *      so exceeding the per-team cap would produce an unbalanced game.
+ * 1. At least one human player must be present (host must be connected).
+ * 2. Total human player count must not exceed the configured playerCount (6 or 8).
+ * 3. Neither team may have more than Math.floor(playerCount 2) human
+ * players — remaining seats are filled by bots in the alternating layout,
+ * so exceeding the per-team cap would produce an unbalanced game.
  *
  * This function is pure (no side-effects) and is called by both the WebSocket
  * handler (start_game message) and the REST endpoint POST /api/rooms/:code/start.
  *
- * @param {Map<string, Object>} clients      Current room clients (userId → entry).
- * @param {number}              playerCount  Room's configured player count (6 or 8).
+ * @param {Map<string, Object>} clients Current room clients (userId → entry).
+ * @param {number} playerCount Room's configured player count (6 or 8).
  * @returns {{ valid: boolean, error?: string, errorCode?: string }}
  */
 function validateStartGame(clients, playerCount) {
@@ -942,9 +942,9 @@ function validateStartGame(clients, playerCount) {
  * This is an array-returning wrapper around buildOccupiedSeats() for callers
  * that need an Array rather than a Map (e.g. the REST endpoint).
  *
- * @param {Map<string, Object>} clients      Current room clients.
- * @param {number}              playerCount  Room's configured player count.
- * @returns {Array<Object>}  Human-only seat descriptors, sorted by seatIndex.
+ * @param {Map<string, Object>} clients Current room clients.
+ * @param {number} playerCount Room's configured player count.
+ * @returns {Array<Object>} Human-only seat descriptors, sorted by seatIndex.
  */
 function buildSeatsFromClients(clients, playerCount) {
   const occupiedMap = buildOccupiedSeats(clients, playerCount);
@@ -952,23 +952,23 @@ function buildSeatsFromClients(clients, playerCount) {
 }
 
 // ---------------------------------------------------------------------------
-// Start-game handler (host-driven, Sub-AC 5.2)
+// Start-game handler (host-driven, )
 // ---------------------------------------------------------------------------
 
 /**
  * Build a Map<seatIndex, LobbySeat> from the current live client map.
  *
  * Rules (mirrors the visual seat layout):
- *   - Team-1 clients → even seat indices: 0, 2, 4, 6
- *   - Team-2 clients → odd  seat indices: 1, 3, 5, 7
+ * - Team-1 clients → even seat indices: 0, 2, 4, 6
+ * - Team-2 clients → odd seat indices: 1, 3, 5, 7
  *
  * The n-th Team-1 player gets seat n*2; the n-th Team-2 player gets n*2+1.
  * Only the first (playerCount/2) members per team are assigned seats; extra
  * players are dropped (which should not occur under normal lobby rules).
  *
- * @param {Map<string, Object>} clients     - Current roomClients map for the room.
- * @param {number}              playerCount - Total seat capacity (6 or 8).
- * @returns {Map<number, Object>}           - seatIndex → LobbySeat-shaped object.
+ * @param {Map<string, Object>} clients - Current roomClients map for the room.
+ * @param {number} playerCount - Total seat capacity (6 or 8).
+ * @returns {Map<number, Object>} - seatIndex → LobbySeat-shaped object.
  */
 function buildOccupiedSeats(clients, playerCount) {
   const t1 = [];
@@ -1018,29 +1018,29 @@ function buildOccupiedSeats(clients, playerCount) {
  * Process a start_game message from the host.
  *
  * This is the primary game-start entry point for clients connected to
- * /ws/room/<CODE>.  It:
+ * /ws/room/<CODE>. It:
  *
- *   1. Verifies the requester is the room host.
- *   2. Fetches full room metadata (id, variant) from Supabase and confirms
- *      the room is still in 'waiting' status.
- *   3. Builds a seat snapshot from the live roomClients map.
- *   4. Fills empty seats with bot players (botFiller.fillWithBots).
- *   5. Creates the in-memory game state via gameSocketServer.createGame().
- *   6. Updates Supabase room status to 'starting' — this prevents new players
- *      from joining via the room WS and signals the game page to accept WS
- *      connections.
- *   7. Broadcasts { type: 'lobby-starting', seats, botsAdded, roomCode } to
- *      ALL connected clients (human players AND spectators) so they navigate
- *      to /game/<roomCode>.
- *   8. Asynchronously persists the game state (transitions status → 'in_progress').
- *   9. Schedules the first bot turn if the opening player is a bot.
+ * 1. Verifies the requester is the room host.
+ * 2. Fetches full room metadata (id, variant) from Supabase and confirms
+ * the room is still in 'waiting' status.
+ * 3. Builds a seat snapshot from the live roomClients map.
+ * 4. Fills empty seats with bot players (botFiller.fillWithBots).
+ * 5. Creates the in-memory game state via gameSocketServer.createGame().
+ * 6. Updates Supabase room status to 'starting' — this prevents new players
+ * from joining via the room WS and signals the game page to accept WS
+ * connections.
+ * 7. Broadcasts { type: 'lobby-starting', seats, botsAdded, roomCode } to
+ * ALL connected clients (human players AND spectators) so they navigate
+ * to /game/<roomCode>.
+ * 8. Asynchronously persists the game state (transitions status → 'in_progress').
+ * 9. Schedules the first bot turn if the opening player is a bot.
  *
  * @param {{
- *   ws:       import('ws'),
- *   userId:   string,
- *   isHost:   boolean,
- *   roomCode: string,
- *   clients:  Map<string, Object>
+ * ws: import('ws'),
+ * userId: string,
+ * isHost: boolean,
+ * roomCode: string,
+ * clients: Map<string, Object>
  * }} ctx
  */
 async function handleStartGame(ctx) {
@@ -1083,9 +1083,9 @@ async function handleStartGame(ctx) {
     const variant     = dbRoom.card_removal_variant || 'remove_7s';
     const roomId      = dbRoom.id;
 
-    // ── Validate player count and team balance (Sub-AC 5.2) ───────────────────
+    // ── Validate player count and team balance ───────────────────
     // Server-enforced: checks that no team exceeds playerCount/2 humans and that
-    // the lobby is not empty.  Bots will fill any remaining empty seats.
+    // the lobby is not empty. Bots will fill any remaining empty seats.
     const validation = validateStartGame(clients, playerCount);
     if (!validation.valid) {
       ws.send(
@@ -1103,7 +1103,7 @@ async function handleStartGame(ctx) {
 
     // ── Detect empty seats and auto-fill with bots (gameInitService) ──────────
     // buildGameSeats() calls detectEmptySeats() + buildBotSeats() internally,
-    // then merges and sorts the final seat array.  emptySlots is logged for
+    // then merges and sorts the final seat array. emptySlots is logged for
     // diagnostics; allSeats and botSeats drive the broadcast and createGame.
     const { allSeats, botSeats, emptySlots } = buildGameSeats(playerCount, occupiedSeats);
     const bots = botSeats; // alias kept for the botsAdded broadcast field
@@ -1125,14 +1125,14 @@ async function handleStartGame(ctx) {
 
     // ── Update Supabase room status to 'starting' ─────────────────────────────
     // 'starting' keeps the room joinable for late-connecting clients but signals
-    // that the game is transitioning.  persistGameState (called below) will then
+    // that the game is transitioning. persistGameState (called below) will then
     // move it to 'in_progress' once the snapshot is stored.
     //
     // Two failure modes:
-    //   • Resolved with { error } (Supabase constraint/policy error) — fatal:
-    //     send an error to the host and abort (the room state is indeterminate).
-    //   • Thrown / rejected (network outage, connection refused) — non-fatal:
-    //     log and continue so connected clients are not stranded mid-lobby.
+    // • Resolved with { error } (Supabase constraint/policy error) — fatal:
+    // send an error to the host and abort (the room state is indeterminate).
+    // • Thrown / rejected (network outage, connection refused) — non-fatal:
+    // log and continue so connected clients are not stranded mid-lobby.
     try {
       const supabase = getSupabase();
       const { error: updateErr } = await supabase
@@ -1226,12 +1226,12 @@ async function handleStartGame(ctx) {
  * Auto-start a matchmaking room without requiring a host action.
  *
  * Functionally identical to handleStartGame but skips the host-authorization
- * check.  Called automatically either when all matched players join or when
+ * check. Called automatically either when all matched players join or when
  * the 30-second fill timer fires.
  *
- * @param {string}            roomCode
+ * @param {string} roomCode
  * @param {Map<string, Object>} clients
- * @param {number}            playerCount
+ * @param {number} playerCount
  */
 async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
   console.log(`[RoomWS] handleAutoStartMatchmaking: starting room ${roomCode} (${clients.size}/${playerCount} players).`);
@@ -1347,16 +1347,16 @@ async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-AC 45d — Rematch bot-fill timer
+// Rematch bot-fill timer
 // ---------------------------------------------------------------------------
 
 /**
  * Start the 30-second window for rematch players to reconnect to the room lobby.
  *
  * Called by gameSocketServer.handleRematchVote immediately after broadcasting
- * `rematch_start`.  If all original human players reconnect before the window
+ * `rematch_start`. If all original human players reconnect before the window
  * expires the timer is cancelled and _executeRematchBotFill() runs immediately
- * via process.nextTick.  Otherwise it fires after REMATCH_BOT_FILL_TIMEOUT_MS
+ * via process.nextTick. Otherwise it fires after REMATCH_BOT_FILL_TIMEOUT_MS
  * and absent slots are replaced by bots.
  *
  * The pending rematch settings (players, variant, playerCount)
@@ -1454,7 +1454,7 @@ function cancelRematchBotFillTimer(roomCode) {
  * architecture is designed so that a `difficulty` field on each bot seat can
  * be propagated here once difficulty tiers are introduced.
  *
- * @param {string}              roomCode
+ * @param {string} roomCode
  * @param {Map<string, Object>} [clientsOverride] - Optional clients Map (defaults to live roomClients).
  * @returns {Promise<void>}
  */
@@ -1641,7 +1641,7 @@ function attachRoomSocketServer(httpServer) {
 
     if (!match) {
       // Not our path — let the next registered upgrade handler deal with it
-      // (e.g. the legacy /ws lobby server).  Do NOT destroy the socket here.
+      // (e.g. the legacy /ws lobby server). Do NOT destroy the socket here.
       return;
     }
 
@@ -1663,8 +1663,8 @@ function attachRoomSocketServer(httpServer) {
       typeof parsed.query.token === 'string' ? parsed.query.token : null;
 
     // Extract optional role and spectator_token query params.
-    //   role=spectator          → the client wants spectator-only access
-    //   spectator_token=<hex>   → 32-char token proving private-room access
+    // role=spectator → the client wants spectator-only access
+    // spectator_token=<hex> → 32-char token proving private-room access
     const role           = typeof parsed.query.role === 'string' ? parsed.query.role : null;
     const spectatorToken = typeof parsed.query.spectator_token === 'string'
       ? parsed.query.spectator_token
@@ -1715,9 +1715,9 @@ function attachRoomSocketServer(httpServer) {
     const isMatchmakingRoom = !!(meta?.isMatchmaking);
 
     // ── ─────────────────────────────────────────────────────────────────────
-    //    SPECTATOR BRANCH
-    //    Stored in roomSpectators — never counted toward team or player-count
-    //    limits, never visible in room_players, cannot send game commands.
+    // SPECTATOR BRANCH
+    // Stored in roomSpectators — never counted toward team or player-count
+    // limits, never visible in room_players, cannot send game commands.
     // ── ─────────────────────────────────────────────────────────────────────
     if (isSpectatorRequest) {
       // Private rooms require the spectator_token to prevent uninvited viewers.
@@ -1775,7 +1775,7 @@ function attachRoomSocketServer(httpServer) {
     }
 
     // ── ─────────────────────────────────────────────────────────────────────
-    //    PLAYER BRANCH (normal join)
+    // PLAYER BRANCH (normal join)
     // ── ─────────────────────────────────────────────────────────────────────
 
     // ── Determine host status ───────────────────────────────────────────────
@@ -1790,9 +1790,9 @@ function attachRoomSocketServer(httpServer) {
     const playerCount = meta ? meta.playerCount : 6;
 
     // Team assignment priority:
-    //   1. Existing in-memory entry (reconnect / tab refresh) — preserves current teamId.
-    //   2. Pending rematch entry — restores the player's team from the previous game.
-    //   3. Auto-assign — for fresh joins with no prior context.
+    // 1. Existing in-memory entry (reconnect / tab refresh) — preserves current teamId.
+    // 2. Pending rematch entry — restores the player's team from the previous game.
+    // 3. Auto-assign — for fresh joins with no prior context.
     const existingEntry = clients.get(userId);
     let teamId;
     if (existingEntry) {
@@ -1808,7 +1808,7 @@ function attachRoomSocketServer(httpServer) {
 
     // ── Cancel any pending host-transfer timer for this room ─────────────────
     // If the ORIGINAL host reconnects before the grace window elapses, cancel
-    // the transfer timer.  If a different (non-host) player joins while a timer
+    // the transfer timer. If a different (non-host) player joins while a timer
     // is running, leave the timer intact — only the original host's reconnect
     // should reset it.
     if (!isMatchmakingRoom) {
@@ -1833,7 +1833,7 @@ function attachRoomSocketServer(httpServer) {
       isMatchmaking: isMatchmakingRoom,
     });
 
-    // ── Notify rematch gathering countdown (Sub-AC 45c) ─────────────────────
+    // ── Notify rematch gathering countdown ─────────────────────
     // If a 30-second post-rematch gathering countdown is active for this room,
     // notify the game server that this player has rejoined so the countdown
     // state is updated and re-broadcast to all game-socket connections.
@@ -1854,9 +1854,9 @@ function attachRoomSocketServer(httpServer) {
 
     // ── Matchmaking-room auto-start logic ────────────────────────────────────
     // For matchmaking rooms, the game starts automatically:
-    //   (a) Immediately when all matched players have connected.
-    //   (b) After MATCHMAKING_LOBBY_TIMEOUT_MS (30 s) for late players —
-    //       empty seats are filled with bots.
+    // (a) Immediately when all matched players have connected.
+    // (b) After MATCHMAKING_LOBBY_TIMEOUT_MS (30 s) for late players —
+    // empty seats are filled with bots.
     if (isMatchmakingRoom && !matchmakingTimers.has(roomCode + ':started')) {
       if (clients.size >= playerCount) {
         // All seats filled — cancel any fill timer and start immediately.
@@ -1889,7 +1889,7 @@ function attachRoomSocketServer(httpServer) {
       }
     }
 
-    // ── Sub-AC 45d: Rematch early-start check ────────────────────────────────
+    // ── Rematch early-start check ────────────────────────────────
     // If a rematch bot-fill timer is pending and ALL original human players
     // have now reconnected, cancel the timer and start the game immediately
     // rather than waiting for the full 30-second window to expire.
@@ -1982,7 +1982,7 @@ function attachRoomSocketServer(httpServer) {
 
         // If the disconnected player was the host (private room only), start
         // a grace-period timer so that a reconnect within the window cancels
-        // the transfer.  Matchmaking rooms have no host concept.
+        // the transfer. Matchmaking rooms have no host concept.
         if (wasHost && !isMatchmakingRoom) {
           _startHostTransferTimer(roomCode, userId);
         }
@@ -2029,7 +2029,7 @@ function _resetRoomState() {
   // Cancel and clear any pending host-disconnect timers (module-level and local map).
   _clearAllHostDisconnectTimers();
   hostTransferTimers.clear();
-  // Cancel and clear any pending rematch bot-fill timers (Sub-AC 45d).
+  // Cancel and clear any pending rematch bot-fill timers.
   for (const handle of _rematchBotFillTimers.values()) {
     clearTimeout(handle);
   }
@@ -2075,7 +2075,7 @@ module.exports = {
   _startHostTransferTimer,
   _cancelHostTransferTimer,
   _executeHostTransfer,
-  // Sub-AC 45d — Rematch bot-fill timer (exported for unit testing and gameSocketServer):
+  // Rematch bot-fill timer (exported for unit testing and gameSocketServer):
   startRematchBotFillTimer,
   cancelRematchBotFillTimer,
   _executeRematchBotFill,

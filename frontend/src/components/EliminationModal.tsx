@@ -2,29 +2,29 @@
 
 /**
  * EliminationModal — shown to a human player whose hand was emptied by a
- * declaration (Sub-AC 27b).
+ * declaration.
  *
  * Prompts the eliminated player to choose one of their eligible teammates to
- * receive future turns on their behalf.  The server will use this choice when
+ * receive future turns on their behalf. The server will use this choice when
  * `_resolveValidTurn` is called with the eliminated player's ID.
  *
  * ### Behaviour
  * - Rendered when `eliminationPrompt` is non-null (set by `useGameSocket` on
- *   `choose_turn_recipient_prompt` arrival).
+ * `choose_turn_recipient_prompt` arrival).
  * - Lists only eligible teammates (those still holding cards).
  * - On selection: calls `onChoose(recipientId)` which sends
- *   `choose_turn_recipient` to the server and clears the prompt.
+ * `choose_turn_recipient` to the server and clears the prompt.
  * - The modal is dismissed automatically after the player confirms a choice.
  * - If there are NO eligible teammates (entire team eliminated), the modal
- *   shows an informational message and auto-closes after 4 seconds.
+ * shows an informational message and auto-closes after 4 seconds.
  * - The game continues regardless of whether or when the player responds
- *   (the prompt is fire-and-forget from the server's perspective).
+ * (the prompt is fire-and-forget from the server's perspective).
  *
  * ### Accessibility
  * - `role="dialog"` + `aria-modal="true"` + `aria-labelledby`.
  * - Focus is trapped inside while the modal is open (first button auto-focused).
  * - Pressing Escape key is not implemented intentionally — the player MUST
- *   select a teammate (or the auto-close fires after 4 s if no eligible ones).
+ * select a teammate (or the auto-close fires after 4 s if no eligible ones).
  */
 
 import React, { useEffect, useRef } from 'react';

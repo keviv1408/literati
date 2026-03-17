@@ -1,43 +1,43 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for DeclarationTimerBar — Sub-AC 23a: 60-second countdown timer
+ * Tests for DeclarationTimerBar — 60-second countdown timer
  * for the declaration phase, visible to the declarant, with a warning state
  * in the final 10 seconds, and auto-submit on expiry.
  *
  * Coverage:
- *   Rendering:
- *     • Renders the data-testid="declaration-timer-bar" wrapper
- *     • Renders a progress bar (role="progressbar")
- *     • Renders the fill element (data-testid="declaration-timer-fill")
- *     • Renders the seconds label (data-testid="declaration-timer-seconds")
- *     • Renders the label element (data-testid="declaration-timer-label")
- *     • aria-valuemax equals durationMs/1000
- *   Normal state (> 10 seconds remaining):
- *     • Fill uses emerald colour class when plenty of time remains
- *     • Label shows "Declaration timer" text
- *     • Seconds label shows correct ceiling seconds
- *   Warning state (≤ 10 seconds remaining):
- *     • Fill uses amber colour class at 10 seconds
- *     • Label text changes to "⚠ Declare now!" at 10 seconds
- *     • Label shows animate-pulse class at 10 seconds
- *   Danger state (≤ 5 seconds remaining):
- *     • Fill uses red colour class at 5 seconds
- *     • Seconds label gains animate-pulse class at 5 seconds
- *   Already-expired timer:
- *     • Renders without crashing when expiresAt is in the past
- *     • Shows "0s" countdown
- *     • Fill width is 0%
- *   onExpiry callback:
- *     • onExpiry is NOT called immediately when timer is rendered with time remaining
- *     • onExpiry is called when expiresAt is in the past (expired on mount)
- *   Accessibility:
- *     • progressbar has aria-valuenow in seconds
- *     • progressbar aria-valuemin is 0
- *     • progressbar aria-valuemax matches durationMs/1000
- *     • seconds label has aria-label with remaining seconds
- *   Custom className:
- *     • Extra className forwarded to the outer wrapper
+ * Rendering:
+ * • Renders the data-testid="declaration-timer-bar" wrapper
+ * • Renders a progress bar (role="progressbar")
+ * • Renders the fill element (data-testid="declaration-timer-fill")
+ * • Renders the seconds label (data-testid="declaration-timer-seconds")
+ * • Renders the label element (data-testid="declaration-timer-label")
+ * • aria-valuemax equals durationMs/1000
+ * Normal state (> 10 seconds remaining):
+ * • Fill uses emerald colour class when plenty of time remains
+ * • Label shows "Declaration timer" text
+ * • Seconds label shows correct ceiling seconds
+ * Warning state (≤ 10 seconds remaining):
+ * • Fill uses amber colour class at 10 seconds
+ * • Label text changes to "⚠ Declare now!" at 10 seconds
+ * • Label shows animate-pulse class at 10 seconds
+ * Danger state (≤ 5 seconds remaining):
+ * • Fill uses red colour class at 5 seconds
+ * • Seconds label gains animate-pulse class at 5 seconds
+ * Already-expired timer:
+ * • Renders without crashing when expiresAt is in the past
+ * • Shows "0s" countdown
+ * • Fill width is 0%
+ * onExpiry callback:
+ * • onExpiry is NOT called immediately when timer is rendered with time remaining
+ * • onExpiry is called when expiresAt is in the past (expired on mount)
+ * Accessibility:
+ * • progressbar has aria-valuenow in seconds
+ * • progressbar aria-valuemin is 0
+ * • progressbar aria-valuemax matches durationMs/1000
+ * • seconds label has aria-label with remaining seconds
+ * Custom className:
+ * • Extra className forwarded to the outer wrapper
  */
 
 import React from 'react';

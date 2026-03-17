@@ -1,46 +1,46 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 45c: 30-second rematch gathering countdown.
+ * Tests for 30-second rematch gathering countdown.
  *
  * After a rematch is initiated (majority vote OR host-initiated), the server
  * starts a 30-second gathering countdown that:
- *  1. Tracks which players from the finished game have rejoined the room lobby.
- *  2. Broadcasts live `rematch_gathering` events to all connected game-socket
- *     clients (both immediately and on every TIMER_TICK_INTERVAL_MS tick).
- *  3. Fires a final broadcast with `expired: true` when the 30s window closes.
- *  4. Fires an early broadcast with `allRejoined: true` if every expected
- *     player rejoins before the 30s window closes.
- *  5. Ignores players who were not in the previous game (no-op).
- *  6. Excludes bot players from the expected-reconnect set (bots are always
- *     "present" — they do not navigate away from the game page).
+ * 1. Tracks which players from the finished game have rejoined the room lobby.
+ * 2. Broadcasts live `rematch_gathering` events to all connected game-socket
+ * clients (both immediately and on every TIMER_TICK_INTERVAL_MS tick).
+ * 3. Fires a final broadcast with `expired: true` when the 30s window closes.
+ * 4. Fires an early broadcast with `allRejoined: true` if every expected
+ * player rejoins before the 30s window closes.
+ * 5. Ignores players who were not in the previous game (no-op).
+ * 6. Excludes bot players from the expected-reconnect set (bots are always
+ * "present" — they do not navigate away from the game page).
  *
  * Coverage:
- *   _startRematchGatheringCountdown:
- *    1. Creates gathering state with correct expectedPlayerIds (humans only)
- *    2. Broadcasts initial `rematch_gathering` event immediately
- *    3. Initial broadcast has correct shape (roomCode, expiresAt, durationMs,
- *       reconnectedCount:0, totalCount, reconnectedPlayerIds:[], pendingPlayerIds:[...])
- *    4. Broadcasts tick event every TIMER_TICK_INTERVAL_MS
- *    5. Fires expiry with `expired:true` after REMATCH_GATHER_TIMEOUT_MS
- *    6. Expiry broadcast includes correct reconnected/pending counts
- *    7. Does nothing (no state, no broadcast) when player list is all bots
- *    8. Re-initialising cancels any existing gathering timer before starting new one
- *   notifyRematchPlayerJoined:
- *    9.  Marks player as reconnected, re-broadcasts updated state
- *   10.  Updated broadcast has incremented reconnectedCount and removed player from pending
- *   11.  Unknown player (not in expectedPlayerIds) is silently ignored
- *   12.  Bot player is silently ignored (not in expectedPlayerIds)
- *   13.  No-op when no gathering is active for the room
- *   14.  Early completion: when all players rejoin, cancels timer + broadcasts allRejoined:true
- *   15.  After early completion, further notifyRematchPlayerJoined calls are no-ops
- *   _cancelRematchGathering:
- *   16.  Removes state so _rematchGatheringState has no entry
- *   17.  Cancels the timer so expiry callback never fires
- *   18.  Safe to call when no gathering is active (no-op)
- *   _clearAllRematchGatherings:
- *   19.  Clears multiple active gatherings at once
- *   20.  Prevents any expiry callbacks from firing after clearing
+ * _startRematchGatheringCountdown:
+ * 1. Creates gathering state with correct expectedPlayerIds (humans only)
+ * 2. Broadcasts initial `rematch_gathering` event immediately
+ * 3. Initial broadcast has correct shape (roomCode, expiresAt, durationMs,
+ * reconnectedCount:0, totalCount, reconnectedPlayerIds:[], pendingPlayerIds:[...])
+ * 4. Broadcasts tick event every TIMER_TICK_INTERVAL_MS
+ * 5. Fires expiry with `expired:true` after REMATCH_GATHER_TIMEOUT_MS
+ * 6. Expiry broadcast includes correct reconnected/pending counts
+ * 7. Does nothing (no state, no broadcast) when player list is all bots
+ * 8. Re-initialising cancels any existing gathering timer before starting new one
+ * notifyRematchPlayerJoined:
+ * 9. Marks player as reconnected, re-broadcasts updated state
+ * 10. Updated broadcast has incremented reconnectedCount and removed player from pending
+ * 11. Unknown player (not in expectedPlayerIds) is silently ignored
+ * 12. Bot player is silently ignored (not in expectedPlayerIds)
+ * 13. No-op when no gathering is active for the room
+ * 14. Early completion: when all players rejoin, cancels timer + broadcasts allRejoined:true
+ * 15. After early completion, further notifyRematchPlayerJoined calls are no-ops
+ * _cancelRematchGathering:
+ * 16. Removes state so _rematchGatheringState has no entry
+ * 17. Cancels the timer so expiry callback never fires
+ * 18. Safe to call when no gathering is active (no-op)
+ * _clearAllRematchGatherings:
+ * 19. Clears multiple active gatherings at once
+ * 20. Prevents any expiry callbacks from firing after clearing
  */
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ function makeBot(id, teamId = 2, seatIndex = 1) {
 
 /**
  * Register a mock WS for the given player in the given room so that
- * broadcastToGame reaches them.  Returns the mock WS.
+ * broadcastToGame reaches them. Returns the mock WS.
  */
 function addConnection(roomCode, playerId) {
   const ws = makeMockWs();

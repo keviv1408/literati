@@ -6,16 +6,16 @@
  * Full game interface with real-time card play, ask/declare flows,
  * turn indicators, score tracking, and bot support.
  *
- * Spectator support (Sub-AC 42c):
- *   When the WebSocket server sends `spectator_init` (i.e. the connecting
- *   client's bearer token is not mapped to any player in the game), this page
- *   automatically switches to the read-only `SpectatorView` component.  The
- *   detection is purely reactive: `myPlayerId` stays `null` while `players`
- *   becomes non-empty after `spectator_init` is received.
+ * Spectator support:
+ * When the WebSocket server sends `spectator_init` (i.e. the connecting
+ * client's bearer token is not mapped to any player in the game), this page
+ * automatically switches to the read-only `SpectatorView` component. The
+ * detection is purely reactive: `myPlayerId` stays `null` while `players`
+ * becomes non-empty after `spectator_init` is received.
  *
- *   Spectators connect to /ws/game/<ROOMCODE>?token=<any-valid-bearer> — any
- *   guest or registered token works.  The backend classifies the connection as
- *   a spectator if the playerId is not in the game's player list.
+ * Spectators connect to /ws/game/<ROOMCODE>?token=<any-valid-bearer> — any
+ * guest or registered token works. The backend classifies the connection as
+ * a spectator if the playerId is not in the game's player list.
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -93,45 +93,45 @@ export default function GamePage({ params }: PageProps) {
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Declaration result overlay (Sub-AC 26c) ────────────────────────────────
+  // ── Declaration result overlay ────────────────────────────────
   //
-  // Shown immediately after `declaration_result` arrives.  Auto-dismisses after
+  // Shown immediately after `declaration_result` arrives. Auto-dismisses after
   // 3 seconds (with a visible countdown) or earlier if the player presses the
-  // explicit "Dismiss" button.  On dismiss, `sendGameAdvance()` is called to
+  // explicit "Dismiss" button. On dismiss, `sendGameAdvance()` is called to
   // notify the server that the client is ready for the next turn.
   const [showDeclarationOverlay, setShowDeclarationOverlay] = useState(false);
 
-  // ── Failed Declaration Reveal (Sub-AC 26b) ────────────────────────────────
+  // ── Failed Declaration Reveal ────────────────────────────────
   //
   // When declarationFailed arrives from the socket, the overlay is shown.
   // The player (or the auto-dismiss timer inside the component) can dismiss it
-  // by setting failedRevealDismissed to true.  The flag resets automatically
+  // by setting failedRevealDismissed to true. The flag resets automatically
   // when declarationFailed changes (new failed declaration in the same game).
   // NOTE: `declarationFailed` is destructured from useGameSocket below.
   // `showFailedReveal` is therefore computed after the useGameSocket call.
   const [failedRevealDismissed, setFailedRevealDismissed] = useState(false);
 
-  // ── Score flash (Sub-AC 25b) ───────────────────────────────────────────────
+  // ── Score flash ───────────────────────────────────────────────
   //
   // When a declaration_result arrives, briefly highlight the scoring team's
   // score in the header (1 | 2 | null). Cleared after 2 s.
   const [scoreFlash, setScoreFlash]         = useState<1 | 2 | null>(null);
   const scoreFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Deal animation (Sub-AC 10b) ────────────────────────────────────────────
+  // ── Deal animation ────────────────────────────────────────────
   //
   // `isDealAnimating` controls the DealAnimation overlay.
   // `hasDealtRef` prevents the animation from re-firing on reconnect/refresh:
-  //   only the first `game_init` that brings a non-empty hand triggers it.
+  // only the first `game_init` that brings a non-empty hand triggers it.
   const [isDealAnimating, setIsDealAnimating]   = useState(false);
   const hasDealtRef                             = useRef(false);
 
-  // ── Card flip animation (AC 33 Sub-AC 2) ─────────────────────────────────
+  // ── Card flip animation (AC 33) ─────────────────────────────────
   //
   // When a successful ask arrives and the current player is the ASKER
   // (i.e. they received the card), `newlyArrivedCardId` is set to that card's
   // ID so that `CardHand` can render it with a CardFlipWrapper (back → face
-  // flip animation).  Cleared by `flipTimerRef` after 700 ms (animation
+  // flip animation). Cleared by `flipTimerRef` after 700 ms (animation
   // duration ~550 ms plus a small buffer).
   const [newlyArrivedCardId, setNewlyArrivedCardId] = useState<CardId | null>(null);
   const flipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -197,7 +197,7 @@ export default function GamePage({ params }: PageProps) {
       setRematchStarted(true);
     },
     onRematchStarting: () => {
-      // Sub-AC 46c: new game spun up server-side with same teams/seats.
+      // new game spun up server-side with same teams/seats.
       // Clear post-game state so the upcoming game_init seamlessly transitions
       // into the new game without a page reload.
       setGameOver(null);
@@ -206,18 +206,18 @@ export default function GamePage({ params }: PageProps) {
     },
   });
 
-  // ── Sub-AC 45a: Host detection for private-room Rematch button ───────────
+  // ── Host detection for private-room Rematch button ───────────
   //
   // Only registered users can be hosts (guests cannot create rooms).
   // A player is the host when:
-  //   1. Their Supabase user ID matches the room's host_user_id.
-  //   2. The room is NOT a matchmaking room (private rooms only).
+  // 1. Their Supabase user ID matches the room's host_user_id.
+  // 2. The room is NOT a matchmaking room (private rooms only).
   //
   // This flag gates the "🔄 Rematch" button shown only at game-end.
   // Guest-only mode: host detection not applicable (no Supabase user ID).
   const isHostOfPrivateRoom = false;
 
-  // ── Failed Declaration Reveal visibility guard (Sub-AC 26b) ───────────────
+  // ── Failed Declaration Reveal visibility guard ───────────────
   // Computed here — after useGameSocket — because it depends on `declarationFailed`
   // which is destructured from the hook above.
   const showFailedReveal = Boolean(declarationFailed && !failedRevealDismissed);
@@ -249,14 +249,14 @@ export default function GamePage({ params }: PageProps) {
   useEffect(() => {
     if (lastAskResult?.lastMove) {
       if (lastAskResult.success) {
-        // ── Card flip animation (Sub-AC 2 of AC 33) ────────────────────────
+        // ── Card flip animation ────────────────────────
         // When the CURRENT PLAYER received the card (they were the asker),
         // trigger the flip animation so the newly arrived card reveals itself
         // by flipping from card-back to card-face in their hand.
         //
-        // The flight animation (Sub-AC 1) ends at ~1.5 s; the flip animation
+        // The flight animation ends at ~1.5 s; the flip animation
         // starts immediately when the card appears in the hand (via hand_update
-        // which arrives roughly simultaneously with ask_result).  The 700 ms
+        // which arrives roughly simultaneously with ask_result). The 700 ms
         // timer provides a small buffer past the 550 ms CSS animation duration.
         if (lastAskResult.askerId === myPlayerId) {
           if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
@@ -300,7 +300,7 @@ export default function GamePage({ params }: PageProps) {
         scoreFlashTimer.current = setTimeout(() => setScoreFlash(null), 2000);
       }
 
-      // ── Declaration result overlay (Sub-AC 26c) ─────────────────────────
+      // ── Declaration result overlay ─────────────────────────
       // Show the overlay with a 3-second auto-dismiss countdown.
       // The overlay is closed by handleDeclarationOverlayDismiss which also
       // dispatches game_advance to the server.
@@ -314,10 +314,10 @@ export default function GamePage({ params }: PageProps) {
     }
   }, [lastDeclareResult, playDeclarationSuccess, playDeclarationFail]);
 
-  // ── Reset FailedDeclarationReveal dismissed flag on new failure (Sub-AC 26b) ─
+  // ── Reset FailedDeclarationReveal dismissed flag on new failure ─
   // When a fresh declarationFailed payload arrives (a new failed declaration
   // in the same game), re-show the overlay even if the player dismissed the
-  // previous one.  The effect also covers the first arrival (null → payload).
+  // previous one. The effect also covers the first arrival (null → payload).
   useEffect(() => {
     if (declarationFailed) {
       setFailedRevealDismissed(false);
@@ -327,11 +327,11 @@ export default function GamePage({ params }: PageProps) {
   // ── Trigger deal animation on first game_init ─────────────────────────────
   //
   // Fire once when `myHand` first arrives with cards (i.e., the player just
-  // received their dealt hand for the first time this session).  The
+  // received their dealt hand for the first time this session). The
   // `hasDealtRef` guard prevents it from re-triggering on:
-  //   • WebSocket reconnect (same session, hand already dealt)
-  //   • Page refresh (new session, hasDealtRef resets to false — animation plays again,
-  //     which is acceptable since the player sees their hand "arrive" on reconnect)
+  // • WebSocket reconnect (same session, hand already dealt)
+  // • Page refresh (new session, hasDealtRef resets to false — animation plays again,
+  // which is acceptable since the player sees their hand "arrive" on reconnect)
   useEffect(() => {
     if (myHand.length > 0 && !hasDealtRef.current) {
       hasDealtRef.current = true;
@@ -352,11 +352,11 @@ export default function GamePage({ params }: PageProps) {
   //
   // When the server-side 30-second turn timer expires, the server auto-executes
   // a move (ask or declare) via bot logic and then sends `ask_result` or
-  // `declaration_result`.  Those events are handled by the existing effects
+  // `declaration_result`. Those events are handled by the existing effects
   // above that close the modals via setSelectedCard(null) / setShowDeclare(false).
   //
   // However, there can be a brief gap (network latency + WS send queue) between
-  // the server auto-move and the client receiving the result.  This effect
+  // the server auto-move and the client receiving the result. This effect
   // mirrors the server expiry on the client: once `turnTimer.expiresAt` passes
   // it proactively closes any open ask/declare modals and resets loading state,
   // so the UI feels instant even before the result arrives from the server.
@@ -387,9 +387,9 @@ export default function GamePage({ params }: PageProps) {
   const isMyTurn          = Boolean(myPlayerId && gameState?.currentTurnPlayerId === myPlayerId);
 
   // `useTurnIndicator` manages the glow + turn-start chime:
-  //  • plays a single chime on the false → true transition (turn starts)
-  //  • `clearIndicator()` immediately suppresses the glow when the player
-  //    submits an ask or declaration
+  // • plays a single chime on the false → true transition (turn starts)
+  // • `clearIndicator()` immediately suppresses the glow when the player
+  // submits an ask or declaration
   const { indicatorActive, clearIndicator } = useTurnIndicator(isMyTurn ?? false);
 
   const currentTurnPlayer = gameState?.currentTurnPlayerId
@@ -458,10 +458,10 @@ export default function GamePage({ params }: PageProps) {
     enabled: !muted,
   });
 
-  // ── Sub-AC 28b: Post-declaration seat highlight ───────────────────────────
+  // ── Post-declaration seat highlight ───────────────────────────
   //
   // After a correct declaration, `postDeclarationHighlight` carries the set of
-  // same-team player IDs eligible to receive the turn.  All clients see the
+  // same-team player IDs eligible to receive the turn. All clients see the
   // cyan seat rings (informational); only the current turn player gets a click
   // handler to redirect the turn via `choose_next_turn`.
   const highlightedPlayerIds = postDeclarationHighlight
@@ -486,21 +486,21 @@ export default function GamePage({ params }: PageProps) {
       ? handleChooseNextTurnSeat
       : undefined;
 
-  // ── Sub-AC 56c: Turn-pass mode ────────────────────────────────────────────
+  // ── Turn-pass mode ────────────────────────────────────────────
   //
   // `isTurnPassMode` is true when the local player is the current turn player
-  // AND is in the post-declaration seat-selection window.  This covers two
+  // AND is in the post-declaration seat-selection window. This covers two
   // sub-states:
-  //   1. `postDeclarationHighlight !== null` — seats are highlighted, waiting
-  //      for the player to tap one.
-  //   2. `pendingTurnPassAck` — the player tapped a seat (highlight cleared
-  //      optimistically) but the server's `post_declaration_turn_selected` ack
-  //      hasn't arrived yet.
+  // 1. `postDeclarationHighlight !== null` — seats are highlighted, waiting
+  // for the player to tap one.
+  // 2. `pendingTurnPassAck` — the player tapped a seat (highlight cleared
+  // optimistically) but the server's `post_declaration_turn_selected` ack
+  // hasn't arrived yet.
   //
   // While `isTurnPassMode` is true:
-  //   • Ask and Declare buttons are hidden (replaced by a selection prompt).
-  //   • The ask-prompt hint is suppressed.
-  //   • The turn-indicator banner shows seat-selection guidance.
+  // • Ask and Declare buttons are hidden (replaced by a selection prompt).
+  // • The ask-prompt hint is suppressed.
+  // • The turn-indicator banner shows seat-selection guidance.
   const isTurnPassMode = isMyTurn && (postDeclarationHighlight !== null || pendingTurnPassAck);
 
   const handleAsk = useCallback((targetId: string, cardId: CardId) => {
@@ -523,7 +523,7 @@ export default function GamePage({ params }: PageProps) {
     sendDeclare(halfSuitId, assignment);
   }
 
-  // ── Declaration result overlay dismiss (Sub-AC 26c) ───────────────────────
+  // ── Declaration result overlay dismiss ───────────────────────
   //
   // Called by DeclarationResultOverlay when the player presses "Dismiss" or
   // when the 3-second auto-dismiss countdown expires.
@@ -575,11 +575,11 @@ export default function GamePage({ params }: PageProps) {
         className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-8 gap-6 overflow-y-auto"
         data-testid="game-completed-view"
       >
-        {/* ── Game-over summary (Sub-AC 32d) ─────────────────────────────────
-         *  Renders the winner announcement, final score, tiebreak reason (if
-         *  applicable), and the full half-suit tally.  declaredSuits is drawn
-         *  from the most-recent gameState snapshot so the tally is always
-         *  complete when the game_over message arrives.
+        {/* ── Game-over summary ─────────────────────────────────
+         * Renders the winner announcement, final score, tiebreak reason (if
+         * applicable), and the full half-suit tally. declaredSuits is drawn
+         * from the most-recent gameState snapshot so the tally is always
+         * complete when the game_over message arrives.
          */}
         <GameOverScreen
           winner={winner ?? null}
@@ -594,7 +594,7 @@ export default function GamePage({ params }: PageProps) {
         />
 
         {/* Room dissolved notice — shown when the server permanently closes the room.
-         *  Takes priority over the vote panel; once dissolved the vote is moot.
+         * Takes priority over the vote panel; once dissolved the vote is moot.
          */}
         {roomDissolved ? (
           <div
@@ -626,14 +626,14 @@ export default function GamePage({ params }: PageProps) {
           )
         )}
 
-        {/* ── Sub-AC 45a: Host Rematch button (private rooms only) ──────────────
-         *  Visible only to the registered host of a non-matchmaking room.
-         *  Clicking sends `rematch_initiate` to the server; the server validates
-         *  host identity via DB lookup and broadcasts `rematch_start` to all
-         *  clients, bypassing the vote window.
+        {/* ── Host Rematch button (private rooms only) ──────────────
+         * Visible only to the registered host of a non-matchmaking room.
+         * Clicking sends `rematch_initiate` to the server; the server validates
+         * host identity via DB lookup and broadcasts `rematch_start` to all
+         * clients, bypassing the vote window.
          *
-         *  Not shown when roomDissolved is set (room is permanently closed) or
-         *  when rematchStarted is true (redirect is already in flight).
+         * Not shown when roomDissolved is set (room is permanently closed) or
+         * when rematchStarted is true (redirect is already in flight).
          */}
         {isHostOfPrivateRoom && !roomDissolved && (
           <button
@@ -656,10 +656,10 @@ export default function GamePage({ params }: PageProps) {
     );
   }
 
-  // ── Spectator mode (Sub-AC 42c) ────────────────────────────────────────────
+  // ── Spectator mode ────────────────────────────────────────────
   //
   // When the WebSocket server sends `spectator_init` the hook populates
-  // `players` but leaves `myPlayerId` as null.  We detect this combination
+  // `players` but leaves `myPlayerId` as null. We detect this combination
   // once the socket is connected AND players have been received: if players are
   // populated but the current client has no assigned player ID, we are a spectator.
   //
@@ -762,7 +762,7 @@ export default function GamePage({ params }: PageProps) {
         <div className={['relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium', isMyTurn ? 'bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40' : 'bg-slate-800/50 text-slate-400 border-b border-slate-700/40'].join(' ')} role="status" aria-live="polite" data-testid="turn-indicator">
           {isMyTurn ? (
             isTurnPassMode ? (
-              // Sub-AC 56c: turn-pass selection window — guide the declarant
+              // turn-pass selection window — guide the declarant
               pendingTurnPassAck
                 ? (<><span aria-hidden="true">⏳</span><span data-testid="turn-pass-pending-label">Choosing next turn…</span></>)
                 : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)
@@ -782,10 +782,10 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
 
-      {/* ── Sub-AC 28c: Post-declaration turn-selection countdown ───────────
-       *  Shown to ALL clients for 30 seconds after a human correct declaration
-       *  while the declaring team chooses who takes the next turn.
-       *  On expiry the server auto-selects a random eligible player.
+      {/* ── Post-declaration turn-selection countdown ───────────
+       * Shown to ALL clients for 30 seconds after a human correct declaration
+       * while the declaring team chooses who takes the next turn.
+       * On expiry the server auto-selects a random eligible player.
        */}
       {postDeclarationTimer && gameState && (
         <CountdownTimer
@@ -801,26 +801,26 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
 
-      {/* ── Sub-AC 56b: Declaration turn-pass prompt ──────────────────────────
-       *  Shown to ALL clients while `postDeclarationHighlight` is non-null —
-       *  i.e. while the current turn player (the declarant) is choosing which
-       *  eligible same-team player receives the next turn.
+      {/* ── Declaration turn-pass prompt ──────────────────────────
+       * Shown to ALL clients while `postDeclarationHighlight` is non-null —
+       * i.e. while the current turn player (the declarant) is choosing which
+       * eligible same-team player receives the next turn.
        *
-       *  For the DECLARANT (isMyTurn): cyan banner with instruction to click a
-       *  highlighted (cyan-ring) teammate seat.
+       * For the DECLARANT (isMyTurn): cyan banner with instruction to click a
+       * highlighted (cyan-ring) teammate seat.
        *
-       *  For ALL OTHER PLAYERS: muted status strip showing the declarant's
-       *  name so observers understand why some seats are glowing.
+       * For ALL OTHER PLAYERS: muted status strip showing the declarant's
+       * name so observers understand why some seats are glowing.
        *
-       *  The prompt disappears (unmounts) as soon as `postDeclarationHighlight`
-       *  is cleared, which happens when:
-       *    a) The declarant clicks a highlighted seat → `sendChooseNextTurn`
-       *       immediately sets `postDeclarationHighlight` to null (optimistic).
-       *    b) The 30-second timer expires → server sends
-       *       `post_declaration_turn_selected` → hook clears the highlight.
-       *  In both cases the cyan seat rings disappear simultaneously with the
-       *  prompt banner, fulfilling the "clearing highlights when the prompt is
-       *  dismissed" requirement.
+       * The prompt disappears (unmounts) as soon as `postDeclarationHighlight`
+       * is cleared, which happens when:
+       * a) The declarant clicks a highlighted seat → `sendChooseNextTurn`
+       * immediately sets `postDeclarationHighlight` to null (optimistic).
+       * b) The 30-second timer expires → server sends
+       * `post_declaration_turn_selected` → hook clears the highlight.
+       * In both cases the cyan seat rings disappear simultaneously with the
+       * prompt banner, fulfilling the "clearing highlights when the prompt is
+       * dismissed" requirement.
        */}
       {postDeclarationHighlight && gameState && (
         <DeclarationTurnPassPrompt
@@ -832,7 +832,7 @@ export default function GamePage({ params }: PageProps) {
       <VoiceAudioLayer />
 
       {/*
-       * Bot-takeover banner (Sub-AC 2 of AC 39)
+       * Bot-takeover banner
        *
        * Shown to ALL clients (including the timed-out player) when the server
        * broadcasts `bot_takeover` — indicating the human player's 30-second turn
@@ -858,9 +858,9 @@ export default function GamePage({ params }: PageProps) {
       )}
 
       {/* ── Last-move display (AC 35) ─────────────────────────────────────────
-       *  Shows only the single most-recent move (no running history per spec).
-       *  The `lastResultMsg` (5-second flash) takes precedence over the
-       *  persisted `gameState.lastMove` so fresh results are visible immediately.
+       * Shows only the single most-recent move (no running history per spec).
+       * The `lastResultMsg` (5-second flash) takes precedence over the
+       * persisted `gameState.lastMove` so fresh results are visible immediately.
        */}
       <LastMoveDisplay
         message={currentLastMoveMessage}
@@ -924,10 +924,10 @@ export default function GamePage({ params }: PageProps) {
        * Player hand area — ask/declare controls.
        *
        * These controls are gated exclusively on `isMyTurn` (derived from the
-       * game socket's game_init / game_state messages).  They are completely
+       * game socket's game_init / game_state messages). They are completely
        * independent of matchmaking state: no matchmaking hook, context, or
        * status flag influences the enabled/disabled state of the Declare button
-       * or card-selection interaction.  Ask / declare mode is always available
+       * or card-selection interaction. Ask / declare mode is always available
        * once game_init is received, regardless of player count (6 or 8) or
        * whether any seat is occupied by a bot.
        */}
@@ -936,8 +936,8 @@ export default function GamePage({ params }: PageProps) {
           <div className="flex flex-col gap-2" data-testid="game-controls">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">Your hand — <strong className="text-white">{myHand.length}</strong> card{myHand.length !== 1 ? 's' : ''}</span>
-              {/* Sub-AC 56c: during turn-pass mode the declarant must choose a
-               *  teammate seat — Ask/Declare are hidden until the turn advances. */}
+              {/* during turn-pass mode the declarant must choose a
+               * teammate seat — Ask/Declare are hidden until the turn advances. */}
               {isMyTurn && !isTurnPassMode && (
                 <div className="flex items-center gap-2">
                   <button
@@ -972,8 +972,8 @@ export default function GamePage({ params }: PageProps) {
                   </button>
                 </div>
               )}
-              {/* Sub-AC 56c: seat-selection prompt — replaces Ask/Declare row
-               *  while the declarant is choosing who gets the next turn.         */}
+              {/* seat-selection prompt — replaces Ask/Declare row
+               * while the declarant is choosing who gets the next turn. */}
               {isTurnPassMode && (
                 <span
                   className="text-xs text-cyan-300 font-medium animate-pulse"
@@ -1026,7 +1026,7 @@ export default function GamePage({ params }: PageProps) {
             {/*
              * Distinguish "truly spectating" (spectator_init was received so
              * players is populated but myPlayerId was never set) from
-             * "still connecting / awaiting game_init".  This prevents the
+             * "still connecting / awaiting game_init". This prevents the
              * "Watching as spectator" label from briefly flashing for
              * legitimate players who connected but haven't yet received
              * their personalised game_init message.
@@ -1050,7 +1050,7 @@ export default function GamePage({ params }: PageProps) {
           declaredSuits={gameState?.declaredSuits ?? []}
           onConfirm={handleDeclare}
           onCancel={() => {
-            // Clear private server-side suit selection on modal close (Sub-AC 21a)
+            // Clear private server-side suit selection on modal close
             sendDeclareSelecting(undefined);
             setShowDeclare(false);
           }}
@@ -1069,7 +1069,7 @@ export default function GamePage({ params }: PageProps) {
         </div>
       )}
 
-      {/* ── Deal animation overlay (Sub-AC 10b) ─────────────────────────── */}
+      {/* ── Deal animation overlay ─────────────────────────── */}
       {isDealAnimating && (
         <DealAnimation
           playerCount={(effectivePlayerCount === 8 ? 8 : 6) as 6 | 8}
@@ -1077,9 +1077,9 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
 
-      {/* ── Card flight animation overlay (AC 33 Sub-AC 1) ─────────────── */}
-      {/* Renders a face-up card flying from the card-giver's seat to the    */}
-      {/* card-receiver's seat after every successful ask_card result.       */}
+      {/* ── Card flight animation overlay (AC 33) ─────────────── */}
+      {/* Renders a face-up card flying from the card-giver's seat to the */}
+      {/* card-receiver's seat after every successful ask_card result. */}
       {cardFlight && (
         <CardFlightAnimation
           cardId={cardFlight.cardId}
@@ -1106,10 +1106,10 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
 
-      {/* ── Declaration result overlay (Sub-AC 26c) ─────────────────────── */}
+      {/* ── Declaration result overlay ─────────────────────── */}
       {/* Shown to all players immediately after declaration_result arrives. */}
-      {/* Auto-dismisses after 3 s; explicit Dismiss button cancels early.   */}
-      {/* On dismiss, dispatches game_advance to the server.                 */}
+      {/* Auto-dismisses after 3 s; explicit Dismiss button cancels early. */}
+      {/* On dismiss, dispatches game_advance to the server. */}
       {showDeclarationOverlay && lastDeclareResult && (
         <DeclarationResultOverlay
           result={lastDeclareResult}
@@ -1118,12 +1118,12 @@ export default function GamePage({ params }: PageProps) {
           onDismiss={handleDeclarationOverlayDismiss}
         />
       )}
-      {/* ── Failed Declaration Reveal overlay (Sub-AC 26b) ─────────────────
-       *  Shown to ALL clients (players + spectators) when the server broadcasts
-       *  a declarationFailed event (incorrect declaration only).  Displays each
-       *  card in the half-suit with the claimed holder crossed out in red and
-       *  the actual holder highlighted in green.
-       *  Auto-dismisses after 6 seconds; player can also dismiss manually.
+      {/* ── Failed Declaration Reveal overlay ─────────────────
+       * Shown to ALL clients (players + spectators) when the server broadcasts
+       * a declarationFailed event (incorrect declaration only). Displays each
+       * card in the half-suit with the claimed holder crossed out in red and
+       * the actual holder highlighted in green.
+       * Auto-dismisses after 6 seconds; player can also dismiss manually.
        */}
       {showFailedReveal && declarationFailed && (
         <FailedDeclarationReveal
@@ -1134,10 +1134,10 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
 
-      {/* ── Elimination modal (Sub-AC 27b) ───────────────────────────────────
-       *  Shown ONLY to the human player whose hand was just emptied by a
-       *  declaration.  Prompts them to pick a teammate to receive future turns
-       *  on their behalf.  The game continues regardless of this choice.
+      {/* ── Elimination modal ───────────────────────────────────
+       * Shown ONLY to the human player whose hand was just emptied by a
+       * declaration. Prompts them to pick a teammate to receive future turns
+       * on their behalf. The game continues regardless of this choice.
        */}
       {eliminationPrompt && (
         <EliminationModal
@@ -1160,7 +1160,7 @@ export default function GamePage({ params }: PageProps) {
  *
  * `indicatorActive` is forwarded as `isActiveTurn` exclusively for the
  * local player's own seat so the amber glow clears the moment they submit
- * an ask or declaration (before the server responds).  All other seats
+ * an ask or declaration (before the server responds). All other seats
  * derive their active-turn state from `currentTurnPlayerId` as normal.
  */
 function PlayerRow({
@@ -1181,14 +1181,14 @@ function PlayerRow({
   /** Value from `useTurnIndicator` — drives the glow override for the local player's seat. */
   indicatorActive: boolean;
   /**
-   * Sub-AC 28b: Set of player IDs whose seats should show a cyan highlight
+   * Set of player IDs whose seats should show a cyan highlight
    * ring (eligible to receive the turn after a correct declaration).
    * When undefined, no seats are highlighted.
    */
   highlightedPlayerIds?: Set<string>;
   /**
-   * Sub-AC 28b: Called when the local player clicks a highlighted seat.
-   * Receives the playerId of the tapped seat.  Only provided to the
+   * Called when the local player clicks a highlighted seat.
+   * Receives the playerId of the tapped seat. Only provided to the
    * current turn player (the declarant); other players pass undefined.
    */
   onSeatClick?: (playerId: string) => void;
@@ -1208,7 +1208,7 @@ function PlayerRow({
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-3 lg:gap-5 xl:gap-6 flex-wrap">
       {seats.map((player, i) => {
-        // Sub-AC 28b: determine whether this seat should glow cyan
+        // determine whether this seat should glow cyan
         const isHl = Boolean(player && highlightedPlayerIds?.has(player.playerId));
         const isAskTarget = Boolean(player && askTargetPlayerIds?.has(player.playerId));
 
@@ -1224,7 +1224,7 @@ function PlayerRow({
             // For all other seats: undefined → seat derives from currentTurnPlayerId.
             isActiveTurn={player?.playerId === myPlayerId ? indicatorActive : undefined}
             voiceState={player ? getSeatState(player.playerId) : null}
-            // Sub-AC 28b: highlight eligible seats and wire click handler
+            // highlight eligible seats and wire click handler
             isHighlighted={isHl}
             onHighlightClick={
               isHl && onSeatClick && player

@@ -1,35 +1,35 @@
 'use strict';
 
 /**
- * Tests for Sub-AC 42a — Backend spectator URL generation and exposure.
+ * Tests for Backend spectator URL generation and exposure.
  *
  * Coverage:
  *
  * REST API tests (via supertest):
- *   1. GET /api/rooms/spectate/:token — happy path: returns roomCode + room
- *   2. GET /api/rooms/spectate/:token — 400 for invalid token format (too short)
- *   3. GET /api/rooms/spectate/:token — 400 for non-hex token
- *   4. GET /api/rooms/spectate/:token — 404 when token not found in DB
- *   5. GET /api/rooms/spectate/:token — normalises lowercase token to UPPERCASE
- *   6. GET /api/rooms/active — includes spectatorUrl for each room (matchmaking vs private)
- *   7. POST /api/rooms — response includes inviteLink and spectatorLink
- *   8. POST /api/rooms — spectatorLink uses token-based path (/spectate/<TOKEN>)
+ * 1. GET /api/rooms/spectate/:token — happy path: returns roomCode + room
+ * 2. GET /api/rooms/spectate/:token — 400 for invalid token format (too short)
+ * 3. GET /api/rooms/spectate/:token — 400 for non-hex token
+ * 4. GET /api/rooms/spectate/:token — 404 when token not found in DB
+ * 5. GET /api/rooms/spectate/:token — normalises lowercase token to UPPERCASE
+ * 6. GET /api/rooms/active — includes spectatorUrl for each room (matchmaking vs private)
+ * 7. POST /api/rooms — response includes inviteLink and spectatorLink
+ * 8. POST /api/rooms — spectatorLink uses token-based path (/spectate/<TOKEN>)
  *
  * roomSocketServer unit tests:
- *   9.  broadcast() sends to players AND spectators
- *  10.  broadcastToSpectators() sends ONLY to spectators, not players
- *  11.  Spectator is stored in roomSpectators, NOT roomClients
- *  12.  Players do NOT appear in roomSpectators
- *  13.  fetchRoomMetaWithToken is exported and returns spectator_token field
+ * 9. broadcast() sends to players AND spectators
+ * 10. broadcastToSpectators() sends ONLY to spectators, not players
+ * 11. Spectator is stored in roomSpectators, NOT roomClients
+ * 12. Players do NOT appear in roomSpectators
+ * 13. fetchRoomMetaWithToken is exported and returns spectator_token field
  *
  * WebSocket connection handler unit tests (pure-function level):
- *  14.  Spectator connection for a matchmaking room succeeds without spectator_token
- *  15.  Spectator connection for a private room succeeds with correct spectator_token
- *  16.  Spectator connection for a private room is rejected with invalid spectator_token
- *  17.  Spectator receives { type: 'connected', role: 'spectator' } on join
- *  18.  Spectator receives current room_players snapshot on join
- *  19.  Spectator message triggers a SPECTATOR error, not a crash
- *  20.  Spectator disconnect removes entry from roomSpectators
+ * 14. Spectator connection for a matchmaking room succeeds without spectator_token
+ * 15. Spectator connection for a private room succeeds with correct spectator_token
+ * 16. Spectator connection for a private room is rejected with invalid spectator_token
+ * 17. Spectator receives { type: 'connected', role: 'spectator' } on join
+ * 18. Spectator receives current room_players snapshot on join
+ * 19. Spectator message triggers a SPECTATOR error, not a crash
+ * 20. Spectator disconnect removes entry from roomSpectators
  */
 
 // ---------------------------------------------------------------------------
@@ -524,7 +524,7 @@ describe('roomSocketServer WS handler — spectator connection path', () => {
 
   /**
    * Simulate a WS 'connection' event by calling the internal connection
-   * handler directly.  This avoids spinning up a real HTTP server.
+   * handler directly. This avoids spinning up a real HTTP server.
    *
    * We monkey-patch the wss 'connection' listener so it is callable from tests.
    */
@@ -550,7 +550,7 @@ describe('roomSocketServer WS handler — spectator connection path', () => {
   }
 
   // ── Tests that work with the module's internal maps after simulating
-  //    key operations ──────────────────────────────────────────────────
+  // key operations ──────────────────────────────────────────────────
 
   it('[14] broadcast() does not throw when roomSpectators entry is missing', () => {
     const { broadcast } = require('../ws/roomSocketServer');

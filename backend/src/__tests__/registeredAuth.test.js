@@ -2,12 +2,12 @@
 
 /**
  * Integration tests for registered-user authentication routes:
- *   POST /api/auth/register  — create account with email + password
- *   POST /api/auth/login     — sign in; receive JWT
- *   POST /api/auth/logout    — invalidate session
- *   POST /api/auth/refresh   — exchange refresh token
+ * POST /api/auth/register — create account with email + password
+ * POST /api/auth/login — sign in; receive JWT
+ * POST /api/auth/logout — invalidate session
+ * POST /api/auth/refresh — exchange refresh token
  *
- * No real Supabase connections are made.  Both the service-role client
+ * No real Supabase connections are made. Both the service-role client
  * (getSupabaseClient) and the anon-key client (getAuthClient) are mocked.
  */
 
@@ -21,8 +21,8 @@ const request = require('supertest');
  * (Re)load the Express app with fresh module state and optional mock clients.
  *
  * @param {object} [opts]
- * @param {object} [opts.mockAdmin]   — Mock for getSupabaseClient() (service role)
- * @param {object} [opts.mockAuth]    — Mock for getAuthClient() (anon key)
+ * @param {object} [opts.mockAdmin] — Mock for getSupabaseClient() (service role)
+ * @param {object} [opts.mockAuth] — Mock for getAuthClient() (anon key)
  */
 function loadApp({ mockAdmin, mockAuth } = {}) {
   jest.resetModules();
@@ -52,10 +52,10 @@ function loadApp({ mockAdmin, mockAuth } = {}) {
  * Build a mock Supabase admin client (service-role operations).
  *
  * @param {object} opts
- * @param {object} opts.createUserResult   — Return value of admin.createUser()
- * @param {object} [opts.signOutResult]    — Return value of admin.signOut()
- * @param {object} [opts.fromResult]       — Chainable .from().insert() mock
- * @param {object} [opts.getUserResult]    — Return value of auth.getUser()
+ * @param {object} opts.createUserResult — Return value of admin.createUser()
+ * @param {object} [opts.signOutResult] — Return value of admin.signOut()
+ * @param {object} [opts.fromResult] — Chainable.from().insert() mock
+ * @param {object} [opts.getUserResult] — Return value of auth.getUser()
  */
 function buildAdminMock({
   createUserResult,
@@ -84,8 +84,8 @@ function buildAdminMock({
  * Build a mock Supabase anon-key client (user-facing auth flows).
  *
  * @param {object} opts
- * @param {object} opts.signInResult      — Return value of auth.signInWithPassword()
- * @param {object} [opts.refreshResult]   — Return value of auth.refreshSession()
+ * @param {object} opts.signInResult — Return value of auth.signInWithPassword()
+ * @param {object} [opts.refreshResult] — Return value of auth.refreshSession()
  */
 function buildAuthMock({
   signInResult,

@@ -4,25 +4,25 @@
  * Tests for RematchVotePanel component.
  *
  * Coverage:
- *   Rendering states:
- *     1. Shows "Waiting for rematch vote…" when both rematchVote and rematchDeclined are null
- *     2. Shows decline panel with reason "Vote timed out" when rematchDeclined.reason is 'timeout'
- *     3. Shows decline panel with reason "Majority voted no" when rematchDeclined.reason is 'majority_no'
- *     4. Renders the vote panel when rematchVote is provided
- *     5. Shows correct tally text (e.g. "2 / 6 voted yes · need 4")
- *     6. Renders Yes and No buttons for a human local player who hasn't voted
- *     7. Does NOT render vote buttons for bots (myPlayerId is a bot in playerVotes)
- *     8. Renders player vote list with all players
- *     9. Shows ✔ Yes for players who voted yes
- *    10. Shows ✘ No for players who voted no
- *    11. Shows … for players who haven't voted
- *    12. Shows countdown timer element
- *   Interaction:
- *    13. Clicking Yes button calls onVote(true)
- *    14. Clicking No button calls onVote(false)
- *    15. Buttons are disabled after voting (pressing Yes disables both buttons)
- *    16. aria-pressed is set correctly after voting
- *    17. Server-side pre-cast vote disables buttons (myCurrentVote not null)
+ * Rendering states:
+ * 1. Shows "Waiting for rematch vote…" when both rematchVote and rematchDeclined are null
+ * 2. Shows decline panel with reason "Vote timed out" when rematchDeclined.reason is 'timeout'
+ * 3. Shows decline panel with reason "Majority voted no" when rematchDeclined.reason is 'majority_no'
+ * 4. Renders the vote panel when rematchVote is provided
+ * 5. Shows correct tally text (e.g. "2 6 voted yes · need 4")
+ * 6. Renders Yes and No buttons for a human local player who hasn't voted
+ * 7. Does NOT render vote buttons for bots (myPlayerId is a bot in playerVotes)
+ * 8. Renders player vote list with all players
+ * 9. Shows ✔ Yes for players who voted yes
+ * 10. Shows ✘ No for players who voted no
+ * 11. Shows … for players who haven't voted
+ * 12. Shows countdown timer element
+ * Interaction:
+ * 13. Clicking Yes button calls onVote(true)
+ * 14. Clicking No button calls onVote(false)
+ * 15. Buttons are disabled after voting (pressing Yes disables both buttons)
+ * 16. aria-pressed is set correctly after voting
+ * 17. Server-side pre-cast vote disables buttons (myCurrentVote not null)
  */
 
 import React from 'react';
