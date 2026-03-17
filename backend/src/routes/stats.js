@@ -243,7 +243,7 @@ router.get('/profile/by-username/:username', async (req, res) => {
  * GET /api/stats/game-summary/:roomCode
  *
  * Returns a post-game summary for a completed game, aggregating declaration
- * attempts, successes, and failures per player from the persisted game_state.
+ * and ask-card statistics per player from the persisted game_state.
  *
  * Path params:
  *   roomCode  {string}  6-character room code
@@ -252,15 +252,22 @@ router.get('/profile/by-username/:username', async (req, res) => {
  *   {
  *     roomCode,
  *     winner: 1 | 2 | null,
+ *     tiebreakerWinner: 1 | 2 | null,
  *     scores: { team1, team2 },
  *     variant: 'remove_2s' | 'remove_7s' | 'remove_8s',
+ *     declaredSuits: [ { halfSuitId, teamId, declaredBy } ],
  *     playerSummaries: [
  *       {
  *         playerId, displayName, avatarId, teamId,
  *         isBot, isGuest,
- *         declarationAttempts, declarationSuccesses, declarationFailures
+ *         declarationAttempts, declarationSuccesses, declarationFailures,
+ *         askAttempts, askSuccesses, askFailures,
+ *         repeatedAskAttempts, cardsWonFromOpponents,
+ *         mostTargetedOpponentId, mostTargetedOpponentAskCount,
+ *         averageMoveTimeMs
  *       }
- *     ]
+ *     ],
+ *     mvpPlayerId: string | null
  *   }
  *
  * Errors:
@@ -302,6 +309,14 @@ router.get('/game-summary/:roomCode', async (req, res) => {
       return res.status(404).json({ error: 'Game state not available for this room' });
     }
 
+    const declaredSuits = Object.entries(gs.declaredSuits || {}).map(
+      ([halfSuitId, info]) => ({
+        halfSuitId,
+        teamId: info.teamId,
+        declaredBy: info.declaredBy,
+      })
+    );
+
     // Build a lookup map of playerId → player info from the players array
     const players = Array.isArray(gs.players) ? gs.players : [];
     const playerMap = {};
@@ -311,57 +326,195 @@ router.get('/game-summary/:roomCode', async (req, res) => {
         displayName: p.displayName || null,
         avatarId: p.avatarId || null,
         teamId: p.teamId,
+        seatIndex: typeof p.seatIndex === 'number' ? p.seatIndex : Number.MAX_SAFE_INTEGER,
         isBot: p.isBot === true,
         isGuest: p.isGuest === true,
         declarationAttempts: 0,
         declarationSuccesses: 0,
         declarationFailures: 0,
+        askAttempts: 0,
+        askSuccesses: 0,
+        askFailures: 0,
+        repeatedAskAttempts: 0,
+        cardsWonFromOpponents: 0,
+        mostTargetedOpponentId: null,
+        mostTargetedOpponentAskCount: 0,
+        totalMoveTimeMs: 0,
+        timedMoveCount: 0,
       };
     }
 
-    // Walk the move history and accumulate declaration stats per player
+    // Walk the move history and accumulate declaration / ask stats per player.
+    // A "repeated ask" means the asker's team had already asked the same target
+    // for the same card earlier in the match.
     const moveHistory = Array.isArray(gs.moveHistory) ? gs.moveHistory : [];
+    const seenTeamAskKeys = new Set();
+    const askTargetCountsByAsker = new Map();
     for (const move of moveHistory) {
-      if (move.type !== 'declaration' && move.type !== 'forced_failed_declaration') {
+      if (move.type === 'declaration' || move.type === 'forced_failed_declaration') {
+        const declarerId = move.declarerId;
+        if (!declarerId) continue;
+
+        // Include declarers who may have been eliminated / are bots (they exist in playerMap)
+        if (!playerMap[declarerId]) {
+          // Player not in the players list (unlikely but guard anyway)
+          playerMap[declarerId] = {
+            playerId: declarerId,
+            displayName: null,
+            avatarId: null,
+            teamId: null,
+            seatIndex: Number.MAX_SAFE_INTEGER,
+            isBot: false,
+            isGuest: false,
+            declarationAttempts: 0,
+            declarationSuccesses: 0,
+            declarationFailures: 0,
+            askAttempts: 0,
+            askSuccesses: 0,
+            askFailures: 0,
+            repeatedAskAttempts: 0,
+            cardsWonFromOpponents: 0,
+            mostTargetedOpponentId: null,
+            mostTargetedOpponentAskCount: 0,
+            totalMoveTimeMs: 0,
+            timedMoveCount: 0,
+          };
+        }
+
+        playerMap[declarerId].declarationAttempts += 1;
+        if (move.correct === true) {
+          playerMap[declarerId].declarationSuccesses += 1;
+        } else {
+          playerMap[declarerId].declarationFailures += 1;
+        }
         continue;
       }
 
-      const declarerId = move.declarerId;
-      if (!declarerId) continue;
+      if (move.type !== 'ask') continue;
 
-      // Include declarers who may have been eliminated / are bots (they exist in playerMap)
-      if (!playerMap[declarerId]) {
-        // Player not in the players list (unlikely but guard anyway)
-        playerMap[declarerId] = {
-          playerId: declarerId,
-          displayName: null,
-          avatarId: null,
-          teamId: null,
-          isBot: false,
-          isGuest: false,
-          declarationAttempts: 0,
-          declarationSuccesses: 0,
-          declarationFailures: 0,
-        };
+      const askerId = move.askerId;
+      if (!askerId || !playerMap[askerId]) continue;
+
+      const askerSummary = playerMap[askerId];
+      askerSummary.askAttempts += 1;
+
+      if (move.targetId) {
+        let targetCounts = askTargetCountsByAsker.get(askerId);
+        if (!targetCounts) {
+          targetCounts = new Map();
+          askTargetCountsByAsker.set(askerId, targetCounts);
+        }
+        targetCounts.set(move.targetId, (targetCounts.get(move.targetId) ?? 0) + 1);
       }
 
-      playerMap[declarerId].declarationAttempts += 1;
-      if (move.correct === true) {
-        playerMap[declarerId].declarationSuccesses += 1;
+      if (move.success === true) {
+        askerSummary.askSuccesses += 1;
+        askerSummary.cardsWonFromOpponents += 1;
       } else {
-        playerMap[declarerId].declarationFailures += 1;
+        askerSummary.askFailures += 1;
+      }
+
+      const teamScope = askerSummary.teamId != null
+        ? `team:${askerSummary.teamId}`
+        : `player:${askerId}`;
+      const askKey = `${teamScope}|${move.targetId || ''}|${move.cardId || ''}`;
+      if (seenTeamAskKeys.has(askKey)) {
+        askerSummary.repeatedAskAttempts += 1;
+      } else {
+        seenTeamAskKeys.add(askKey);
       }
     }
 
+    for (let i = 1; i < moveHistory.length; i++) {
+      const move = moveHistory[i];
+      const prevMove = moveHistory[i - 1];
+      const moveTs = typeof move.ts === 'number' ? move.ts : null;
+      const prevTs = typeof prevMove?.ts === 'number' ? prevMove.ts : null;
+      if (moveTs == null || prevTs == null || moveTs < prevTs) continue;
+
+      const actorId =
+        move.type === 'ask'
+          ? move.askerId
+          : move.type === 'declaration' || move.type === 'forced_failed_declaration'
+            ? move.declarerId
+            : null;
+
+      if (!actorId || !playerMap[actorId]) continue;
+
+      playerMap[actorId].totalMoveTimeMs += moveTs - prevTs;
+      playerMap[actorId].timedMoveCount += 1;
+    }
+
+    for (const [askerId, targetCounts] of askTargetCountsByAsker.entries()) {
+      const askerSummary = playerMap[askerId];
+      if (!askerSummary) continue;
+
+      const bestTargetId = Array.from(targetCounts.entries())
+        .sort((a, b) => {
+          if (b[1] !== a[1]) return b[1] - a[1];
+          const targetASeat = playerMap[a[0]]?.seatIndex ?? Number.MAX_SAFE_INTEGER;
+          const targetBSeat = playerMap[b[0]]?.seatIndex ?? Number.MAX_SAFE_INTEGER;
+          return targetASeat - targetBSeat;
+        })[0];
+
+      if (bestTargetId) {
+        askerSummary.mostTargetedOpponentId = bestTargetId[0];
+        askerSummary.mostTargetedOpponentAskCount = bestTargetId[1];
+      }
+    }
+
+    // MVP = highest ask success rate, then most cards won from opponents,
+    // then more ask attempts, then earlier seat order.
+    const mvpCandidate = players
+      .map((p) => playerMap[p.playerId])
+      .filter((summary) => summary && summary.askAttempts > 0)
+      .sort((a, b) => {
+        const left = a.askSuccesses * b.askAttempts;
+        const right = b.askSuccesses * a.askAttempts;
+        if (left !== right) return right - left;
+        if (b.cardsWonFromOpponents !== a.cardsWonFromOpponents) {
+          return b.cardsWonFromOpponents - a.cardsWonFromOpponents;
+        }
+        if (b.askAttempts !== a.askAttempts) return b.askAttempts - a.askAttempts;
+        return a.seatIndex - b.seatIndex;
+      })[0] ?? null;
+
     // Convert the map to an array preserving original seat order
-    const playerSummaries = players.map((p) => playerMap[p.playerId]);
+    const playerSummaries = players.map((p) => {
+      const summary = playerMap[p.playerId];
+      return {
+        playerId: summary.playerId,
+        displayName: summary.displayName,
+        avatarId: summary.avatarId,
+        teamId: summary.teamId,
+        isBot: summary.isBot,
+        isGuest: summary.isGuest,
+        declarationAttempts: summary.declarationAttempts,
+        declarationSuccesses: summary.declarationSuccesses,
+        declarationFailures: summary.declarationFailures,
+        askAttempts: summary.askAttempts,
+        askSuccesses: summary.askSuccesses,
+        askFailures: summary.askFailures,
+        repeatedAskAttempts: summary.repeatedAskAttempts,
+        cardsWonFromOpponents: summary.cardsWonFromOpponents,
+        mostTargetedOpponentId: summary.mostTargetedOpponentId,
+        mostTargetedOpponentAskCount: summary.mostTargetedOpponentAskCount,
+        averageMoveTimeMs:
+          summary.timedMoveCount > 0
+            ? Math.round(summary.totalMoveTimeMs / summary.timedMoveCount)
+            : null,
+      };
+    });
 
     return res.status(200).json({
       roomCode: data.code,
       winner: gs.winner !== undefined ? gs.winner : null,
+      tiebreakerWinner: gs.tiebreakerWinner !== undefined ? gs.tiebreakerWinner : null,
       scores: gs.scores || { team1: 0, team2: 0 },
       variant: gs.variant || null,
+      declaredSuits,
       playerSummaries,
+      mvpPlayerId: mvpCandidate ? mvpCandidate.playerId : null,
     });
   } catch (err) {
     console.error('Unexpected error fetching game summary:', err);

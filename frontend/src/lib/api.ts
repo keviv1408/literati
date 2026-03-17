@@ -19,6 +19,7 @@ import type {
   CreateRoomResponse,
   InviteCodeResponse,
 } from '@/types/room';
+import type { GameSummaryResponse } from '@/types/game';
 
 export interface VoiceJoinResponse {
   roomName: string;
@@ -263,6 +264,17 @@ export async function createRoom(
     }
     throw err;
   }
+}
+
+/**
+ * GET /api/stats/game-summary/:roomCode
+ *
+ * Public completed-game summary with per-player declaration and ask metrics.
+ */
+export async function getGameSummary(roomCode: string): Promise<GameSummaryResponse> {
+  return apiFetch<GameSummaryResponse>(`/api/stats/game-summary/${roomCode.toUpperCase()}`, {
+    method: 'GET',
+  });
 }
 
 /**

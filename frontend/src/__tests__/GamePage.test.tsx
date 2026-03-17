@@ -34,8 +34,10 @@ jest.mock('next/navigation', () => ({
 
 // Mock the API module
 const mockGetRoomByCode = jest.fn();
+const mockGetGameSummary = jest.fn();
 jest.mock('@/lib/api', () => ({
   getRoomByCode: (...args: unknown[]) => mockGetRoomByCode(...args),
+  getGameSummary: (...args: unknown[]) => mockGetGameSummary(...args),
   getGuestBearerToken: jest.fn().mockResolvedValue('mock-bearer-token'),
   ApiError: class ApiError extends Error {
     constructor(
@@ -156,6 +158,58 @@ function makeParams(roomId: string): Promise<{ 'room-id': string }> {
 beforeEach(() => {
   jest.clearAllMocks();
   lastMockWsInstance = null;
+  mockGetGameSummary.mockResolvedValue({
+    roomCode: 'ABC123',
+    winner: 1,
+    tiebreakerWinner: null,
+    scores: { team1: 5, team2: 3 },
+    variant: 'remove_7s',
+    declaredSuits: [
+      { halfSuitId: 'low_s', teamId: 1, declaredBy: 'p1' },
+      { halfSuitId: 'high_s', teamId: 2, declaredBy: 'p2' },
+    ],
+    mvpPlayerId: 'p1',
+    playerSummaries: [
+      {
+        playerId: 'p1',
+        displayName: 'Alice',
+        avatarId: null,
+        teamId: 1,
+        isBot: false,
+        isGuest: false,
+        declarationAttempts: 1,
+        declarationSuccesses: 1,
+        declarationFailures: 0,
+        askAttempts: 2,
+        askSuccesses: 2,
+        askFailures: 0,
+        repeatedAskAttempts: 0,
+        cardsWonFromOpponents: 2,
+        mostTargetedOpponentId: 'p2',
+        mostTargetedOpponentAskCount: 2,
+        averageMoveTimeMs: 5900,
+      },
+      {
+        playerId: 'p2',
+        displayName: 'Bob',
+        avatarId: null,
+        teamId: 2,
+        isBot: false,
+        isGuest: false,
+        declarationAttempts: 0,
+        declarationSuccesses: 0,
+        declarationFailures: 0,
+        askAttempts: 1,
+        askSuccesses: 0,
+        askFailures: 1,
+        repeatedAskAttempts: 1,
+        cardsWonFromOpponents: 0,
+        mostTargetedOpponentId: 'p1',
+        mostTargetedOpponentAskCount: 1,
+        averageMoveTimeMs: 4200,
+      },
+    ],
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -331,6 +385,9 @@ describe('GamePage — completed room', () => {
       expect(screen.getByTestId('game-completed-view')).toBeTruthy();
     });
     expect(screen.getByText('Game Over')).toBeTruthy();
+    await waitFor(() => {
+      expect(mockGetGameSummary).toHaveBeenCalledWith('ABC123');
+    });
   });
 
   it('shows final score as 0-0 when no game state is available', async () => {
@@ -345,6 +402,30 @@ describe('GamePage — completed room', () => {
     expect(screen.getByTestId('final-score')).toBeTruthy();
     expect(screen.getByTestId('score-team1')).toBeTruthy();
     expect(screen.getByTestId('score-team2')).toBeTruthy();
+  });
+
+  it('falls back to game summary data for final score and half-suit tally', async () => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('score-team1').textContent).toBe('5');
+    });
+    expect(screen.getByTestId('score-team2').textContent).toBe('3');
+    expect(screen.getByLabelText('Low Spades: Team 1')).toBeTruthy();
+    expect(screen.getByLabelText('High Spades: Team 2')).toBeTruthy();
+  });
+
+  it('renders the ask stats table once the completed-game summary loads', async () => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ask-stats-table')).toBeTruthy();
+    });
+    expect(screen.getByTestId('match-mvp-card')).toBeTruthy();
   });
 });
 

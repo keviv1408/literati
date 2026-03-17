@@ -20,7 +20,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getRoomByCode, getGuestBearerToken, ApiError } from '@/lib/api';
+import { getRoomByCode, getGuestBearerToken, getGameSummary, ApiError } from '@/lib/api';
 import { unlockGameAudio } from '@/lib/audio';
 import { getCachedToken } from '@/lib/backendSession';
 import { useGuest } from '@/contexts/GuestContext';
@@ -55,7 +55,7 @@ import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
 import { cardLabel, getCardHalfSuit } from '@/types/game';
-import type { CardId, HalfSuitId, GameOverPayload } from '@/types/game';
+import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -88,6 +88,7 @@ export default function GamePage({ params }: PageProps) {
   const [selectedAskCard, setSelectedAskCard] = useState<CardId | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [gameOver, setGameOver]           = useState<GameOverPayload | null>(null);
+  const [gameSummary, setGameSummary]     = useState<GameSummaryResponse | null>(null);
   const [rematchStarted, setRematchStarted] = useState(false);
   const [voteStartedAt, setVoteStartedAt]   = useState<number | undefined>(undefined);
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
@@ -171,6 +172,10 @@ export default function GamePage({ params }: PageProps) {
     return () => { cancelled = true; };
   }, [roomCode, router]);
 
+  useEffect(() => {
+    setGameSummary(null);
+  }, [roomCode]);
+
   const isGameActive = room?.status === 'in_progress' || room?.status === 'starting' || room?.status === 'completed';
 
   const {
@@ -221,6 +226,39 @@ export default function GamePage({ params }: PageProps) {
   // Computed here — after useGameSocket — because it depends on `declarationFailed`
   // which is destructured from the hook above.
   const showFailedReveal = Boolean(declarationFailed && !failedRevealDismissed);
+
+  const shouldLoadGameSummary = Boolean(
+    roomCode &&
+    (room?.status === 'completed' || gameState?.status === 'completed' || gameOver),
+  );
+
+  useEffect(() => {
+    if (!roomCode || !shouldLoadGameSummary) return;
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+
+    const loadSummary = async () => {
+      attempt += 1;
+      try {
+        const summary = await getGameSummary(roomCode);
+        if (!cancelled) {
+          setGameSummary(summary);
+        }
+      } catch {
+        if (cancelled || attempt >= 5) return;
+        retryTimer = setTimeout(loadSummary, attempt === 1 ? 300 : 1000);
+      }
+    };
+
+    loadSummary();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [roomCode, shouldLoadGameSummary]);
 
   // ── Audio sound callbacks ─────────────────────────────────────────────────
   //
@@ -554,7 +592,28 @@ export default function GamePage({ params }: PageProps) {
     );
   }
 
-  const finalGameOver = gameOver ?? (gameState?.status === 'completed' ? { type: 'game_over' as const, winner: gameState.winner ?? null, tiebreakerWinner: gameState.tiebreakerWinner ?? null, scores: gameState.scores } : null);
+  const finalGameOver =
+    gameOver ??
+    (gameState?.status === 'completed'
+      ? {
+          type: 'game_over' as const,
+          winner: gameState.winner ?? null,
+          tiebreakerWinner: gameState.tiebreakerWinner ?? null,
+          scores: gameState.scores,
+        }
+      : gameSummary
+        ? {
+            type: 'game_over' as const,
+            winner: gameSummary.winner ?? null,
+            tiebreakerWinner: gameSummary.tiebreakerWinner ?? null,
+            scores: gameSummary.scores,
+          }
+        : null);
+
+  const finalDeclaredSuits =
+    gameState?.declaredSuits && gameState.declaredSuits.length > 0
+      ? gameState.declaredSuits
+      : (gameSummary?.declaredSuits ?? []);
 
   if (finalGameOver || room.status === 'completed') {
     const { winner, scores, tiebreakerWinner } = finalGameOver ?? { winner: null as 1 | 2 | null, tiebreakerWinner: null as 1 | 2 | null, scores: { team1: 0, team2: 0 } };
@@ -585,9 +644,12 @@ export default function GamePage({ params }: PageProps) {
           winner={winner ?? null}
           tiebreakerWinner={tiebreakerWinner ?? null}
           scores={scores}
-          declaredSuits={gameState?.declaredSuits ?? []}
+          declaredSuits={finalDeclaredSuits}
           myTeamId={myTeamId}
+          myPlayerId={myPlayerId}
           players={players}
+          playerSummaries={gameSummary?.playerSummaries}
+          mvpPlayerId={gameSummary?.mvpPlayerId ?? null}
           variant={VARIANT_LABELS[room.card_removal_variant]}
           roomCode={room.code}
           testId="game-over-screen"

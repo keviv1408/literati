@@ -24,7 +24,7 @@
  */
 
 import React from 'react';
-import type { DeclaredSuit, GamePlayer, HalfSuitId } from '@/types/game';
+import type { DeclaredSuit, GamePlayer, GameSummaryPlayer, HalfSuitId } from '@/types/game';
 import { halfSuitLabel, SUIT_SYMBOLS } from '@/types/game';
 
 // ── Canonical half-suit order ─────────────────────────────────────────────────
@@ -45,6 +45,28 @@ const TIEBREAKER_HALF_SUIT: HalfSuitId = 'high_d';
 
 function getTierLabel(halfSuitId: HalfSuitId): string {
   return halfSuitId.startsWith('low_') ? 'Low' : 'High';
+}
+
+function formatPercent(numerator: number, denominator: number): string {
+  if (denominator <= 0) return '-';
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function formatMoveTime(ms: number | null): string {
+  if (ms == null || ms < 0) return '-';
+  const seconds = Math.round(ms / 100) / 10;
+  return `${seconds}s`;
+}
+
+function formatMostTargetedOpponent(
+  summary: GameSummaryPlayer,
+  playerNameById: Map<string, string>,
+): string {
+  if (!summary.mostTargetedOpponentId || summary.mostTargetedOpponentAskCount <= 0) {
+    return '-';
+  }
+  const opponentName = playerNameById.get(summary.mostTargetedOpponentId) ?? summary.mostTargetedOpponentId;
+  return `${opponentName} (${summary.mostTargetedOpponentAskCount})`;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -92,12 +114,18 @@ export interface GameOverScreenProps {
   declaredSuits: DeclaredSuit[];
   /** null = spectator; undefined = not yet known */
   myTeamId?: 1 | 2 | null;
+  /** Optional exact local-player id for row highlighting. */
+  myPlayerId?: string | null;
   /**
    * Full player roster from the final game state.  When provided, a per-player
    * declaration stats table (attempts / successes / failures) is rendered below
    * the half-suit tally.  When omitted the table is hidden.
    */
   players?: GamePlayer[];
+  /** Optional post-game summary rows fetched from the backend stats API. */
+  playerSummaries?: GameSummaryPlayer[];
+  /** Optional MVP player id computed by the backend summary endpoint. */
+  mvpPlayerId?: string | null;
   /** Optional: card-removal variant label e.g. "Remove 7s (Classic)" */
   variant?: string;
   /** Optional: room code for subtitle display */
@@ -185,7 +213,10 @@ export default function GameOverScreen({
   scores,
   declaredSuits,
   myTeamId,
+  myPlayerId,
   players,
+  playerSummaries,
+  mvpPlayerId,
   variant,
   roomCode,
   testId = 'game-over-screen',
@@ -204,6 +235,42 @@ export default function GameOverScreen({
     () => (players && players.length > 0 ? computePlayerStats(declaredSuits, players) : []),
     [declaredSuits, players],
   );
+
+  const sortedPlayerSummaries = React.useMemo(() => {
+    if (!playerSummaries || playerSummaries.length === 0) return [];
+    return [...playerSummaries].sort((a, b) => {
+      if (a.teamId !== b.teamId) return a.teamId - b.teamId;
+      const left = a.askSuccesses * b.askAttempts;
+      const right = b.askSuccesses * a.askAttempts;
+      if (left !== right) return right - left;
+      if (b.cardsWonFromOpponents !== a.cardsWonFromOpponents) {
+        return b.cardsWonFromOpponents - a.cardsWonFromOpponents;
+      }
+      return b.askAttempts - a.askAttempts;
+    });
+  }, [playerSummaries]);
+
+  const mvpSummary = React.useMemo(
+    () => sortedPlayerSummaries.find((summary) => summary.playerId === mvpPlayerId) ?? null,
+    [mvpPlayerId, sortedPlayerSummaries],
+  );
+
+  const playerNameById = React.useMemo(() => {
+    const result = new Map<string, string>();
+    if (players) {
+      for (const player of players) {
+        result.set(player.playerId, player.displayName);
+      }
+    }
+    if (playerSummaries) {
+      for (const summary of playerSummaries) {
+        if (summary.displayName) {
+          result.set(summary.playerId, summary.displayName);
+        }
+      }
+    }
+    return result;
+  }, [playerSummaries, players]);
 
   const isTie = winner === null || scores.team1 === scores.team2;
   const isWinner = !isTie && myTeamId !== null && myTeamId !== undefined && winner === myTeamId;
@@ -226,7 +293,7 @@ export default function GameOverScreen({
 
   return (
     <div
-      className="flex flex-col items-center gap-6 w-full max-w-lg mx-auto"
+      className="flex flex-col items-center gap-6 w-full max-w-4xl mx-auto"
       data-testid={testId}
       role="main"
       aria-label="Game over"
@@ -306,7 +373,7 @@ export default function GameOverScreen({
 
       {/* ── Half-suit tally ────────────────────────────────────────────────── */}
       <section
-        className="w-full"
+        className="w-full max-w-xl"
         data-testid="half-suit-tally"
         aria-label="Half-suit tally"
       >
@@ -385,6 +452,30 @@ export default function GameOverScreen({
         </div>
       </section>
 
+      {/* ── Match MVP ─────────────────────────────────────────────────────── */}
+      {mvpSummary && (
+        <section
+          className="w-full max-w-xl rounded-2xl border border-amber-500/30 bg-amber-950/20 px-5 py-4 text-center"
+          data-testid="match-mvp-card"
+          aria-label="Match MVP"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-300/80 mb-2">
+            Match MVP
+          </p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <span className="text-2xl" aria-hidden="true">🏅</span>
+            <span className="text-lg font-semibold text-white" data-testid={`match-mvp-name-${mvpSummary.playerId}`}>
+              {mvpSummary.displayName ?? 'Unknown Player'}
+            </span>
+            <TeamBadge teamId={mvpSummary.teamId} size="xs" />
+          </div>
+          <p className="text-sm text-amber-100/80">
+            {formatPercent(mvpSummary.askSuccesses, mvpSummary.askAttempts)} ask success
+            {' '}with {mvpSummary.cardsWonFromOpponents} card{mvpSummary.cardsWonFromOpponents === 1 ? '' : 's'} won from the opposing team.
+          </p>
+        </section>
+      )}
+
       {/* ── Per-player declaration stats ───────────────────────────────────── */}
       {playerStats.length > 0 && (
         <section
@@ -412,7 +503,9 @@ export default function GameOverScreen({
             {/* Player rows */}
             {playerStats.map((stat, idx) => {
               const isEven = idx % 2 === 0;
-              const isMe = stat.teamId === myTeamId;
+              const isMe = myPlayerId
+                ? stat.playerId === myPlayerId
+                : stat.teamId === myTeamId;
               const teamColour =
                 stat.teamId === 1
                   ? 'text-emerald-300'
@@ -482,6 +575,117 @@ export default function GameOverScreen({
                 </div>
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Per-player ask stats ──────────────────────────────────────────── */}
+      {sortedPlayerSummaries.length > 0 && (
+        <section
+          className="w-full"
+          data-testid="ask-stats-table"
+          aria-label="Player ask statistics"
+        >
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 text-center mb-3">
+            Ask Stats
+          </h2>
+
+          <div className="w-full rounded-xl overflow-x-auto border border-slate-700/40">
+            <div className="min-w-[860px]">
+              <div
+                className="grid grid-cols-[minmax(180px,1.2fr)_72px_92px_92px_96px_88px_minmax(140px,1fr)] gap-x-3 px-3 py-2 bg-slate-700/30 border-b border-slate-700/40"
+                aria-hidden="true"
+              >
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Player</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">Asks</span>
+                <span className="text-xs font-semibold text-emerald-400/80 uppercase tracking-wide text-center">Success %</span>
+                <span className="text-xs font-semibold text-amber-300/80 uppercase tracking-wide text-center">Repeat %</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">Cards Won</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">Avg Time</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Most Targeted</span>
+              </div>
+
+              {sortedPlayerSummaries.map((summary, idx) => {
+                const isEven = idx % 2 === 0;
+                const isMe = myPlayerId
+                  ? summary.playerId === myPlayerId
+                  : summary.teamId === myTeamId;
+                const teamColour = summary.teamId === 1 ? 'text-emerald-300' : 'text-violet-300';
+                const successPct = formatPercent(summary.askSuccesses, summary.askAttempts);
+                const repeatPct = formatPercent(summary.repeatedAskAttempts, summary.askAttempts);
+                const avgMoveTime = formatMoveTime(summary.averageMoveTimeMs);
+                const mostTargetedLabel = formatMostTargetedOpponent(summary, playerNameById);
+
+                return (
+                  <div
+                    key={summary.playerId}
+                    className={[
+                      'grid grid-cols-[minmax(180px,1.2fr)_72px_92px_92px_96px_88px_minmax(140px,1fr)] gap-x-3 px-3 py-2 items-center',
+                      isEven ? 'bg-slate-800/30' : 'bg-slate-800/10',
+                      isMe ? 'ring-1 ring-inset ring-emerald-700/40' : '',
+                    ].filter(Boolean).join(' ')}
+                    data-testid={`ask-stats-row-${summary.playerId}`}
+                    aria-label={`${summary.displayName}: ${summary.askAttempts} asks, ${successPct} success rate, ${repeatPct} repeated asks, ${summary.cardsWonFromOpponents} cards won, ${avgMoveTime} average move time, most targeted ${mostTargetedLabel}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <TeamBadge teamId={summary.teamId} size="xs" />
+                      <span
+                        className={`text-sm font-medium truncate ${isMe ? 'text-white' : teamColour}`}
+                        data-testid={`ask-stats-player-name-${summary.playerId}`}
+                      >
+                        {summary.displayName ?? 'Unknown Player'}
+                        {isMe && (
+                          <span className="ml-1 text-xs text-emerald-400 font-normal">(You)</span>
+                        )}
+                      </span>
+                    </div>
+
+                    <span
+                      className="text-sm tabular-nums text-slate-300 text-center"
+                      data-testid={`ask-stats-attempts-${summary.playerId}`}
+                    >
+                      {summary.askAttempts}
+                    </span>
+
+                    <span
+                      className={`text-sm tabular-nums font-semibold text-center ${summary.askSuccesses > 0 ? 'text-emerald-400' : 'text-slate-500'}`}
+                      data-testid={`ask-stats-success-rate-${summary.playerId}`}
+                    >
+                      {successPct}
+                    </span>
+
+                    <span
+                      className={`text-sm tabular-nums font-semibold text-center ${summary.repeatedAskAttempts > 0 ? 'text-amber-300' : 'text-slate-500'}`}
+                      data-testid={`ask-stats-repeat-rate-${summary.playerId}`}
+                    >
+                      {repeatPct}
+                    </span>
+
+                    <span
+                      className="text-sm tabular-nums text-slate-300 text-center"
+                      data-testid={`ask-stats-cards-won-${summary.playerId}`}
+                    >
+                      {summary.cardsWonFromOpponents}
+                    </span>
+
+                    <span
+                      className="text-sm tabular-nums text-slate-300 text-center"
+                      data-testid={`ask-stats-avg-time-${summary.playerId}`}
+                    >
+                      {avgMoveTime}
+                    </span>
+
+                    <span
+                      className="text-sm text-slate-300 truncate"
+                      data-testid={`ask-stats-most-targeted-${summary.playerId}`}
+                      title={mostTargetedLabel}
+                    >
+                      {mostTargetedLabel}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
       )}

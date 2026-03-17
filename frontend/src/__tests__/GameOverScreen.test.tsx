@@ -55,7 +55,7 @@
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import GameOverScreen, { computePlayerStats } from '@/components/GameOverScreen';
-import type { DeclaredSuit, GamePlayer } from '@/types/game';
+import type { DeclaredSuit, GamePlayer, GameSummaryPlayer } from '@/types/game';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +121,66 @@ const MIXED_DECLARATIONS: DeclaredSuit[] = [
   { halfSuitId: 'high_h', teamId: 1, declaredBy: 'p4' }, // p4 failure (T2 declared, T1 got point)
   { halfSuitId: 'low_c',  teamId: 2, declaredBy: 'p4' }, // p4 success
   { halfSuitId: 'high_c', teamId: 2, declaredBy: 'p6' }, // p6 success
+];
+
+const ASK_SUMMARIES: GameSummaryPlayer[] = [
+  {
+    playerId: 'p1',
+    displayName: 'Alice',
+    avatarId: null,
+    teamId: 1,
+    isBot: false,
+    isGuest: false,
+    declarationAttempts: 2,
+    declarationSuccesses: 1,
+    declarationFailures: 1,
+    askAttempts: 3,
+    askSuccesses: 2,
+    askFailures: 1,
+    repeatedAskAttempts: 1,
+    cardsWonFromOpponents: 2,
+    mostTargetedOpponentId: 'p2',
+    mostTargetedOpponentAskCount: 2,
+    averageMoveTimeMs: 6400,
+  },
+  {
+    playerId: 'p2',
+    displayName: 'Bob',
+    avatarId: null,
+    teamId: 2,
+    isBot: false,
+    isGuest: false,
+    declarationAttempts: 1,
+    declarationSuccesses: 1,
+    declarationFailures: 0,
+    askAttempts: 2,
+    askSuccesses: 2,
+    askFailures: 0,
+    repeatedAskAttempts: 0,
+    cardsWonFromOpponents: 2,
+    mostTargetedOpponentId: 'p1',
+    mostTargetedOpponentAskCount: 2,
+    averageMoveTimeMs: 2100,
+  },
+  {
+    playerId: 'p3',
+    displayName: 'Charlie',
+    avatarId: null,
+    teamId: 1,
+    isBot: false,
+    isGuest: false,
+    declarationAttempts: 2,
+    declarationSuccesses: 2,
+    declarationFailures: 0,
+    askAttempts: 0,
+    askSuccesses: 0,
+    askFailures: 0,
+    repeatedAskAttempts: 0,
+    cardsWonFromOpponents: 0,
+    mostTargetedOpponentId: null,
+    mostTargetedOpponentAskCount: 0,
+    averageMoveTimeMs: null,
+  },
 ];
 
 function makeProps(overrides: Partial<React.ComponentProps<typeof GameOverScreen>> = {}) {
@@ -561,5 +621,53 @@ describe('GameOverScreen', () => {
   it('computePlayerStats: returns empty array for empty declaredSuits', () => {
     const stats = computePlayerStats([], SIX_PLAYERS);
     expect(stats).toHaveLength(0);
+  });
+
+  it('renders ask stats table when playerSummaries are provided', () => {
+    render(
+      <GameOverScreen
+        {...makeProps({ players: SIX_PLAYERS, playerSummaries: ASK_SUMMARIES, mvpPlayerId: 'p2' })}
+      />,
+    );
+    expect(screen.getByTestId('ask-stats-table')).toBeTruthy();
+  });
+
+  it('shows ask attempts, success %, repeat %, and cards won in the ask stats table', () => {
+    render(
+      <GameOverScreen
+        {...makeProps({ players: SIX_PLAYERS, playerSummaries: ASK_SUMMARIES, mvpPlayerId: 'p2' })}
+      />,
+    );
+
+    expect(screen.getByTestId('ask-stats-attempts-p1').textContent).toBe('3');
+    expect(screen.getByTestId('ask-stats-success-rate-p1').textContent).toBe('67%');
+    expect(screen.getByTestId('ask-stats-repeat-rate-p1').textContent).toBe('33%');
+    expect(screen.getByTestId('ask-stats-cards-won-p1').textContent).toBe('2');
+    expect(screen.getByTestId('ask-stats-avg-time-p1').textContent).toBe('6.4s');
+    expect(screen.getByTestId('ask-stats-success-rate-p3').textContent).toBe('-');
+    expect(screen.getByTestId('ask-stats-avg-time-p3').textContent).toBe('-');
+  });
+
+  it('shows the most targeted opponent by display name and removes the team column', () => {
+    render(
+      <GameOverScreen
+        {...makeProps({ players: SIX_PLAYERS, playerSummaries: ASK_SUMMARIES, mvpPlayerId: 'p2' })}
+      />,
+    );
+
+    expect(screen.getByTestId('ask-stats-most-targeted-p1').textContent).toBe('Bob (2)');
+    expect(screen.getByTestId('ask-stats-most-targeted-p2').textContent).toBe('Alice (2)');
+    expect(within(screen.getByTestId('ask-stats-table')).queryByText(/^T$/)).toBeNull();
+  });
+
+  it('renders the MVP card using the backend-selected player id', () => {
+    render(
+      <GameOverScreen
+        {...makeProps({ players: SIX_PLAYERS, playerSummaries: ASK_SUMMARIES, mvpPlayerId: 'p2' })}
+      />,
+    );
+
+    expect(screen.getByTestId('match-mvp-card')).toBeTruthy();
+    expect(screen.getByTestId('match-mvp-name-p2').textContent).toContain('Bob');
   });
 });

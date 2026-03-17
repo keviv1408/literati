@@ -7,6 +7,7 @@
  *  - Returns 404 when room exists but game_state is null
  *  - Returns 200 with correct playerSummaries aggregated from moveHistory
  *  - Counts both 'declaration' and 'forced_failed_declaration' move types
+ *  - Aggregates ask success / repeat stats and MVP
  *  - Handles players with zero declarations
  *  - Handles bots and guests in playerSummaries
  *  - Handles empty moveHistory gracefully
@@ -57,7 +58,7 @@ function makeRoomRow(overrides = {}) {
   };
 }
 
-/** Minimal finalised game state with 6 players (3v3), two declarations. */
+/** Minimal finalised game state with 6 players (3v3) and mixed asks/declarations. */
 function makeFinalGameState(overrides = {}) {
   return {
     variant: 'remove_7s',
@@ -86,8 +87,12 @@ function makeFinalGameState(overrides = {}) {
       // p5 two correct declarations
       { type: 'declaration', declarerId: 'p5', halfSuitId: 'high_d', correct: true,  winningTeam: 1, ts: 5000 },
       { type: 'declaration', declarerId: 'p5', halfSuitId: 'low_c',  correct: true,  winningTeam: 1, ts: 6000 },
-      // ask move (should be ignored)
-      { type: 'ask', askerId: 'p1', targetId: 'p2', cardId: '1_s', success: true, ts: 7000 },
+      // ask moves
+      { type: 'ask', askerId: 'p1', targetId: 'p2', cardId: '1_s',  success: true,  ts: 7000 },
+      { type: 'ask', askerId: 'p5', targetId: 'p2', cardId: '1_s',  success: false, ts: 7100 }, // repeated by Team 1
+      { type: 'ask', askerId: 'p2', targetId: 'p1', cardId: '13_h', success: true,  ts: 7200 },
+      { type: 'ask', askerId: 'p2', targetId: 'p3', cardId: '12_h', success: false, ts: 7300 },
+      { type: 'ask', askerId: 'p2', targetId: 'p1', cardId: '11_h', success: false, ts: 7400 },
     ],
     ...overrides,
   };
@@ -127,10 +132,13 @@ describe('GET /api/stats/game-summary/:roomCode', () => {
     expect(res.status).toBe(200);
     expect(res.body.roomCode).toBe('ABC123');
     expect(res.body.winner).toBe(1);
+    expect(res.body.tiebreakerWinner).toBeNull();
     expect(res.body.scores).toEqual({ team1: 5, team2: 3 });
     expect(res.body.variant).toBe('remove_7s');
+    expect(Array.isArray(res.body.declaredSuits)).toBe(true);
     expect(Array.isArray(res.body.playerSummaries)).toBe(true);
     expect(res.body.playerSummaries).toHaveLength(6);
+    expect(res.body.mvpPlayerId).toBe('p1');
   });
 
   it('correctly aggregates declaration attempts, successes, and failures for p1', async () => {
@@ -236,8 +244,7 @@ describe('GET /api/stats/game-summary/:roomCode', () => {
     expect(ids).toEqual(['p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
   });
 
-  it('ignores non-declaration moves (type: ask) when tallying stats', async () => {
-    // The fixture contains one 'ask' move that should be ignored
+  it('ignores ask moves when tallying declaration counts', async () => {
     mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
       data: makeRoomRow(),
       error: null,
@@ -251,6 +258,78 @@ describe('GET /api/stats/game-summary/:roomCode', () => {
       0
     );
     expect(total).toBe(6);
+  });
+
+  it('aggregates ask stats for each player from moveHistory', async () => {
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
+      data: makeRoomRow(),
+      error: null,
+    });
+
+    const res = await request(app).get('/api/stats/game-summary/ABC123');
+
+    const p1 = res.body.playerSummaries.find((p) => p.playerId === 'p1');
+    const p2 = res.body.playerSummaries.find((p) => p.playerId === 'p2');
+    const p5 = res.body.playerSummaries.find((p) => p.playerId === 'p5');
+
+    expect(p1.askAttempts).toBe(1);
+    expect(p1.askSuccesses).toBe(1);
+    expect(p1.askFailures).toBe(0);
+    expect(p1.repeatedAskAttempts).toBe(0);
+    expect(p1.cardsWonFromOpponents).toBe(1);
+    expect(p1.mostTargetedOpponentId).toBe('p2');
+    expect(p1.mostTargetedOpponentAskCount).toBe(1);
+    expect(p1.averageMoveTimeMs).toBe(1000);
+
+    expect(p2.askAttempts).toBe(3);
+    expect(p2.askSuccesses).toBe(1);
+    expect(p2.askFailures).toBe(2);
+    expect(p2.repeatedAskAttempts).toBe(0);
+    expect(p2.cardsWonFromOpponents).toBe(1);
+    expect(p2.mostTargetedOpponentId).toBe('p1');
+    expect(p2.mostTargetedOpponentAskCount).toBe(2);
+    expect(p2.averageMoveTimeMs).toBe(325);
+
+    expect(p5.askAttempts).toBe(1);
+    expect(p5.askSuccesses).toBe(0);
+    expect(p5.askFailures).toBe(1);
+    expect(p5.repeatedAskAttempts).toBe(1);
+    expect(p5.cardsWonFromOpponents).toBe(0);
+    expect(p5.mostTargetedOpponentId).toBe('p2');
+    expect(p5.mostTargetedOpponentAskCount).toBe(1);
+    expect(p5.averageMoveTimeMs).toBe(700);
+  });
+
+  it('returns zero ask counts for players who never asked', async () => {
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
+      data: makeRoomRow(),
+      error: null,
+    });
+
+    const res = await request(app).get('/api/stats/game-summary/ABC123');
+
+    for (const pid of ['p3', 'p4', 'p6']) {
+      const player = res.body.playerSummaries.find((p) => p.playerId === pid);
+      expect(player.askAttempts).toBe(0);
+      expect(player.askSuccesses).toBe(0);
+      expect(player.askFailures).toBe(0);
+      expect(player.repeatedAskAttempts).toBe(0);
+      expect(player.cardsWonFromOpponents).toBe(0);
+      expect(player.mostTargetedOpponentId).toBeNull();
+      expect(player.mostTargetedOpponentAskCount).toBe(0);
+      expect(player.averageMoveTimeMs).toBe(pid === 'p3' ? 1000 : null);
+    }
+  });
+
+  it('chooses MVP by success rate first, then cards won from opponents', async () => {
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
+      data: makeRoomRow(),
+      error: null,
+    });
+
+    const res = await request(app).get('/api/stats/game-summary/ABC123');
+
+    expect(res.body.mvpPlayerId).toBe('p1');
   });
 
   it('handles game state with empty moveHistory (all zeros)', async () => {

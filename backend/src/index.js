@@ -11,6 +11,7 @@ const voiceRouter = require('./routes/voice');
 const authRouter = require('./routes/auth');
 const matchmakingRouter = require('./routes/matchmaking');
 const liveGamesRouter = require('./routes/liveGames');
+const statsRouter = require('./routes/stats');
 const { startCleanupTimer, stopCleanupTimer } = require('./sessions/guestSessionStore');
 const {
   startQueueCleanupTimer,
@@ -70,6 +71,7 @@ app.get('/health', (_req, res) => {
 
 // ── API routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
+app.use('/api/stats', statsRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/rooms', voiceRouter);
 app.use('/api/matchmaking', matchmakingRouter);

@@ -199,6 +199,39 @@ export interface GameOverPayload {
   scores: { team1: number; team2: number };
 }
 
+/** Per-player post-game summary row returned by GET /api/stats/game-summary/:roomCode. */
+export interface GameSummaryPlayer {
+  playerId: string;
+  displayName: string | null;
+  avatarId: string | null;
+  teamId: 1 | 2;
+  isBot: boolean;
+  isGuest: boolean;
+  declarationAttempts: number;
+  declarationSuccesses: number;
+  declarationFailures: number;
+  askAttempts: number;
+  askSuccesses: number;
+  askFailures: number;
+  repeatedAskAttempts: number;
+  cardsWonFromOpponents: number;
+  mostTargetedOpponentId: string | null;
+  mostTargetedOpponentAskCount: number;
+  averageMoveTimeMs: number | null;
+}
+
+/** Completed-game summary payload returned by the stats API. */
+export interface GameSummaryResponse {
+  roomCode: string;
+  winner: 1 | 2 | null;
+  tiebreakerWinner: 1 | 2 | null;
+  scores: { team1: number; team2: number };
+  variant: 'remove_2s' | 'remove_7s' | 'remove_8s' | null;
+  declaredSuits: DeclaredSuit[];
+  playerSummaries: GameSummaryPlayer[];
+  mvpPlayerId: string | null;
+}
+
 /** Per-player rematch vote visibility record. */
 export interface PlayerVoteRecord {
   playerId: string;
