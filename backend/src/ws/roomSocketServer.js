@@ -1360,7 +1360,7 @@ async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
  * via process.nextTick.  Otherwise it fires after REMATCH_BOT_FILL_TIMEOUT_MS
  * and absent slots are replaced by bots.
  *
- * The pending rematch settings (players, variant, playerCount, inferenceMode)
+ * The pending rematch settings (players, variant, playerCount)
  * MUST already be stored in pendingRematchStore before calling this function.
  *
  * @param {string} roomCode
@@ -1469,7 +1469,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
     return;
   }
 
-  const { players: originalPlayers, variant, playerCount, inferenceMode } = pending;
+  const { players: originalPlayers, variant, playerCount } = pending;
 
   // ── Fetch room metadata (id, current status) from Supabase ───────────────
   const dbRoom = await fetchRoomMetaFull(code);
@@ -1548,8 +1548,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
         spectatorUrl: dbRoom.spectator_token
           ? `/game/${code}?spectatorToken=${encodeURIComponent(dbRoom.spectator_token)}`
           : undefined,
-        seats:       allSeats,
-        inferenceMode,
+        seats: allSeats,
       });
     } catch (err) {
       console.error('[RoomWS] _executeRematchBotFill: createGame failed for room', code, ':', err);

@@ -28,6 +28,7 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const mockGetRoomByCode = jest.fn();
@@ -179,7 +180,6 @@ function makeGameInit(opts: { currentTurnPlayerId?: string } = {}) {
       winner: null,
       tiebreakerWinner: null,
       declaredSuits: [],
-      inferenceMode: false,
     },
     variant: 'remove_7s',
     playerCount: 6,
@@ -534,7 +534,6 @@ describe('TurnPassInteraction — server ack restores normal state', () => {
         winner: null,
         tiebreakerWinner: null,
         declaredSuits: [{ halfSuitId: 'low_s', teamId: 1, declaredBy: MY_PLAYER_ID }],
-        inferenceMode: false,
       },
     }));
 
@@ -592,7 +591,6 @@ describe('TurnPassInteraction — server ack restores normal state', () => {
         winner: null,
         tiebreakerWinner: null,
         declaredSuits: [{ halfSuitId: 'low_s', teamId: 1, declaredBy: MY_PLAYER_ID }],
-        inferenceMode: false,
       },
     }));
 

@@ -507,18 +507,17 @@ describe('GamePage — 8-player in_progress game', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sub-AC 9.2: inference (ask/answer) mode always available
+// Game action availability
 //
 // These tests verify that the game controls (Declare button, card hand,
 // AskCardModal, DeclareModal) are:
-//   • Available immediately after game_init is received (no delay due to
-//     matchmaking state — the game page uses ONLY game socket state)
+//   • Available immediately after game_init is received
 //   • Available when the current player is on their turn, regardless of
 //     whether teammates/opponents are bots or humans
 //   • Available for both 6-player and 8-player game configurations
 //
-// The controls are gated exclusively on `isMyTurn` which comes from
-// gameState.currentTurnPlayerId === myPlayerId (game socket state only).
+// The controls are gated exclusively on `isMyTurn`, derived from
+// gameState.currentTurnPlayerId === myPlayerId.
 // ---------------------------------------------------------------------------
 
 /** Minimal GamePlayer for use in game_init payloads. */
@@ -821,7 +820,6 @@ describe('GamePage — Sub-AC 9.2: game controls always available', () => {
           winner: null,
           tiebreakerWinner: null,
           declaredSuits: [],
-          inferenceMode: false,
         },
         variant: 'remove_7s',
         playerCount: 6,
@@ -873,7 +871,6 @@ describe('GamePage — Sub-AC 25b: declaration outcome broadcast and score displ
       winner: null,
       tiebreakerWinner: null,
       declaredSuits: [],
-      inferenceMode: false,
     };
   }
 
@@ -1127,7 +1124,6 @@ describe('GamePage — Sub-AC 46d: rematch vote UI and room_dissolved', () => {
         winner: 1,
         tiebreakerWinner: null,
         declaredSuits: [],
-        inferenceMode: false,
       },
       variant: 'remove_7s',
       playerCount: 6,

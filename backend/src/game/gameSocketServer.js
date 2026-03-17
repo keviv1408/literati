@@ -13,7 +13,6 @@
  *   { type: 'ask_card',          targetPlayerId: string, cardId: string }
  *   { type: 'declare_suit',      halfSuitId: string, assignment: { [cardId]: playerId } }
  *   { type: 'rematch_vote',      vote: boolean }    — cast after game_over
- *   { type: 'toggle_inference' }                 — any player can toggle; broadcast to all
  *   { type: 'partial_selection', flow: 'ask'|'declare', halfSuitId?: string,
  *                                cardId?: string, assignment?: { [cardId]: playerId } }
  *     — fire-and-forget: active player reports wizard progress so the server
@@ -72,7 +71,6 @@
  *   { type: 'room_dissolved',      reason: 'timeout'|'majority_no' }
  *     — broadcast shortly after rematch_declined; signals that the room has been
  *       permanently closed and clients should stop attempting reconnections.
- *   { type: 'inference_mode_changed', enabled: boolean, toggledBy: string }
  *   { type: 'bot_takeover',         playerId: string,
  *                                   partialState: { halfSuitId?: string, cardId?: string } | null }
  *     — broadcast when a human player's turn timer expires; includes any
@@ -2325,38 +2323,6 @@ function handleDeclareProgress(roomCode, declarerId, halfSuitId, assignment) {
 }
 
 // ---------------------------------------------------------------------------
-// Inference mode toggle
-// ---------------------------------------------------------------------------
-
-/**
- * Toggle the shared inference-mode flag for a room.
- * Any in-game player (not spectator) can call this.
- * Broadcasts `inference_mode_changed` to ALL connections (players + spectators).
- *
- * @param {string} roomCode
- * @param {string} playerId - The player who sent the toggle message
- */
-function handleToggleInference(roomCode, playerId) {
-  const gs = getGame(roomCode);
-  if (!gs) return;
-
-  // Toggle the flag on the in-memory game state
-  gs.inferenceMode = !gs.inferenceMode;
-
-  console.log(
-    `[game-ws] Inference mode ${gs.inferenceMode ? 'enabled' : 'disabled'} ` +
-    `in room ${roomCode} by player ${playerId}`
-  );
-
-  // Broadcast to all connections in the room (players and spectators)
-  broadcastToGame(roomCode, {
-    type:       'inference_mode_changed',
-    enabled:    gs.inferenceMode,
-    toggledBy:  playerId,
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Rematch vote handling
 // ---------------------------------------------------------------------------
 
@@ -2456,9 +2422,8 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
         isBot:       p.isBot,
         isGuest:     p.isGuest,
       })),
-      variant:       gs.variant,
-      playerCount:   gs.playerCount,
-      inferenceMode: gs.inferenceMode,
+      variant:     gs.variant,
+      playerCount: gs.playerCount,
     };
     setPendingRematch(roomCode, previousSettings);
     console.log(
@@ -2486,9 +2451,8 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
       seatIndex: p.seatIndex,
       isBot:     p.isBot,
     }));
-    rematchStartPayload.variant       = previousSettings.variant;
-    rematchStartPayload.playerCount   = previousSettings.playerCount;
-    rematchStartPayload.inferenceMode = previousSettings.inferenceMode;
+    rematchStartPayload.variant     = previousSettings.variant;
+    rematchStartPayload.playerCount = previousSettings.playerCount;
   }
 
   console.log(`[game-ws] Host ${playerId} initiated rematch for room ${roomCode}`);
@@ -2796,11 +2760,10 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
             roomCode:      newGs.roomCode,
             variant:       newGs.variant,
             playerCount:   newGs.playerCount,
-            players:       serializePlayers(newGs),
-            hands:         serializeSpectatorHands(newGs),
-            moveHistory:   serializeSpectatorMoveHistory(newGs),
-            gameState:     serializePublicState(newGs),
-            inferenceMode: newGs.inferenceMode ?? false,
+            players:     serializePlayers(newGs),
+            hands:       serializeSpectatorHands(newGs),
+            moveHistory: serializeSpectatorMoveHistory(newGs),
+            gameState:   serializePublicState(newGs),
           });
         } else {
           sendGameInit(newGs, pid, connWs);
@@ -3138,11 +3101,10 @@ function attachGameSocketServer(httpServer) {
         roomCode:      gs.roomCode,
         variant:       gs.variant,
         playerCount:   gs.playerCount,
-        players:       serializePlayers(gs),
-        hands:         serializeSpectatorHands(gs),
-        moveHistory:   serializeSpectatorMoveHistory(gs),
-        gameState:     serializePublicState(gs),
-        inferenceMode: gs.inferenceMode ?? false,
+        players:     serializePlayers(gs),
+        hands:       serializeSpectatorHands(gs),
+        moveHistory: serializeSpectatorMoveHistory(gs),
+        gameState:   serializePublicState(gs),
       });
     } else {
       sendGameInit(gs, playerId, ws);
@@ -3228,11 +3190,6 @@ function attachGameSocketServer(httpServer) {
           // Bypasses the vote window and immediately triggers rematch_start.
           // The server validates host identity and room type via DB lookup.
           await handleRematchInitiate(roomCode, playerId, ws);
-          break;
-        }
-
-        case 'toggle_inference': {
-          handleToggleInference(roomCode, playerId);
           break;
         }
 
@@ -3392,7 +3349,6 @@ module.exports = {
   handleDeclare,
   handleRematchVote,
   handleRematchInitiate,
-  handleToggleInference,
   handlePartialSelection,
   handleDeclareProgress,
   /**

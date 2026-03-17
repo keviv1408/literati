@@ -26,7 +26,6 @@
  *   as soon as the player takes an action and the server advances the turn.
  * - **Card count badge**: small circle showing remaining hand size.
  * - **Team colour**: border and background tinted emerald (T1) or violet (T2).
- * - **Inference indicator**: shown when inference mode is active and data exists.
  *
  * ### Active-turn animation lifecycle
  * The animation is triggered by either:
@@ -36,13 +35,6 @@
  * It is automatically cleared when the player submits an ask or declaration:
  * the server advances `currentTurnPlayerId`, the prop updates, and React
  * removes the CSS classes on the next render.
- *
- * ### Inference mode integration
- * When `inference` prop is provided (a `PlayerInference` map from
- * `useCardInference`), an `<InferenceIndicator>` badge is rendered showing
- * confirmed and excluded card counts.  The parent is responsible for gating
- * this prop based on whether inference mode is active.  Spectators always
- * have it active (forced by `InferenceProvider`).
  *
  * ### Wired to the game store
  * Although this component is pure (all data via props), it is designed to be
@@ -64,9 +56,7 @@
 import React from 'react';
 import Avatar from '@/components/Avatar';
 import { BotBadge } from '@/components/BotBadge';
-import InferenceIndicator from '@/components/InferenceIndicator';
 import type { GamePlayer } from '@/types/game';
-import type { PlayerInference } from '@/hooks/useCardInference';
 import type { VoiceSeatState } from '@/hooks/useDailyVoice';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -105,34 +95,6 @@ export interface GamePlayerSeatProps {
    * Pass `false` (or omit) to rely on `currentTurnPlayerId` matching.
    */
   isActiveTurn?: boolean;
-
-  /**
-   * Per-card inference data for this player (from `useCardInference`).
-   *
-   * When provided and non-empty, an `<InferenceIndicator>` badge is rendered
-   * below the team-dot row showing confirmed and excluded card counts.
-   *
-   * Pass the player's slice of `cardInferences[playerId]` from the
-   * `InferenceContext` when inference mode is active.  Omit (or pass
-   * `undefined`) to suppress the indicator when inference mode is off or
-   * when no inference data exists for this player yet.
-   *
-   * Spectators always have inference mode active (enforced by
-   * `InferenceProvider`); players can toggle it via the header button.
-   */
-  inference?: PlayerInference;
-
-  /**
-   * Uniform-distribution probability percentage (0–100) for this player.
-   *
-   * When provided and > 0, a cyan `~XX%` badge is displayed inside the
-   * `<InferenceIndicator>` showing the player's share of unknown cards
-   * under the uniform-distribution model.
-   *
-   * Pass `undefined` or `0` to suppress the badge (e.g. for the local
-   * player whose cards are fully known, or when inference mode is off).
-   */
-  inferencePercent?: number;
 
   /**
    * Sub-AC 28b: When true, renders a cyan highlight ring around this seat
@@ -200,8 +162,6 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   myPlayerId,
   currentTurnPlayerId,
   isActiveTurn,
-  inference,
-  inferencePercent,
   isHighlighted = false,
   onHighlightClick,
   isAskTargetable = false,
@@ -252,9 +212,6 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
     : (playerId === currentTurnPlayerId || isCurrentTurn);
 
   const style = TEAM_STYLES[teamId] ?? TEAM_STYLES[1];
-
-  // Has any inference data to display?
-  const hasInference = inference !== undefined && Object.keys(inference).length > 0;
 
   const voiceAria = voiceState?.connected
     ? [
@@ -467,15 +424,6 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         </div>
       )}
 
-      {/* ── Inference indicator (confirmed / excluded counts + uniform % badge) ── */}
-      {(hasInference || (inferencePercent !== undefined && inferencePercent > 0)) && (
-        <InferenceIndicator
-          playerId={playerId}
-          inference={inference ?? {}}
-          sharePercent={inferencePercent}
-          className="mt-0.5"
-        />
-      )}
     </div>
   );
 };

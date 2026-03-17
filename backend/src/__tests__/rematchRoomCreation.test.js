@@ -218,7 +218,6 @@ describe('handleRematchVote — majority reached creates new game', () => {
     playerCount: 6,
     players,
     status:      'completed',
-    inferenceMode: false,
   };
 
   // A minimal fake "new" game state (returned by createGame)
@@ -229,7 +228,6 @@ describe('handleRematchVote — majority reached creates new game', () => {
     playerCount: 6,
     players,
     status:      'active',
-    inferenceMode: false,
     currentTurnPlayerId: 'p1',
     scores: { team1: 0, team2: 0 },
   };

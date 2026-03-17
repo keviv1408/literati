@@ -61,7 +61,6 @@ function makeGameState(overrides: Partial<PublicGameState> = {}): PublicGameStat
     winner: null,
     tiebreakerWinner: null,
     declaredSuits: DECLARED_SUITS_MIXED,
-    inferenceMode: false,
     ...overrides,
   };
 }
@@ -87,8 +86,6 @@ function makeContextValue(gameState: PublicGameState | null): Omit<GameContextVa
     sendRematchVote: () => {},
     botTakeover: null,
     sendPartialSelection: () => {},
-    inferenceMode: false,
-    sendToggleInference: () => {},
     sendAsk: () => {},
     sendDeclare: () => {},
     // Sub-AC 28a: eligible next-turn players (empty until first declaration)

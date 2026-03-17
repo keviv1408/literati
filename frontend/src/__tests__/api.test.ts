@@ -19,7 +19,6 @@ import { ApiError, createRoom } from '@/lib/api';
 const payload: CreateRoomPayload = {
   playerCount: 6,
   cardRemovalVariant: 'remove_7s',
-  inferenceMode: true,
 };
 
 describe('createRoom', () => {

@@ -23,7 +23,6 @@ import {
   getCardHalfSuit,
 } from '@/types/game';
 import type { CardId, GamePlayer } from '@/types/game';
-import type { ProbabilityMap } from '@/utils/cardProbabilities';
 import type { TurnTimerPayload } from '@/hooks/useGameSocket';
 
 interface AskCardModalProps {
@@ -34,14 +33,6 @@ interface AskCardModalProps {
   onConfirm: (targetPlayerId: string, cardId: CardId) => void;
   onCancel: () => void;
   isLoading?: boolean;
-  /**
-   * When inference mode is active, the parent passes this function so the
-   * modal can show the probability that each opponent holds the selected card.
-   *
-   * `getCardProbabilities(cardId)` returns a ProbabilityMap (playerId → %)
-   * using the uniform-distribution model.
-   */
-  getCardProbabilities?: (cardId: CardId) => ProbabilityMap;
   /**
    * Active server-side turn timer payload.  When provided, the modal renders
    * a `TurnTimerStrip` so the countdown remains visible even though the modal
@@ -59,7 +50,6 @@ export default function AskCardModal({
   onConfirm,
   onCancel,
   isLoading = false,
-  getCardProbabilities,
   turnTimer,
 }: AskCardModalProps) {
   const myPlayer = players.find((p) => p.playerId === myPlayerId);
@@ -76,9 +66,6 @@ export default function AskCardModal({
 
   const halfSuitId = getCardHalfSuit(selectedCard, variant);
   const suitName   = halfSuitId ? halfSuitLabel(halfSuitId) : '';
-
-  // Inference probabilities for the selected card (null when mode is off)
-  const cardProbs = getCardProbabilities ? getCardProbabilities(selectedCard) : null;
 
   function handleConfirm() {
     if (!selectedTarget || isLoading) return;
@@ -133,7 +120,6 @@ export default function AskCardModal({
             <div className="space-y-2">
               {validTargets.map((player) => {
                 const isSelected = selectedTarget === player.playerId;
-                const pct = cardProbs ? (cardProbs[player.playerId] ?? 0) : null;
                 return (
                   <button
                     key={player.playerId}
@@ -146,7 +132,7 @@ export default function AskCardModal({
                         : 'border-slate-600/50 bg-slate-700/30 text-slate-300 hover:border-slate-500 hover:bg-slate-700/50',
                     ].join(' ')}
                     aria-pressed={isSelected}
-                    aria-label={`Ask ${player.displayName} (Team ${player.teamId}, ${player.cardCount} cards${pct !== null && pct > 0 ? `, ~${pct}% likely` : ''})`}
+                    aria-label={`Ask ${player.displayName} (Team ${player.teamId}, ${player.cardCount} cards)`}
                   >
                     {/* Avatar */}
                     <div
@@ -164,15 +150,6 @@ export default function AskCardModal({
                       <p className="text-xs text-slate-500">
                         Team {player.teamId} &bull; {player.cardCount} card{player.cardCount !== 1 ? 's' : ''}
                       </p>
-                      {/* Inference probability hint */}
-                      {pct !== null && pct > 0 && (
-                        <p
-                          className="text-[0.65rem] text-cyan-400 font-semibold mt-0.5"
-                          data-testid="inference-pct-hint"
-                        >
-                          ~{pct}% likely to hold this card
-                        </p>
-                      )}
                     </div>
 
                     {/* Radio indicator */}

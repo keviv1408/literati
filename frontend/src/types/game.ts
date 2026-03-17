@@ -66,11 +66,6 @@ export interface PublicGameState {
   winner: 1 | 2 | null;
   tiebreakerWinner: 1 | 2 | null;
   declaredSuits: DeclaredSuit[];
-  /**
-   * Shared inference-mode flag — when true all clients show deduction highlights.
-   * Any in-game player can toggle via `toggle_inference` WebSocket message.
-   */
-  inferenceMode: boolean;
 }
 
 /** Full game init payload sent to each player on connection. */
@@ -253,8 +248,6 @@ export interface RematchStartPayload {
   variant?: 'remove_2s' | 'remove_7s' | 'remove_8s';
   /** Total seat count carried forward (6 or 8). */
   playerCount?: number;
-  /** Inference mode flag carried forward. */
-  inferenceMode?: boolean;
 }
 
 /**
@@ -289,18 +282,6 @@ export interface RoomDissolvedPayload {
   type: 'room_dissolved';
   /** Mirrors the reason from the preceding rematch_declined event. */
   reason: 'timeout' | 'majority_no';
-}
-
-/**
- * Broadcast to all clients when the shared inference-mode flag is toggled.
- * Any in-game player can trigger this.
- */
-export interface InferenceModeChangedPayload {
-  type: 'inference_mode_changed';
-  /** New value of the flag after the toggle. */
-  enabled: boolean;
-  /** Player ID who performed the toggle. */
-  toggledBy: string;
 }
 
 /**

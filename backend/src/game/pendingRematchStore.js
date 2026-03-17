@@ -6,7 +6,7 @@
  *
  * After a majority of players vote yes for a rematch the server snapshots the
  * finished game's configuration (player team assignments, card-removal variant,
- * playerCount, and inferenceMode) so the next game can be started with
+ * and playerCount) so the next game can be started with
  * identical settings.  The snapshot is stored keyed by roomCode and is read
  * by:
  *
@@ -42,7 +42,6 @@
  * @property {PendingPlayerSettings[]} players       — full player roster from the finished game
  * @property {string}                  variant       — card-removal variant ('remove_2s'|…)
  * @property {number}                  playerCount   — 6 or 8
- * @property {boolean}                 inferenceMode — inference mode flag from the finished game
  * @property {number}                  createdAt     — epoch ms when the snapshot was taken
  */
 

@@ -45,16 +45,6 @@ export interface Room {
    * False (default) for private rooms created by a specific host.
    */
   is_matchmaking?: boolean;
-  /**
-   * When true, inference highlights are enabled: bots display inferred card
-   * knowledge (which ranks have been eliminated, which suits are exhausted) and
-   * the UI may surface inference cues to all players.
-   *
-   * Always true for matchmaking rooms (enforced server-side).
-   * Host-configurable for private rooms at creation time.
-   * Defaults to true.
-   */
-  inference_mode?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -65,12 +55,6 @@ export interface Room {
 export interface CreateRoomPayload {
   playerCount: 6 | 8;
   cardRemovalVariant: CardRemovalVariant;
-  /**
-   * Whether inference mode is enabled for this room.
-   * Omitting this field defaults to true on the server.
-   * Always forced to true for matchmaking rooms.
-   */
-  inferenceMode?: boolean;
 }
 
 /** Response from POST /api/rooms (201) */

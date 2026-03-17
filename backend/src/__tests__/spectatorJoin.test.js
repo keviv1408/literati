@@ -16,7 +16,6 @@
  *   3. Game WebSocket spectator connection (integration tests)
  *      - Valid spectator token → spectator_init with public snapshot only
  *      - spectator_init.gameState has no moveHistory / hands / botKnowledge
- *      - spectator_init.inferenceMode is present
  *      - Invalid / missing token → rejected
  *      - Spectator cannot send game messages (receives SPECTATOR error)
  *      - Lowercase token also accepted (case-insensitive)
@@ -532,13 +531,6 @@ describe('Game WebSocket spectator connection', () => {
       expect(typeof move.ts).toBe('number');
       expect(typeof move.message).toBe('string');
     }
-  });
-
-  // ── spectator_init carries inferenceMode flag ───────────────────────────────
-  it('spectator_init includes the inferenceMode boolean flag', async () => {
-    const msg = await firstMessage(`spectatorToken=${VALID_SPECTATOR_TOKEN}`);
-    expect(msg.type).toBe('spectator_init');
-    expect(typeof msg.inferenceMode).toBe('boolean');
   });
 
   // ── spectator cannot send game messages ─────────────────────────────────────

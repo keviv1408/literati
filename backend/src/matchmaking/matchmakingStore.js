@@ -43,22 +43,21 @@ const _playerQueue = new Map();
  *
  * @param {number} playerCount - 6 or 8
  * @param {string} cardRemovalVariant - 'remove_2s' | 'remove_7s' | 'remove_8s'
- * @param {boolean} [inferenceMode=true] - whether inference mode is enabled
  * @returns {string}
  */
-function makeFilterKey(playerCount, cardRemovalVariant, inferenceMode = true) {
-  return `${playerCount}:${cardRemovalVariant}:${inferenceMode ? 'inf' : 'noinf'}`;
+function makeFilterKey(playerCount, cardRemovalVariant) {
+  return `${playerCount}:${cardRemovalVariant}`;
 }
 
 /**
  * Parse a filter key back into its components.
  *
  * @param {string} filterKey
- * @returns {{ playerCount: number, cardRemovalVariant: string, inferenceMode: boolean }}
+ * @returns {{ playerCount: number, cardRemovalVariant: string }}
  */
 function parseFilterKey(filterKey) {
-  const [countStr, variant, inf] = filterKey.split(':');
-  return { playerCount: Number(countStr), cardRemovalVariant: variant, inferenceMode: inf !== 'noinf' };
+  const [countStr, variant] = filterKey.split(':');
+  return { playerCount: Number(countStr), cardRemovalVariant: variant };
 }
 
 /**

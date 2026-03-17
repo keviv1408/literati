@@ -1,10 +1,9 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for DeclareModal — Sub-AC 9.2: inference (ask/answer) mode always
- * available during a game session regardless of player count or bot presence.
+ * Tests for DeclareModal.
  *
- * Also covers Sub-AC 22c: Seat-targeting interaction — selecting a card row
+ * Also covers Sub-AC 22c: seat-targeting interaction — selecting a card row
  * opens a teammate seat strip; tapping a seat chip completes the assignment
  * and clears the selection state.
  *

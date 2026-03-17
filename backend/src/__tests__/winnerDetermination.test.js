@@ -74,7 +74,6 @@ function buildTestGame() {
     tiebreakerWinner: null,
     botKnowledge: new Map(),
     moveHistory: [],
-    inferenceMode: false,
   };
 }
 

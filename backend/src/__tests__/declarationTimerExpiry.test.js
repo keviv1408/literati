@@ -123,7 +123,6 @@ function buildGame({ handOverrides = {}, currentTurnPlayerId = 'p1', declaredSui
     tiebreakerWinner: null,
     botKnowledge:     new Map(),
     moveHistory:      [],
-    inferenceMode:    false,
   };
 }
 

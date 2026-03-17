@@ -1,8 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for AskCardModal — Sub-AC 9.2: inference (ask/answer) mode always
- * available during a game session regardless of player count or bot presence.
+ * Tests for AskCardModal.
  *
  * Coverage:
  *   • Renders the selected card info and "Ask for a card" heading
@@ -165,10 +164,10 @@ describe('AskCardModal — opponent filtering (8-player)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Bot opponents — inference mode works with bots
+// Bot opponents
 // ---------------------------------------------------------------------------
 
-describe('AskCardModal — bot opponents (inference mode with bots)', () => {
+describe('AskCardModal — bot opponents', () => {
   it('shows bot opponents as valid ask targets', () => {
     const players = build6Players();
     // Replace Carol (p4) with a bot

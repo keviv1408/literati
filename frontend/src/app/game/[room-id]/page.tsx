@@ -28,8 +28,6 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
 import { useMoveAnnouncements } from '@/hooks/useMoveAnnouncements';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
-import { useCardInference } from '@/hooks/useCardInference';
-import { useInference } from '@/hooks/useInference';
 import { GameProvider } from '@/contexts/GameContext';
 import { VoiceProvider, useVoice } from '@/contexts/VoiceContext';
 import CardHand from '@/components/CardHand';
@@ -55,7 +53,6 @@ import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import type { Room } from '@/types/room';
 import { cardLabel, getCardHalfSuit } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload } from '@/types/game';
-import type { PlayerInference } from '@/hooks/useCardInference';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -194,7 +191,7 @@ export default function GamePage({ params }: PageProps) {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, players, gameState, variant, playerCount,
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
     botTakeover, rematchVote, rematchDeclined, roomDissolved,
-    inferenceMode, sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate, sendToggleInference,
+    sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting, sendGameAdvance,
     declareProgress,
     eliminationPrompt, sendChooseTurnRecipient,
@@ -417,41 +414,6 @@ export default function GamePage({ params }: PageProps) {
   const myPlayer          = players.find((p) => p.playerId === myPlayerId) ?? null;
   const myTeamId          = myPlayer?.teamId ?? null;
   const isMyTurn          = Boolean(myPlayerId && gameState?.currentTurnPlayerId === myPlayerId);
-
-  // ── Inference mode (Sub-AC 37c) ───────────────────────────────────────────
-  //
-  // `inferenceMode` (from useGameSocket) is the authoritative shared flag,
-  // synchronised across all connected clients via `inference_mode_changed`
-  // broadcasts.  `sendToggleInference` (also from the socket) sends the
-  // `toggle_inference` message to the server.
-  //
-  // `useCardInference` tracks per-card confirmed/excluded knowledge from
-  // public ask/declare events.  `useInference` computes uniform-distribution
-  // probability percentages based on current card counts.
-  const { cardInferences, resetInferences } = useCardInference({
-    lastAskResult,
-    lastDeclareResult,
-    variant,
-  });
-
-  // Clear ask/declare inference history on rematch.
-  useEffect(() => {
-    if (rematchStarted) resetInferences();
-  }, [rematchStarted, resetInferences]);
-
-  // Compute uniform-distribution probability percentages.
-  // The toggle state comes from the socket (`inferenceMode`); `useInference`
-  // only provides the computation helpers.
-  const {
-    getCardProbabilities,
-    getPlayerSharePercent,
-  } = useInference({
-    myPlayerId,
-    myHand,
-    players,
-    declaredSuits: gameState?.declaredSuits ?? [],
-    variant,
-  });
 
   // `useTurnIndicator` manages the glow + turn-start chime:
   //  • plays a single chime on the false → true transition (turn starts)
@@ -753,7 +715,7 @@ export default function GamePage({ params }: PageProps) {
     <GameProvider value={{
       wsStatus, myPlayerId, myHand, players, gameState, variant, playerCount,
       lastAskResult, lastDeclareResult, turnTimer, botTakeover, rematchVote, rematchDeclined,
-      inferenceMode, sendAsk, sendDeclare, sendRematchVote, sendToggleInference,
+      sendAsk, sendDeclare, sendRematchVote,
       eligibleNextTurnPlayerIds,
       error: wsError,
     }}>
@@ -803,23 +765,6 @@ export default function GamePage({ params }: PageProps) {
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <VoiceControls />
-          {/* Inference mode toggle — shows uniform-distribution probability badges */}
-          <button
-            onClick={sendToggleInference}
-            aria-label={inferenceMode ? 'Disable inference mode' : 'Enable inference mode'}
-            aria-pressed={inferenceMode}
-            title={inferenceMode ? 'Inference mode: ON — click to disable' : 'Inference mode: OFF — click to enable probability hints'}
-            className={[
-              'transition-colors p-1 rounded-lg text-base leading-none',
-              'focus:outline-none focus:ring-2 focus:ring-cyan-400',
-              inferenceMode
-                ? 'text-cyan-300 bg-cyan-900/40 ring-1 ring-cyan-700/50'
-                : 'text-slate-400 hover:text-slate-200',
-            ].join(' ')}
-            data-testid="inference-toggle"
-          >
-            🔍
-          </button>
           {/* Mute toggle — persists across page refreshes via localStorage */}
           <MuteToggle muted={muted} onToggle={toggleMute} />
           <div className="flex items-center gap-1.5" title={`Connection: ${wsStatus}`} data-testid="ws-status-indicator">
@@ -973,9 +918,6 @@ export default function GamePage({ params }: PageProps) {
               currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
               playerCount={effectivePlayerCount}
               indicatorActive={indicatorActive}
-              inferenceActive={inferenceMode}
-              cardInferences={cardInferences}
-              getPlayerSharePercent={getPlayerSharePercent}
               highlightedPlayerIds={highlightedPlayerIds}
               onSeatClick={seatClickHandler}
               askTargetPlayerIds={selectedAskCard ? validAskTargetIds : undefined}
@@ -996,9 +938,6 @@ export default function GamePage({ params }: PageProps) {
               currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
               playerCount={effectivePlayerCount}
               indicatorActive={indicatorActive}
-              inferenceActive={inferenceMode}
-              cardInferences={cardInferences}
-              getPlayerSharePercent={getPlayerSharePercent}
               highlightedPlayerIds={highlightedPlayerIds}
               onSeatClick={seatClickHandler}
               askTargetPlayerIds={selectedAskCard ? validAskTargetIds : undefined}
@@ -1144,7 +1083,6 @@ export default function GamePage({ params }: PageProps) {
             setShowDeclare(false);
           }}
           isLoading={actionLoading}
-          getCardProbabilities={inferenceMode ? getCardProbabilities : undefined}
           turnTimer={turnTimer}
           onDeclareProgress={sendDeclareProgress}
           onSuitSelect={(id) => sendDeclareSelecting(id ?? undefined)}
@@ -1244,9 +1182,6 @@ function PlayerRow({
   currentTurnPlayerId,
   playerCount,
   indicatorActive,
-  inferenceActive = false,
-  cardInferences = {},
-  getPlayerSharePercent,
   highlightedPlayerIds,
   onSeatClick,
   askTargetPlayerIds,
@@ -1258,12 +1193,6 @@ function PlayerRow({
   playerCount: number;
   /** Value from `useTurnIndicator` — drives the glow override for the local player's seat. */
   indicatorActive: boolean;
-  /** When true, inference overlays are rendered on each seat. */
-  inferenceActive?: boolean;
-  /** Per-player ask/declare inference data (confirmed/excluded cards). */
-  cardInferences?: Record<string, PlayerInference>;
-  /** Returns uniform-distribution probability % for a player (or undefined if inactive). */
-  getPlayerSharePercent?: (player: import('@/types/game').GamePlayer) => number;
   /**
    * Sub-AC 28b: Set of player IDs whose seats should show a cyan highlight
    * ring (eligible to receive the turn after a correct declaration).
@@ -1292,15 +1221,6 @@ function PlayerRow({
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-3 lg:gap-5 xl:gap-6 flex-wrap">
       {seats.map((player, i) => {
-        // Per-player inference data — only passed when inference mode is active
-        const playerInference = (inferenceActive && player)
-          ? (cardInferences[player.playerId] ?? {})
-          : undefined;
-        // Uniform distribution share % — only for opponents (not local player)
-        const sharePercent = (inferenceActive && player && getPlayerSharePercent)
-          ? getPlayerSharePercent(player)
-          : undefined;
-
         // Sub-AC 28b: determine whether this seat should glow cyan
         const isHl = Boolean(player && highlightedPlayerIds?.has(player.playerId));
         const isAskTarget = Boolean(player && askTargetPlayerIds?.has(player.playerId));
@@ -1316,8 +1236,6 @@ function PlayerRow({
             // clears immediately on action submit (before server round-trip).
             // For all other seats: undefined → seat derives from currentTurnPlayerId.
             isActiveTurn={player?.playerId === myPlayerId ? indicatorActive : undefined}
-            inference={playerInference}
-            inferencePercent={sharePercent}
             voiceState={player ? getSeatState(player.playerId) : null}
             // Sub-AC 28b: highlight eligible seats and wire click handler
             isHighlighted={isHl}

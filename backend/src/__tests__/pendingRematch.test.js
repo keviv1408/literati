@@ -19,9 +19,9 @@
  *    10. _clearAll resets all state
  *
  *   handleRematchVote (majority path):
- *    11. majority YES → setPendingRematch called with player/variant/playerCount/inferenceMode
+ *    11. majority YES → setPendingRematch called with player/variant/playerCount
  *    12. majority YES → rematch_start broadcast includes previousTeams array
- *    13. majority YES → rematch_start broadcast includes variant, playerCount, inferenceMode
+ *    13. majority YES → rematch_start broadcast includes variant and playerCount
  *    14. majority YES → previousTeams contains correct teamId/seatIndex/isBot per player
  *    15. majority YES → rematch_start is broadcast when gs is null (no previousTeams)
  *
@@ -68,9 +68,8 @@ function makePendingSettings(overrides = {}) {
       makePlayer('bot1', 1, 4, true),
       makePlayer('bot2', 2, 5, true),
     ],
-    variant:       'remove_7s',
-    playerCount:   6,
-    inferenceMode: true,
+    variant:     'remove_7s',
+    playerCount: 6,
     ...overrides,
   };
 }
@@ -106,7 +105,6 @@ describe('pendingRematchStore', () => {
     expect(stored).not.toBeNull();
     expect(stored.variant).toBe('remove_7s');
     expect(stored.playerCount).toBe(6);
-    expect(stored.inferenceMode).toBe(true);
     expect(stored.players).toHaveLength(6);
   });
 
@@ -195,7 +193,6 @@ describe('handleRematchVote — pending rematch cloning', () => {
       roomCode:      'ROOM01',
       variant:       'remove_7s',
       playerCount:   6,
-      inferenceMode: true,
       status:        'completed',
       players: [
         makePlayer('p1', 1, 0),
@@ -266,9 +263,8 @@ describe('handleRematchVote — pending rematch cloning', () => {
         isBot:       p.isBot,
         isGuest:     p.isGuest,
       })),
-      variant:       gs.variant,
-      playerCount:   gs.playerCount,
-      inferenceMode: gs.inferenceMode,
+      variant:     gs.variant,
+      playerCount: gs.playerCount,
     };
     pendingStore.setPendingRematch('ROOM01', previousSettings);
 
@@ -276,7 +272,6 @@ describe('handleRematchVote — pending rematch cloning', () => {
     expect(stored).not.toBeNull();
     expect(stored.variant).toBe('remove_7s');
     expect(stored.playerCount).toBe(6);
-    expect(stored.inferenceMode).toBe(true);
     expect(stored.players).toHaveLength(6);
 
     gameStore.deleteGame('ROOM01');
@@ -294,9 +289,8 @@ describe('handleRematchVote — pending rematch cloning', () => {
         seatIndex: p.seatIndex,
         isBot:     p.isBot,
       })),
-      variant:       settings.variant,
-      playerCount:   settings.playerCount,
-      inferenceMode: settings.inferenceMode,
+      variant:     settings.variant,
+      playerCount: settings.playerCount,
     };
 
     expect(payload.previousTeams).toHaveLength(6);
@@ -310,8 +304,8 @@ describe('handleRematchVote — pending rematch cloning', () => {
     expect(bot1Entry.isBot).toBe(true);
   });
 
-  test('13. rematch_start payload includes variant, playerCount, inferenceMode', () => {
-    const settings = makePendingSettings({ variant: 'remove_8s', playerCount: 8, inferenceMode: false });
+  test('13. rematch_start payload includes variant and playerCount', () => {
+    const settings = makePendingSettings({ variant: 'remove_8s', playerCount: 8 });
     const payload = {
       type:          'rematch_start',
       roomCode:      'ROOM01',
@@ -321,14 +315,12 @@ describe('handleRematchVote — pending rematch cloning', () => {
         seatIndex: p.seatIndex,
         isBot:     p.isBot,
       })),
-      variant:       settings.variant,
-      playerCount:   settings.playerCount,
-      inferenceMode: settings.inferenceMode,
+      variant:     settings.variant,
+      playerCount: settings.playerCount,
     };
 
     expect(payload.variant).toBe('remove_8s');
     expect(payload.playerCount).toBe(8);
-    expect(payload.inferenceMode).toBe(false);
   });
 
   test('14. previousTeams preserves teamId and seatIndex for all players', () => {
@@ -397,7 +389,4 @@ describe('pendingRematchStore — player lookup for lobby restoration', () => {
     expect(getPendingRematch('ROOM01').variant).toBe('remove_7s');
   });
 
-  test('inferenceMode is preserved through store round-trip', () => {
-    expect(getPendingRematch('ROOM01').inferenceMode).toBe(true);
-  });
 });

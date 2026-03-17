@@ -11,7 +11,6 @@
  * Form fields:
  *  1. Player count   — 6 or 8 players (radio cards)
  *  2. Card variant   — remove_2s | remove_7s | remove_8s (radio list)
- *  3. Inference mode — toggle (on by default); enables inference highlights
  *
  * On success the modal transitions to a "Room Created!" confirmation phase that
  * immediately displays the invite code, invite link, and spectator link.
@@ -102,8 +101,6 @@ export default function CreateRoomModal({
   // ── Form state ─────────────────────────────────────────────────────────────
   const [playerCount, setPlayerCount] = useState<6 | 8>(6);
   const [variant, setVariant] = useState<CardRemovalVariant>('remove_7s');
-  /** Inference mode is enabled by default; host can toggle it off. */
-  const [inferenceMode, setInferenceMode] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,7 +115,6 @@ export default function CreateRoomModal({
     if (open) {
       setPlayerCount(6);
       setVariant('remove_7s');
-      setInferenceMode(true);
       setError(null);
       setIsSubmitting(false);
       setCreatedRoom(null);
@@ -158,10 +154,7 @@ export default function CreateRoomModal({
       setIsSubmitting(true);
 
       try {
-        const { room } = await createRoom(
-          { playerCount, cardRemovalVariant: variant, inferenceMode },
-          displayName
-        );
+        const { room } = await createRoom({ playerCount, cardRemovalVariant: variant }, displayName);
         // Cache room data so the lobby page can render without an extra fetch
         cacheCreatedRoom(room);
         // Show the success confirmation panel immediately
@@ -191,7 +184,7 @@ export default function CreateRoomModal({
         setIsSubmitting(false);
       }
     },
-    [isSubmitting, playerCount, variant, inferenceMode, displayName, onClose, router]
+    [isSubmitting, playerCount, variant, displayName, onClose, router]
   );
 
   // ── Enter room (from success phase) ────────────────────────────────────────
@@ -525,59 +518,6 @@ export default function CreateRoomModal({
               })}
             </div>
           </fieldset>
-
-          {/* ── Inference mode toggle ─────────────────────────────────────── */}
-          <div className="mb-5">
-            <p className="block text-sm font-medium text-emerald-200 mb-2">
-              Game Options
-            </p>
-            <label
-              className={`
-                flex items-center justify-between gap-4 p-3 rounded-xl border cursor-pointer
-                transition-all duration-150 select-none
-                focus-within:ring-2 focus-within:ring-emerald-400 focus-within:ring-offset-2 focus-within:ring-offset-slate-900
-                ${inferenceMode
-                  ? 'border-emerald-500 bg-emerald-900/40'
-                  : 'border-slate-600 bg-slate-800/30 hover:border-slate-500 hover:bg-slate-800/50'
-                }
-              `}
-              data-testid="inference-mode-label"
-            >
-              <span>
-                <span
-                  className={`font-semibold text-sm ${inferenceMode ? 'text-emerald-300' : 'text-slate-200'}`}
-                >
-                  🔍 Inference Mode
-                </span>
-                <span className="block text-xs text-slate-400 mt-0.5">
-                  Show card-elimination hints and bot reasoning to all players
-                </span>
-              </span>
-              {/* Toggle switch */}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={inferenceMode}
-                aria-label="Toggle inference mode"
-                data-testid="inference-mode-toggle"
-                onClick={() => setInferenceMode((v) => !v)}
-                className={`
-                  relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
-                  transition-colors duration-200 focus:outline-none focus:ring-2
-                  focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900
-                  ${inferenceMode ? 'bg-emerald-600' : 'bg-slate-600'}
-                `}
-              >
-                <span
-                  className={`
-                    inline-block h-4 w-4 transform rounded-full bg-white shadow
-                    transition-transform duration-200
-                    ${inferenceMode ? 'translate-x-6' : 'translate-x-1'}
-                  `}
-                />
-              </button>
-            </label>
-          </div>
 
           {/* ── Error message ─────────────────────────────────────────────── */}
           {error && (

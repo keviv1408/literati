@@ -93,7 +93,6 @@ literati/
 | `src/hooks/useLiveGamesSocket.ts` | Live games feed WebSocket hook |
 | `src/hooks/useReconnect.ts` | Auto-reconnect logic |
 | `src/hooks/useAuth.ts` | Auth state (Supabase + guest) |
-| `src/hooks/useCardInference.ts` | Card probability inference |
 | `src/hooks/useTurnIndicator.ts` | Whose turn it is |
 | `src/types/game.ts` | Game state types |
 | `src/types/room.ts` | Room types |

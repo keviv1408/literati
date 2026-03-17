@@ -134,20 +134,6 @@ export interface GameContextValue {
   sendPartialSelection?: (partial: PartialSelectionPayload) => void;
 
   /**
-   * Shared inference-mode flag. When `true`, components should render
-   * deduction highlights (which player likely holds which cards based on
-   * public ask/declaration history).  Any in-game player can toggle this
-   * via `sendToggleInference`; the server broadcasts the change to all clients.
-   */
-  inferenceMode: boolean;
-
-  /**
-   * Toggle the shared inference mode on/off.
-   * Sends `toggle_inference` to the server; no-op for spectators.
-   */
-  sendToggleInference: () => void;
-
-  /**
    * Look up the player occupying a given seat index.
    * Returns `null` if the seat is empty or not yet populated.
    */

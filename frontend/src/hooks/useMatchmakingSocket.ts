@@ -54,7 +54,6 @@ export type MatchmakingStatus =
 export interface MatchmakingFilter {
   playerCount: 6 | 8;
   cardRemovalVariant: CardRemovalVariant;
-  inferenceMode: boolean;
 }
 
 export interface UseMatchmakingSocketOptions {
@@ -93,7 +92,7 @@ export interface UseMatchmakingSocketResult {
    * Send a `join-queue` message to the server.
    * No-ops if the socket is not OPEN.
    */
-  joinQueue: (playerCount: 6 | 8, cardRemovalVariant: CardRemovalVariant, inferenceMode?: boolean) => void;
+  joinQueue: (playerCount: 6 | 8, cardRemovalVariant: CardRemovalVariant) => void;
   /**
    * Send a `leave-queue` message to the server.
    * No-ops if the socket is not OPEN.
@@ -215,7 +214,6 @@ export function useMatchmakingSocket({
                 type: 'join-queue',
                 playerCount: filter.playerCount,
                 cardRemovalVariant: filter.cardRemovalVariant,
-                inferenceMode: filter.inferenceMode,
               })
             );
           }
@@ -286,11 +284,11 @@ export function useMatchmakingSocket({
    * Call after the socket is 'ready' (authenticated).
    */
   const joinQueue = useCallback(
-    (playerCount: 6 | 8, cardRemovalVariant: CardRemovalVariant, inferenceMode = true): void => {
+    (playerCount: 6 | 8, cardRemovalVariant: CardRemovalVariant): void => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(
-          JSON.stringify({ type: 'join-queue', playerCount, cardRemovalVariant, inferenceMode })
+          JSON.stringify({ type: 'join-queue', playerCount, cardRemovalVariant })
         );
       }
     },

@@ -33,7 +33,6 @@ import type {
   RematchStartingPayload,
   RematchDeclinedPayload,
   RoomDissolvedPayload,
-  InferenceModeChangedPayload,
   BotTakeoverPayload,
   PlayerDisconnectedPayload,
   PlayerReconnectedPayload,
@@ -154,12 +153,6 @@ export interface UseGameSocketReturn {
    */
   roomDissolved: RoomDissolvedPayload | null;
   /**
-   * Shared inference-mode flag. When true, clients should show deduction
-   * highlights. Kept in sync with all other clients via `inference_mode_changed`
-   * WebSocket broadcasts; also included in the public game state on reconnect.
-   */
-  inferenceMode: boolean;
-  /**
    * Non-null when a bot takeover event was received for the current room.
    * Cleared automatically when a new turn starts (ask_result / declaration_result).
    * Components can use this to animate a takeover indicator.
@@ -210,12 +203,6 @@ export interface UseGameSocketReturn {
    * @param roomCode  The current room code (6-char upper-case).
    */
   sendRematchInitiate: (roomCode: string) => void;
-  /**
-   * Toggle the shared inference mode on/off. Sends `toggle_inference` to the
-   * server, which broadcasts the new state to all connected clients.
-   * Only in-game players (not spectators) should call this.
-   */
-  sendToggleInference: () => void;
   /**
    * Report partial wizard selection progress to the server (fire-and-forget).
    * The server stores this transiently and uses it to deterministically
@@ -398,7 +385,6 @@ export function useGameSocket({
   const [rematchVote, setRematchVote]    = useState<RematchVoteUpdatePayload | null>(null);
   const [rematchDeclined, setRematchDeclined] = useState<RematchDeclinedPayload | null>(null);
   const [roomDissolved, setRoomDissolved]   = useState<RoomDissolvedPayload | null>(null);
-  const [inferenceMode, setInferenceMode]   = useState<boolean>(false);
   const [botTakeover, setBotTakeover]       = useState<BotTakeoverPayload | null>(null);
   const [declareProgress, setDeclareProgress] = useState<DeclareProgressPayload | null>(null);
   const [reconnectWindows, setReconnectWindows] = useState<
@@ -495,8 +481,6 @@ export function useGameSocket({
           // Reset ephemeral timer state on fresh init to avoid stale countdowns
           // from a previous turn/room before the next timer event arrives.
           setTurnTimer(null);
-          // Sync inference mode from server state on (re)connect
-          setInferenceMode(payload.gameState?.inferenceMode ?? false);
           break;
         }
 
@@ -521,8 +505,6 @@ export function useGameSocket({
           setPlayerCount(payload.playerCount ?? null);
           // Spectators should not carry over a player's previous turn timer.
           setTurnTimer(null);
-          // Sync inference mode from server state on spectator connect
-          setInferenceMode(payload.gameState?.inferenceMode ?? false);
           break;
         }
 
@@ -556,9 +538,6 @@ export function useGameSocket({
           const { state } = msg as { state: PublicGameState };
           if (state) {
             setGameState(state);
-            // Keep inference mode in sync with game_state broadcasts
-            // (covers the case where a client missed inference_mode_changed)
-            setInferenceMode(state.inferenceMode ?? false);
           }
           break;
         }
@@ -750,12 +729,6 @@ export function useGameSocket({
           break;
         }
 
-        case 'inference_mode_changed': {
-          const payload = msg as unknown as InferenceModeChangedPayload;
-          setInferenceMode(payload.enabled);
-          break;
-        }
-
         // ── Reconnect window events (Sub-AC 3 of AC 39) ──────────────────────
         case 'player_disconnected': {
           const payload = msg as unknown as PlayerDisconnectedPayload;
@@ -886,12 +859,6 @@ export function useGameSocket({
     ws.send(JSON.stringify({ type: 'rematch_initiate', roomCode }));
   }, []);
 
-  const sendToggleInference = useCallback(() => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'toggle_inference' }));
-  }, []);
-
   /**
    * Report the current wizard step to the server (fire-and-forget).
    * Called by CardRequestWizard and DeclareModal on each step transition
@@ -1011,7 +978,6 @@ export function useGameSocket({
     rematchVote,
     rematchDeclined,
     roomDissolved,
-    inferenceMode,
     botTakeover,
     reconnectWindows,
     eliminationPrompt,
@@ -1024,7 +990,6 @@ export function useGameSocket({
     sendDeclareProgress,
     sendRematchVote,
     sendRematchInitiate,
-    sendToggleInference,
     sendPartialSelection,
     sendDeclareSelecting,
     sendGameAdvance,

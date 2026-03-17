@@ -165,7 +165,6 @@ function buildGame({
     tiebreakerWinner: null,
     botKnowledge:     new Map(),
     moveHistory:      [],
-    inferenceMode:    false,
   };
 }
 

@@ -110,7 +110,7 @@ function broadcastToQueue(filterKey, data) {
  * @param {Object}   msg
  */
 async function handleJoinQueue(ws, connectionId, user, msg) {
-  const { playerCount, cardRemovalVariant, inferenceMode } = msg;
+  const { playerCount, cardRemovalVariant } = msg;
 
   // ── Validate playerCount ────────────────────────────────────────────────────
   const count = Number(playerCount);
@@ -133,10 +133,7 @@ async function handleJoinQueue(ws, connectionId, user, msg) {
     return;
   }
 
-  // inferenceMode defaults to true if not provided (backward compat)
-  const inf = inferenceMode !== false;
-
-  const filterKey = makeFilterKey(count, cardRemovalVariant, inf);
+  const filterKey = makeFilterKey(count, cardRemovalVariant);
 
   // ── Add to queue ────────────────────────────────────────────────────────────
   const { position, queueSize } = joinQueue(filterKey, {
@@ -166,7 +163,7 @@ async function handleJoinQueue(ws, connectionId, user, msg) {
   });
 
   // ── Try to assemble a match ─────────────────────────────────────────────────
-  await tryAssembleMatch(filterKey, count, cardRemovalVariant, inf);
+  await tryAssembleMatch(filterKey, count, cardRemovalVariant);
 }
 
 // ---------------------------------------------------------------------------
@@ -254,9 +251,8 @@ function cleanupQueuedPlayer(playerId) {
  * @param {string} filterKey
  * @param {number} requiredCount - playerCount (6 or 8)
  * @param {string} cardRemovalVariant
- * @param {boolean} [inferenceMode=true]
  */
-async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant, inferenceMode = true) {
+async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant) {
   const currentSize = getQueueSize(filterKey);
   if (currentSize < requiredCount) {
     return; // not enough players yet — wait for more
@@ -293,7 +289,6 @@ async function tryAssembleMatch(filterKey, requiredCount, cardRemovalVariant, in
         status: 'waiting',
         // Mark as a matchmaking room: no host controls, auto-start when full.
         is_matchmaking: true,
-        inference_mode: inferenceMode,
       })
       .select()
       .single();

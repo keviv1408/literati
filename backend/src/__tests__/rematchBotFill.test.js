@@ -104,7 +104,6 @@ function makePending6(playerOverrides = []) {
     players,
     variant:       'remove_7s',
     playerCount:   6,
-    inferenceMode: false,
   };
 }
 

@@ -50,7 +50,6 @@ import {
   SUIT_SYMBOLS,
 } from '@/types/game';
 import type { CardId, HalfSuitId, GamePlayer, DeclaredSuit } from '@/types/game';
-import type { ProbabilityMap } from '@/utils/cardProbabilities';
 import type { TurnTimerPayload, DeclarationTimerPayload } from '@/hooks/useGameSocket';
 
 interface DeclareModalProps {
@@ -62,15 +61,6 @@ interface DeclareModalProps {
   onConfirm: (halfSuitId: HalfSuitId, assignment: Record<CardId, string>) => void;
   onCancel: () => void;
   isLoading?: boolean;
-  /**
-   * When inference mode is active, the parent passes this function so the
-   * modal can show probability hints alongside each card's teammate selector.
-   *
-   * `getCardProbabilities(cardId)` returns a ProbabilityMap (playerId → %)
-   * for the card.  The modal uses this to label each teammate option with the
-   * likelihood that they hold the card.
-   */
-  getCardProbabilities?: (cardId: CardId) => ProbabilityMap;
   /**
    * Active server-side turn timer payload.  When provided, the modal renders
    * a `TurnTimerStrip` so the countdown remains visible even though the modal
@@ -136,7 +126,6 @@ export default function DeclareModal({
   onConfirm,
   onCancel,
   isLoading = false,
-  getCardProbabilities,
   turnTimer,
   onDeclareProgress,
   onSuitSelect,
@@ -496,8 +485,6 @@ export default function DeclareModal({
                   const isSelectedForTargeting = selectedCardForAssign === cardId;
                   // Sub-AC 23b: is this non-hand card explicitly confirmed/locked?
                   const isLocked = !isMine && lockedAssignments.has(cardId);
-                  // Per-card probability map (only when inference is active)
-                  const cardProbs = getCardProbabilities ? getCardProbabilities(cardId) : null;
                   // Sub-AC 23b/23c: resolved assignee details (locked badge + revision badge)
                   const assigneePlayer = assignee
                     ? teammates.find((p) => p.playerId === assignee) ?? null
@@ -651,45 +638,13 @@ export default function DeclareModal({
                               >
                                 <option value="">Who holds this?</option>
                                 {teammates.map((p) => {
-                                  const pct = cardProbs ? (cardProbs[p.playerId] ?? 0) : null;
                                   return (
                                     <option key={p.playerId} value={p.playerId}>
-                                      {p.displayName}{p.playerId === myPlayerId ? ' (you)' : ''}{pct !== null && pct > 0 ? ` — ~${pct}%` : ''}
+                                      {p.displayName}{p.playerId === myPlayerId ? ' (you)' : ''}
                                     </option>
                                   );
                                 })}
                               </select>
-                              {/* Inference probability breakdown below the select */}
-                              {cardProbs && Object.keys(cardProbs).length > 0 && (
-                                <div
-                                  className="flex flex-wrap gap-1 mt-1"
-                                  data-testid="inference-prob-row"
-                                  aria-label={`Probability hints for ${cardLabel(cardId)}`}
-                                >
-                                  {teammates.map((p) => {
-                                    const pct = cardProbs[p.playerId] ?? 0;
-                                    if (pct === 0) return null;
-                                    const isAssigned = assignee === p.playerId;
-                                    return (
-                                      <button
-                                        key={p.playerId}
-                                        type="button"
-                                        onClick={() => setCardAssignee(cardId, p.playerId)}
-                                        className={[
-                                          'text-[0.6rem] font-semibold px-1.5 py-0.5 rounded-full transition-colors',
-                                          isAssigned
-                                            ? 'bg-cyan-600/60 text-cyan-100 border border-cyan-500'
-                                            : 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/60 hover:bg-cyan-800/50',
-                                        ].join(' ')}
-                                        aria-label={`Assign to ${p.displayName} (~${pct}%)`}
-                                        data-testid="inference-prob-chip"
-                                      >
-                                        {p.displayName.slice(0, 6)}: ~{pct}%
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
                             </div>
                             {/* Sub-AC 23b: Confirm (lock) button.
                                 Shown when a teammate is selected; hidden while

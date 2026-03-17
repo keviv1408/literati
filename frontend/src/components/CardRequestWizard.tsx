@@ -38,7 +38,6 @@ import {
   parseCard,
 } from '@/types/game';
 import type { CardId, HalfSuitId, GamePlayer, DeclaredSuit } from '@/types/game';
-import type { ProbabilityMap } from '@/utils/cardProbabilities';
 import type { TurnTimerPayload, PartialSelectionPayload } from '@/hooks/useGameSocket';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -61,11 +60,6 @@ export interface CardRequestWizardProps {
    * back to Step 1 to change the half-suit.
    */
   initialCard?: CardId;
-  /**
-   * When inference mode is active the parent passes this helper so the wizard
-   * can show probability hints in the opponent list (Step 3).
-   */
-  getCardProbabilities?: (cardId: CardId) => ProbabilityMap;
   /**
    * Active server-side turn timer payload.  When provided, the wizard renders
    * a `TurnTimerStrip` below the step indicator so the 30-second countdown
@@ -387,7 +381,6 @@ function Step3Opponent({
   onBack,
   onConfirm,
   isLoading,
-  getCardProbabilities,
 }: {
   selectedCard: CardId;
   /**
@@ -403,7 +396,6 @@ function Step3Opponent({
   onBack: () => void;
   onConfirm: () => void;
   isLoading: boolean;
-  getCardProbabilities?: (cardId: CardId) => ProbabilityMap;
 }) {
   const myPlayer = players.find((p) => p.playerId === myPlayerId);
   const myTeamId = myPlayer?.teamId;
@@ -418,8 +410,6 @@ function Step3Opponent({
   const selectedPlayerCanBeAsked =
     selectedTarget != null &&
     allOpponents.some((p) => p.playerId === selectedTarget);
-
-  const cardProbs = getCardProbabilities ? getCardProbabilities(selectedCard) : null;
 
   return (
     <div data-testid="wizard-step-3">
@@ -451,7 +441,6 @@ function Step3Opponent({
           >
             {allOpponents.map((player) => {
               const isSelected = selectedTarget === player.playerId;
-              const pct = cardProbs ? (cardProbs[player.playerId] ?? 0) : null;
               return (
                 <button
                   key={player.playerId}
@@ -460,7 +449,7 @@ function Step3Opponent({
                   }}
                   role="option"
                   aria-selected={isSelected}
-                  aria-label={`Ask ${player.displayName} (Team ${player.teamId}, ${player.cardCount} cards${pct !== null && pct > 0 ? `, ~${pct}% likely` : ''})`}
+                  aria-label={`Ask ${player.displayName} (Team ${player.teamId}, ${player.cardCount} cards)`}
                   data-testid={`opponent-option-${player.playerId}`}
                   disabled={isLoading}
                   className={[
@@ -490,14 +479,6 @@ function Step3Opponent({
                     <p className="text-xs text-slate-500">
                       Team {player.teamId} &bull; {player.cardCount} card{player.cardCount !== 1 ? 's' : ''}
                     </p>
-                    {pct !== null && pct > 0 && (
-                      <p
-                        className="text-[0.65rem] text-cyan-400 font-semibold mt-0.5"
-                        data-testid="inference-pct-hint"
-                      >
-                        ~{pct}% likely to hold this card
-                      </p>
-                    )}
                   </div>
 
                   {/* Radio indicator */}
@@ -556,7 +537,6 @@ export default function CardRequestWizard({
   onCancel,
   isLoading = false,
   initialCard,
-  getCardProbabilities,
   turnTimer,
   onPartialSelection,
 }: CardRequestWizardProps) {
@@ -699,7 +679,6 @@ export default function CardRequestWizard({
             onBack={handleBackToStep2}
             onConfirm={handleConfirm}
             isLoading={isLoading}
-            getCardProbabilities={getCardProbabilities}
           />
         )}
       </div>

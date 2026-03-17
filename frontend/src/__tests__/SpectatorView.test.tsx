@@ -12,7 +12,6 @@
  *   • Score display shows team scores.
  *   • Both team rows are rendered.
  *   • Spectator footer shows the read-only note.
- *   • Inference banner is always visible for spectators.
  *   • Declared suit badges are rendered when suits are declared.
  *   • No ask/declare controls are rendered (read-only enforcement).
  *   • Room code is shown in the header.
@@ -80,7 +79,6 @@ function makeGameState(overrides: Partial<PublicGameState> = {}): PublicGameStat
     winner: null,
     tiebreakerWinner: null,
     declaredSuits: [],
-    inferenceMode: false,
     ...overrides,
   };
 }
@@ -328,13 +326,6 @@ describe('SpectatorView', () => {
     });
   });
 
-  describe('inference mode', () => {
-    it('renders the inference banner (always on for spectators)', () => {
-      render(<SpectatorView {...buildProps()} />);
-      expect(screen.getByTestId('spectator-inference-banner')).toBeTruthy();
-    });
-  });
-
   describe('declared suits', () => {
     it('does not render the in-game half-suit grid even when suits have been declared', () => {
       render(
@@ -384,11 +375,6 @@ describe('SpectatorView', () => {
       expect(screen.queryByTestId('ask-card-modal')).toBeNull();
     });
 
-    it('does not render an inference mode toggle button', () => {
-      render(<SpectatorView {...buildProps()} />);
-      // The regular game view has a data-testid="inference-toggle" — spectator view should NOT
-      expect(screen.queryByTestId('inference-toggle')).toBeNull();
-    });
   });
 
   describe('center table', () => {

@@ -454,28 +454,6 @@ describe('Ask card privacy — server-side enforcement (Sub-AC 15b)', () => {
     }
   });
 
-  it('spectator toggle_inference attempt returns SPECTATOR error ONLY to spectator', async () => {
-    const { ws: spectWs } = await waitForInit(
-      `spectatorToken=${SPECTATOR_HEX}`,
-      'spectator_init',
-    );
-    const { ws: ws1 } = await waitForInit(`token=${p1Token}`, 'game_init');
-
-    try {
-      const [spectError, p1Observed] = await Promise.all([
-        waitForMessage(spectWs, (m) => m.type === 'error', 3000),
-        sendAndObserve(spectWs, { type: 'toggle_inference' }, ws1, 300),
-      ]);
-
-      expect(spectError.code).toBe('SPECTATOR');
-      const leaks = p1Observed.filter((m) => m.type === 'error');
-      expect(leaks).toHaveLength(0);
-    } finally {
-      spectWs.close();
-      ws1.close();
-    }
-  });
-
   // ─────────────────────────────────────────────────────────────────────────
   // 3. UNKNOWN / PREVIEW MESSAGE TYPE PRIVACY
   // ─────────────────────────────────────────────────────────────────────────

@@ -85,7 +85,6 @@ function buildGame(variant = 'remove_7s', handOverrides = {}) {
     botKnowledge:       new Map(),
     moveHistory:        [],
     eliminatedPlayerIds: new Set(),
-    inferenceMode:      false,
   };
 }
 
@@ -475,7 +474,6 @@ describe('tiebreakerWinner in serialisation', () => {
       moveHistory: [],
       eliminatedPlayerIds: [],
       turnRecipients: {},
-      inferenceMode: false,
     };
 
     const restored = restoreGameState(snapshot);
@@ -502,7 +500,6 @@ describe('tiebreakerWinner in serialisation', () => {
       moveHistory: [],
       eliminatedPlayerIds: [],
       turnRecipients: {},
-      inferenceMode: false,
     };
 
     const restored = restoreGameState(snapshot);

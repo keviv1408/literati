@@ -9,13 +9,12 @@
  *
  * ### What is shown
  * - Prominent "👁 SPECTATING" banner so the read-only mode is immediately clear.
- * - Inference mode banner (🔍) — always active for spectators; explains badges.
  * - Live scores for both teams (Team 1 / Team 2).
  * - Turn indicator — whose turn it currently is.
  * - Animated turn-timer progress bar (same as the player view).
  * - Last-move description (one line, no history log).
  * - All players arranged in two team rows, each with avatar, name, card count,
- *   team colour, active-turn glow, and inference indicators (🔍/✕ badges).
+ *   team colour, and active-turn glow.
  * - Declared half-suit badges accumulating in the centre.
  * - WebSocket connection-status dot.
  *
@@ -23,16 +22,7 @@
  * - Player's own card hand (spectators have no hand).
  * - Ask-card or declare-suit controls.
  * - Rematch vote panel.
- * - Inference mode toggle button (spectators always have inference mode on).
  * - Historical move log (last move only, per spec).
- *
- * ### Inference mode
- * Spectators automatically have inference mode active (locked on via
- * `InferenceProvider` with `isSpectator=true`).  Card-location data is
- * derived from public ask/declare events via `useCardInference`.  The
- * `SpectatorPlayerRow` reads inference data from `useInferenceContext` and
- * passes each player's inferred card knowledge to `GamePlayerSeat`.
- * Spectators cannot toggle inference mode — no toggle button is rendered.
  *
  * @example
  * // Inside /game/[room-id]/page.tsx when spectator mode is detected:
@@ -56,8 +46,6 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import CardHand from '@/components/CardHand';
-import { useCardInference } from '@/hooks/useCardInference';
-import { InferenceProvider, useInferenceContext } from '@/contexts/InferenceContext';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
@@ -103,9 +91,9 @@ export interface SpectatorViewProps {
   playerCount: 6 | 8 | null;
   /** Server-authoritative turn timer, drives the timer progress bar. */
   turnTimer: TurnTimerPayload | null;
-  /** Most recent ask-card result (used for inference tracking and last-move text). */
+  /** Most recent ask-card result (used for the move log and last-move text). */
   lastAskResult: AskResultPayload | null;
-  /** Most recent declaration result (used for inference tracking and last-move text). */
+  /** Most recent declaration result (used for the move log and last-move text). */
   lastDeclareResult: DeclarationResultPayload | null;
   /** 6-character room code shown in the header. */
   roomCode: string;
@@ -179,17 +167,6 @@ export default function SpectatorView({
   );
   const [godModeEnabled, setGodModeEnabled] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-
-  // ── Card inference ─────────────────────────────────────────────────────────
-  // Spectators derive card-location knowledge from public ask/declare events.
-  // Inference mode is always active for spectators (isSpectator=true on the
-  // InferenceProvider), so they cannot toggle it off.
-  const effectiveVariantForInference = variant ?? (cardRemovalVariant as 'remove_2s' | 'remove_7s' | 'remove_8s');
-  const { cardInferences } = useCardInference({
-    lastAskResult,
-    lastDeclareResult,
-    variant: effectiveVariantForInference,
-  });
 
   // ── Last-move display (transient 5-second flash) ───────────────────────────
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
@@ -311,11 +288,7 @@ export default function SpectatorView({
   }
 
   // ── Main spectator view ────────────────────────────────────────────────────
-  // Wrapped in InferenceProvider with isSpectator=true so inference mode is
-  // permanently on and the toggle is disabled.  SpectatorPlayerRow consumes
-  // cardInferences from the context to show per-seat indicators.
   return (
-    <InferenceProvider isSpectator={true} cardInferences={cardInferences}>
     <div
       className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden"
       data-testid="spectator-view"
@@ -356,13 +329,6 @@ export default function SpectatorView({
           Spectating · Read Only
         </span>
       </div>
-
-      {/* ── Inference mode banner ─────────────────────────────────────────────
-       *  Explains the 🔍 / ✕ badges shown on player seats.  Always rendered
-       *  for spectators since inference mode is locked on.
-       *  Must be inside InferenceProvider to read inferenceMode from context.
-       */}
-      <SpectatorInferenceBanner />
 
       {/* ── Turn indicator ───────────────────────────────────────────────────
        *  Shows whose turn it is.  Spectators can see this but cannot act.
@@ -462,7 +428,7 @@ export default function SpectatorView({
         className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden lg:justify-center lg:gap-8 xl:gap-10"
         aria-label="Spectator game table"
       >
-        {/* Team 2 row — inference data is passed via InferenceContext */}
+        {/* Team 2 row */}
         <div
           className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl"
           aria-label="Team 2 players"
@@ -497,7 +463,7 @@ export default function SpectatorView({
           </div>
         </div>
 
-        {/* Team 1 row — inference data is passed via InferenceContext */}
+        {/* Team 1 row */}
         <div
           className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl"
           aria-label="Team 1 players"
@@ -668,37 +634,10 @@ export default function SpectatorView({
         />
       )}
     </div>
-    </InferenceProvider>
   );
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-
-// ── SpectatorInferenceBanner ──────────────────────────────────────────────────
-
-/**
- * Displays a subtle banner explaining the 🔍/✕ inference badges on player
- * seats.  Always rendered when inference mode is active (always for spectators).
- *
- * Must be rendered inside an `<InferenceProvider>`.
- * Reads `inferenceMode` from `useInferenceContext()` — for spectators this
- * is always `true`, but the conditional guard ensures the component is
- * future-proof if the mode could ever be off.
- */
-function SpectatorInferenceBanner() {
-  const { inferenceMode } = useInferenceContext();
-  if (!inferenceMode) return null;
-  return (
-    <div
-      className="relative z-10 flex items-center justify-center gap-1.5 px-4 py-1 bg-sky-950/60 border-b border-sky-800/30 text-[0.65rem] text-sky-400"
-      aria-label="Inference mode active for spectators"
-      data-testid="spectator-inference-banner"
-    >
-      <span aria-hidden="true">🔍</span>
-      <span>Inference mode — 🔍 confirmed cards · ✕ excluded cards</span>
-    </div>
-  );
-}
 
 /**
  * SpectatorHeader — top header bar shared across all spectator view states.
@@ -789,11 +728,6 @@ function SpectatorHeader({
 /**
  * SpectatorPlayerRow — one team's player seats rendered as a horizontal row.
  *
- * Reads inference mode and card inference data from `useInferenceContext`
- * (provided by the wrapping `InferenceProvider` with `isSpectator=true`).
- * Each seat receives its player's inference data when inference mode is active
- * (always true for spectators), so `GamePlayerSeat` renders the 🔍/✕ badges.
- *
  * Spectators are always `myPlayerId=null` so the "You" pill is never shown.
  * Active-turn glow still animates based on `currentTurnPlayerId` matching.
  */
@@ -812,7 +746,6 @@ function SpectatorPlayerRow({
   selectedPlayerId: string | null;
   onSelectPlayer: (playerId: string) => void;
 }) {
-  const { inferenceMode, cardInferences } = useInferenceContext();
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
 
   return (
@@ -860,10 +793,6 @@ function SpectatorPlayerRow({
               player={player}
               myPlayerId={null}
               currentTurnPlayerId={currentTurnPlayerId}
-              // Pass inference data for each occupied seat when inference mode is on.
-              // InferenceIndicator inside GamePlayerSeat only renders when the map
-              // is non-empty, so passing an empty object {} is safe.
-              inference={inferenceMode ? (cardInferences[player.playerId] ?? {}) : undefined}
             />
           </button>
         );

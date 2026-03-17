@@ -132,10 +132,6 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
     // Move history for crash recovery
     moveHistory: [],
 
-    // Shared UI preference: when true, all clients show inference highlights.
-    // Any in-game player can toggle this; it is broadcast in real time.
-    inferenceMode: false,
-
     // ── Player elimination (Sub-AC 27b) ─────────────────────────────────────
     // Set of playerIds whose hands are now empty (cards removed by a declaration).
     // Populated by applyDeclaration / applyForcedFailedDeclaration when a
@@ -262,7 +258,6 @@ function serializePublicState(gs) {
     winner:              gs.winner,
     tiebreakerWinner:    gs.tiebreakerWinner,
     declaredSuits:       declaredSuitsArr,
-    inferenceMode:       gs.inferenceMode ?? false,
   };
 }
 
@@ -272,9 +267,8 @@ function serializePublicState(gs) {
  * Each player entry includes:
  *   - cardCount: total cards held
  *   - halfSuitCounts: { [halfSuitId]: number } — how many cards in each half-suit.
- *     This is public information (opponents can infer it) and is used for:
+ *     This is public information and is used for:
  *       • Enforcing ask eligibility (server checks target has ≥1 in half-suit)
- *       • Inference-mode highlights on the client
  *       • Bot decision-making
  *
  * @param {Object} gs
@@ -551,8 +545,6 @@ function restoreGameState(snapshot, roomCode, roomId) {
     tiebreakerWinner: snapshot.tiebreakerWinner,
     botKnowledge:  new Map(),
     moveHistory:   snapshot.moveHistory ?? [],
-    // Inference mode resets to off on crash recovery (transient UI preference)
-    inferenceMode: snapshot.inferenceMode ?? false,
     // Sub-AC 27b: restore elimination state
     eliminatedPlayerIds: new Set(snapshot.eliminatedPlayerIds ?? []),
     turnRecipients:      new Map(Object.entries(snapshot.turnRecipients ?? {})),

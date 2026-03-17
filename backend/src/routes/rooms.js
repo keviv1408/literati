@@ -160,7 +160,6 @@ router.get('/spectate/:token', async (req, res) => {
  * Request body:
  *   playerCount        {number}   6 or 8
  *   cardRemovalVariant {string}   'remove_2s' | 'remove_7s' | 'remove_8s'
- *   inferenceMode      {boolean?} Enable inference highlights (default: true)
  *
  * The authenticated user becomes the room host. Host userId is derived from
  * the validated JWT (req.user.id) rather than the request body to prevent
@@ -171,7 +170,7 @@ router.get('/spectate/:token', async (req, res) => {
  *     room: {
  *       id, code, invite_code, spectator_token,
  *       host_user_id, player_count, card_removal_variant,
- *       inference_mode, status, created_at, updated_at
+ *       status, created_at, updated_at
  *     },
  *     inviteLink:    string  — ready-made player join URL
  *     spectatorLink: string  — ready-made private spectator URL (token-based)
@@ -187,7 +186,7 @@ router.get('/spectate/:token', async (req, res) => {
  *   500 — internal error
  */
 router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
-  const { playerCount, cardRemovalVariant, inferenceMode } = req.body;
+  const { playerCount, cardRemovalVariant } = req.body;
   const hostUserId = req.user.isGuest ? req.user.sessionId : req.user.id;
   // For DB writes, guests don't exist in the users table so host_user_id must be null.
   const hostUserIdForDb = req.user.isGuest ? null : req.user.id;
@@ -210,12 +209,6 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
     validationErrors.push(
       `cardRemovalVariant must be one of: ${VALID_CARD_REMOVAL_VARIANTS.join(', ')}`
     );
-  }
-
-  // inferenceMode is optional; default to true if omitted.
-  // Reject explicitly if a non-boolean value is provided.
-  if (inferenceMode !== undefined && typeof inferenceMode !== 'boolean') {
-    validationErrors.push('inferenceMode must be a boolean (true or false)');
   }
 
   if (validationErrors.length > 0) {
@@ -326,8 +319,6 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
         player_count: Number(playerCount),
         card_removal_variant: cardRemovalVariant,
         status: ROOM_STATUS.WAITING,
-        // inferenceMode defaults to true when not explicitly provided
-        inference_mode: inferenceMode !== undefined ? inferenceMode : true,
       })
       .select()
       .single();
@@ -457,7 +448,7 @@ router.get('/:code', async (req, res) => {
     const { data: room, error } = await supabase
       .from('rooms')
       .select(
-        'id, code, invite_code, host_user_id, player_count, card_removal_variant, status, is_matchmaking, inference_mode, created_at, updated_at'
+        'id, code, invite_code, host_user_id, player_count, card_removal_variant, status, is_matchmaking, created_at, updated_at'
       )
       .eq('code', code.toUpperCase())
       .maybeSingle();

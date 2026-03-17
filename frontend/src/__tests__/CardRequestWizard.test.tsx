@@ -40,10 +40,6 @@
  *     • The wizard is only shown by the game page when isMyTurn is true
  *       (this component itself contains no isMyTurn logic — gating tested
  *        indirectly by verifying the dialog role is present when rendered)
- *
- *   Inference mode
- *     • Step 3 shows probability hints when getCardProbabilities is provided
- *     • Hints are absent when getCardProbabilities is omitted
  */
 
 import React from 'react';
@@ -91,7 +87,6 @@ interface RenderOptions {
   onCancel?: jest.Mock;
   isLoading?: boolean;
   initialCard?: string;
-  getCardProbabilities?: (cardId: string) => Record<string, number>;
 }
 
 function renderWizard(options: RenderOptions = {}) {
@@ -106,7 +101,6 @@ function renderWizard(options: RenderOptions = {}) {
     onCancel:      options.onCancel      ?? jest.fn(),
     isLoading:     options.isLoading     ?? false,
     initialCard:   options.initialCard,
-    getCardProbabilities: options.getCardProbabilities,
   };
   return { ...render(<CardRequestWizard {...props} />), props };
 }
@@ -414,170 +408,6 @@ describe('CardRequestWizard — entry via initialCard', () => {
     fireEvent.click(screen.getByTestId('opponent-option-p4'));
     fireEvent.click(screen.getByTestId('wizard-confirm-ask'));
     expect(onConfirm).toHaveBeenCalledWith('p4', '1_h');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Inference mode
-// ---------------------------------------------------------------------------
-
-describe('CardRequestWizard — inference mode hints in Step 3', () => {
-  function goToStep3WithInference(probs: Record<string, number>) {
-    const getCardProbabilities = jest.fn(() => probs);
-    renderWizard({
-      myHand: ['3_h'],
-      players: build6Players(),
-      getCardProbabilities,
-    });
-    fireEvent.click(screen.getByTestId('halfsuit-option-low_h'));
-    fireEvent.click(screen.getByTestId('card-option-1_h'));
-    return { getCardProbabilities };
-  }
-
-  it('shows probability hint for opponent when getCardProbabilities returns > 0', () => {
-    goToStep3WithInference({ p4: 40, p5: 30, p6: 30 });
-    // At least one "% likely" hint should appear
-    expect(screen.getAllByTestId('inference-pct-hint').length).toBeGreaterThan(0);
-  });
-
-  it('does NOT show inference hints when getCardProbabilities is not provided', () => {
-    renderWizard({ myHand: ['3_h'] });
-    fireEvent.click(screen.getByTestId('halfsuit-option-low_h'));
-    fireEvent.click(screen.getByTestId('card-option-1_h'));
-    expect(screen.queryAllByTestId('inference-pct-hint')).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// halfSuitCounts — grey-out opponents with 0 cards in selected half-suit
-// ---------------------------------------------------------------------------
-
-describe('CardRequestWizard — halfSuitCounts grey-out (Step 3)', () => {
-  /** Build players where some have halfSuitCounts populated. */
-  function buildPlayersWithHalfSuitCounts(): GamePlayer[] {
-    return [
-      // Team 1 (my team)
-      buildPlayer({ playerId: 'p1', displayName: 'Me',    teamId: 1, seatIndex: 0, cardCount: 3 }),
-      buildPlayer({ playerId: 'p2', displayName: 'Alice', teamId: 1, seatIndex: 2, cardCount: 3 }),
-      buildPlayer({ playerId: 'p3', displayName: 'Bob',   teamId: 1, seatIndex: 4, cardCount: 2 }),
-      // Team 2 — opponents:
-      // Carol: has cards but NONE in low_h
-      buildPlayer({
-        playerId: 'p4', displayName: 'Carol', teamId: 2, seatIndex: 1, cardCount: 4,
-        halfSuitCounts: { low_h: 0, high_h: 2, low_s: 1, high_s: 0, low_d: 1, high_d: 0, low_c: 0, high_c: 0 },
-      }),
-      // Dave: has 2 cards in low_h — fully enabled
-      buildPlayer({
-        playerId: 'p5', displayName: 'Dave',  teamId: 2, seatIndex: 3, cardCount: 5,
-        halfSuitCounts: { low_h: 2, high_h: 1, low_s: 1, high_s: 0, low_d: 1, high_d: 0, low_c: 0, high_c: 0 },
-      }),
-      // Eve: has 1 card in low_h — enabled
-      buildPlayer({
-        playerId: 'p6', displayName: 'Eve',   teamId: 2, seatIndex: 5, cardCount: 3,
-        halfSuitCounts: { low_h: 1, high_h: 0, low_s: 1, high_s: 0, low_d: 1, high_d: 0, low_c: 0, high_c: 0 },
-      }),
-    ];
-  }
-
-  function goToStep3WithHalfSuitCounts() {
-    const players = buildPlayersWithHalfSuitCounts();
-    const { container } = renderWizard({ myHand: ['3_h'], players });
-    fireEvent.click(screen.getByTestId('halfsuit-option-low_h'));
-    fireEvent.click(screen.getByTestId('card-option-1_h'));
-    expect(screen.getByTestId('wizard-step-3')).toBeTruthy();
-    return { players, container };
-  }
-
-  it('shows ALL opponents with cardCount > 0, including those with 0 in half-suit', () => {
-    goToStep3WithHalfSuitCounts();
-    // Carol (p4) has cardCount=4 but halfSuitCounts.low_h=0 → shows but greyed
-    expect(screen.getByTestId('opponent-option-p4')).toBeTruthy();
-    // Dave (p5) and Eve (p6) have cards in low_h → shown normally
-    expect(screen.getByTestId('opponent-option-p5')).toBeTruthy();
-    expect(screen.getByTestId('opponent-option-p6')).toBeTruthy();
-  });
-
-  it('greyed-out opponent button is disabled', () => {
-    goToStep3WithHalfSuitCounts();
-    const carolBtn = screen.getByTestId('opponent-option-p4');
-    expect(carolBtn).toBeDisabled();
-  });
-
-  it('greyed-out opponent has aria-disabled="true"', () => {
-    goToStep3WithHalfSuitCounts();
-    const carolBtn = screen.getByTestId('opponent-option-p4');
-    expect(carolBtn.getAttribute('aria-disabled')).toBe('true');
-  });
-
-  it('greyed-out opponent shows "0 cards in this half-suit" label', () => {
-    goToStep3WithHalfSuitCounts();
-    expect(screen.getByTestId('opponent-no-cards-in-suit-p4')).toBeTruthy();
-  });
-
-  it('enabled opponents (with cards in half-suit) are NOT disabled', () => {
-    goToStep3WithHalfSuitCounts();
-    const daveBtn = screen.getByTestId('opponent-option-p5');
-    expect(daveBtn).not.toBeDisabled();
-  });
-
-  it('confirm button stays disabled when no active target is selected', () => {
-    goToStep3WithHalfSuitCounts();
-    const confirmBtn = screen.getByTestId('wizard-confirm-ask');
-    expect(confirmBtn).toBeDisabled();
-  });
-
-  it('confirm button is enabled after selecting an enabled opponent', () => {
-    goToStep3WithHalfSuitCounts();
-    fireEvent.click(screen.getByTestId('opponent-option-p5')); // Dave — enabled
-    expect(screen.getByTestId('wizard-confirm-ask')).not.toBeDisabled();
-  });
-
-  it('fires onConfirm with the enabled opponent when confirmed', () => {
-    const onConfirm = jest.fn();
-    const players = buildPlayersWithHalfSuitCounts();
-    renderWizard({ myHand: ['3_h'], players, onConfirm });
-    fireEvent.click(screen.getByTestId('halfsuit-option-low_h'));
-    fireEvent.click(screen.getByTestId('card-option-1_h'));
-    fireEvent.click(screen.getByTestId('opponent-option-p5'));   // Dave
-    fireEvent.click(screen.getByTestId('wizard-confirm-ask'));
-    expect(onConfirm).toHaveBeenCalledWith('p5', '1_h');
-  });
-
-  it('opponent without halfSuitCounts (undefined) is treated as enabled (backward-compat)', () => {
-    // p4 has NO halfSuitCounts set — should be enabled
-    const players = build6Players(); // no halfSuitCounts
-    renderWizard({ myHand: ['3_h'], players });
-    fireEvent.click(screen.getByTestId('halfsuit-option-low_h'));
-    fireEvent.click(screen.getByTestId('card-option-1_h'));
-    const carolBtn = screen.getByTestId('opponent-option-p4');
-    expect(carolBtn).not.toBeDisabled();
-  });
-
-  it('auto-selects when only one opponent has cards in the half-suit', () => {
-    // Only p6 (Eve) has cards in low_h
-    const players: GamePlayer[] = [
-      buildPlayer({ playerId: 'p1', displayName: 'Me',    teamId: 1, seatIndex: 0, cardCount: 3 }),
-      buildPlayer({ playerId: 'p2', displayName: 'Alice', teamId: 1, seatIndex: 2, cardCount: 3 }),
-      buildPlayer({ playerId: 'p3', displayName: 'Bob',   teamId: 1, seatIndex: 4, cardCount: 2 }),
-      buildPlayer({
-        playerId: 'p4', displayName: 'Carol', teamId: 2, seatIndex: 1, cardCount: 3,
-        halfSuitCounts: { low_h: 0, high_h: 1, low_s: 1, high_s: 0, low_d: 1, high_d: 0, low_c: 0, high_c: 0 },
-      }),
-      buildPlayer({
-        playerId: 'p5', displayName: 'Dave',  teamId: 2, seatIndex: 3, cardCount: 2,
-        halfSuitCounts: { low_h: 0, high_h: 1, low_s: 0, high_s: 0, low_d: 1, high_d: 0, low_c: 0, high_c: 0 },
-      }),
-      buildPlayer({
-        playerId: 'p6', displayName: 'Eve',   teamId: 2, seatIndex: 5, cardCount: 3,
-        halfSuitCounts: { low_h: 2, high_h: 0, low_s: 0, high_s: 0, low_d: 1, high_d: 0, low_c: 0, high_c: 0 },
-      }),
-    ];
-    renderWizard({ myHand: ['3_h'], players, initialCard: '1_h' });
-    // Skip step 2, go directly to step 3
-    fireEvent.click(screen.getByTestId('card-option-1_h'));
-    expect(screen.getByTestId('wizard-step-3')).toBeTruthy();
-    // Eve should be auto-selected (only enabled target)
-    expect(screen.getByTestId('wizard-confirm-ask')).not.toBeDisabled();
   });
 });
 
