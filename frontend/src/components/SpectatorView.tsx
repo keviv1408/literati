@@ -51,6 +51,7 @@ import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
+import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import type {
   CardId,
   GamePlayer,
@@ -453,14 +454,10 @@ export default function SpectatorView({
           aria-hidden="true"
           data-testid="spectator-table-center"
         >
-          <div className="w-full aspect-[2/1] rounded-full border-2 border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center shadow-inner shadow-black/40">
-            <div className="text-center">
-              <div className="text-2xl mb-0.5">👁</div>
-              <p className="text-[10px] text-slate-500">
-                {effectivePlayerCount === 6 ? '3v3' : '4v4'}
-              </p>
-            </div>
-          </div>
+          <DeclaredBooksTable
+            declaredSuits={gameState?.declaredSuits ?? []}
+            playerCount={effectivePlayerCount === 8 ? 8 : 6}
+          />
         </div>
 
         {/* Team 1 row */}

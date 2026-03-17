@@ -20,7 +20,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -373,6 +373,48 @@ describe('GamePage — in_progress game view', () => {
     await waitFor(() => {
       expect(screen.getByTestId('game-table-center')).toBeTruthy();
     });
+  });
+
+  it('renders declared books in the correct half of the center table', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('game-view')).toBeTruthy();
+    });
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit('player-me', [
+        makePlayer('player-me', 'Me', 1, 0),
+        makePlayer('p2', 'Alice', 1, 2),
+        makePlayer('p3', 'Bob', 1, 4),
+        makePlayer('p4', 'Carol', 2, 1),
+        makePlayer('p5', 'Dave', 2, 3),
+        makePlayer('p6', 'Eve', 2, 5),
+      ]),
+      gameState: {
+        status: 'active',
+        currentTurnPlayerId: 'player-me',
+        scores: { team1: 1, team2: 1 },
+        lastMove: null,
+        winner: null,
+        tiebreakerWinner: null,
+        declaredSuits: [
+          { halfSuitId: 'low_s', teamId: 1, declaredBy: 'player-me' },
+          { halfSuitId: 'high_h', teamId: 2, declaredBy: 'p4' },
+        ],
+      },
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('declared-books-table')).toBeTruthy();
+    });
+
+    expect(within(screen.getByTestId('table-books-team1')).getByTestId('table-book-low_s')).toBeTruthy();
+    expect(within(screen.getByTestId('table-books-team2')).getByTestId('table-book-high_h')).toBeTruthy();
+    expect(within(screen.getByTestId('table-book-low_s')).getByLabelText('A of Spades')).toBeTruthy();
+    expect(within(screen.getByTestId('table-book-high_h')).getByLabelText('K of Hearts')).toBeTruthy();
+    expect(within(screen.getByTestId('table-books-team1')).queryByTestId('table-book-high_h')).toBeNull();
+    expect(within(screen.getByTestId('table-books-team2')).queryByTestId('table-book-low_s')).toBeNull();
   });
 
   it('renders the player hand area footer', async () => {

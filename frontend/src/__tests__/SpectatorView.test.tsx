@@ -18,7 +18,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Lightweight mock for GamePlayerSeat — the real component renders SVG icons
@@ -175,6 +175,24 @@ describe('SpectatorView', () => {
       expect(screen.getByTestId('spectator-view')).toBeTruthy();
     });
 
+    it('renders declared books into the correct half of the center table', () => {
+      render(
+        <SpectatorView
+          {...buildProps({
+            gameState: makeGameState({
+              declaredSuits: [
+                { halfSuitId: 'low_s', teamId: 1, declaredBy: 'p1' },
+                { halfSuitId: 'high_h', teamId: 2, declaredBy: 'p2' },
+              ],
+            }),
+          })}
+        />,
+      );
+
+      expect(within(screen.getByTestId('table-books-team1')).getByTestId('table-book-low_s')).toBeTruthy();
+      expect(within(screen.getByTestId('table-books-team2')).getByTestId('table-book-high_h')).toBeTruthy();
+    });
+
     it('renders the spectator banner (prominent read-only indicator)', () => {
       render(<SpectatorView {...buildProps()} />);
       const banner = screen.getByTestId('spectator-banner');
@@ -321,8 +339,8 @@ describe('SpectatorView', () => {
 
     it('renders team label text for Team 1 and Team 2', () => {
       render(<SpectatorView {...buildProps()} />);
-      expect(screen.getByText('Team 2')).toBeTruthy();
-      expect(screen.getByText('Team 1')).toBeTruthy();
+      expect(screen.getAllByText('Team 2').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Team 1').length).toBeGreaterThan(0);
     });
   });
 

@@ -45,10 +45,10 @@ import DealAnimation from '@/components/DealAnimation';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
+import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
-import { ConnectedScoreboardPanel } from '@/components/ScoreboardPanel';
 import MuteToggle from '@/components/MuteToggle';
 import VoiceControls from '@/components/VoiceControls';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
@@ -865,20 +865,6 @@ export default function GamePage({ params }: PageProps) {
       )}
 
       <main className="relative z-10 flex-1 flex flex-row items-start px-3 py-3 gap-3 min-h-0 overflow-hidden lg:items-stretch">
-
-        {/*
-         * Side scoreboard panel (Sub-AC 34a).
-         *
-         * Displays each team's name and current book count (0–8) with
-         * per-team declared-suit badges.  Hidden on mobile (the compact
-         * header score display serves mobile); shown as a fixed-width side
-         * column on large screens (≥1024 px).  The `scoreFlash` prop drives
-         * the yellow-highlight animation when a team just scored a book.
-         */}
-        <div className="hidden lg:flex flex-col w-48 xl:w-56 shrink-0 pt-1" data-testid="side-scoreboard-column">
-          <ConnectedScoreboardPanel myTeamId={myTeamId} scoreFlash={scoreFlash} />
-        </div>
-
         {/* ── Central game content ──────────────────────────────────────── */}
         <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden lg:self-stretch lg:justify-center lg:gap-8 xl:gap-10">
           <div className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl" aria-label="Team 2 players" data-testid="team2-row">
@@ -897,9 +883,10 @@ export default function GamePage({ params }: PageProps) {
           </div>
 
           <div className="relative flex items-center justify-center w-full max-w-xs lg:max-w-md xl:max-w-lg" aria-hidden="true" data-testid="game-table-center">
-            <div className="w-full aspect-[2/1] rounded-full border-2 border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center shadow-inner shadow-black/40">
-              <div className="text-center"><div className="text-2xl mb-0.5">🃏</div><p className="text-[10px] text-slate-500">{effectivePlayerCount === 6 ? '3v3' : '4v4'}</p></div>
-            </div>
+            <DeclaredBooksTable
+              declaredSuits={declaredSuits}
+              playerCount={effectivePlayerCount === 8 ? 8 : 6}
+            />
           </div>
 
           <div className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl" aria-label="Team 1 players" data-testid="team1-row">
