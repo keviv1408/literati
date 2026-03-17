@@ -49,6 +49,7 @@ import CardHand from '@/components/CardHand';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
+import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import type {
   CardId,
   GamePlayer,
@@ -63,6 +64,8 @@ import type {
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CountdownTimer from '@/components/CountdownTimer';
+import CardFlightAnimation from '@/components/CardFlightAnimation';
+import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 
 // ── Variant display helpers ────────────────────────────────────────────────────
 
@@ -171,6 +174,12 @@ export default function SpectatorView({
   // ── Last-move display (transient 5-second flash) ───────────────────────────
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const {
+    cardFlight,
+    askDeniedCue,
+    clearCardFlight,
+    clearAskDeniedCue,
+  } = useAskResultAnimations(lastAskResult);
   const showTransientLastResult = useEffectEvent((msg: string) => {
     setLastResultMsg(msg);
     if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
@@ -203,24 +212,13 @@ export default function SpectatorView({
 
   const displayedMove = lastResultMsg ?? gameState?.lastMove ?? null;
   const selectedPlayer = selectedPlayerId
+    && godModeEnabled
+    && players.some((player) => player.playerId === selectedPlayerId)
     ? players.find((player) => player.playerId === selectedPlayerId) ?? null
     : null;
   const selectedPlayerHand: CardId[] = selectedPlayer
     ? (spectatorHands[selectedPlayer.playerId] ?? [])
     : [];
-
-  useEffect(() => {
-    if (!selectedPlayerId) return;
-    if (!players.some((player) => player.playerId === selectedPlayerId)) {
-      setSelectedPlayerId(null);
-    }
-  }, [players, selectedPlayerId]);
-
-  useEffect(() => {
-    if (!godModeEnabled) {
-      setSelectedPlayerId(null);
-    }
-  }, [godModeEnabled]);
 
   // ── Connecting state ───────────────────────────────────────────────────────
   if (wsStatus === 'connecting' || wsStatus === 'idle') {
@@ -631,6 +629,28 @@ export default function SpectatorView({
           players={players}
           variant={effectiveVariant}
           onDismiss={() => setDismissedDeclarationFailed(declarationFailed)}
+        />
+      )}
+
+      {cardFlight && (
+        <CardFlightAnimation
+          cardId={cardFlight.cardId}
+          fromX={cardFlight.fromX}
+          fromY={cardFlight.fromY}
+          toX={cardFlight.toX}
+          toY={cardFlight.toY}
+          onComplete={clearCardFlight}
+        />
+      )}
+
+      {askDeniedCue && (
+        <AskDeniedAnimation
+          cardId={askDeniedCue.cardId}
+          seatLeft={askDeniedCue.seatLeft}
+          seatTop={askDeniedCue.seatTop}
+          seatWidth={askDeniedCue.seatWidth}
+          seatHeight={askDeniedCue.seatHeight}
+          onComplete={clearAskDeniedCue}
         />
       )}
     </div>

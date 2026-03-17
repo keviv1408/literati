@@ -23,14 +23,14 @@
  * can clearly see which exact card changed hands.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type { CardId } from '@/types/game';
 import PlayingCard from './PlayingCard';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 /** Total duration of the card flight animation in milliseconds. */
-export const FLIGHT_DURATION_MS = 1500;
+export const FLIGHT_DURATION_MS = 2000;
 
 /** Width of the flying card element in pixels (matches w-10 = 40px). */
 const CARD_W = 40;
@@ -90,16 +90,12 @@ export default function CardFlightAnimation({
   toY,
   onComplete,
 }: CardFlightAnimationProps) {
-  // Stable ref so the effect closure never captures a stale callback
-  const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
-
   useEffect(() => {
     const t = setTimeout(() => {
-      onCompleteRef.current();
+      onComplete();
     }, FLIGHT_DURATION_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [onComplete]);
 
   // Delta from source centre to destination centre
   const dx = toX - fromX;

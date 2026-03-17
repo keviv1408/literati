@@ -43,6 +43,7 @@ import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import DealAnimation from '@/components/DealAnimation';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
+import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
@@ -50,6 +51,7 @@ import { ConnectedScoreboardPanel } from '@/components/ScoreboardPanel';
 import MuteToggle from '@/components/MuteToggle';
 import VoiceControls from '@/components/VoiceControls';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
+import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
 import { cardLabel, getCardHalfSuit } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload } from '@/types/game';
@@ -132,23 +134,6 @@ export default function GamePage({ params }: PageProps) {
   // duration ~550 ms plus a small buffer).
   const [newlyArrivedCardId, setNewlyArrivedCardId] = useState<CardId | null>(null);
   const flipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Card flight animation (AC 33 Sub-AC 1) ─────────────────────────────────
-  //
-  // Triggered whenever a successful ask_card result arrives.
-  // Stores the viewport-coordinate from/to centres of the two player seats so
-  // that `CardFlightAnimation` can render the transferred card flying from the
-  // card-giver (target) to the card-receiver (asker).
-  //
-  // Cleared (set to null) in the onComplete callback once the 1.5 s animation
-  // finishes, which unmounts the overlay.
-  const [cardFlight, setCardFlight] = useState<{
-    cardId: CardId;
-    fromX: number;
-    fromY: number;
-    toX: number;
-    toY: number;
-  } | null>(null);
 
   useEffect(() => {
     params.then((resolved) => {
@@ -252,32 +237,16 @@ export default function GamePage({ params }: PageProps) {
     playDeclarationFail,
   } = useAudio();
 
+  const {
+    cardFlight,
+    askDeniedCue,
+    clearCardFlight,
+    clearAskDeniedCue,
+  } = useAskResultAnimations(lastAskResult);
+
   useEffect(() => {
     if (lastAskResult?.lastMove) {
-      // ── Card flight animation: trigger on every successful transfer ──────
-      // Query the DOM for both seat elements by their data-player-id attribute
-      // BEFORE any state reset so the seat elements are still at their current
-      // positions. On success the card flies from the target (giver) to the
-      // asker (receiver).
       if (lastAskResult.success) {
-        const fromEl = document.querySelector<HTMLElement>(
-          `[data-player-id="${lastAskResult.targetId}"]`
-        );
-        const toEl = document.querySelector<HTMLElement>(
-          `[data-player-id="${lastAskResult.askerId}"]`
-        );
-        if (fromEl && toEl) {
-          const fromRect = fromEl.getBoundingClientRect();
-          const toRect   = toEl.getBoundingClientRect();
-          setCardFlight({
-            cardId: lastAskResult.cardId,
-            fromX: fromRect.left + fromRect.width  / 2,
-            fromY: fromRect.top  + fromRect.height / 2,
-            toX:   toRect.left   + toRect.width    / 2,
-            toY:   toRect.top    + toRect.height   / 2,
-          });
-        }
-
         // ── Card flip animation (Sub-AC 2 of AC 33) ────────────────────────
         // When the CURRENT PLAYER received the card (they were the asker),
         // trigger the flip animation so the newly arrived card reveals itself
@@ -532,13 +501,13 @@ export default function GamePage({ params }: PageProps) {
   //   • The turn-indicator banner shows seat-selection guidance.
   const isTurnPassMode = isMyTurn && (postDeclarationHighlight !== null || pendingTurnPassAck);
 
-  function handleAsk(targetId: string, cardId: CardId) {
+  const handleAsk = useCallback((targetId: string, cardId: CardId) => {
     setActionLoading(true);
     // Immediately clear the turn indicator so the glow and audio repeat
     // stop as soon as the player submits — before the server responds.
     clearIndicator();
     sendAsk(targetId, cardId);
-  }
+  }, [clearIndicator, sendAsk]);
 
   const handleAskTargetSeat = useCallback((targetPlayerId: string) => {
     if (!selectedAskCard || actionLoading) return;
@@ -1115,7 +1084,18 @@ export default function GamePage({ params }: PageProps) {
           fromY={cardFlight.fromY}
           toX={cardFlight.toX}
           toY={cardFlight.toY}
-          onComplete={() => setCardFlight(null)}
+          onComplete={clearCardFlight}
+        />
+      )}
+
+      {askDeniedCue && (
+        <AskDeniedAnimation
+          cardId={askDeniedCue.cardId}
+          seatLeft={askDeniedCue.seatLeft}
+          seatTop={askDeniedCue.seatTop}
+          seatWidth={askDeniedCue.seatWidth}
+          seatHeight={askDeniedCue.seatHeight}
+          onComplete={clearAskDeniedCue}
         />
       )}
 

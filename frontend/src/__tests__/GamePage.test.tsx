@@ -85,10 +85,13 @@ class MockWebSocket {
   onmessage: ((e: MessageEvent) => void) | null = null;
   readyState = 0; // CONNECTING
   close() { this.readyState = 3; }
-  send(_data: string) {}
+  send() {}
   constructor(public url: string) {
-    lastMockWsInstance = this;
+    MockWebSocket.latestInstance = this;
+    lastMockWsInstance = MockWebSocket.latestInstance;
   }
+
+  static latestInstance: MockWebSocket | null = null;
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (global as any).WebSocket = MockWebSocket;
@@ -450,6 +453,56 @@ describe('GamePage — in_progress game view', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('countdown-timer')).toBeNull();
     });
+  });
+
+  it('shows a denied ask overlay over the asked player and clears it shortly after', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('game-view')).toBeTruthy();
+    });
+
+    act(() => openWs());
+    act(() => sendWsMessage(makeGameInit('player-me', [
+      makePlayer('player-me', 'Me', 1, 0),
+      makePlayer('p2', 'Alice', 1, 2),
+      makePlayer('p3', 'Bob', 1, 4),
+      makePlayer('p4', 'Carol', 2, 1),
+      makePlayer('p5', 'Dave', 2, 3),
+      makePlayer('p6', 'Eve', 2, 5),
+    ])));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('game-player-seat').length).toBeGreaterThan(0);
+    });
+
+    jest.useFakeTimers();
+    try {
+      act(() => sendWsMessage({
+        type: 'ask_result',
+        askerId: 'player-me',
+        targetId: 'p4',
+        cardId: '5_h',
+        success: false,
+        newTurnPlayerId: 'p4',
+        lastMove: 'Me asked Carol for 5♥ — denied',
+      }));
+
+      act(() => {
+        jest.advanceTimersByTime(20);
+      });
+
+      expect(screen.getByTestId('ask-denied-animation')).toBeTruthy();
+      expect(screen.getByTestId('ask-denied-card')).toBeTruthy();
+      expect(screen.getByTestId('ask-denied-x')).toBeTruthy();
+
+      act(() => {
+        jest.advanceTimersByTime(2000);
+      });
+
+      expect(screen.queryByTestId('ask-denied-animation')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
