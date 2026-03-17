@@ -123,7 +123,7 @@ body:has([role="dialog"]) {
 /* ── Card flight animation (AC 33 Sub-AC 1) ─────────────────────────────────── */
 
 /**
- * Card transfer flight — a face-down card flies from the card-giver's seat to
+ * Card transfer flight — a face-up card flies from the card-giver's seat to
  * the card-receiver's seat after a successful ask_card.
  *
  * The card lifts slightly at the arc midpoint (15 px above the straight line)
@@ -160,7 +160,7 @@ body:has([role="dialog"]) {
 }
 
 .animate-card-flight {
-  animation: card-flight 0.6s ease-in-out forwards;
+  animation: card-flight 1.5s ease-in-out forwards;
 }
 
 /* ── Card flip reveal animation (Sub-AC 2 of AC 33) ────────────────────────── */

@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * CardFlightAnimation — overlays a card back-face that flies from one player's
+ * CardFlightAnimation — overlays a face-up card that flies from one player's
  * seat position to another, simulating the physical card transfer after a
  * successful ask_card result.
  *
  * The component:
  *  • Mounts as a fixed full-viewport overlay (pointer-events-none, aria-hidden)
- *  • Positions the card back at the source seat centre (viewport coordinates)
+ *  • Positions the transferred card at the source seat centre (viewport coordinates)
  *  • Applies `animate-card-flight` which translates by (--flight-dx, --flight-dy)
  *    to land on the destination seat centre, with a slight arc lift at mid-flight
  *  • Calls `onComplete` after FLIGHT_DURATION_MS and expects the parent to unmount it
@@ -19,16 +19,18 @@
  *  4. Mounting this component with the computed from/to coordinates
  *  5. Unmounting on onComplete (by clearing the flight state)
  *
- * Visual style: matches the card back used in DealAnimation (blue-900 base,
- * inner border rings) for a consistent look throughout the game.
+ * Visual style: uses the shared PlayingCard face-up rendering so every player
+ * can clearly see which exact card changed hands.
  */
 
 import { useEffect, useRef } from 'react';
+import type { CardId } from '@/types/game';
+import PlayingCard from './PlayingCard';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 /** Total duration of the card flight animation in milliseconds. */
-export const FLIGHT_DURATION_MS = 600;
+export const FLIGHT_DURATION_MS = 1500;
 
 /** Width of the flying card element in pixels (matches w-10 = 40px). */
 const CARD_W = 40;
@@ -39,6 +41,9 @@ const CARD_H = 64;
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface CardFlightAnimationProps {
+  /** The specific card being transferred. */
+  cardId: CardId;
+
   /**
    * X coordinate (horizontal, in viewport pixels) of the centre of the source
    * seat — i.e. the player who gave up the card.
@@ -74,10 +79,11 @@ export interface CardFlightAnimationProps {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 /**
- * `CardFlightAnimation` renders a single face-down card that flies from
+ * `CardFlightAnimation` renders a single face-up card that flies from
  * `(fromX, fromY)` to `(toX, toY)` in viewport coordinates.
  */
 export default function CardFlightAnimation({
+  cardId,
   fromX,
   fromY,
   toX,
@@ -109,7 +115,7 @@ export default function CardFlightAnimation({
       aria-hidden="true"
       data-testid="card-flight-animation"
     >
-      {/* Flying card back-face — styled to match DealAnimation */}
+      {/* Flying card — rendered face-up so all players can identify it. */}
       <div
         className="absolute animate-card-flight"
         style={
@@ -125,11 +131,11 @@ export default function CardFlightAnimation({
         }
         data-testid="card-flight-card"
       >
-        {/* Blue card back identical to DealAnimation */}
-        <div className="w-full h-full rounded-lg border-2 border-blue-700 bg-blue-900 shadow-xl">
-          <div className="absolute inset-1 rounded border border-blue-600/50 bg-blue-800/50" />
-          <div className="absolute inset-2 rounded border border-blue-500/30" />
-        </div>
+        <PlayingCard
+          cardId={cardId}
+          size="md"
+          className="w-10 h-16 shadow-xl"
+        />
       </div>
     </div>
   );

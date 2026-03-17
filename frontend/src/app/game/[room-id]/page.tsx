@@ -138,12 +138,13 @@ export default function GamePage({ params }: PageProps) {
   //
   // Triggered whenever a successful ask_card result arrives.
   // Stores the viewport-coordinate from/to centres of the two player seats so
-  // that `CardFlightAnimation` can render a face-down card flying from the
+  // that `CardFlightAnimation` can render the transferred card flying from the
   // card-giver (target) to the card-receiver (asker).
   //
-  // Cleared (set to null) in the onComplete callback once the 600 ms animation
+  // Cleared (set to null) in the onComplete callback once the 1.5 s animation
   // finishes, which unmounts the overlay.
   const [cardFlight, setCardFlight] = useState<{
+    cardId: CardId;
     fromX: number;
     fromY: number;
     toX: number;
@@ -269,6 +270,7 @@ export default function GamePage({ params }: PageProps) {
           const fromRect = fromEl.getBoundingClientRect();
           const toRect   = toEl.getBoundingClientRect();
           setCardFlight({
+            cardId: lastAskResult.cardId,
             fromX: fromRect.left + fromRect.width  / 2,
             fromY: fromRect.top  + fromRect.height / 2,
             toX:   toRect.left   + toRect.width    / 2,
@@ -281,7 +283,7 @@ export default function GamePage({ params }: PageProps) {
         // trigger the flip animation so the newly arrived card reveals itself
         // by flipping from card-back to card-face in their hand.
         //
-        // The flight animation (Sub-AC 1) ends at ~600 ms; the flip animation
+        // The flight animation (Sub-AC 1) ends at ~1.5 s; the flip animation
         // starts immediately when the card appears in the hand (via hand_update
         // which arrives roughly simultaneously with ask_result).  The 700 ms
         // timer provides a small buffer past the 550 ms CSS animation duration.
@@ -1125,10 +1127,11 @@ export default function GamePage({ params }: PageProps) {
       )}
 
       {/* ── Card flight animation overlay (AC 33 Sub-AC 1) ─────────────── */}
-      {/* Renders a face-down card flying from the card-giver's seat to the  */}
+      {/* Renders a face-up card flying from the card-giver's seat to the    */}
       {/* card-receiver's seat after every successful ask_card result.       */}
       {cardFlight && (
         <CardFlightAnimation
+          cardId={cardFlight.cardId}
           fromX={cardFlight.fromX}
           fromY={cardFlight.fromY}
           toX={cardFlight.toX}

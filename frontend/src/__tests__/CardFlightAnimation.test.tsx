@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for CardFlightAnimation (AC 33 Sub-AC 1) — card back-face flight
+ * Tests for CardFlightAnimation (AC 33 Sub-AC 1) — face-up card flight
  * animation triggered after a successful ask_card result.
  *
  * Covers:
@@ -10,7 +10,7 @@
  *  • pointer-events-none class so game controls are not blocked
  *  • fixed + inset-0 classes for full-viewport overlay
  *  • The flying card element is present on mount
- *  • Card carries the card-back visual style (blue-900 background)
+ *  • Card carries the transferred card face so players can identify it
  *  • CSS custom properties --flight-dx and --flight-dy are set from props
  *  • animate-card-flight class is applied to the flying card element
  *  • onComplete fires after FLIGHT_DURATION_MS
@@ -39,6 +39,7 @@ afterEach(() => {
 
 function renderFlight(overrides?: Partial<React.ComponentProps<typeof CardFlightAnimation>>) {
   const defaults = {
+    cardId: '5_s',
     fromX: 100,
     fromY: 200,
     toX:   400,
@@ -81,22 +82,19 @@ describe('CardFlightAnimation — rendering', () => {
   });
 });
 
-// ── Card back visual ─────────────────────────────────────────────────────────
+// ── Face-up card visual ──────────────────────────────────────────────────────
 
-describe('CardFlightAnimation — card back style', () => {
+describe('CardFlightAnimation — face-up card style', () => {
   it('the flying card has animate-card-flight class', () => {
     renderFlight();
     const card = screen.getByTestId('card-flight-card');
     expect(card.className).toContain('animate-card-flight');
   });
 
-  it('the flying card contains a child with bg-blue-900 (card back colour)', () => {
-    renderFlight();
-    const card = screen.getByTestId('card-flight-card');
-    // The blue card back is a direct child of the positioned card element
-    const backFace = card.firstElementChild as HTMLElement;
-    expect(backFace).toBeTruthy();
-    expect(backFace.className).toContain('bg-blue-900');
+  it('renders the transferred card face-up instead of a face-down card back', () => {
+    renderFlight({ cardId: '5_s' });
+    expect(screen.getByLabelText('5 of Spades')).toBeTruthy();
+    expect(screen.queryByLabelText('Card (face down)')).toBeNull();
   });
 
   it('the flying card wrapper has absolute positioning class', () => {
@@ -234,6 +232,7 @@ describe('CardFlightAnimation — onComplete ref stability', () => {
     // Update the prop mid-flight — the ref update should ensure second() is called
     rerender(
       <CardFlightAnimation
+        cardId="5_s"
         fromX={100} fromY={200} toX={400} toY={150}
         onComplete={second}
       />
