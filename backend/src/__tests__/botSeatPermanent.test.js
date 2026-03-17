@@ -523,7 +523,7 @@ describe('scheduleBotTurnIfNeeded — reclaim queue integration', () => {
     const timerMsg = ws._messages.find((m) => m.type === 'turn_timer');
     expect(timerMsg).toBeDefined();
     expect(timerMsg.playerId).toBe('p1');
-    expect(timerMsg.durationMs).toBe(30_000);
+    expect(timerMsg.durationMs).toBe(60_000);
 
     cancelTurnTimer(ROOM);
     removeConnection(ROOM, 'p1');

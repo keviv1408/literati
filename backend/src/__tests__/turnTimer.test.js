@@ -3,7 +3,7 @@
 /**
  * Unit tests for the server-side turn timer in gameSocketServer.js.
  *
- * Sub-AC 3: 30-second server-side turn timer for the card request flow that
+ * Sub-AC 3: 60-second server-side turn timer for the card request flow that
  * persists across step navigation and triggers an auto-forfeit/skip on expiry.
  *
  * Coverage:
@@ -13,7 +13,7 @@
  *     3. Schedules timer for a human player and broadcasts turn_timer event
  *     4. Cancels existing timer before scheduling a new one (prevents double-fire)
  *     5. Broadcasts correct { type, playerId, durationMs, expiresAt } fields
- *     6. expiresAt is approximately Date.now() + 30000
+ *     6. expiresAt is approximately Date.now() + 60000
  *
  *   cancelTurnTimer:
  *     7. Calling cancelTurnTimer clears the scheduled timeout
@@ -229,7 +229,7 @@ describe('scheduleTurnTimerIfNeeded', () => {
     const timerMsg = ws._messages.find((m) => m.type === 'turn_timer');
     expect(timerMsg).toBeDefined();
     expect(timerMsg.playerId).toBe('p1');
-    expect(timerMsg.durationMs).toBe(30_000);
+    expect(timerMsg.durationMs).toBe(60_000);
 
     removeConnection('TIMER1', 'p1');
   });
@@ -248,14 +248,14 @@ describe('scheduleTurnTimerIfNeeded', () => {
     const timerMsg = ws._messages.find((m) => m.type === 'turn_timer');
     expect(timerMsg.type).toBe('turn_timer');
     expect(timerMsg.playerId).toBe('p2');
-    expect(timerMsg.durationMs).toBe(30_000);
-    expect(timerMsg.expiresAt).toBeGreaterThanOrEqual(before + 30_000);
-    expect(timerMsg.expiresAt).toBeLessThanOrEqual(after  + 30_000 + 100);
+    expect(timerMsg.durationMs).toBe(60_000);
+    expect(timerMsg.expiresAt).toBeGreaterThanOrEqual(before + 60_000);
+    expect(timerMsg.expiresAt).toBeLessThanOrEqual(after  + 60_000 + 100);
 
     removeConnection('TIMER1', 'p2');
   });
 
-  it('6. expiresAt is approximately Date.now() + 30000', () => {
+  it('6. expiresAt is approximately Date.now() + 60000', () => {
     const gs = makeGame({ currentPlayer: 'p1' });
     setGame('TIMER1', gs);
 
@@ -266,7 +266,7 @@ describe('scheduleTurnTimerIfNeeded', () => {
     scheduleTurnTimerIfNeeded(gs);
 
     const timerMsg = ws._messages.find((m) => m.type === 'turn_timer');
-    const expectedExpiry = before + 30_000;
+    const expectedExpiry = before + 60_000;
     // Allow ±200ms for test execution time
     expect(Math.abs(timerMsg.expiresAt - expectedExpiry)).toBeLessThan(200);
 

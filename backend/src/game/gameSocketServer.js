@@ -223,7 +223,7 @@ function _getRoomSocketServer() {
 const BOT_TURN_DELAY_MS = 5_000;
 
 /** Time a human player has to act before the server auto-moves for them (ms) */
-const HUMAN_TURN_TIMEOUT_MS = 120_000;
+const HUMAN_TURN_TIMEOUT_MS = 60_000;
 
 /**
  * Time the declaring team has to choose which teammate takes the next turn
@@ -628,7 +628,7 @@ function scheduleBotTurnIfNeeded(gs) {
   // instead of scheduling a bot turn.  After _executeReclaim returns:
   //   - player.isBot === false
   //   - The calling action handler will call scheduleTurnTimerIfNeeded(gs) next,
-  //     which will detect isBot=false and schedule the 30-second human turn timer.
+  //     which will detect isBot=false and schedule the 60-second human turn timer.
   if (isInReclaimQueue(gs.roomCode, currentPlayer.playerId)) {
     _executeReclaim(gs, currentPlayer.playerId);
     return; // Do NOT schedule a bot turn — human resumes control.
@@ -728,7 +728,7 @@ function cancelTurnTimer(roomCode) {
  * the DeclareModal card-assignment form).
  *
  * Behaviour:
- *   1. Cancels the existing 30-second turn timer.
+ *   1. Cancels the existing 60-second turn timer.
  *   2. Starts a 60-second DECLARATION_PHASE_TIMEOUT_MS timer that calls
  *      `executeTimedOutTurn` on expiry (same as the original turn timer).
  *   3. Emits real-time `timer_tick` events every 1 second AND a `timer_threshold`
@@ -744,7 +744,7 @@ function cancelTurnTimer(roomCode) {
  * @param {string} playerId  — The declaring player who entered Step 2.
  */
 function startDeclarationPhaseTimer(roomCode, playerId) {
-  // Cancel the existing 30-second turn timer (via timerService + metadata map).
+  // Cancel the existing 60-second turn timer (via timerService + metadata map).
   cancelTurnTimer(roomCode);
 
   // Start the 60-second countdown via timerService.
@@ -1166,7 +1166,7 @@ function _clearAllReconnectWindows() {
  * Restores the human flag, removes the reclaim entry, broadcasts updates,
  * and persists the change.  After this returns, the calling code falls
  * through to `scheduleTurnTimerIfNeeded` which will see `isBot = false`
- * and start the 30-second human turn timer.
+ * and start the 60-second human turn timer.
  *
  * Sub-AC 4: Mid-game reclaim at next turn boundary.
  *
@@ -1236,7 +1236,7 @@ function _startReconnectWindow(gs, player) {
 
   const expiresAt = Date.now() + RECONNECT_WINDOW_MS;
 
-  // ── 30-second turn timer (concurrent) ────────────────────────────────────
+  // ── 60-second turn timer (concurrent) ────────────────────────────────────
   // Start the turn timer BEFORE marking the player as bot so that
   // scheduleTurnTimerIfNeeded sees isBot === false and sets the 30-second
   // timer (rather than skipping it).  This timer runs concurrently with
@@ -1333,14 +1333,14 @@ function _startReconnectWindow(gs, player) {
 
   // ── Bot timer ─────────────────────────────────────────────────────────────
   // Schedule the bot to act after the bot-turn delay. This runs alongside the
-  // 30-second turn timer (both fire concurrently); whichever fires first wins.
+  // 60-second turn timer (both fire concurrently); whichever fires first wins.
   if (gs.currentTurnPlayerId === playerId) {
     scheduleBotTurnIfNeeded(gs);
   }
 
   console.log(
     `[game-ws] Player ${playerId} disconnected from room ${roomCode} — ` +
-    `concurrent 30s turn timer + ${RECONNECT_WINDOW_MS / 1000}s reconnect window started`
+    `concurrent ${HUMAN_TURN_TIMEOUT_MS / 1000}s turn timer + ${RECONNECT_WINDOW_MS / 1000}s reconnect window started`
   );
 }
 
@@ -1448,7 +1448,7 @@ function cancelReconnectWindow(roomCode, playerId) {
  *   2. If the game is active: starts the 60-second reconnect window
  *      (`reconnect_timer` → `reconnect_tick` → `reconnect_expired`).
  *   3. If the disconnected player holds the active turn: ALSO starts the
- *      30-second turn timer concurrently (`turn_timer` → `turn_timer_tick`
+ *      60-second turn timer concurrently (`turn_timer` → `turn_timer_tick`
  *      → `bot_takeover`).
  *
  * Spectators disconnecting are silently ignored.
@@ -1511,7 +1511,7 @@ function handlePlayerDisconnect(roomCode, playerId, isSpectator) {
   // 1. Always start the 60-second reconnect window for any human player
   startReconnectWindow(roomCode, playerId);
 
-  // 2. If this player holds the active turn, also start the 30-second turn timer
+  // 2. If this player holds the active turn, also start the 60-second turn timer
   if (gs.currentTurnPlayerId === playerId) {
     scheduleTurnTimerIfNeeded(gs);
   }
@@ -3435,7 +3435,7 @@ function attachGameSocketServer(httpServer) {
         if (currentGs && currentGs.status === 'active') {
           const player = currentGs.players.find((p) => p.playerId === playerId);
           if (player && !player.isBot) {
-            // Start the concurrent timer sequence: 30s turn timer + 60s reconnect window.
+            // Start the concurrent timer sequence: 60s turn timer + 60s reconnect window.
             // _startReconnectWindow handles both — it starts the turn timer BEFORE
             // marking the seat as bot, ensuring both timers run simultaneously.
             _startReconnectWindow(currentGs, player);

@@ -4,7 +4,7 @@
  * Unit tests for the concurrent timer infrastructure (Sub-AC 1 of AC 39).
  *
  * Verifies that on player disconnect the server:
- *   1.  Starts a 30-second turn timer (via scheduleTurnTimerIfNeeded) and a
+ *   1.  Starts a 60-second turn timer (via scheduleTurnTimerIfNeeded) and a
  *       60-second reconnect window simultaneously when the disconnected player
  *       holds the active turn.
  *   2.  Starts ONLY the reconnect window (no turn timer) when the disconnected
@@ -14,7 +14,7 @@
  *   5.  Emits `reconnect_expired` when the 60-second window closes.
  *   6.  Emits `turn_timer` start event concurrently with the reconnect window.
  *   7.  Emits `turn_timer_tick` events every TIMER_TICK_INTERVAL_MS.
- *   8.  `bot_takeover` fires when the 30-second turn timer expires.
+ *   8.  `bot_takeover` fires when the 60-second turn timer expires.
  *   9.  cancelReconnectWindow cancels both the expiry and the tick interval.
  *   10. startReconnectWindow + cancelReconnectWindow are idempotent.
  *   11. handlePlayerDisconnect is a no-op for spectators.
@@ -464,7 +464,7 @@ describe('handlePlayerDisconnect', () => {
     cleanupRoom();
   });
 
-  it('6. starts 30-second turn timer when active player disconnects', () => {
+  it('6. starts 60-second turn timer when active player disconnects', () => {
     const { sockets } = setupRoom(['p1', 'p2', 'p3'], 'p1'); // p1 has the turn
     handlePlayerDisconnect(ROOM, 'p1', false);
 
@@ -472,7 +472,7 @@ describe('handlePlayerDisconnect', () => {
     const timerMsg = sockets.p2._messages.find((m) => m.type === 'turn_timer');
     expect(timerMsg).toBeDefined();
     expect(timerMsg.playerId).toBe('p1');
-    expect(timerMsg.durationMs).toBe(30_000);
+    expect(timerMsg.durationMs).toBe(60_000);
     cleanupRoom();
   });
 
@@ -495,18 +495,18 @@ describe('handlePlayerDisconnect', () => {
 
     // Both timer entries should exist
     expect(_reconnectTimers.has(`${ROOM}:p1`)).toBe(true); // 60s reconnect
-    expect(_turnTimers.has(ROOM)).toBe(true);               // 30s turn timer
+    expect(_turnTimers.has(ROOM)).toBe(true);               // 60s turn timer
     cleanupRoom();
   });
 
-  it('8. bot_takeover fires when the 30-second turn timer expires', () => {
+  it('8. bot_takeover fires when the 60-second turn timer expires', () => {
     const { sockets } = setupRoom(['p1', 'p2', 'p3'], 'p1');
     mockCompleteBotFromPartial.mockReturnValue({ action: 'pass' });
 
     handlePlayerDisconnect(ROOM, 'p1', false);
 
-    // Advance 30 seconds — turn timer fires
-    jest.advanceTimersByTime(30_000);
+    // Advance 60 seconds — turn timer fires
+    jest.advanceTimersByTime(60_000);
 
     const takeover = sockets.p2._messages.find((m) => m.type === 'bot_takeover');
     expect(takeover).toBeDefined();
@@ -595,7 +595,7 @@ describe('scheduleTurnTimerIfNeeded — tick events', () => {
     expect(tick.playerId).toBe('p1');
     expect(typeof tick.remainingMs).toBe('number');
     expect(tick.remainingMs).toBeGreaterThan(0);
-    expect(tick.remainingMs).toBeLessThanOrEqual(30_000);
+    expect(tick.remainingMs).toBeLessThanOrEqual(60_000);
     expect(typeof tick.expiresAt).toBe('number');
 
     removeConnection(ROOM, 'p1');
