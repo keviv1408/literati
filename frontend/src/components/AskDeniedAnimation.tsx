@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import type { CardId } from '@/types/game';
 import PlayingCard from './PlayingCard';
 
-export const ASK_DENIED_ANIMATION_MS = 2000;
+export const ASK_DENIED_ANIMATION_MS = 3000;
 
 const CARD_W = 72;
 const CARD_H = 108;
@@ -44,7 +44,7 @@ export default function AskDeniedAnimation({
   const cardTop = seatTop + Math.max(4, seatHeight * 0.06);
   const cardCenterX = cardLeft + CARD_W / 2;
   const cardCenterY = cardTop + CARD_H / 2;
-  const xSize = Math.max(42, Math.min(72, seatWidth * 0.62));
+  const xSize = Math.max(56, Math.min(90, seatWidth * 0.75));
 
   return (
     <div
