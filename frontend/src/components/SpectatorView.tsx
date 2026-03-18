@@ -180,13 +180,24 @@ export default function SpectatorView({
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observedAskBatchRef = useRef<AskMoveBatch | null>(null);
   const processedAskResultKeyRef = useRef<string | null>(null);
+  const getPlayerDisplayName = (playerId: string) => {
+    return players.find((p) => p.playerId === playerId)?.displayName;
+  };
+  const getPlayerBubblePlacement = (playerId: string): 'above' | 'below' | undefined => {
+    const player = players.find((p) => p.playerId === playerId);
+    if (!player) return undefined;
+    return player.teamId === 2 ? 'below' : 'above';
+  };
   const {
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
     clearCardFlight,
     clearAskDeniedCue,
-  } = useAskResultAnimations(lastAskResult);
+  } = useAskResultAnimations(lastAskResult, {
+    getPlayerDisplayName,
+    getPlayerBubblePlacement,
+  });
   const showTransientLastResult = useEffectEvent((msg: string, persistentMessage: string | null = null) => {
     setLastResultMsg(msg);
     setSyntheticLastMoveMsg(persistentMessage);

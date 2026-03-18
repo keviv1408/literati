@@ -651,14 +651,14 @@ describe('GamePage — in_progress game view', () => {
 
       expect(screen.getByTestId('ask-speech-bubble-overlay')).toBeTruthy();
       expect(screen.getByTestId('ask-speech-bubble-text').textContent).toContain(
-        'Can I have the 5 of hearts?',
+        'Carol, can I have the 5 of hearts?',
       );
       expect(screen.getByTestId('ask-denied-animation')).toBeTruthy();
       expect(screen.getByTestId('ask-denied-card')).toBeTruthy();
       expect(screen.getByTestId('ask-denied-x')).toBeTruthy();
 
       act(() => {
-        jest.advanceTimersByTime(2000);
+        jest.advanceTimersByTime(3500);
       });
 
       expect(screen.queryByTestId('ask-speech-bubble-overlay')).toBeNull();

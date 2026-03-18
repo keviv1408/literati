@@ -32,10 +32,12 @@ export interface AskSpeechBubbleState {
   placement: 'above' | 'below';
 }
 
-const ASKER_BUBBLE_MS = 2000;
+const ASKER_BUBBLE_MS = 3500;
 
 interface UseAskResultAnimationsOptions {
   getAskBubbleCardIds?: (lastAskResult: AskResultPayload) => CardId[] | undefined;
+  getPlayerDisplayName?: (playerId: string) => string | undefined;
+  getPlayerBubblePlacement?: (playerId: string) => 'above' | 'below' | undefined;
 }
 
 function getPlayerSeatElement(playerId: string): HTMLElement | null {
@@ -58,9 +60,10 @@ function rankToWord(rank: CardRank): string {
   }
 }
 
-function askBubbleText(cardId: CardId): string {
+function askBubbleText(cardId: CardId, askerName?: string): string {
   const { rank, suit } = parseCard(cardId);
-  return `Can I have the ${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}?`;
+  const prefix = askerName ? `${askerName}, c` : 'C';
+  return `${prefix}an I have the ${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}?`;
 }
 
 function formatNaturalList(items: string[]): string {
@@ -70,25 +73,28 @@ function formatNaturalList(items: string[]): string {
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
-function askBubbleTextForCards(cardIds: CardId[]): string {
+function askBubbleTextForCards(cardIds: CardId[], askerName?: string): string {
   if (cardIds.length === 0) return 'Can I have that card?';
-  if (cardIds.length === 1) return askBubbleText(cardIds[0]);
+  if (cardIds.length === 1) return askBubbleText(cardIds[0], askerName);
 
   const requestedCards = cardIds.map((cardId) => {
     const { rank, suit } = parseCard(cardId);
     return `${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}`;
   });
 
-  return `Can I have the ${formatNaturalList(requestedCards)}?`;
+  const prefix = askerName ? `${askerName}, c` : 'C';
+  return `${prefix}an I have the ${formatNaturalList(requestedCards)}?`;
 }
 
 function buildAskSpeechBubble(
   playerRect: DOMRect,
   cardIds: CardId[],
+  targetName?: string,
+  placementOverride?: 'above' | 'below',
 ): AskSpeechBubbleState {
-  const placement = playerRect.top > 120 ? 'above' : 'below';
+  const placement = placementOverride ?? (playerRect.top > 120 ? 'above' : 'below');
   return {
-    text: askBubbleTextForCards(cardIds),
+    text: askBubbleTextForCards(cardIds, targetName),
     anchorX: playerRect.left + playerRect.width / 2,
     anchorY: placement === 'above' ? playerRect.top - 10 : playerRect.bottom + 10,
     placement,
@@ -106,6 +112,8 @@ export function useAskResultAnimations(
   options: UseAskResultAnimationsOptions = {},
 ) {
   const getAskBubbleCardIds = options.getAskBubbleCardIds;
+  const getPlayerDisplayName = options.getPlayerDisplayName;
+  const getPlayerBubblePlacement = options.getPlayerBubblePlacement;
   const [cardFlight, setCardFlight] = useState<CardFlightState | null>(null);
   const [askDeniedCue, setAskDeniedCue] = useState<AskDeniedCueState | null>(null);
   const [askSpeechBubble, setAskSpeechBubble] = useState<AskSpeechBubbleState | null>(null);
@@ -114,6 +122,8 @@ export function useAskResultAnimations(
     if (!lastAskResult) return;
 
     const overrideBubbleCardIds = getAskBubbleCardIds?.(lastAskResult);
+    const targetName = getPlayerDisplayName?.(lastAskResult.targetId);
+    const placementOverride = getPlayerBubblePlacement?.(lastAskResult.askerId);
     let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
     const frameId = requestAnimationFrame(() => {
       const askerEl = getPlayerSeatElement(lastAskResult.askerId);
@@ -125,7 +135,7 @@ export function useAskResultAnimations(
               ? lastAskResult.batchCardIds
               : [lastAskResult.cardId];
         setAskSpeechBubble(
-          buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleCardIds),
+          buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleCardIds, targetName, placementOverride),
         );
         bubbleTimer = setTimeout(() => {
           setAskSpeechBubble(null);
@@ -178,7 +188,7 @@ export function useAskResultAnimations(
       cancelAnimationFrame(frameId);
       if (bubbleTimer) clearTimeout(bubbleTimer);
     };
-  }, [getAskBubbleCardIds, lastAskResult]);
+  }, [getAskBubbleCardIds, getPlayerBubblePlacement, getPlayerDisplayName, lastAskResult]);
 
   const clearCardFlight = useCallback(() => setCardFlight(null), []);
   const clearAskDeniedCue = useCallback(() => setAskDeniedCue(null), []);
