@@ -174,7 +174,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
     return (
       <div
         className={[
-          'w-[6.5rem] lg:w-[8rem] xl:w-[8.75rem] flex flex-col items-center gap-1 lg:gap-1.5',
+          'w-[6.5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5',
           'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl',
           'border border-dashed',
           'border-slate-700/60 bg-slate-900/60',
@@ -238,7 +238,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   return (
     <div
       className={[
-        'relative w-[6.5rem] lg:w-[8rem] xl:w-[8.75rem] flex flex-col items-center gap-1 lg:gap-1.5',
+        'relative w-[6.5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5',
         'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl border',
         'transition-transform duration-100',
         // Eliminated players are visually dimmed and cannot act

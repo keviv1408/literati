@@ -165,6 +165,7 @@ export default function DesktopCardHand({
   const canInteract = isMyTurn && !disabled && !!onSelectCard;
   const groups = buildSuitGroups(hand, variant);
   const totalCards = hand.length;
+  const desktopCardClassName = 'xl:w-[5rem] xl:h-[7.5rem] 2xl:w-[5.5rem] 2xl:h-[8.25rem]';
 
   return (
     <div
@@ -174,11 +175,11 @@ export default function DesktopCardHand({
     >
       {/* Scrollable row — allows very large hands to scroll horizontally */}
       <div
-        className="overflow-x-auto pb-2 px-1"
+        className="overflow-x-auto px-1 pb-2 lg:px-2"
         style={{ scrollbarWidth: 'thin' }}
       >
         <div
-          className="flex w-max min-w-full items-end justify-center gap-3 mx-auto"
+          className="mx-auto flex w-max min-w-full items-end justify-center gap-3 xl:gap-4 2xl:gap-5"
           role="group"
           aria-label="Card hand groups"
         >
@@ -233,6 +234,7 @@ export default function DesktopCardHand({
                         disabled={!canInteract}
                         onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
                         size="xl"
+                        cardClassName={desktopCardClassName}
                       />
                     ) : (
                       <PlayingCard
@@ -242,6 +244,7 @@ export default function DesktopCardHand({
                         disabled={!canInteract}
                         onClick={canInteract ? () => onSelectCard!(cardId) : undefined}
                         size="xl"
+                        className={desktopCardClassName}
                       />
                     )}
                       {/* Half-suit boundary notch: rendered as a thin right border */}

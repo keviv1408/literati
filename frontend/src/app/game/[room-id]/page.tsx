@@ -940,10 +940,10 @@ export default function GamePage({ params }: PageProps) {
         </div>
       )}
 
-      <main className="relative z-10 flex-1 flex flex-row items-start px-3 py-3 gap-3 min-h-0 overflow-hidden lg:items-stretch">
+      <main className="relative z-10 flex min-h-0 flex-1 items-stretch overflow-hidden px-3 py-3 lg:px-5 xl:px-6">
         {/* ── Central game content ──────────────────────────────────────── */}
-        <div className="flex flex-col flex-1 items-center justify-between gap-3 min-h-0 overflow-hidden lg:self-stretch lg:justify-center lg:gap-8 xl:gap-10">
-          <div className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl" aria-label="Team 2 players" data-testid="team2-row">
+        <div className="mx-auto flex min-h-0 w-full max-w-[82rem] flex-1 flex-col items-center justify-center gap-4 overflow-hidden lg:gap-5 xl:max-w-[90rem] xl:gap-6 2xl:max-w-[98rem]">
+          <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 2 players" data-testid="team2-row">
             <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
             <PlayerRow
               players={team2Players}
@@ -958,14 +958,14 @@ export default function GamePage({ params }: PageProps) {
             />
           </div>
 
-          <div className="relative flex items-center justify-center w-full max-w-xs lg:max-w-md xl:max-w-lg" aria-hidden="true" data-testid="game-table-center">
+          <div className="relative flex w-full max-w-sm items-center justify-center lg:max-w-xl xl:max-w-2xl 2xl:max-w-[44rem]" aria-hidden="true" data-testid="game-table-center">
             <DeclaredBooksTable
               declaredSuits={declaredSuits}
               playerCount={effectivePlayerCount === 8 ? 8 : 6}
             />
           </div>
 
-          <div className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl" aria-label="Team 1 players" data-testid="team1-row">
+          <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 1 players" data-testid="team1-row">
             <PlayerRow
               players={team1Players}
               myPlayerId={myPlayerId}
@@ -993,9 +993,9 @@ export default function GamePage({ params }: PageProps) {
        * once game_init is received, regardless of player count (6 or 8) or
        * whether any seat is occupied by a bot.
        */}
-      <footer className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 backdrop-blur-sm px-3 py-3" data-testid="player-hand-area">
+      <footer className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 px-3 py-2.5 backdrop-blur-sm lg:px-5 lg:py-3" data-testid="player-hand-area">
         {myPlayer ? (
-          <div className="flex flex-col gap-2" data-testid="game-controls">
+          <div className="mx-auto flex w-full max-w-[82rem] flex-col gap-2 xl:max-w-[90rem] 2xl:max-w-[98rem]" data-testid="game-controls">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">Your hand — <strong className="text-white">{myHand.length}</strong> card{myHand.length !== 1 ? 's' : ''}</span>
               {/* during turn-pass mode the declarant must choose a
@@ -1268,7 +1268,7 @@ function PlayerRow({
   const seatsPerTeam = Math.floor(playerCount / 2);
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
   return (
-    <div className="flex items-center justify-center gap-2 sm:gap-3 lg:gap-5 xl:gap-6 flex-wrap">
+    <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 lg:gap-6 xl:gap-8 2xl:gap-10">
       {seats.map((player, i) => {
         // determine whether this seat should glow cyan
         const isHl = Boolean(player && highlightedPlayerIds?.has(player.playerId));

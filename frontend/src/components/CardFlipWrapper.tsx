@@ -45,6 +45,8 @@ export interface CardFlipWrapperProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /** Extra className applied to the perspective-container wrapper. */
   className?: string;
+  /** Extra className forwarded to both rendered PlayingCard faces. */
+  cardClassName?: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -56,6 +58,7 @@ export default function CardFlipWrapper({
   onClick,
   size = 'md',
   className = '',
+  cardClassName = '',
 }: CardFlipWrapperProps) {
   return (
     /*
@@ -93,6 +96,7 @@ export default function CardFlipWrapper({
             disabled={disabled}
             onClick={onClick}
             size={size}
+            className={cardClassName}
           />
         </div>
 
@@ -112,6 +116,7 @@ export default function CardFlipWrapper({
             cardId={cardId}
             faceDown={true}
             size={size}
+            className={cardClassName}
           />
         </div>
       </div>
