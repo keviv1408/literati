@@ -18,7 +18,7 @@
  * a spectator if the playerId is not in the game's player list.
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGuestBearerToken, getGameSummary, ApiError } from '@/lib/api';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
@@ -31,8 +31,21 @@ import { useTurnIndicator } from '@/hooks/useTurnIndicator';
 import { GameProvider } from '@/contexts/GameContext';
 import { VoiceProvider, useVoice } from '@/contexts/VoiceContext';
 import CardHand from '@/components/CardHand';
+import PlayingCard from '@/components/PlayingCard';
 import InlineAskTray, { getAvailableAskHalfSuits } from '@/components/InlineAskTray';
-import DeclareModal from '@/components/DeclareModal';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core';
+import { DeclareDropSeat } from '@/components/InlineDeclare';
+import InlineDeclareTray from '@/components/InlineDeclareTray';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import EliminationModal from '@/components/EliminationModal';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
@@ -54,8 +67,8 @@ import VoiceControls from '@/components/VoiceControls';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
-import { cardLabel, getCardHalfSuit } from '@/types/game';
-import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse } from '@/types/game';
+import { cardLabel, getCardHalfSuit, getHalfSuitCards, allHalfSuitIds } from '@/types/game';
+import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -132,7 +145,11 @@ export default function GamePage({ params }: PageProps) {
   const [bearerToken, setBearerToken]     = useState<string | null>(null);
   const spectatorToken                    = searchParams.get('spectatorToken');
 
-  const [showDeclare, setShowDeclare]     = useState(false);
+  const [declareMode, setDeclareMode]     = useState(false);
+  const [declareSelectedSuit, setDeclareSelectedSuit] = useState<HalfSuitId | null>(null);
+  const [declareAssignment, setDeclareAssignment] = useState<Record<CardId, string>>({});
+  const [declareActiveDragId, setDeclareActiveDragId] = useState<string | null>(null);
+  const [declareSelectedCard, setDeclareSelectedCard] = useState<CardId | null>(null);
   const [showAskInline, setShowAskInline] = useState(false);
   const [selectedAskHalfSuit, setSelectedAskHalfSuit] = useState<HalfSuitId | null>(null);
   const [selectedAskCardIds, setSelectedAskCardIds] = useState<CardId[]>([]);
@@ -524,7 +541,11 @@ export default function GamePage({ params }: PageProps) {
 
       updatePendingAskBatch(null);
       setActionLoading(false);
-      setShowDeclare(false);
+      setDeclareMode(false);
+      setDeclareSelectedSuit(null);
+      setDeclareAssignment({});
+      setDeclareActiveDragId(null);
+      setDeclareSelectedCard(null);
       setSelectedAskCardIds([]);
       setSelectedAskHalfSuit(null);
       setShowAskInline(false);
@@ -570,7 +591,7 @@ export default function GamePage({ params }: PageProps) {
   // When the server-side 30-second turn timer expires, the server auto-executes
   // a move (ask or declare) via bot logic and then sends `ask_result` or
   // `declaration_result`. Those events are handled by the existing effects
-  // above that close the modals via setSelectedCard(null) / setShowDeclare(false).
+  // above that close the modals via setSelectedCard(null) / setDeclareMode(false).
   //
   // However, there can be a brief gap (network latency + WS send queue) between
   // the server auto-move and the client receiving the result. This effect
@@ -590,7 +611,11 @@ export default function GamePage({ params }: PageProps) {
     const t = setTimeout(() => {
       setSelectedAskCardIds([]);
       setSelectedAskHalfSuit(null);
-      setShowDeclare(false);
+      setDeclareMode(false);
+      setDeclareSelectedSuit(null);
+      setDeclareAssignment({});
+      setDeclareActiveDragId(null);
+      setDeclareSelectedCard(null);
       setShowAskInline(false);
       updatePendingAskBatch(null);
       setActionLoading(false);
@@ -631,19 +656,172 @@ export default function GamePage({ params }: PageProps) {
     setSelectedAskCardIds([]);
   }, []);
 
+  const resetDeclareMode = useCallback(() => {
+    if (declareSelectedSuit) {
+      sendDeclareSelecting(undefined);
+      sendDeclareProgress(null, {});
+    }
+    setDeclareMode(false);
+    setDeclareSelectedSuit(null);
+    setDeclareAssignment({});
+    setDeclareActiveDragId(null);
+    setDeclareSelectedCard(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [declareSelectedSuit, sendDeclareSelecting, sendDeclareProgress]);
+
   const handleAskHalfSuitSelect = useCallback((halfSuitId: HalfSuitId) => {
     setShowAskInline(true);
     setSelectedAskHalfSuit(halfSuitId);
     setSelectedAskCardIds([]);
-    setShowDeclare(false);
+    resetDeclareMode();
     sendPartialSelection({ flow: 'ask', halfSuitId });
-  }, [sendPartialSelection]);
+  }, [sendPartialSelection, resetDeclareMode]);
 
   const handleAskHandCardSelect = useCallback((cardId: CardId) => {
     const halfSuitId = getCardHalfSuit(cardId, resolvedVariant);
     if (!halfSuitId) return;
     handleAskHalfSuitSelect(halfSuitId);
   }, [resolvedVariant, handleAskHalfSuitSelect]);
+
+  // ── Inline declare: clicking a card in hand to select half-suit ──────────
+  const handleDeclareHandCardSelect = useCallback((cardId: CardId) => {
+    const halfSuitId = getCardHalfSuit(cardId, resolvedVariant);
+    if (!halfSuitId) return;
+
+    // Check this suit hasn't already been declared
+    const declaredIds = new Set(declaredSuits.map((d: DeclaredSuit) => d.halfSuitId));
+    if (declaredIds.has(halfSuitId)) return;
+
+    // Check we hold at least 1 card from this half-suit
+    const suitCards = getHalfSuitCards(halfSuitId, resolvedVariant);
+    const myCardsInSuit = suitCards.filter((c: CardId) => myHand.includes(c));
+    if (myCardsInSuit.length === 0) return;
+
+    // Initialize assignment — hand cards auto-assigned to self
+    const initial: Record<CardId, string> = {};
+    for (const card of suitCards) {
+      if (myHand.includes(card)) {
+        initial[card] = myPlayerId!;
+      }
+    }
+
+    setDeclareSelectedSuit(halfSuitId);
+    setDeclareAssignment(initial);
+    setDeclareSelectedCard(null);
+    setDeclareActiveDragId(null);
+
+    sendDeclareSelecting(halfSuitId);
+    sendDeclareProgress(halfSuitId, initial);
+  }, [resolvedVariant, declaredSuits, myHand, myPlayerId, sendDeclareSelecting, sendDeclareProgress]);
+
+  // ── Inline declare: DnD sensors ──────────────────────────────
+  const declareSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+
+  // ── Inline declare: DnD handlers ────────────────────────────
+  const handleDeclareDragStart = useCallback((event: DragStartEvent) => {
+    setDeclareActiveDragId(String(event.active.id));
+    setDeclareSelectedCard(null);
+  }, []);
+
+  const handleDeclareDragEnd = useCallback((event: DragEndEvent) => {
+    setDeclareActiveDragId(null);
+    const rawId = String(event.active.id);
+    // Draggable IDs are prefixed with "declare-"
+    const cardId = rawId.replace(/^declare-/, '') as CardId;
+    const overId = event.over?.id;
+    if (!overId) return;
+    // Never allow moving hand cards
+    if (myHand.includes(cardId)) return;
+
+    const overStr = String(overId);
+    // Verify the target is a teammate
+    const teammates = players.filter((p) => p.teamId === myTeamId);
+    if (teammates.some((t) => t.playerId === overStr)) {
+      setDeclareAssignment((prev) => {
+        const next = { ...prev, [cardId]: overStr };
+        if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
+        return next;
+      });
+    }
+  }, [myHand, players, myTeamId, declareSelectedSuit, sendDeclareProgress]);
+
+  // ── Inline declare: tap-to-assign ────────────────────────────
+  const handleDeclareTapCard = useCallback((cardId: CardId) => {
+    if (myHand.includes(cardId)) return;
+    setDeclareSelectedCard((prev) => (prev === cardId ? null : cardId));
+  }, [myHand]);
+
+  const handleDeclareTapZone = useCallback((playerId: string) => {
+    if (!declareSelectedCard) return;
+    setDeclareAssignment((prev) => {
+      const next = { ...prev, [declareSelectedCard]: playerId };
+      if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
+      return next;
+    });
+    setDeclareSelectedCard(null);
+  }, [declareSelectedCard, declareSelectedSuit, sendDeclareProgress]);
+
+  const handleDeclareRemoveCard = useCallback((cardId: CardId) => {
+    if (myHand.includes(cardId)) return;
+    setDeclareAssignment((prev) => {
+      const next = { ...prev };
+      delete next[cardId];
+      if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
+      return next;
+    });
+  }, [myHand, declareSelectedSuit, sendDeclareProgress]);
+
+  // ── Inline declare: back to suit selection (clear suit, keep mode) ──────
+  const handleDeclareBack = useCallback(() => {
+    sendDeclareSelecting(undefined);
+    sendDeclareProgress(null, {});
+    setDeclareSelectedSuit(null);
+    setDeclareAssignment({});
+    setDeclareSelectedCard(null);
+    setDeclareActiveDragId(null);
+  }, [sendDeclareSelecting, sendDeclareProgress]);
+
+  // ── Inline declare: confirm ──────────────────────────────────
+  const handleDeclareConfirm = useCallback(() => {
+    if (!declareSelectedSuit || actionLoading) return;
+    const suitCards = getHalfSuitCards(declareSelectedSuit, resolvedVariant);
+    const isComplete = suitCards.length > 0 && suitCards.every((c: CardId) => declareAssignment[c]);
+    if (!isComplete) return;
+    setActionLoading(true);
+    clearIndicator();
+    sendDeclare(declareSelectedSuit, declareAssignment);
+  }, [declareSelectedSuit, actionLoading, resolvedVariant, declareAssignment, clearIndicator, sendDeclare]);
+
+  // ── Inline declare: timer expiry auto-fill ───────────────────
+  const handleDeclareTimerExpiry = useCallback(() => {
+    if (!declareSelectedSuit || actionLoading) return;
+    const suitCards = getHalfSuitCards(declareSelectedSuit, resolvedVariant);
+    const teammates = players.filter((p) => p.teamId === myTeamId).sort((a, b) => a.seatIndex - b.seatIndex);
+    const firstOther = teammates.find((p) => p.playerId !== myPlayerId);
+    const filled = { ...declareAssignment };
+    for (const card of suitCards) {
+      if (!filled[card]) {
+        filled[card] = firstOther?.playerId ?? myPlayerId!;
+      }
+    }
+    setActionLoading(true);
+    clearIndicator();
+    sendDeclare(declareSelectedSuit, filled);
+  }, [declareSelectedSuit, actionLoading, resolvedVariant, players, myTeamId, myPlayerId, declareAssignment, clearIndicator, sendDeclare]);
+
+  // ── Inline declare: derived data ─────────────────────────────
+  const declareSuitCards = declareSelectedSuit ? getHalfSuitCards(declareSelectedSuit, resolvedVariant) : [];
+  const declareUnassignedCards = declareSuitCards.filter((c) => !declareAssignment[c]);
+  const declareIsComplete = declareSuitCards.length > 0 && declareSuitCards.every((c) => declareAssignment[c]);
+  const declareAssignedCount = declareSuitCards.length - declareUnassignedCards.length;
+
+  /** Cards assigned to a specific teammate. */
+  const getDeclareTeammateCards = useCallback((playerId: string): CardId[] =>
+    declareSuitCards.filter((c) => declareAssignment[c] === playerId),
+  [declareSuitCards, declareAssignment]);
 
   const handleAskCardToggle = useCallback((cardId: CardId) => {
     if (!selectedAskHalfSuit) return;
@@ -795,12 +973,6 @@ export default function GamePage({ params }: PageProps) {
     });
     handleAsk(pendingAskBatch.targetPlayerId, nextCardId, pendingAskBatch.requestedCardIds);
   }, [gameState?.currentTurnPlayerId, handleAsk, myHand, myPlayerId, pendingAskBatch, players, updatePendingAskBatch]);
-
-  function handleDeclare(halfSuitId: HalfSuitId, assignment: Record<CardId, string>) {
-    setActionLoading(true);
-    clearIndicator();
-    sendDeclare(halfSuitId, assignment);
-  }
 
   // ── Declaration result overlay dismiss ───────────────────────
   //
@@ -1181,191 +1353,282 @@ export default function GamePage({ params }: PageProps) {
         </div>
       )}
 
-      <main className="relative z-10 flex min-h-0 flex-1 items-stretch overflow-hidden px-3 py-3 lg:px-5 xl:px-6">
-        {/* ── Central game content ──────────────────────────────────────── */}
-        <div className="mx-auto flex min-h-0 w-full max-w-[82rem] flex-1 flex-col items-center justify-center gap-4 overflow-hidden lg:gap-5 xl:max-w-[90rem] xl:gap-6 2xl:max-w-[98rem]">
-          <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 2 players" data-testid="team2-row">
-            <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
-            <PlayerRow
-              players={team2Players}
-              myPlayerId={myPlayerId}
-              currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-              playerCount={effectivePlayerCount}
-              indicatorActive={indicatorActive}
-              highlightedPlayerIds={highlightedPlayerIds}
-              onSeatClick={seatClickHandler}
-              askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
-              onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
-            />
-          </div>
-
-          <div className="relative flex w-full max-w-sm items-center justify-center lg:max-w-xl xl:max-w-2xl 2xl:max-w-[44rem]" aria-hidden="true" data-testid="game-table-center">
-            <DeclaredBooksTable
-              declaredSuits={declaredSuits}
-              playerCount={effectivePlayerCount === 8 ? 8 : 6}
-            />
-          </div>
-
-          <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 1 players" data-testid="team1-row">
-            <PlayerRow
-              players={team1Players}
-              myPlayerId={myPlayerId}
-              currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-              playerCount={effectivePlayerCount}
-              indicatorActive={indicatorActive}
-              highlightedPlayerIds={highlightedPlayerIds}
-              onSeatClick={seatClickHandler}
-              askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
-              onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
-            />
-            <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
-          </div>
-        </div>
-      </main>
-
-      {/*
-       * Player hand area — ask/declare controls.
-       *
-       * These controls are gated exclusively on `isMyTurn` (derived from the
-       * game socket's game_init / game_state messages). They are completely
-       * independent of matchmaking state: no matchmaking hook, context, or
-       * status flag influences the enabled/disabled state of the Declare button
-       * or card-selection interaction. Ask / declare mode is always available
-       * once game_init is received, regardless of player count (6 or 8) or
-       * whether any seat is occupied by a bot.
-       */}
-      <footer className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 px-3 py-2.5 backdrop-blur-sm lg:px-5 lg:py-3" data-testid="player-hand-area">
-        {myPlayer ? (
-          <div className="mx-auto flex w-full max-w-[82rem] flex-col gap-2 xl:max-w-[90rem] 2xl:max-w-[98rem]" data-testid="game-controls">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Your hand — <strong className="text-white">{myHand.length}</strong> card{myHand.length !== 1 ? 's' : ''}</span>
-              {/* during turn-pass mode the declarant must choose a
-               * teammate seat — Ask/Declare are hidden until the turn advances. */}
-              {isMyTurn && !isTurnPassMode && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (showAskInline) {
-                        resetAskMode();
-                      } else {
-                        setShowAskInline(true);
-                        setSelectedAskHalfSuit(null);
-                        setSelectedAskCardIds([]);
-                      }
-                      setShowDeclare(false);
-                    }}
-                    disabled={actionLoading || (!showAskInline && availableAskHalfSuits.length === 0)}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-50"
-                    aria-label="Ask an opponent for a card"
-                    data-testid="ask-button"
+      {/* Render function that wraps teammate seats with DeclareDropSeat during inline declare */}
+      {(() => {
+        const declareSeatWrapper = declareMode && declareSelectedSuit
+          ? (player: import('@/types/game').GamePlayer, seatElement: React.ReactNode) => {
+              if (player.teamId === myTeamId) {
+                return (
+                  <DeclareDropSeat
+                    playerId={player.playerId}
+                    assignedCards={getDeclareTeammateCards(player.playerId)}
+                    myHand={myHand}
+                    hasSelectedCard={!!declareSelectedCard}
+                    onTapZone={() => handleDeclareTapZone(player.playerId)}
+                    onRemoveCard={handleDeclareRemoveCard}
+                    isMe={player.playerId === myPlayerId}
                   >
-                    {showAskInline ? 'Cancel Ask' : 'Ask'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      resetAskMode();
-                      setShowDeclare(true);
-                    }}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-violet-700 hover:bg-violet-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:opacity-50"
-                    aria-label="Declare a half-suit"
-                    data-testid="declare-button"
-                  >
-                    Declare
-                  </button>
+                    {seatElement}
+                  </DeclareDropSeat>
+                );
+              }
+              return seatElement;
+            }
+          : undefined;
+
+        const mainContent = (
+          <>
+          <main className="relative z-10 flex min-h-0 flex-1 items-stretch overflow-hidden px-3 py-3 lg:px-5 xl:px-6">
+            <div className="mx-auto flex min-h-0 w-full max-w-[82rem] flex-1 flex-col items-center justify-center gap-4 overflow-hidden lg:gap-5 xl:max-w-[90rem] xl:gap-6 2xl:max-w-[98rem]">
+              <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 2 players" data-testid="team2-row">
+                <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
+                <PlayerRow
+                  players={team2Players}
+                  myPlayerId={myPlayerId}
+                  currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+                  playerCount={effectivePlayerCount}
+                  indicatorActive={indicatorActive}
+                  highlightedPlayerIds={highlightedPlayerIds}
+                  onSeatClick={seatClickHandler}
+                  askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
+                  onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
+                  renderSeatWrapper={declareSeatWrapper}
+                />
+              </div>
+
+              <div className="relative flex w-full max-w-sm items-center justify-center lg:max-w-xl xl:max-w-2xl 2xl:max-w-[44rem]" data-testid="game-table-center">
+                <DeclaredBooksTable
+                  declaredSuits={declaredSuits}
+                  playerCount={effectivePlayerCount === 8 ? 8 : 6}
+                />
+              </div>
+
+              <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 1 players" data-testid="team1-row">
+                <PlayerRow
+                  players={team1Players}
+                  myPlayerId={myPlayerId}
+                  currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+                  playerCount={effectivePlayerCount}
+                  indicatorActive={indicatorActive}
+                  highlightedPlayerIds={highlightedPlayerIds}
+                  onSeatClick={seatClickHandler}
+                  askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
+                  onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
+                  renderSeatWrapper={declareSeatWrapper}
+                />
+                <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
+              </div>
+            </div>
+          </main>
+          </>
+        );
+
+        const showDeclareTray = declareMode && !!declareSelectedSuit && isMyTurn && !isTurnPassMode;
+
+        const footerContent = (
+          <>
+          {/*
+           * Player hand area -- ask/declare controls.
+           *
+           * These controls are gated exclusively on `isMyTurn` (derived from the
+           * game socket's game_init / game_state messages). They are completely
+           * independent of matchmaking state: no matchmaking hook, context, or
+           * status flag influences the enabled/disabled state of the Declare button
+           * or card-selection interaction. Ask / declare mode is always available
+           * once game_init is received, regardless of player count (6 or 8) or
+           * whether any seat is occupied by a bot.
+           */}
+          <footer className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 px-3 py-2.5 backdrop-blur-sm lg:px-5 lg:py-3" data-testid="player-hand-area">
+            {myPlayer ? (
+              <div className="mx-auto flex w-full max-w-[82rem] flex-col gap-2 xl:max-w-[90rem] 2xl:max-w-[98rem]" data-testid="game-controls">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">Your hand — <strong className="text-white">{myHand.length}</strong> card{myHand.length !== 1 ? 's' : ''}</span>
+                  {/* during turn-pass mode the declarant must choose a
+                   * teammate seat -- Ask/Declare are hidden until the turn advances. */}
+                  {isMyTurn && !isTurnPassMode && (
+                    <div className="flex items-center gap-2">
+                      {/* Ask / Declare toggle */}
+                      <div
+                        className="relative flex items-center rounded-full bg-slate-700/70 p-0.5"
+                        role="radiogroup"
+                        aria-label="Action mode"
+                        data-testid="ask-declare-toggle"
+                      >
+                        <button
+                          role="radio"
+                          aria-checked={!declareMode}
+                          onClick={() => {
+                            if (declareMode) {
+                              resetDeclareMode();
+                            } else if (showAskInline) {
+                              // Tapping Ask while ask tray is open cancels the current ask
+                              resetAskMode();
+                            }
+                          }}
+                          disabled={actionLoading}
+                          className={[
+                            'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
+                            !declareMode
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white',
+                            actionLoading ? 'opacity-50' : '',
+                          ].join(' ')}
+                          data-testid="toggle-ask"
+                        >
+                          Ask
+                        </button>
+                        <button
+                          role="radio"
+                          aria-checked={declareMode}
+                          onClick={() => {
+                            if (!declareMode) {
+                              resetAskMode();
+                              setDeclareMode(true);
+                            }
+                          }}
+                          disabled={actionLoading}
+                          className={[
+                            'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
+                            declareMode
+                              ? 'bg-violet-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white',
+                            actionLoading ? 'opacity-50' : '',
+                          ].join(' ')}
+                          data-testid="toggle-declare"
+                        >
+                          Declare
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {/* seat-selection prompt -- replaces Ask/Declare row
+                   * while the declarant is choosing who gets the next turn. */}
+                  {isTurnPassMode && (
+                    <span
+                      className="text-xs text-cyan-300 font-medium animate-pulse"
+                      data-testid="turn-pass-action-prompt"
+                      aria-live="polite"
+                    >
+                      {pendingTurnPassAck ? '⏳ Choosing…' : '👆 Tap a highlighted teammate seat above'}
+                    </span>
+                  )}
                 </div>
-              )}
-              {/* seat-selection prompt — replaces Ask/Declare row
-               * while the declarant is choosing who gets the next turn. */}
-              {isTurnPassMode && (
-                <span
-                  className="text-xs text-cyan-300 font-medium animate-pulse"
-                  data-testid="turn-pass-action-prompt"
-                  aria-live="polite"
-                >
-                  {pendingTurnPassAck ? '⏳ Choosing…' : '👆 Tap a highlighted teammate seat above'}
-                </span>
-              )}
-            </div>
-            {showAskInline && isMyTurn && !isTurnPassMode && (
-              <InlineAskTray
-                myHand={myHand}
-                variant={effectiveVariant}
-                declaredSuits={declaredSuits}
-                selectedHalfSuit={selectedAskHalfSuit}
-                selectedCardIds={selectedAskCardIds}
-                onSelectHalfSuit={handleAskHalfSuitSelect}
-                onToggleCard={handleAskCardToggle}
-                onBack={() => {
-                  setSelectedAskHalfSuit(null);
-                  setSelectedAskCardIds([]);
-                }}
-                onCancel={resetAskMode}
-                isLoading={actionLoading}
-              />
+                {showAskInline && isMyTurn && !isTurnPassMode && (
+                  <InlineAskTray
+                    myHand={myHand}
+                    variant={effectiveVariant}
+                    declaredSuits={declaredSuits}
+                    selectedHalfSuit={selectedAskHalfSuit}
+                    selectedCardIds={selectedAskCardIds}
+                    onSelectHalfSuit={handleAskHalfSuitSelect}
+                    onToggleCard={handleAskCardToggle}
+                    onBack={() => {
+                      setSelectedAskHalfSuit(null);
+                      setSelectedAskCardIds([]);
+                    }}
+                    onCancel={resetAskMode}
+                    isLoading={actionLoading}
+                  />
+                )}
+                {showDeclareTray && (
+                  <InlineDeclareTray
+                    halfSuitId={declareSelectedSuit!}
+                    unassignedCards={declareUnassignedCards}
+                    selectedCard={declareSelectedCard}
+                    onTapCard={handleDeclareTapCard}
+                    totalCards={declareSuitCards.length}
+                    assignedCount={declareAssignedCount}
+                    declarationTimer={declarationTimer}
+                    onTimerExpiry={handleDeclareTimerExpiry}
+                    isComplete={declareIsComplete}
+                    isLoading={actionLoading}
+                    onBack={handleDeclareBack}
+                    onCancel={resetDeclareMode}
+                    onConfirm={handleDeclareConfirm}
+                  />
+                )}
+                <div className={[
+                  'transition-opacity',
+                  showAskInline || showDeclareTray ? 'opacity-45' : 'opacity-100',
+                  declareMode && !declareSelectedSuit ? 'ring-2 ring-violet-500/70 rounded-xl shadow-lg shadow-violet-500/20' : '',
+                ].join(' ')}>
+                  <CardHand
+                    hand={myHand}
+                    selectedCard={null}
+                    onSelectCard={
+                      isMyTurn && !isTurnPassMode
+                        ? (declareMode && !declareSelectedSuit ? handleDeclareHandCardSelect : handleAskHandCardSelect)
+                        : undefined
+                    }
+                    isMyTurn={isMyTurn}
+                    disabled={actionLoading || !isMyTurn || isTurnPassMode || (declareMode && !!declareSelectedSuit)}
+                    variant={effectiveVariant}
+                    newlyArrivedCardId={newlyArrivedCardId}
+                  />
+                </div>
+                {isMyTurn && !isTurnPassMode && !showAskInline && !declareMode && myHand.length > 0 && (
+                  <p className="text-xs text-slate-500 text-center animate-pulse" data-testid="ask-prompt">Tap a card to ask, or switch to Declare mode</p>
+                )}
+                {isMyTurn && !isTurnPassMode && declareMode && !declareSelectedSuit && (
+                  <p className="text-xs text-violet-300 text-center animate-pulse" data-testid="declare-card-prompt">
+                    Tap a card in your hand to select which half-suit to declare
+                  </p>
+                )}
+                {isMyTurn && !isTurnPassMode && showAskInline && selectedAskCardIds.length > 0 && (
+                  <p className="text-xs text-emerald-300 text-center" data-testid="ask-seat-prompt">
+                    Tap an opponent avatar above for{' '}
+                    {selectedAskCardIds.length === 1
+                      ? cardLabel(selectedAskCardIds[0])
+                      : `${selectedAskCardIds.length} selected cards`}.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="text-center text-xs text-slate-500 py-2" data-testid="spectator-status">
+                {/*
+                 * Distinguish "truly spectating" (spectator_init was received so
+                 * players is populated but myPlayerId was never set) from
+                 * "still connecting / awaiting game_init". This prevents the
+                 * "Watching as spectator" label from briefly flashing for
+                 * legitimate players who connected but haven't yet received
+                 * their personalised game_init message.
+                 */}
+                {wsStatus === 'connected' && players.length > 0
+                  ? 'Watching as spectator'
+                  : (wsStatus === 'connected' || wsStatus === 'connecting')
+                  ? 'Connecting to game…'
+                  : wsStatus === 'error'
+                  ? `Connection error${wsError ? ': ' + wsError : ''} — refresh to retry`
+                  : 'Not connected to game server'}
+              </div>
             )}
-            <div className={showAskInline ? 'transition-opacity opacity-45' : 'transition-opacity opacity-100'}>
-              <CardHand
-                hand={myHand}
-                selectedCard={null}
-                onSelectCard={isMyTurn && !isTurnPassMode ? handleAskHandCardSelect : undefined}
-                isMyTurn={isMyTurn}
-                disabled={actionLoading || !isMyTurn || isTurnPassMode}
-                variant={effectiveVariant}
-                newlyArrivedCardId={newlyArrivedCardId}
-              />
-            </div>
-            {isMyTurn && !isTurnPassMode && !showAskInline && !showDeclare && myHand.length > 0 && (
-              <p className="text-xs text-slate-500 text-center animate-pulse" data-testid="ask-prompt">Tap a card or click Ask ↑ to ask, or click Declare ↑</p>
-            )}
-            {isMyTurn && !isTurnPassMode && showAskInline && selectedAskCardIds.length > 0 && (
-              <p className="text-xs text-emerald-300 text-center" data-testid="ask-seat-prompt">
-                Tap an opponent avatar above for{' '}
-                {selectedAskCardIds.length === 1
-                  ? cardLabel(selectedAskCardIds[0])
-                  : `${selectedAskCardIds.length} selected cards`}.
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="text-center text-xs text-slate-500 py-2" data-testid="spectator-status">
-            {/*
-             * Distinguish "truly spectating" (spectator_init was received so
-             * players is populated but myPlayerId was never set) from
-             * "still connecting / awaiting game_init". This prevents the
-             * "Watching as spectator" label from briefly flashing for
-             * legitimate players who connected but haven't yet received
-             * their personalised game_init message.
-             */}
-            {wsStatus === 'connected' && players.length > 0
-              ? 'Watching as spectator'
-              : (wsStatus === 'connected' || wsStatus === 'connecting')
-              ? 'Connecting to game…'
-              : wsStatus === 'error'
-              ? `Connection error${wsError ? ': ' + wsError : ''} — refresh to retry`
-              : 'Not connected to game server'}
-          </div>
-        )}
-      </footer>
-      {showDeclare && isMyTurn && (
-        <DeclareModal
-          myPlayerId={myPlayerId!}
-          myHand={myHand}
-          players={players}
-          variant={effectiveVariant}
-          declaredSuits={gameState?.declaredSuits ?? []}
-          onConfirm={handleDeclare}
-          onCancel={() => {
-            // Clear private server-side suit selection on modal close
-            sendDeclareSelecting(undefined);
-            setShowDeclare(false);
-          }}
-          isLoading={actionLoading}
-          turnTimer={turnTimer}
-          onDeclareProgress={sendDeclareProgress}
-          onSuitSelect={(id) => sendDeclareSelecting(id ?? undefined)}
-        />
-      )}
+          </footer>
+          </>
+        );
+
+        if (declareMode && declareSelectedSuit) {
+          return (
+            <DndContext
+              sensors={declareSensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDeclareDragStart}
+              onDragEnd={handleDeclareDragEnd}
+            >
+              {mainContent}
+              {footerContent}
+              <DragOverlay dropAnimation={null}>
+                {declareActiveDragId ? (
+                  <div className="opacity-90 scale-110 rotate-3 pointer-events-none">
+                    <PlayingCard cardId={declareActiveDragId.replace(/^declare-/, '')} size="md" selected />
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          );
+        }
+
+        return <>{mainContent}{footerContent}</>;
+      })()}
       {room.status === 'starting' && !gameState && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" role="status" data-testid="starting-overlay">
           <div className="flex flex-col items-center gap-4 text-white">
@@ -1479,58 +1742,38 @@ function PlayerRow({
   onSeatClick,
   askTargetPlayerIds,
   onAskTargetClick,
+  renderSeatWrapper,
 }: {
   players: import('@/types/game').GamePlayer[];
   myPlayerId: string | null;
   currentTurnPlayerId: string | null;
   playerCount: number;
-  /** Value from `useTurnIndicator` — drives the glow override for the local player's seat. */
   indicatorActive: boolean;
-  /**
-   * Set of player IDs whose seats should show a cyan highlight
-   * ring (eligible to receive the turn after a correct declaration).
-   * When undefined, no seats are highlighted.
-   */
   highlightedPlayerIds?: Set<string>;
-  /**
-   * Called when the local player clicks a highlighted seat.
-   * Receives the playerId of the tapped seat. Only provided to the
-   * current turn player (the declarant); other players pass undefined.
-   */
   onSeatClick?: (playerId: string) => void;
-  /**
-   * Opponent player IDs whose seats are eligible ask targets for the
-   * currently selected ask card.
-   */
   askTargetPlayerIds?: Set<string>;
-  /**
-   * Called when the local player taps a highlighted ask-target seat.
-   */
   onAskTargetClick?: (playerId: string) => void;
+  /** Optional wrapper for individual seats — used by inline declare to make teammate seats droppable. */
+  renderSeatWrapper?: (player: import('@/types/game').GamePlayer, seatElement: React.ReactNode) => React.ReactNode;
 }) {
   const { getSeatState } = useVoice();
   const seatsPerTeam = Math.floor(playerCount / 2);
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 lg:gap-6 xl:gap-8 2xl:gap-10">
+    <div className="flex flex-wrap items-start justify-center gap-2 sm:gap-3 lg:gap-6 xl:gap-8 2xl:gap-10">
       {seats.map((player, i) => {
-        // determine whether this seat should glow cyan
         const isHl = Boolean(player && highlightedPlayerIds?.has(player.playerId));
         const isAskTarget = Boolean(player && askTargetPlayerIds?.has(player.playerId));
 
-        return (
+        const seatElement = (
           <GamePlayerSeat
             key={player ? player.playerId : `empty-${i}`}
             seatIndex={player ? player.seatIndex : i}
             player={player}
             myPlayerId={myPlayerId}
             currentTurnPlayerId={currentTurnPlayerId}
-            // For the local player's own seat: use indicatorActive so the glow
-            // clears immediately on action submit (before server round-trip).
-            // For all other seats: undefined → seat derives from currentTurnPlayerId.
             isActiveTurn={player?.playerId === myPlayerId ? indicatorActive : undefined}
             voiceState={player ? getSeatState(player.playerId) : null}
-            // highlight eligible seats and wire click handler
             isHighlighted={isHl}
             onHighlightClick={
               isHl && onSeatClick && player
@@ -1545,6 +1788,12 @@ function PlayerRow({
             }
           />
         );
+
+        if (player && renderSeatWrapper) {
+          return <React.Fragment key={player.playerId}>{renderSeatWrapper(player, seatElement)}</React.Fragment>;
+        }
+
+        return seatElement;
       })}
     </div>
   );

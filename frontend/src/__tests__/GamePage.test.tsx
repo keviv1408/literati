@@ -798,7 +798,7 @@ describe('GamePage — game controls always available', () => {
       mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
     });
 
-    it('shows Declare button when it is the player\'s turn', async () => {
+    it('shows Ask/Declare toggle when it is the player\'s turn', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
 
@@ -807,7 +807,8 @@ describe('GamePage — game controls always available', () => {
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
 
       await waitFor(() => {
-        expect(screen.getByTestId('declare-button')).toBeTruthy();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
+        expect(screen.getByTestId('toggle-declare')).toBeTruthy();
       });
     });
 
@@ -842,11 +843,15 @@ describe('GamePage — game controls always available', () => {
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
 
       await waitFor(() => {
-        expect(screen.getByTestId('ask-button')).toBeTruthy();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
       });
 
-      fireEvent.click(screen.getByTestId('ask-button'));
-      fireEvent.click(screen.getByTestId('inline-ask-halfsuit-low_h'));
+      // In ask mode (default), click a card in hand to open ask tray with half-suit pre-selected
+      const heartCardWrapper = document.querySelector('[data-testid="card-wrapper-3_h"]') as HTMLElement;
+      expect(heartCardWrapper).toBeTruthy();
+      const heartCard = heartCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(heartCard).toBeTruthy();
+      fireEvent.click(heartCard);
       fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
 
       const carolSeat = document.querySelector('[data-player-id="p4"]') as HTMLElement;
@@ -866,11 +871,15 @@ describe('GamePage — game controls always available', () => {
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
 
       await waitFor(() => {
-        expect(screen.getByTestId('ask-button')).toBeTruthy();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
       });
 
-      fireEvent.click(screen.getByTestId('ask-button'));
-      fireEvent.click(screen.getByTestId('inline-ask-halfsuit-low_h'));
+      // Click a heart card in hand to open ask tray for low_h
+      const heartCardWrapper = document.querySelector('[data-testid="card-wrapper-3_h"]') as HTMLElement;
+      expect(heartCardWrapper).toBeTruthy();
+      const heartCard = heartCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(heartCard).toBeTruthy();
+      fireEvent.click(heartCard);
       fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
       fireEvent.click(screen.getByTestId('inline-ask-card-2_h'));
 
@@ -944,11 +953,15 @@ describe('GamePage — game controls always available', () => {
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
 
       await waitFor(() => {
-        expect(screen.getByTestId('ask-button')).toBeTruthy();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
       });
 
-      fireEvent.click(screen.getByTestId('ask-button'));
-      fireEvent.click(screen.getByTestId('inline-ask-halfsuit-low_h'));
+      // Click a heart card in hand to open ask tray for low_h
+      const heartCardWrapper = document.querySelector('[data-testid="card-wrapper-3_h"]') as HTMLElement;
+      expect(heartCardWrapper).toBeTruthy();
+      const heartCard = heartCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(heartCard).toBeTruthy();
+      fireEvent.click(heartCard);
       fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
       fireEvent.click(screen.getByTestId('inline-ask-card-2_h'));
 
@@ -1064,8 +1077,8 @@ describe('GamePage — game controls always available', () => {
         // game-controls div is shown (player is in the game)
         expect(screen.getByTestId('game-controls')).toBeTruthy();
       });
-      // But Declare button must not appear
-      expect(screen.queryByTestId('declare-button')).toBeNull();
+      // But Ask/Declare toggle must not appear (not my turn)
+      expect(screen.queryByTestId('ask-declare-toggle')).toBeNull();
     });
 
     it('game controls are never disabled due to matchmaking state', async () => {
@@ -1078,8 +1091,8 @@ describe('GamePage — game controls always available', () => {
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
 
       await waitFor(() => {
-        // Declare button is enabled (not disabled)
-        const declareBtn = screen.getByTestId('declare-button') as HTMLButtonElement;
+        // Toggle is shown and Declare side is enabled (not disabled)
+        const declareBtn = screen.getByTestId('toggle-declare') as HTMLButtonElement;
         expect(declareBtn.disabled).toBe(false);
       });
     });
@@ -1100,14 +1113,14 @@ describe('GamePage — game controls always available', () => {
       mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
     });
 
-    it('shows Declare button when opponents are all bots', async () => {
+    it('shows Ask/Declare toggle when opponents are all bots', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
       act(() => openWs());
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, allBotOpponents)));
 
       await waitFor(() => {
-        expect(screen.getByTestId('declare-button')).toBeTruthy();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
       });
     });
 
@@ -1145,14 +1158,14 @@ describe('GamePage — game controls always available', () => {
       });
     });
 
-    it('shows Declare button in an 8-player game on the player\'s turn', async () => {
+    it('shows Ask/Declare toggle in an 8-player game on the player\'s turn', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
       act(() => openWs());
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players8, { playerCount: 8 })));
 
       await waitFor(() => {
-        expect(screen.getByTestId('declare-button')).toBeTruthy();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
       });
     });
 
@@ -1420,14 +1433,14 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
       gameState: makeGameState(),
     }));
 
-    await waitFor(() => expect(screen.getByTestId('declare-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy());
 
-    // Open declare modal
+    // Enter declare mode via toggle
     act(() => {
-      screen.getByTestId('declare-button').click();
+      screen.getByTestId('toggle-declare').click();
     });
 
-    // Send declaration_result — modal should close
+    // Send declaration_result — declare mode should reset
     act(() => sendWsMessage({
       type: 'declaration_result',
       declarerId: MY_PLAYER_ID,
@@ -1440,8 +1453,9 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
     }));
 
     await waitFor(() => {
-      // DeclareModal should be dismissed
-      expect(screen.queryByTestId('declare-modal')).toBeNull();
+      // Declare mode should be reset (toggle back to Ask)
+      const askBtn = screen.getByTestId('toggle-ask') as HTMLButtonElement;
+      expect(askBtn.getAttribute('aria-checked')).toBe('true');
     });
   });
 });
