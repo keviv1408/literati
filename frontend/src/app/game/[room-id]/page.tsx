@@ -27,7 +27,6 @@ import { getCachedToken } from '@/lib/backendSession';
 import { useGuest } from '@/contexts/GuestContext';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
-import { useMoveAnnouncements } from '@/hooks/useMoveAnnouncements';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
 import { GameProvider } from '@/contexts/GameContext';
 import { VoiceProvider, useVoice } from '@/contexts/VoiceContext';
@@ -665,11 +664,6 @@ export default function GamePage({ params }: PageProps) {
       window.removeEventListener('touchstart', unlockAudio);
     };
   }, [preload]);
-
-  useMoveAnnouncements({
-    message: currentLastMoveMessage,
-    enabled: !muted,
-  });
 
   // ── Post-declaration seat highlight ───────────────────────────
   //
