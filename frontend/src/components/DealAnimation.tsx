@@ -16,7 +16,7 @@
  * game controls or the accessibility tree while it plays.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import PlayingCard from './PlayingCard';
 import {
   TABLE_CX,
@@ -24,7 +24,6 @@ import {
   VIEWBOX_HEIGHT,
   VIEWBOX_WIDTH,
   getSeatPositions,
-  toCssPercent,
 } from '@/utils/seatPositions';
 
 // ── Timing constants ──────────────────────────────────────────────────────────
@@ -106,23 +105,23 @@ function buildDealFlights(playerCount: 6 | 8): DealFlight[] {
 
 export default function DealAnimation({ playerCount, onComplete }: DealAnimationProps) {
   const [phase, setPhase] = useState<Phase>('shuffling');
-  const cardsPerPlayer = getCardsPerPlayer(playerCount);
-  const seatTargets = useMemo(() => getSeatPositions(playerCount), [playerCount]);
   const dealFlights = useMemo(() => buildDealFlights(playerCount), [playerCount]);
   const totalAnimationMs = useMemo(() => getTotalAnimationMs(playerCount), [playerCount]);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('dealing'), SHUFFLE_MS);
     const t2 = setTimeout(() => {
       setPhase('done');
-      onComplete();
+      onCompleteRef.current();
     }, totalAnimationMs);
 
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [onComplete, totalAnimationMs]);
+  }, [totalAnimationMs]);
 
   // Once the phase is 'done' the component renders nothing — it unmounts.
   if (phase === 'done') return null;
@@ -137,35 +136,6 @@ export default function DealAnimation({ playerCount, onComplete }: DealAnimation
         className="relative w-[min(94vw,72rem)] max-w-[72rem]"
         style={{ aspectRatio: `${VIEWBOX_WIDTH} / ${VIEWBOX_HEIGHT}` }}
       >
-        <div className="absolute inset-[16%_18%] rounded-[999px] border border-emerald-300/12 bg-[radial-gradient(circle_at_50%_25%,rgba(16,185,129,0.12),transparent_40%),linear-gradient(180deg,rgba(15,23,42,0.08),rgba(2,6,23,0.26))] shadow-[inset_0_0_0_1px_rgba(16,185,129,0.06),0_22px_60px_rgba(2,6,23,0.4)]" />
-
-        {seatTargets.map(({ seatIndex, x, y }) => (
-          <div
-            key={seatIndex}
-            className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{ left: toCssPercent(x, 'width'), top: toCssPercent(y, 'height') }}
-            data-testid="deal-seat-target"
-            data-seat-index={seatIndex}
-          >
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className="animate-deal-seat-pulse flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-950/75 shadow-[0_8px_18px_rgba(2,6,23,0.34)]"
-                style={{ animationDelay: `${seatIndex * 80}ms` }}
-              >
-                <span
-                  className={[
-                    'h-2.5 w-2.5 rounded-full',
-                    seatIndex % 2 === 0 ? 'bg-emerald-400/90' : 'bg-violet-400/90',
-                  ].join(' ')}
-                />
-              </div>
-              <div className="rounded-full border border-white/8 bg-slate-950/75 px-2 py-0.5 text-[10px] font-semibold tracking-[0.2em] text-slate-400">
-                {cardsPerPlayer}
-              </div>
-            </div>
-          </div>
-        ))}
-
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <div className="absolute left-1/2 top-1/2 h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/12 blur-3xl" />
           <div

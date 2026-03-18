@@ -264,8 +264,11 @@ export default function GamePage({ params }: PageProps) {
       // Clear post-game state so the upcoming game_init seamlessly transitions
       // into the new game without a page reload.
       setGameOver(null);
+      setGameSummary(null);
       setVoteStartedAt(undefined);
       setRematchStarted(false);
+      setRoom((prev) => prev ? { ...prev, status: 'in_progress' } : prev);
+      hasDealtRef.current = false;
     },
   });
 
