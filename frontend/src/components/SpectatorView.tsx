@@ -43,7 +43,7 @@
  * />
  */
 
-import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import CardHand from '@/components/CardHand';
@@ -180,14 +180,14 @@ export default function SpectatorView({
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observedAskBatchRef = useRef<AskMoveBatch | null>(null);
   const processedAskResultKeyRef = useRef<string | null>(null);
-  const getPlayerDisplayName = (playerId: string) => {
+  const getPlayerDisplayName = useCallback((playerId: string) => {
     return players.find((p) => p.playerId === playerId)?.displayName;
-  };
-  const getPlayerBubblePlacement = (playerId: string): 'above' | 'below' | undefined => {
+  }, [players]);
+  const getPlayerBubblePlacement = useCallback((playerId: string): 'above' | 'below' | undefined => {
     const player = players.find((p) => p.playerId === playerId);
     if (!player) return undefined;
     return player.teamId === 2 ? 'below' : 'above';
-  };
+  }, [players]);
   const {
     cardFlight,
     askDeniedCue,
