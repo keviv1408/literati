@@ -1,16 +1,16 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for DealAnimation — client-side shuffle + deal animation.
+ * Tests for DealAnimation — client-side shuffle + full-deck deal animation.
  *
  * Covers:
  * • Component renders with correct data-testid and aria-hidden attribute
  * • Overlay is pointer-events-none (does not block game controls)
- * • In the shuffle phase (0–400 ms) no flying cards are visible
- * • After ~400 ms the deal phase begins and the correct number of flying cards appear
- * • 6-player game → 6 flying cards
- * • 8-player game → 8 flying cards
- * • onComplete fires after the full animation (~1400 ms)
+ * • In the shuffle phase (0–700 ms) no flying cards are visible
+ * • After ~700 ms the deal phase begins and the full 48-card deck appears in flight
+ * • 6-player game → 8 cards dealt to each seat
+ * • 8-player game → 6 cards dealt to each seat
+ * • onComplete fires after the full animation (~3.1 s)
  * • Component unmounts (renders null) once onComplete is called
  * • Each flying card carries the deal-animation-card testid
  * • Cleanup: pending timers are cancelled when the component unmounts early
@@ -72,7 +72,7 @@ describe('DealAnimation — rendering', () => {
 // Phase transitions
 // ---------------------------------------------------------------------------
 
-describe('DealAnimation — shuffle phase (0–400 ms)', () => {
+describe('DealAnimation — shuffle phase (0–700 ms)', () => {
   it('shows NO flying cards during the shuffle phase', () => {
     renderDealAnimation();
     // Immediately after mount: still shuffling
@@ -81,37 +81,63 @@ describe('DealAnimation — shuffle phase (0–400 ms)', () => {
 
   it('deck element has animate-deck-shuffle class during shuffle phase', () => {
     renderDealAnimation();
-    // The element with animate-deck-shuffle is present in the DOM
-    const shuffleEl = document.querySelector('.animate-deck-shuffle');
-    expect(shuffleEl).not.toBeNull();
+    expect(screen.getByTestId('deal-animation-deck').className).toContain('animate-deck-shuffle');
   });
 });
 
-describe('DealAnimation — deal phase (400 ms – 1400 ms)', () => {
-  it('transitions to deal phase after ~400 ms', () => {
+describe('DealAnimation — deal phase (700 ms onward)', () => {
+  it('transitions to deal phase after ~700 ms', () => {
     renderDealAnimation(6);
     expect(screen.queryAllByTestId('deal-animation-card')).toHaveLength(0);
 
-    act(() => { jest.advanceTimersByTime(401); });
+    act(() => { jest.advanceTimersByTime(701); });
 
-    expect(screen.getAllByTestId('deal-animation-card')).toHaveLength(6);
+    expect(screen.getAllByTestId('deal-animation-card')).toHaveLength(48);
   });
 
-  it('renders 6 flying cards for a 6-player game', () => {
+  it('renders one seat target per player', () => {
     renderDealAnimation(6);
-    act(() => { jest.advanceTimersByTime(401); });
-    expect(screen.getAllByTestId('deal-animation-card')).toHaveLength(6);
+    expect(screen.getAllByTestId('deal-seat-target')).toHaveLength(6);
   });
 
-  it('renders 8 flying cards for an 8-player game', () => {
+  it('renders 8 seat targets for an 8-player game', () => {
     renderDealAnimation(8);
-    act(() => { jest.advanceTimersByTime(401); });
-    expect(screen.getAllByTestId('deal-animation-card')).toHaveLength(8);
+    expect(screen.getAllByTestId('deal-seat-target')).toHaveLength(8);
+  });
+
+  it('deals 8 cards to each seat in a 6-player game', () => {
+    renderDealAnimation(6);
+    act(() => { jest.advanceTimersByTime(701); });
+
+    const cards = screen.getAllByTestId('deal-animation-card');
+    const seatCounts = new Map<string, number>();
+    cards.forEach((card) => {
+      const seat = card.getAttribute('data-seat-index') ?? 'missing';
+      seatCounts.set(seat, (seatCounts.get(seat) ?? 0) + 1);
+    });
+
+    expect(cards).toHaveLength(48);
+    expect(Array.from(seatCounts.values())).toEqual([8, 8, 8, 8, 8, 8]);
+  });
+
+  it('deals 6 cards to each seat in an 8-player game', () => {
+    renderDealAnimation(8);
+    act(() => { jest.advanceTimersByTime(701); });
+
+    const cards = screen.getAllByTestId('deal-animation-card');
+    const seatCounts = new Map<string, number>();
+    cards.forEach((card) => {
+      const seat = card.getAttribute('data-seat-index') ?? 'missing';
+      seatCounts.set(seat, (seatCounts.get(seat) ?? 0) + 1);
+    });
+
+    expect(cards).toHaveLength(48);
+    expect(Array.from(seatCounts.values())).toEqual([6, 6, 6, 6, 6, 6, 6, 6]);
   });
 
   it('each flying card has the animate-card-deal class', () => {
     renderDealAnimation(6);
-    act(() => { jest.advanceTimersByTime(401); });
+    act(() => { jest.advanceTimersByTime(701); });
     const cards = screen.getAllByTestId('deal-animation-card');
     cards.forEach((card) => {
       expect(card.className).toContain('animate-card-deal');
@@ -120,9 +146,9 @@ describe('DealAnimation — deal phase (400 ms – 1400 ms)', () => {
 
   it('deck shuffle class is absent during deal phase', () => {
     renderDealAnimation(6);
-    act(() => { jest.advanceTimersByTime(401); });
+    act(() => { jest.advanceTimersByTime(701); });
     // animate-deck-shuffle should be gone once phase changes to 'dealing'
-    expect(document.querySelector('.animate-deck-shuffle')).toBeNull();
+    expect(screen.getByTestId('deal-animation-deck').className).not.toContain('animate-deck-shuffle');
   });
 });
 
@@ -131,22 +157,22 @@ describe('DealAnimation — deal phase (400 ms – 1400 ms)', () => {
 // ---------------------------------------------------------------------------
 
 describe('DealAnimation — completion', () => {
-  it('calls onComplete after the full animation (~1400 ms)', () => {
+  it('calls onComplete after the full animation (~3.1 s)', () => {
     const onComplete = jest.fn();
     renderDealAnimation(6, onComplete);
 
     expect(onComplete).not.toHaveBeenCalled();
 
-    act(() => { jest.advanceTimersByTime(1401); });
+    act(() => { jest.advanceTimersByTime(3201); });
 
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT call onComplete prematurely at 800 ms (mid-deal)', () => {
+  it('does NOT call onComplete prematurely at 1600 ms (mid-deal)', () => {
     const onComplete = jest.fn();
     renderDealAnimation(6, onComplete);
 
-    act(() => { jest.advanceTimersByTime(800); });
+    act(() => { jest.advanceTimersByTime(1600); });
 
     expect(onComplete).not.toHaveBeenCalled();
   });
@@ -154,7 +180,7 @@ describe('DealAnimation — completion', () => {
   it('renders null (no deal-animation element) after onComplete', () => {
     renderDealAnimation(6);
 
-    act(() => { jest.advanceTimersByTime(1401); });
+    act(() => { jest.advanceTimersByTime(3201); });
 
     expect(screen.queryByTestId('deal-animation')).toBeNull();
   });
@@ -174,7 +200,7 @@ describe('DealAnimation — cleanup on early unmount', () => {
     unmount();
 
     // Advance past total animation time — onComplete must NOT fire
-    act(() => { jest.advanceTimersByTime(1500); });
+    act(() => { jest.advanceTimersByTime(3500); });
 
     expect(onComplete).not.toHaveBeenCalled();
   });
@@ -183,10 +209,10 @@ describe('DealAnimation — cleanup on early unmount', () => {
     const onComplete = jest.fn();
     const { unmount } = renderDealAnimation(6, onComplete);
 
-    act(() => { jest.advanceTimersByTime(600); }); // mid-deal
+    act(() => { jest.advanceTimersByTime(1200); }); // mid-deal
     unmount();
 
-    act(() => { jest.advanceTimersByTime(1000); });
+    act(() => { jest.advanceTimersByTime(2500); });
     expect(onComplete).not.toHaveBeenCalled();
   });
 });
@@ -198,7 +224,7 @@ describe('DealAnimation — cleanup on early unmount', () => {
 describe('DealAnimation — flying card structure', () => {
   it('each flying card has CSS custom property --deal-dx set', () => {
     renderDealAnimation(6);
-    act(() => { jest.advanceTimersByTime(401); });
+    act(() => { jest.advanceTimersByTime(701); });
 
     const cards = screen.getAllByTestId('deal-animation-card');
     cards.forEach((card) => {
@@ -209,7 +235,7 @@ describe('DealAnimation — flying card structure', () => {
 
   it('each flying card has CSS custom property --deal-dy set', () => {
     renderDealAnimation(6);
-    act(() => { jest.advanceTimersByTime(401); });
+    act(() => { jest.advanceTimersByTime(701); });
 
     const cards = screen.getAllByTestId('deal-animation-card');
     cards.forEach((card) => {
@@ -220,7 +246,7 @@ describe('DealAnimation — flying card structure', () => {
 
   it('flying cards spread in different directions (non-zero dx/dy values)', () => {
     renderDealAnimation(6);
-    act(() => { jest.advanceTimersByTime(401); });
+    act(() => { jest.advanceTimersByTime(701); });
 
     const cards = screen.getAllByTestId('deal-animation-card');
     const dxValues = cards.map((card) => {
@@ -231,5 +257,19 @@ describe('DealAnimation — flying card structure', () => {
     // Not all cards should have the same dx — they spread in different directions
     const uniqueDx = new Set(dxValues.map((v) => Math.round(v)));
     expect(uniqueDx.size).toBeGreaterThan(1);
+  });
+
+  it('each flying card carries a deal round index', () => {
+    renderDealAnimation(6);
+    act(() => { jest.advanceTimersByTime(701); });
+
+    const rounds = new Set(
+      screen
+        .getAllByTestId('deal-animation-card')
+        .map((card) => card.getAttribute('data-deal-round'))
+        .filter(Boolean)
+    );
+
+    expect(rounds.size).toBe(8);
   });
 });

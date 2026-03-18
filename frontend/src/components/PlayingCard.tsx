@@ -80,6 +80,18 @@ export default function PlayingCard({
     lg: 'text-[2rem]',
     xl: 'text-[2.2rem]',
   };
+  const BACK_BADGE_CLASSES = {
+    sm: 'px-1.5 py-0.5 text-[0.55rem] tracking-[0.22em]',
+    md: 'px-2 py-0.5 text-[0.62rem] tracking-[0.24em]',
+    lg: 'px-2.5 py-0.5 text-[0.72rem] tracking-[0.28em]',
+    xl: 'px-3 py-0.5 text-[0.82rem] tracking-[0.3em]',
+  };
+  const BACK_CORNER_DOT_CLASSES = {
+    sm: 'w-1.5 h-1.5',
+    md: 'w-1.5 h-1.5',
+    lg: 'w-2 h-2',
+    xl: 'w-2 h-2',
+  };
 
   const baseClasses = [
     'relative overflow-hidden rounded-[10px] border select-none font-bold',
@@ -89,7 +101,7 @@ export default function PlayingCard({
     onClick && !disabled ? 'cursor-pointer hover:-translate-y-2 hover:shadow-[0_10px_18px_rgba(15,23,42,0.26)] active:scale-95' : '',
     selected ? 'border-emerald-400 ring-2 ring-emerald-400 -translate-y-3 shadow-emerald-500/30 shadow-lg' : 'border-slate-300/90',
     disabled ? 'opacity-40 cursor-not-allowed' : '',
-    faceDown ? 'bg-blue-900 border-slate-200/80' : 'bg-gradient-to-b from-white via-white to-slate-50',
+    faceDown ? 'bg-slate-950 border-slate-300/60' : 'bg-gradient-to-b from-white via-white to-slate-50',
     className,
   ].join(' ');
 
@@ -101,15 +113,28 @@ export default function PlayingCard({
         aria-label="Card (face down)"
         onClick={disabled ? undefined : onClick}
       >
-        {/* Card back frame */}
-        <div className="absolute inset-[3px] rounded-[7px] border border-blue-100/75 bg-blue-800 shadow-inner" />
-        <div
-          className="absolute inset-[6px] rounded-[5px] border border-blue-200/80"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(45deg, rgba(191,219,254,0.72) 0px, rgba(191,219,254,0.72) 2px, rgba(30,64,175,0.85) 2px, rgba(30,64,175,0.85) 5px)',
-          }}
-        />
+        <div className="absolute inset-[2px] rounded-[8px] border border-white/10 bg-[linear-gradient(165deg,#071827_0%,#0d2c48_46%,#15466f_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12),inset_0_-12px_26px_rgba(2,6,23,0.38)]" />
+        <div className="absolute inset-[5px] rounded-[6px] border border-emerald-200/15" />
+        <div className="absolute inset-[7px] overflow-hidden rounded-[5px]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(110,231,183,0.24),transparent_30%),radial-gradient(circle_at_80%_82%,rgba(96,165,250,0.2),transparent_34%),linear-gradient(145deg,rgba(9,25,45,0.98),rgba(12,52,78,0.92))]" />
+          <div
+            className="absolute inset-0 opacity-70"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(45deg, rgba(148,163,184,0.16) 0px, rgba(148,163,184,0.16) 2px, transparent 2px, transparent 7px), repeating-linear-gradient(-45deg, rgba(16,185,129,0.14) 0px, rgba(16,185,129,0.14) 2px, transparent 2px, transparent 7px)',
+            }}
+          />
+          <div className="absolute inset-[10%] rounded-[4px] border border-white/8" />
+        </div>
+        <span className={`absolute left-1.5 top-1.5 rounded-full bg-emerald-300/80 shadow-[0_0_10px_rgba(110,231,183,0.35)] ${BACK_CORNER_DOT_CLASSES[size]}`} />
+        <span className={`absolute right-1.5 top-1.5 rounded-full bg-sky-300/75 shadow-[0_0_10px_rgba(125,211,252,0.35)] ${BACK_CORNER_DOT_CLASSES[size]}`} />
+        <span className={`absolute bottom-1.5 left-1.5 rounded-full bg-sky-300/75 shadow-[0_0_10px_rgba(125,211,252,0.35)] ${BACK_CORNER_DOT_CLASSES[size]}`} />
+        <span className={`absolute bottom-1.5 right-1.5 rounded-full bg-emerald-300/80 shadow-[0_0_10px_rgba(110,231,183,0.35)] ${BACK_CORNER_DOT_CLASSES[size]}`} />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className={`rounded-full border border-emerald-100/25 bg-slate-950/35 font-black text-emerald-50/90 shadow-[0_0_24px_rgba(16,185,129,0.18)] ${BACK_BADGE_CLASSES[size]}`}>
+            LIT
+          </div>
+        </div>
       </div>
     );
   }

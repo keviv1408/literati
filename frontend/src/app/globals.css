@@ -90,34 +90,109 @@ body:has([role="dialog"]) {
 
 /**
  * Deck shuffle — the stacked face-down cards wobble left/right.
- * Duration applied via.animate-deck-shuffle (0.4 s).
+ * Duration applied via.animate-deck-shuffle (0.7 s).
  */
 @keyframes deck-shuffle {
-  0%,  100% { transform: translate(   0,    0) rotate(  0deg); }
-  15%        { transform: translate(-10px,  2px) rotate( -4deg); }
-  35%        { transform: translate( 10px, -2px) rotate(  4deg); }
-  55%        { transform: translate(  -6px, 1px) rotate( -2deg); }
-  75%        { transform: translate(   6px,-1px) rotate(  2deg); }
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  14% {
+    transform: translate3d(-12px, 2px, 0) rotate(-7deg) scale(1.02);
+  }
+  31% {
+    transform: translate3d(12px, -4px, 0) rotate(6deg) scale(1.04);
+  }
+  52% {
+    transform: translate3d(-8px, 3px, 0) rotate(-4deg) scale(1.01);
+  }
+  74% {
+    transform: translate3d(8px, -2px, 0) rotate(4deg) scale(1.03);
+  }
 }
 
 .animate-deck-shuffle {
-  animation: deck-shuffle 0.4s ease-in-out;
+  animation: deck-shuffle 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes deck-riffle {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  20% {
+    transform: translate(-16px, -10px) rotate(-13deg);
+    opacity: 0.9;
+  }
+  55% {
+    transform: translate(14px, -6px) rotate(12deg);
+    opacity: 0.65;
+  }
+}
+
+.animate-deck-riffle {
+  animation: deck-riffle 0.7s ease-in-out infinite;
 }
 
 /**
- * Single flying card — translates to (--deal-dx, --deal-dy) and fades out.
+ * Single flying card — arcs away from the centre deck toward a seat target.
  * Duration and delay are set inline per card via animationDuration / animationDelay.
  */
 @keyframes card-deal-out {
-  0%   { transform: translate(0, 0) scale(1);   opacity: 1; }
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.98) rotate(-8deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  38% {
+    transform:
+      translate3d(
+        calc(var(--deal-dx, 0px) * 0.38),
+        calc(var(--deal-dy, 80px) * 0.38 - var(--deal-lift, 22px)),
+        0
+      )
+      scale(1.02)
+      rotate(8deg);
+    opacity: 1;
+  }
+  72% {
+    transform:
+      translate3d(
+        calc(var(--deal-dx, 0px) * 0.72),
+        calc(var(--deal-dy, 80px) * 0.72 - calc(var(--deal-lift, 22px) * 0.22)),
+        0
+      )
+      scale(0.9)
+      rotate(-3deg);
+    opacity: 1;
+  }
   100% {
-    transform: translate(var(--deal-dx, 0px), var(--deal-dy, 80px)) scale(0.65);
+    transform:
+      translate3d(var(--deal-dx, 0px), var(--deal-dy, 80px), 0)
+      scale(var(--deal-scale-end, 0.76))
+      rotate(var(--deal-rot-end, 0deg));
     opacity: 0;
   }
 }
 
 .animate-card-deal {
-  animation: card-deal-out 0.6s ease-in forwards;
+  animation: card-deal-out 0.62s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+@keyframes deal-seat-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(148, 163, 184, 0.1);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.08);
+  }
+}
+
+.animate-deal-seat-pulse {
+  animation: deal-seat-pulse 1.2s ease-in-out infinite;
 }
 
 /* ── Card flight animation (AC 33) ─────────────────────────────────── */
