@@ -167,10 +167,11 @@ describe('LastMoveDisplay', () => {
     expect(screen.getByText('6♦').className).toContain('text-red-600');
   });
 
-  it('uses a high-contrast light panel background and larger text', () => {
+  it('uses a high-contrast light panel background and bigger text', () => {
     render(<LastMoveDisplay message="Alice asked Bob for 9♠ — denied" />);
     const panel = screen.getByTestId('last-move-display');
     expect(panel.className).toContain('bg-slate-100/95');
-    expect(panel.className).toContain('text-sm');
+    expect(panel.className).toContain('text-base');
+    expect(panel.className).toContain('sm:text-lg');
   });
 });
