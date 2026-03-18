@@ -65,6 +65,17 @@ function renderCardToken(cardToken: string) {
   return <span className={suitClassFromSymbol(suit)}>{cardToken}</span>;
 }
 
+function renderCardText(text: string) {
+  const parts = text.split(/((?:A|K|Q|J|10|[2-9])[♠♥♦♣])/g);
+  return parts.map((part, index) => {
+    if (!part) return null;
+    if (/^(?:A|K|Q|J|10|[2-9])[♠♥♦♣]$/.test(part)) {
+      return <span key={`${part}-${index}`}>{renderCardToken(part)}</span>;
+    }
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
 function renderHalfSuitLabel(label: string) {
   const m = label.match(/^(Low|High)\s+(Spades|Hearts|Diamonds|Clubs)$/i);
   if (!m) return <span className="font-semibold text-slate-900">{label}</span>;
@@ -93,10 +104,30 @@ function renderStyledMessage(
   nameToTeam: Map<string, 1 | 2>,
   myTeamId?: 1 | 2 | null
 ) {
-  const askMatch = message.match(/^(.*?) asked (.*?) for (\S+) — (got it|denied)$/);
+  const askMixedMatch = message.match(/^(.*?) asked (.*?) for (.*?) — got (.*?); denied (.*?)$/);
+  if (askMixedMatch) {
+    const [, asker, target, requestedCards, gotCards, deniedCards] = askMixedMatch;
+    return (
+      <>
+        {renderName(asker, nameToTeam, myTeamId)}
+        <span className="text-slate-700"> asked </span>
+        {renderName(target, nameToTeam, myTeamId)}
+        <span className="text-slate-700"> for </span>
+        {renderCardText(requestedCards)}
+        <span className="text-slate-600"> — </span>
+        <span className="text-emerald-700 font-semibold">got </span>
+        {renderCardText(gotCards)}
+        <span className="text-slate-600">; </span>
+        <span className="text-rose-700 font-semibold">denied </span>
+        {renderCardText(deniedCards)}
+      </>
+    );
+  }
+
+  const askMatch = message.match(/^(.*?) asked (.*?) for (.*?) — (got it|got them|denied)$/);
   if (askMatch) {
-    const [, asker, target, cardToken, outcome] = askMatch;
-    const outcomeClass = outcome === 'got it'
+    const [, asker, target, requestedCards, outcome] = askMatch;
+    const outcomeClass = outcome === 'got it' || outcome === 'got them'
       ? 'text-emerald-700 font-semibold'
       : 'text-rose-700 font-semibold';
     return (
@@ -105,9 +136,23 @@ function renderStyledMessage(
         <span className="text-slate-700"> asked </span>
         {renderName(target, nameToTeam, myTeamId)}
         <span className="text-slate-700"> for </span>
-        {renderCardToken(cardToken)}
+        {renderCardText(requestedCards)}
         <span className="text-slate-600"> — </span>
         <span className={outcomeClass}>{outcome}</span>
+      </>
+    );
+  }
+
+  const askPreviewMatch = message.match(/^(.*?) asked (.*?) for (.*?)$/);
+  if (askPreviewMatch) {
+    const [, asker, target, requestedCards] = askPreviewMatch;
+    return (
+      <>
+        {renderName(asker, nameToTeam, myTeamId)}
+        <span className="text-slate-700"> asked </span>
+        {renderName(target, nameToTeam, myTeamId)}
+        <span className="text-slate-700"> for </span>
+        {renderCardText(requestedCards)}
       </>
     );
   }

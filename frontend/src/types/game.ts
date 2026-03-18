@@ -108,6 +108,7 @@ export interface AskResultPayload {
   askerId: string;
   targetId: string;
   cardId: CardId;
+  batchCardIds?: CardId[];
   success: boolean;
   newTurnPlayerId: string;
   lastMove: string;

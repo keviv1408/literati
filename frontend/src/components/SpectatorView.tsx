@@ -44,6 +44,7 @@
  */
 
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import CardHand from '@/components/CardHand';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
@@ -175,7 +176,10 @@ export default function SpectatorView({
 
   // ── Last-move display (transient 5-second flash) ───────────────────────────
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
+  const [syntheticLastMoveMsg, setSyntheticLastMoveMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const observedAskBatchRef = useRef<AskMoveBatch | null>(null);
+  const processedAskResultKeyRef = useRef<string | null>(null);
   const {
     cardFlight,
     askDeniedCue,
@@ -183,22 +187,47 @@ export default function SpectatorView({
     clearCardFlight,
     clearAskDeniedCue,
   } = useAskResultAnimations(lastAskResult);
-  const showTransientLastResult = useEffectEvent((msg: string) => {
+  const showTransientLastResult = useEffectEvent((msg: string, persistentMessage: string | null = null) => {
     setLastResultMsg(msg);
+    setSyntheticLastMoveMsg(persistentMessage);
     if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
     lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5_000);
   });
 
   useEffect(() => {
-    const msg = lastAskResult?.lastMove ?? null;
-    if (!msg) return;
-    showTransientLastResult(msg);
-  }, [lastAskResult]);
+    if (!lastAskResult?.lastMove) return;
+    const askResultKey = [
+      lastAskResult.askerId,
+      lastAskResult.targetId,
+      lastAskResult.cardId,
+      lastAskResult.success ? '1' : '0',
+      lastAskResult.newTurnPlayerId,
+      lastAskResult.lastMove,
+    ].join('|');
+    if (processedAskResultKeyRef.current === askResultKey) return;
+    processedAskResultKeyRef.current = askResultKey;
+
+    const observedBatch = advanceAskMoveBatch(observedAskBatchRef.current, lastAskResult);
+    observedAskBatchRef.current = observedBatch;
+    const askerName =
+      players.find((player) => player.playerId === lastAskResult.askerId)?.displayName ?? 'Player';
+    const targetName =
+      players.find((player) => player.playerId === lastAskResult.targetId)?.displayName ?? 'Player';
+    const summaryMessage = buildAskMoveSummaryMessage(
+      observedBatch,
+      lastAskResult,
+      askerName,
+      targetName,
+    );
+
+    showTransientLastResult(summaryMessage ?? lastAskResult.lastMove, summaryMessage);
+  }, [lastAskResult, players]);
 
   useEffect(() => {
     const msg = lastDeclareResult?.lastMove ?? null;
     if (!msg) return;
-    showTransientLastResult(msg);
+    observedAskBatchRef.current = null;
+    showTransientLastResult(msg, null);
   }, [lastDeclareResult]);
 
   // ── Derived values ─────────────────────────────────────────────────────────
@@ -213,7 +242,7 @@ export default function SpectatorView({
     ? players.find((p) => p.playerId === gameState.currentTurnPlayerId)
     : null;
 
-  const displayedMove = lastResultMsg ?? gameState?.lastMove ?? null;
+  const displayedMove = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove ?? null;
   const selectedPlayer = selectedPlayerId
     && godModeEnabled
     && players.some((player) => player.playerId === selectedPlayerId)

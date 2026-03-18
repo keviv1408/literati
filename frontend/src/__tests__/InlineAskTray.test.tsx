@@ -13,9 +13,9 @@ function renderTray(overrides: Partial<React.ComponentProps<typeof InlineAskTray
     variant: 'remove_7s',
     declaredSuits: [],
     selectedHalfSuit: null,
-    selectedCardId: null,
+    selectedCardIds: [],
     onSelectHalfSuit: jest.fn(),
-    onSelectCard: jest.fn(),
+    onToggleCard: jest.fn(),
     onBack: jest.fn(),
     onCancel: jest.fn(),
     isLoading: false,
@@ -47,11 +47,17 @@ describe('InlineAskTray', () => {
     expect(screen.queryByTestId('inline-ask-card-5_h')).toBeNull();
   });
 
-  it('calls onSelectCard when an ask card is picked', () => {
-    const onSelectCard = jest.fn();
-    renderTray({ selectedHalfSuit: 'low_h', onSelectCard });
+  it('calls onToggleCard when an ask card is picked', () => {
+    const onToggleCard = jest.fn();
+    renderTray({ selectedHalfSuit: 'low_h', onToggleCard });
     fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
-    expect(onSelectCard).toHaveBeenCalledWith('1_h');
+    expect(onToggleCard).toHaveBeenCalledWith('1_h');
+  });
+
+  it('shows the multi-select opponent prompt once cards are selected', () => {
+    renderTray({ selectedHalfSuit: 'low_h', selectedCardIds: ['1_h', '2_h'] });
+    expect(screen.getByTestId('inline-ask-step-opponent').textContent).toContain('2 cards');
+    expect(screen.getByTestId('inline-ask-selected-count').textContent).toContain('2 selected');
   });
 
   it('calls onBack and onCancel from the tray controls', () => {

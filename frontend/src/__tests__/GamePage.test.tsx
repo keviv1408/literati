@@ -858,6 +858,190 @@ describe('GamePage — game controls always available', () => {
       );
     });
 
+    it('queues multiple asks for the same opponent and continues only after a successful result', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      const sendSpy = jest.spyOn(lastMockWsInstance as MockWebSocket, 'send');
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-button')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('ask-button'));
+      fireEvent.click(screen.getByTestId('inline-ask-halfsuit-low_h'));
+      fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
+      fireEvent.click(screen.getByTestId('inline-ask-card-2_h'));
+
+      const carolSeat = document.querySelector('[data-player-id="p4"]') as HTMLElement;
+      expect(carolSeat).toBeTruthy();
+      fireEvent.click(carolSeat);
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'ask_card',
+          targetPlayerId: 'p4',
+          cardId: '1_h',
+          batchCardIds: ['1_h', '2_h'],
+        }),
+      );
+
+      act(() => sendWsMessage({
+        type: 'ask_result',
+        askerId: MY_PLAYER_ID,
+        targetId: 'p4',
+        cardId: '1_h',
+        success: true,
+        newTurnPlayerId: MY_PLAYER_ID,
+        lastMove: 'Me asked Carol for A♥ — got it',
+      }));
+
+      act(() => sendWsMessage({
+        type: 'game_players',
+        players: [
+          makePlayer(MY_PLAYER_ID, 'Me', 1, 0),
+          makePlayer('p2', 'Alice', 1, 2),
+          makePlayer('p3', 'Bob', 1, 4),
+          makePlayer('p4', 'Carol', 2, 1, { cardCount: 4 }),
+          makePlayer('p5', 'Dave', 2, 3),
+          makePlayer('p6', 'Eve', 2, 5),
+        ],
+      }));
+
+      await waitFor(() => {
+        expect(sendSpy).toHaveBeenCalledWith(
+          JSON.stringify({
+            type: 'ask_card',
+            targetPlayerId: 'p4',
+            cardId: '2_h',
+            batchCardIds: ['1_h', '2_h'],
+          }),
+        );
+      });
+
+      act(() => sendWsMessage({
+        type: 'ask_result',
+        askerId: MY_PLAYER_ID,
+        targetId: 'p4',
+        cardId: '2_h',
+        success: true,
+        newTurnPlayerId: MY_PLAYER_ID,
+        lastMove: 'Me asked Carol for 2♥ — got it',
+      }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('last-move-display').textContent).toContain(
+          'Me asked Carol for A♥ and 2♥ — got them',
+        );
+      });
+    });
+
+    it('shows the full multi-card request in the ask bubble during a queued ask batch', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-button')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('ask-button'));
+      fireEvent.click(screen.getByTestId('inline-ask-halfsuit-low_h'));
+      fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
+      fireEvent.click(screen.getByTestId('inline-ask-card-2_h'));
+
+      const carolSeat = document.querySelector('[data-player-id="p4"]') as HTMLElement;
+      expect(carolSeat).toBeTruthy();
+      fireEvent.click(carolSeat);
+
+      jest.useFakeTimers();
+      try {
+        act(() => sendWsMessage({
+          type: 'ask_result',
+          askerId: MY_PLAYER_ID,
+          targetId: 'p4',
+          cardId: '1_h',
+          success: true,
+          newTurnPlayerId: MY_PLAYER_ID,
+          lastMove: 'Me asked Carol for A♥ — got it',
+        }));
+
+        act(() => {
+          jest.advanceTimersByTime(20);
+        });
+
+        expect(screen.getByTestId('ask-speech-bubble-text').textContent).toContain('Ace of hearts');
+        expect(screen.getByTestId('ask-speech-bubble-text').textContent).toContain('2 of hearts');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('aggregates consecutive ask results into one top-banner message for all clients', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      act(() => sendWsMessage({
+        type: 'ask_result',
+        askerId: 'p4',
+        targetId: 'player-me',
+        cardId: '10_c',
+        success: true,
+        newTurnPlayerId: 'p4',
+        lastMove: 'Carol asked Me for 10♣ — got it',
+      }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('last-move-display').textContent).toContain(
+          'Carol asked Me for 10♣ — got it',
+        );
+      });
+
+      act(() => sendWsMessage({
+        type: 'ask_result',
+        askerId: 'p4',
+        targetId: 'player-me',
+        cardId: '11_c',
+        success: false,
+        newTurnPlayerId: 'player-me',
+        lastMove: 'Carol asked Me for J♣ — denied',
+      }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('last-move-display').textContent).toContain(
+          'Carol asked Me for 10♣ and J♣ — got 10♣; denied J♣',
+        );
+      });
+    });
+
+    it('shows the full multi-card request in the top banner as soon as the first batched result arrives', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      act(() => sendWsMessage({
+        type: 'ask_result',
+        askerId: 'p4',
+        targetId: 'player-me',
+        cardId: '10_c',
+        batchCardIds: ['10_c', '11_c', '12_c'],
+        success: true,
+        newTurnPlayerId: 'p4',
+        lastMove: 'Carol asked Me for 10♣ — got it',
+      }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('last-move-display').textContent).toContain(
+          'Carol asked Me for 10♣, J♣, and Q♣',
+        );
+      });
+    });
+
     it('does NOT show Declare button when it is NOT the player\'s turn', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());

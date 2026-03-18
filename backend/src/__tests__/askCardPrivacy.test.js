@@ -568,6 +568,7 @@ describe('Ask card privacy — server-side enforcement ', () => {
               type:           'ask_card',
               targetPlayerId: p2Id,
               cardId:         ASK_CARD,
+              batchCardIds:   [ASK_CARD, '5_s'],
             }));
             resolve();
           }, 50);
@@ -580,6 +581,7 @@ describe('Ask card privacy — server-side enforcement ', () => {
         expect(result.askerId).toBe(p1Id);
         expect(result.targetId).toBe(p2Id);
         expect(result.cardId).toBe(ASK_CARD);
+        expect(result.batchCardIds).toEqual([ASK_CARD, '5_s']);
         expect(typeof result.success).toBe('boolean');
         expect(result.newTurnPlayerId).toBeDefined();
         expect(result.lastMove).toBeDefined();

@@ -31,7 +31,7 @@ export default function AskSpeechBubbleOverlay({
         }}
       >
         <div
-          className="relative max-w-[13rem] rounded-2xl border border-amber-300/70 bg-slate-950/95 px-3 py-2 text-center text-sm font-medium text-amber-50 shadow-[0_10px_30px_rgba(15,23,42,0.45)]"
+          className="relative max-w-[18rem] rounded-2xl border border-amber-300/70 bg-slate-950/95 px-3 py-2 text-center text-sm leading-snug font-medium text-amber-50 shadow-[0_10px_30px_rgba(15,23,42,0.45)] sm:max-w-[22rem]"
           data-testid="ask-speech-bubble"
         >
           <span data-testid="ask-speech-bubble-text">{bubble.text}</span>

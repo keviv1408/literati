@@ -179,7 +179,7 @@ export interface UseGameSocketReturn {
    * arrives. Components render a live "X is declaring Low Spades (3/6)" banner.
    */
   declareProgress: DeclareProgressPayload | null;
-  sendAsk: (targetPlayerId: string, cardId: CardId) => void;
+  sendAsk: (targetPlayerId: string, cardId: CardId, batchCardIds?: CardId[]) => void;
   sendDeclare: (halfSuitId: HalfSuitId, assignment: Record<CardId, string>) => void;
   /**
    * Stream in-progress card assignment progress to all other connected clients
@@ -827,10 +827,15 @@ export function useGameSocket({
 
   // ── Send helpers ──────────────────────────────────────────────────────────
 
-  const sendAsk = useCallback((targetPlayerId: string, cardId: CardId) => {
+  const sendAsk = useCallback((targetPlayerId: string, cardId: CardId, batchCardIds?: CardId[]) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'ask_card', targetPlayerId, cardId }));
+    ws.send(JSON.stringify({
+      type: 'ask_card',
+      targetPlayerId,
+      cardId,
+      ...(batchCardIds && batchCardIds.length > 1 ? { batchCardIds } : {}),
+    }));
   }, []);
 
   const sendDeclare = useCallback((

@@ -53,7 +53,7 @@ function suitToWord(symbol: string): string {
 
 export function toSpokenMoveText(message: string): string {
   const withCardsExpanded = message.replace(
-    /(^|[\s(])((?:A|K|Q|J|10|[2-9]))([♠♥♦♣])(?=$|[\s).,!?])/g,
+    /(^|[\s(])((?:A|K|Q|J|10|[2-9]))([♠♥♦♣])(?=$|[\s).,!?;])/g,
     (_match, prefix: string, rank: string, suit: string) =>
       `${prefix}${rankToWord(rank)} of ${suitToWord(suit)}`,
   );
@@ -61,8 +61,11 @@ export function toSpokenMoveText(message: string): string {
   const withPauseMarkers = withCardsExpanded
     .replace(/\s+—\s+/g, '. ')
     .replace(/\s+-\s+/g, '. ')
+    .replace(/;\s+denied\s+/gi, '. denied ')
+    .replace(/;\s+/g, '. ')
     .replace(/\bgot it\b/gi, 'got it.')
-    .replace(/\bdenied\b/gi, 'denied.')
+    .replace(/\bgot them\b/gi, 'got them.')
+    .replace(/\bdenied\b(?!\s+(?:ace|king|queen|jack|ten|[2-9])\s+of\b)/gi, 'denied.')
     .replace(/\bcorrect!\b/gi, 'correct.')
     .replace(/\bincorrect!\b/gi, 'incorrect.');
 

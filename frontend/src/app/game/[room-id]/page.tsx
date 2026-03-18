@@ -21,6 +21,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGuestBearerToken, getGameSummary, ApiError } from '@/lib/api';
+import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import { unlockGameAudio } from '@/lib/audio';
 import { getCachedToken } from '@/lib/backendSession';
 import { useGuest } from '@/contexts/GuestContext';
@@ -69,6 +70,56 @@ interface PageProps {
   params: Promise<{ 'room-id': string }>;
 }
 
+interface PendingAskBatch {
+  targetPlayerId: string;
+  requestedCardIds: CardId[];
+  successfulCardIds: CardId[];
+  deniedCardIds: CardId[];
+  remainingCardIds: CardId[];
+  awaitingResultFor: CardId | null;
+  waitingForStateSync: boolean;
+  lastKnownTargetCardCount: number;
+}
+
+function formatNaturalList(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+function buildAskBatchSummary(
+  batch: PendingAskBatch,
+  askerName: string,
+  targetName: string,
+): string | null {
+  const successfulIds = new Set(batch.successfulCardIds);
+  const deniedIds = new Set(batch.deniedCardIds);
+  const attemptedCardIds = batch.requestedCardIds.filter(
+    (cardId) => successfulIds.has(cardId) || deniedIds.has(cardId),
+  );
+
+  if (attemptedCardIds.length <= 1) return null;
+
+  const attemptedLabels = attemptedCardIds.map((cardId) => cardLabel(cardId));
+  const successfulLabels = attemptedCardIds
+    .filter((cardId) => successfulIds.has(cardId))
+    .map((cardId) => cardLabel(cardId));
+  const deniedLabels = attemptedCardIds
+    .filter((cardId) => deniedIds.has(cardId))
+    .map((cardId) => cardLabel(cardId));
+
+  if (deniedLabels.length === 0) {
+    return `${askerName} asked ${targetName} for ${formatNaturalList(attemptedLabels)} — got them`;
+  }
+
+  if (successfulLabels.length === 0) {
+    return `${askerName} asked ${targetName} for ${formatNaturalList(attemptedLabels)} — denied`;
+  }
+
+  return `${askerName} asked ${targetName} for ${formatNaturalList(attemptedLabels)} — got ${formatNaturalList(successfulLabels)}; denied ${formatNaturalList(deniedLabels)}`;
+}
+
 export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -85,13 +136,18 @@ export default function GamePage({ params }: PageProps) {
   const [showDeclare, setShowDeclare]     = useState(false);
   const [showAskInline, setShowAskInline] = useState(false);
   const [selectedAskHalfSuit, setSelectedAskHalfSuit] = useState<HalfSuitId | null>(null);
-  const [selectedAskCard, setSelectedAskCard] = useState<CardId | null>(null);
+  const [selectedAskCardIds, setSelectedAskCardIds] = useState<CardId[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingAskBatch, setPendingAskBatch] = useState<PendingAskBatch | null>(null);
+  const pendingAskBatchRef = useRef<PendingAskBatch | null>(null);
+  const observedAskBatchRef = useRef<AskMoveBatch | null>(null);
+  const processedAskResultKeyRef = useRef<string | null>(null);
   const [gameOver, setGameOver]           = useState<GameOverPayload | null>(null);
   const [gameSummary, setGameSummary]     = useState<GameSummaryResponse | null>(null);
   const [rematchStarted, setRematchStarted] = useState(false);
   const [voteStartedAt, setVoteStartedAt]   = useState<number | undefined>(undefined);
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
+  const [syntheticLastMoveMsg, setSyntheticLastMoveMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Declaration result overlay ────────────────────────────────
@@ -174,6 +230,9 @@ export default function GamePage({ params }: PageProps) {
 
   useEffect(() => {
     setGameSummary(null);
+    setSyntheticLastMoveMsg(null);
+    observedAskBatchRef.current = null;
+    processedAskResultKeyRef.current = null;
   }, [roomCode]);
 
   const isGameActive = room?.status === 'in_progress' || room?.status === 'starting' || room?.status === 'completed';
@@ -276,16 +335,54 @@ export default function GamePage({ params }: PageProps) {
     playDeclarationFail,
   } = useAudio();
 
+  const getAskBubbleCardIds = useCallback((result: { targetId: string; cardId: CardId }) => {
+    const activeBatch = pendingAskBatchRef.current;
+    if (
+      !activeBatch ||
+      activeBatch.targetPlayerId !== result.targetId ||
+      activeBatch.awaitingResultFor !== result.cardId
+    ) {
+      return undefined;
+    }
+
+    return activeBatch.requestedCardIds;
+  }, []);
+
   const {
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
     clearCardFlight,
     clearAskDeniedCue,
-  } = useAskResultAnimations(lastAskResult);
+  } = useAskResultAnimations(lastAskResult, {
+    getAskBubbleCardIds,
+  });
+
+  const publishMoveMessage = useCallback((message: string, persistentMessage: string | null = null) => {
+    setLastResultMsg(message);
+    setSyntheticLastMoveMsg(persistentMessage);
+    if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
+    lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5000);
+  }, []);
+
+  const updatePendingAskBatch = useCallback((nextBatch: PendingAskBatch | null) => {
+    pendingAskBatchRef.current = nextBatch;
+    setPendingAskBatch(nextBatch);
+  }, []);
 
   useEffect(() => {
     if (lastAskResult?.lastMove) {
+      const askResultKey = [
+        lastAskResult.askerId,
+        lastAskResult.targetId,
+        lastAskResult.cardId,
+        lastAskResult.success ? '1' : '0',
+        lastAskResult.newTurnPlayerId,
+        lastAskResult.lastMove,
+      ].join('|');
+      if (processedAskResultKeyRef.current === askResultKey) return;
+      processedAskResultKeyRef.current = askResultKey;
+
       if (lastAskResult.success) {
         // ── Card flip animation ────────────────────────
         // When the CURRENT PLAYER received the card (they were the asker),
@@ -308,18 +405,87 @@ export default function GamePage({ params }: PageProps) {
       } else {
         playAskFail();
       }
-      setLastResultMsg(lastAskResult.lastMove);
-      if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
-      lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5000);
-      setActionLoading(false);
-      setSelectedAskCard(null);
+      const observedBatch = advanceAskMoveBatch(observedAskBatchRef.current, lastAskResult);
+      observedAskBatchRef.current = observedBatch;
+      const observedAskerName =
+        players.find((player) => player.playerId === lastAskResult.askerId)?.displayName ?? 'Player';
+      const observedTargetName =
+        players.find((player) => player.playerId === lastAskResult.targetId)?.displayName ?? 'Player';
+      const observedSummaryMessage = buildAskMoveSummaryMessage(
+        observedBatch,
+        lastAskResult,
+        observedAskerName,
+        observedTargetName,
+      );
+      setSelectedAskCardIds([]);
       setSelectedAskHalfSuit(null);
       setShowAskInline(false);
+
+      const activeBatch = pendingAskBatchRef.current;
+      const isMatchingBatch = Boolean(
+        activeBatch &&
+        lastAskResult.askerId === myPlayerId &&
+        lastAskResult.targetId === activeBatch.targetPlayerId &&
+        lastAskResult.cardId === activeBatch.awaitingResultFor,
+      );
+
+      if (!isMatchingBatch || !activeBatch) {
+        publishMoveMessage(
+          observedSummaryMessage ?? lastAskResult.lastMove,
+          observedSummaryMessage ?? null,
+        );
+        updatePendingAskBatch(null);
+        setActionLoading(false);
+        return;
+      }
+
+      const nextBatch: PendingAskBatch = {
+        ...activeBatch,
+        successfulCardIds: lastAskResult.success
+          ? [...activeBatch.successfulCardIds, lastAskResult.cardId]
+          : activeBatch.successfulCardIds,
+        deniedCardIds: lastAskResult.success
+          ? activeBatch.deniedCardIds
+          : [...activeBatch.deniedCardIds, lastAskResult.cardId],
+      };
+
+      const shouldContinue =
+        lastAskResult.success &&
+        lastAskResult.newTurnPlayerId === myPlayerId &&
+        activeBatch.remainingCardIds.length > 0;
+
+      if (shouldContinue) {
+        publishMoveMessage(
+          observedSummaryMessage ?? lastAskResult.lastMove,
+          observedSummaryMessage ?? null,
+        );
+        updatePendingAskBatch({
+          ...nextBatch,
+          awaitingResultFor: null,
+          waitingForStateSync: true,
+          lastKnownTargetCardCount: Math.max(0, activeBatch.lastKnownTargetCardCount - 1),
+        });
+        return;
+      }
+
+      const askerName =
+        players.find((player) => player.playerId === lastAskResult.askerId)?.displayName ?? 'Player';
+      const targetName =
+        players.find((player) => player.playerId === lastAskResult.targetId)?.displayName ?? 'Player';
+      const summaryMessage = buildAskBatchSummary(nextBatch, askerName, targetName);
+
+      publishMoveMessage(
+        observedSummaryMessage ?? summaryMessage ?? lastAskResult.lastMove,
+        observedSummaryMessage ?? summaryMessage ?? null,
+      );
+      updatePendingAskBatch(null);
+      setActionLoading(false);
     }
-  }, [lastAskResult, myPlayerId, playAskSuccess, playAskFail]);
+  }, [lastAskResult, myPlayerId, playAskSuccess, playAskFail, players, publishMoveMessage, updatePendingAskBatch]);
 
   useEffect(() => {
     if (lastDeclareResult?.lastMove) {
+      observedAskBatchRef.current = null;
       // ── Declaration result sound: correct vs incorrect ───────────────────
       if (lastDeclareResult.correct) {
         playDeclarationSuccess();
@@ -327,9 +493,7 @@ export default function GamePage({ params }: PageProps) {
         playDeclarationFail();
       }
 
-      setLastResultMsg(lastDeclareResult.lastMove);
-      if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
-      lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5000);
+      publishMoveMessage(lastDeclareResult.lastMove, null);
 
       // ── Score flash: briefly highlight the team that just scored ─────────
       if (lastDeclareResult.winningTeam) {
@@ -344,13 +508,14 @@ export default function GamePage({ params }: PageProps) {
       // dispatches game_advance to the server.
       setShowDeclarationOverlay(true);
 
+      updatePendingAskBatch(null);
       setActionLoading(false);
       setShowDeclare(false);
-      setSelectedAskCard(null);
+      setSelectedAskCardIds([]);
       setSelectedAskHalfSuit(null);
       setShowAskInline(false);
     }
-  }, [lastDeclareResult, playDeclarationSuccess, playDeclarationFail]);
+  }, [lastDeclareResult, playDeclarationSuccess, playDeclarationFail, publishMoveMessage, updatePendingAskBatch]);
 
   // ── Reset FailedDeclarationReveal dismissed flag on new failure ─
   // When a fresh declarationFailed payload arrives (a new failed declaration
@@ -409,10 +574,11 @@ export default function GamePage({ params }: PageProps) {
     const remaining = Math.max(0, turnTimer.expiresAt - Date.now());
 
     const t = setTimeout(() => {
-      setSelectedAskCard(null);
+      setSelectedAskCardIds([]);
       setSelectedAskHalfSuit(null);
       setShowDeclare(false);
       setShowAskInline(false);
+      updatePendingAskBatch(null);
       setActionLoading(false);
     }, remaining);
 
@@ -435,7 +601,7 @@ export default function GamePage({ params }: PageProps) {
     : null;
   const team1Players = players.filter((p) => p.teamId === 1);
   const team2Players = players.filter((p) => p.teamId === 2);
-  const currentLastMoveMessage = lastResultMsg ?? gameState?.lastMove;
+  const currentLastMoveMessage = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove;
   const resolvedVariant = variant ?? room?.card_removal_variant ?? 'remove_7s';
   const declaredSuits = gameState?.declaredSuits ?? [];
   const availableAskHalfSuits = getAvailableAskHalfSuits(myHand, declaredSuits, resolvedVariant);
@@ -448,13 +614,13 @@ export default function GamePage({ params }: PageProps) {
   const resetAskMode = useCallback(() => {
     setShowAskInline(false);
     setSelectedAskHalfSuit(null);
-    setSelectedAskCard(null);
+    setSelectedAskCardIds([]);
   }, []);
 
   const handleAskHalfSuitSelect = useCallback((halfSuitId: HalfSuitId) => {
     setShowAskInline(true);
     setSelectedAskHalfSuit(halfSuitId);
-    setSelectedAskCard(null);
+    setSelectedAskCardIds([]);
     setShowDeclare(false);
     sendPartialSelection({ flow: 'ask', halfSuitId });
   }, [sendPartialSelection]);
@@ -465,11 +631,20 @@ export default function GamePage({ params }: PageProps) {
     handleAskHalfSuitSelect(halfSuitId);
   }, [resolvedVariant, handleAskHalfSuitSelect]);
 
-  const handleAskCardSelect = useCallback((cardId: CardId) => {
+  const handleAskCardToggle = useCallback((cardId: CardId) => {
     if (!selectedAskHalfSuit) return;
-    setSelectedAskCard(cardId);
-    sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit, cardId });
-  }, [selectedAskHalfSuit, sendPartialSelection]);
+    const next = selectedAskCardIds.includes(cardId)
+      ? selectedAskCardIds.filter((id) => id !== cardId)
+      : [...selectedAskCardIds, cardId];
+    setSelectedAskCardIds(next);
+
+    const lastSelectedCardId = next[next.length - 1];
+    if (lastSelectedCardId) {
+      sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit, cardId: lastSelectedCardId });
+    } else {
+      sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit });
+    }
+  }, [selectedAskCardIds, selectedAskHalfSuit, sendPartialSelection]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -541,19 +716,76 @@ export default function GamePage({ params }: PageProps) {
   // • The turn-indicator banner shows seat-selection guidance.
   const isTurnPassMode = isMyTurn && (postDeclarationHighlight !== null || pendingTurnPassAck);
 
-  const handleAsk = useCallback((targetId: string, cardId: CardId) => {
+  const handleAsk = useCallback((targetId: string, cardId: CardId, batchCardIds?: CardId[]) => {
     setActionLoading(true);
     // Immediately clear the turn indicator so the glow and audio repeat
     // stop as soon as the player submits — before the server responds.
     clearIndicator();
-    sendAsk(targetId, cardId);
+    sendAsk(targetId, cardId, batchCardIds);
   }, [clearIndicator, sendAsk]);
 
   const handleAskTargetSeat = useCallback((targetPlayerId: string) => {
-    if (!selectedAskCard || actionLoading) return;
+    if (selectedAskCardIds.length === 0 || actionLoading) return;
+    const targetPlayer = players.find((player) => player.playerId === targetPlayerId);
+    const [firstCardId, ...remainingCardIds] = selectedAskCardIds;
+    if (!firstCardId || !targetPlayer) return;
+
     resetAskMode();
-    handleAsk(targetPlayerId, selectedAskCard);
-  }, [actionLoading, handleAsk, resetAskMode, selectedAskCard]);
+    updatePendingAskBatch({
+      targetPlayerId,
+      requestedCardIds: [firstCardId, ...remainingCardIds],
+      successfulCardIds: [],
+      deniedCardIds: [],
+      remainingCardIds,
+      awaitingResultFor: firstCardId,
+      waitingForStateSync: false,
+      lastKnownTargetCardCount: targetPlayer.cardCount,
+    });
+    handleAsk(targetPlayerId, firstCardId, [firstCardId, ...remainingCardIds]);
+  }, [actionLoading, handleAsk, players, resetAskMode, selectedAskCardIds, updatePendingAskBatch]);
+
+  useEffect(() => {
+    if (!pendingAskBatch?.waitingForStateSync || pendingAskBatch.awaitingResultFor) return;
+    if (gameState?.currentTurnPlayerId !== myPlayerId) {
+      updatePendingAskBatch(null);
+      setActionLoading(false);
+      return;
+    }
+
+    const targetPlayer = players.find((player) => player.playerId === pendingAskBatch.targetPlayerId);
+    if (!targetPlayer) {
+      updatePendingAskBatch(null);
+      setActionLoading(false);
+      return;
+    }
+
+    if (targetPlayer.cardCount !== pendingAskBatch.lastKnownTargetCardCount) return;
+    if (targetPlayer.cardCount <= 0) {
+      updatePendingAskBatch(null);
+      setActionLoading(false);
+      return;
+    }
+
+    const nextCardId = pendingAskBatch.remainingCardIds.find((cardId) => !myHand.includes(cardId));
+    if (!nextCardId) {
+      updatePendingAskBatch(null);
+      setActionLoading(false);
+      return;
+    }
+
+    const remainingCardIds = pendingAskBatch.remainingCardIds.filter((cardId) => cardId !== nextCardId);
+    updatePendingAskBatch({
+      targetPlayerId: pendingAskBatch.targetPlayerId,
+      requestedCardIds: pendingAskBatch.requestedCardIds,
+      successfulCardIds: pendingAskBatch.successfulCardIds,
+      deniedCardIds: pendingAskBatch.deniedCardIds,
+      remainingCardIds,
+      awaitingResultFor: nextCardId,
+      waitingForStateSync: false,
+      lastKnownTargetCardCount: targetPlayer.cardCount,
+    });
+    handleAsk(pendingAskBatch.targetPlayerId, nextCardId, pendingAskBatch.requestedCardIds);
+  }, [gameState?.currentTurnPlayerId, handleAsk, myHand, myPlayerId, pendingAskBatch, players, updatePendingAskBatch]);
 
   function handleDeclare(halfSuitId: HalfSuitId, assignment: Record<CardId, string>) {
     setActionLoading(true);
@@ -953,8 +1185,8 @@ export default function GamePage({ params }: PageProps) {
               indicatorActive={indicatorActive}
               highlightedPlayerIds={highlightedPlayerIds}
               onSeatClick={seatClickHandler}
-              askTargetPlayerIds={selectedAskCard ? validAskTargetIds : undefined}
-              onAskTargetClick={selectedAskCard ? handleAskTargetSeat : undefined}
+              askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
+              onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
             />
           </div>
 
@@ -974,8 +1206,8 @@ export default function GamePage({ params }: PageProps) {
               indicatorActive={indicatorActive}
               highlightedPlayerIds={highlightedPlayerIds}
               onSeatClick={seatClickHandler}
-              askTargetPlayerIds={selectedAskCard ? validAskTargetIds : undefined}
-              onAskTargetClick={selectedAskCard ? handleAskTargetSeat : undefined}
+              askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
+              onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
             />
             <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
           </div>
@@ -1009,7 +1241,7 @@ export default function GamePage({ params }: PageProps) {
                       } else {
                         setShowAskInline(true);
                         setSelectedAskHalfSuit(null);
-                        setSelectedAskCard(null);
+                        setSelectedAskCardIds([]);
                       }
                       setShowDeclare(false);
                     }}
@@ -1052,12 +1284,12 @@ export default function GamePage({ params }: PageProps) {
                 variant={effectiveVariant}
                 declaredSuits={declaredSuits}
                 selectedHalfSuit={selectedAskHalfSuit}
-                selectedCardId={selectedAskCard}
+                selectedCardIds={selectedAskCardIds}
                 onSelectHalfSuit={handleAskHalfSuitSelect}
-                onSelectCard={handleAskCardSelect}
+                onToggleCard={handleAskCardToggle}
                 onBack={() => {
                   setSelectedAskHalfSuit(null);
-                  setSelectedAskCard(null);
+                  setSelectedAskCardIds([]);
                 }}
                 onCancel={resetAskMode}
                 isLoading={actionLoading}
@@ -1077,9 +1309,12 @@ export default function GamePage({ params }: PageProps) {
             {isMyTurn && !isTurnPassMode && !showAskInline && !showDeclare && myHand.length > 0 && (
               <p className="text-xs text-slate-500 text-center animate-pulse" data-testid="ask-prompt">Tap a card or click Ask ↑ to ask, or click Declare ↑</p>
             )}
-            {isMyTurn && !isTurnPassMode && showAskInline && selectedAskCard && (
+            {isMyTurn && !isTurnPassMode && showAskInline && selectedAskCardIds.length > 0 && (
               <p className="text-xs text-emerald-300 text-center" data-testid="ask-seat-prompt">
-                Tap an opponent avatar above for {cardLabel(selectedAskCard)}.
+                Tap an opponent avatar above for{' '}
+                {selectedAskCardIds.length === 1
+                  ? cardLabel(selectedAskCardIds[0])
+                  : `${selectedAskCardIds.length} selected cards`}.
               </p>
             )}
           </div>

@@ -10,7 +10,8 @@
  * ws(s)://host/ws/game/<ROOMCODE>?token=<bearer>
  *
  * ── Client → Server messages ──────────────────────────────────────────────
- * { type: 'ask_card', targetPlayerId: string, cardId: string }
+ * { type: 'ask_card', targetPlayerId: string, cardId: string,
+ * batchCardIds?: string[] }
  * { type: 'declare_suit', halfSuitId: string, assignment: { [cardId]: playerId } }
  * { type: 'rematch_vote', vote: boolean } — cast after game_over
  * { type: 'partial_selection', flow: 'ask'|'declare', halfSuitId?: string,
@@ -145,6 +146,7 @@ const {
   persistGameState,
   restoreGameState,
   markRoomAbandoned,
+  cardHalfSuit,
   getPlayerTeam,
   getTeamPlayers,
   getCardCount,
@@ -1074,7 +1076,7 @@ async function startBotDeclarationCountdown(roomCode, playerId, effectivePartial
   // If bot cannot declare (e.g., fell back to ask or pass), execute immediately.
   if (decision.action !== 'declare') {
     if (decision.action === 'ask') {
-      await handleAskCard(roomCode, playerId, decision.targetId, decision.cardId, null, false);
+      await handleAskCard(roomCode, playerId, decision.targetId, decision.cardId, undefined, null, false);
     }
     return;
   }
@@ -1640,7 +1642,7 @@ async function executeTimedOutTurn(roomCode, playerId) {
   // Complete the action: use partial state if available, otherwise full bot logic.
   const decision = completeBotFromPartial(gs, playerId, effectivePartial);
   if (decision.action === 'ask') {
-    await handleAskCard(roomCode, playerId, decision.targetId, decision.cardId, null, false);
+    await handleAskCard(roomCode, playerId, decision.targetId, decision.cardId, undefined, null, false);
   } else if (decision.action === 'declare') {
     await handleDeclare(roomCode, playerId, decision.halfSuitId, decision.assignment, null, false);
   }
@@ -1726,7 +1728,7 @@ async function executeBotTurn(roomCode, botId) {
   const decision = decideBotMove(gs, botId);
 
   if (decision.action === 'ask') {
-    await handleAskCard(roomCode, botId, decision.targetId, decision.cardId, null, true);
+    await handleAskCard(roomCode, botId, decision.targetId, decision.cardId, undefined, null, true);
   } else if (decision.action === 'declare') {
     await handleDeclare(roomCode, botId, decision.halfSuitId, decision.assignment, null, true);
   }
@@ -1739,6 +1741,32 @@ async function executeBotTurn(roomCode, botId) {
 // ---------------------------------------------------------------------------
 // Action handlers (shared between human WS messages and bot execution)
 // ---------------------------------------------------------------------------
+
+function sanitizeAskBatchCardIds(gs, askerId, targetId, cardId, batchCardIds) {
+  if (!Array.isArray(batchCardIds) || batchCardIds.length <= 1) return undefined;
+
+  const requestedHalfSuitId = cardHalfSuit(gs, cardId);
+  const askerHand = getHand(gs, askerId);
+  const sanitizedCardIds = [];
+
+  for (const candidate of batchCardIds) {
+    if (typeof candidate !== 'string' || sanitizedCardIds.includes(candidate)) continue;
+    if (cardHalfSuit(gs, candidate) !== requestedHalfSuitId) continue;
+
+    if (candidate !== cardId && !askerHand.has(candidate)) {
+      const validation = validateAsk(gs, askerId, targetId, candidate);
+      if (!validation.valid) continue;
+    }
+
+    sanitizedCardIds.push(candidate);
+  }
+
+  if (!sanitizedCardIds.includes(cardId)) {
+    sanitizedCardIds.unshift(cardId);
+  }
+
+  return sanitizedCardIds.length > 1 ? sanitizedCardIds : undefined;
+}
 
 /**
  * Handle an ask-card action.
@@ -1772,10 +1800,19 @@ async function executeBotTurn(roomCode, botId) {
  * @param {string} askerId
  * @param {string} targetId
  * @param {string} cardId
- * @param {import('ws').WebSocket|null} ws - The asker's WS (null for bots)
- * @param {boolean} isBot
+ * @param {string[]|import('ws').WebSocket|null|undefined} batchCardIdsOrWs
+ * @param {import('ws').WebSocket|boolean|null} wsOrIsBot - The asker's WS (null for bots)
+ * @param {boolean} maybeIsBot
  */
-async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = false) {
+async function handleAskCard(roomCode, askerId, targetId, cardId, batchCardIdsOrWs, wsOrIsBot = null, maybeIsBot = false) {
+  const usingBatchCardIds = Array.isArray(batchCardIdsOrWs) || batchCardIdsOrWs === undefined;
+  const batchCardIds = usingBatchCardIds ? batchCardIdsOrWs : undefined;
+  const ws = usingBatchCardIds ? wsOrIsBot : batchCardIdsOrWs;
+  const isBot = usingBatchCardIds
+    ? maybeIsBot
+    : typeof wsOrIsBot === 'boolean'
+      ? wsOrIsBot
+      : maybeIsBot;
   const gs = getGame(roomCode);
   if (!gs) {
     if (ws) sendJson(ws, { type: 'error', message: 'Game not found', code: 'GAME_NOT_FOUND' });
@@ -1802,6 +1839,7 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = fa
 
   // Track which hands changed
   const changedHands = new Set([askerId, targetId]);
+  const publicBatchCardIds = sanitizeAskBatchCardIds(gs, askerId, targetId, cardId, batchCardIds);
 
   // Apply the ask (mutates gs)
   const { success, newTurnPlayerId, lastMove } = applyAsk(gs, askerId, targetId, cardId);
@@ -1815,6 +1853,7 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, ws, isBot = fa
     askerId,
     targetId,
     cardId,
+    ...(publicBatchCardIds ? { batchCardIds: publicBatchCardIds } : {}),
     success,
     newTurnPlayerId,
     lastMove,
@@ -3274,7 +3313,15 @@ function attachGameSocketServer(httpServer) {
             sendJson(ws, { type: 'error', message: 'targetPlayerId and cardId are required', code: 'MISSING_FIELDS' });
             return;
           }
-          await handleAskCard(roomCode, playerId, targetPlayerId, cardId, ws, false);
+          await handleAskCard(
+            roomCode,
+            playerId,
+            targetPlayerId,
+            cardId,
+            Array.isArray(msg.batchCardIds) ? msg.batchCardIds : undefined,
+            ws,
+            false,
+          );
           break;
         }
 

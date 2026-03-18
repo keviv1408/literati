@@ -47,6 +47,12 @@ describe('moveAnnouncements', () => {
     expect(toSpokenMoveText('vv asked Eager Thompson for K♠ — got it')).toBe(
       'vv asked Eager Thompson for king of spades. got it.',
     );
+    expect(toSpokenMoveText('vv asked Eager Thompson for 8♣, 10♣, and J♣ — got them')).toBe(
+      'vv asked Eager Thompson for 8 of clubs, ten of clubs, and jack of clubs. got them.',
+    );
+    expect(toSpokenMoveText('vv asked Eager Thompson for 8♣ and 10♣ — got 8♣; denied 10♣')).toBe(
+      'vv asked Eager Thompson for 8 of clubs and ten of clubs. got 8 of clubs. denied ten of clubs.',
+    );
   });
 
   it('uses speech synthesis to announce the move', () => {

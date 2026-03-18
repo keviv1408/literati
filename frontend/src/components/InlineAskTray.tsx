@@ -16,9 +16,9 @@ interface InlineAskTrayProps {
   variant: 'remove_2s' | 'remove_7s' | 'remove_8s';
   declaredSuits: DeclaredSuit[];
   selectedHalfSuit: HalfSuitId | null;
-  selectedCardId: CardId | null;
+  selectedCardIds: CardId[];
   onSelectHalfSuit: (halfSuitId: HalfSuitId) => void;
-  onSelectCard: (cardId: CardId) => void;
+  onToggleCard: (cardId: CardId) => void;
   onBack: () => void;
   onCancel: () => void;
   isLoading?: boolean;
@@ -66,15 +66,16 @@ export default function InlineAskTray({
   variant,
   declaredSuits,
   selectedHalfSuit,
-  selectedCardId,
+  selectedCardIds,
   onSelectHalfSuit,
-  onSelectCard,
+  onToggleCard,
   onBack,
   onCancel,
   isLoading = false,
 }: InlineAskTrayProps) {
   const availableHalfSuits = getAvailableAskHalfSuits(myHand, declaredSuits, variant);
   const myHandSet = new Set(myHand);
+  const selectedCardSet = new Set(selectedCardIds);
   const askableCards = selectedHalfSuit
     ? getHalfSuitCards(selectedHalfSuit, variant).filter((cardId) => !myHandSet.has(cardId))
     : [];
@@ -102,14 +103,17 @@ export default function InlineAskTray({
               Choose a half-suit, or tap one of your cards below.
             </p>
           )}
-          {selectedHalfSuit && !selectedCardId && (
+          {selectedHalfSuit && selectedCardIds.length === 0 && (
             <p className="mt-1 text-sm text-slate-200" data-testid="inline-ask-step-card">
-              Pick the missing card from <span className="font-semibold text-white">{halfSuitLabel(selectedHalfSuit)}</span>.
+              Pick one or more missing cards from <span className="font-semibold text-white">{halfSuitLabel(selectedHalfSuit)}</span>.
             </p>
           )}
-          {selectedHalfSuit && selectedCardId && (
+          {selectedHalfSuit && selectedCardIds.length > 0 && (
             <p className="mt-1 text-sm text-slate-200" data-testid="inline-ask-step-opponent">
-              Tap an opponent avatar for <span className="font-semibold text-white">{cardLabel(selectedCardId)}</span>.
+              Tap an opponent avatar to ask for{' '}
+              <span className="font-semibold text-white">
+                {selectedCardIds.length} card{selectedCardIds.length !== 1 ? 's' : ''}
+              </span>.
             </p>
           )}
         </div>
@@ -179,11 +183,11 @@ export default function InlineAskTray({
         <div className="mt-3">
           <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
             {askableCards.map((cardId) => {
-              const isSelected = selectedCardId === cardId;
+              const isSelected = selectedCardSet.has(cardId);
               return (
                 <button
                   key={cardId}
-                  onClick={() => onSelectCard(cardId)}
+                  onClick={() => onToggleCard(cardId)}
                   disabled={isLoading}
                   className={[
                     'rounded-2xl border-2 p-1.5 transition-all',
@@ -193,13 +197,20 @@ export default function InlineAskTray({
                     isLoading ? 'opacity-50' : '',
                   ].join(' ')}
                   data-testid={`inline-ask-card-${cardId}`}
-                  aria-label={`Ask for ${cardLabel(cardId)}`}
+                  aria-label={`${isSelected ? 'Deselect' : 'Select'} ${cardLabel(cardId)}`}
+                  aria-pressed={isSelected}
                 >
                   <PlayingCard cardId={cardId} size={isDesktopCenteredCardStage ? 'xl' : 'lg'} />
                 </button>
               );
             })}
           </div>
+
+          {selectedCardIds.length > 0 && (
+            <p className="mt-3 text-center text-xs text-emerald-300" data-testid="inline-ask-selected-count">
+              {selectedCardIds.length} selected. You can keep choosing cards or tap an opponent.
+            </p>
+          )}
 
           {askableCards.length === 0 && (
             <p className="text-sm text-slate-400" data-testid="inline-ask-no-cards">
