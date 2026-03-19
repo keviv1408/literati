@@ -358,3 +358,161 @@ body:has([role="dialog"]) {
   from { width: 100%; }
   to   { width:   0%; }
 }
+
+/* ── Lobby animations ──────────────────────────────────────────── */
+
+/* Page section entrance — fade up with deceleration */
+@keyframes lobby-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-lobby-section-in {
+  animation: lobby-section-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Empty seat breathing — gentle vertical float */
+@keyframes seat-breathe {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-3px);
+    opacity: 0.7;
+  }
+}
+
+.animate-seat-breathe {
+  animation: seat-breathe 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* Empty seat border shimmer — subtle border glow cycle */
+@keyframes seat-shimmer {
+  0%, 100% {
+    border-color: rgba(71, 85, 105, 0.3);
+  }
+  50% {
+    border-color: rgba(71, 85, 105, 0.55);
+  }
+}
+
+.animate-seat-shimmer {
+  animation: seat-shimmer 3s ease-in-out infinite;
+}
+
+/* Player join — scale + fade from ghostly to solid */
+@keyframes player-join {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-player-join {
+  animation: player-join 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Background suit drift — slow floating motion */
+@keyframes suit-drift-1 {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  33% {
+    transform: translate(8px, -12px) rotate(2deg);
+  }
+  66% {
+    transform: translate(-4px, 6px) rotate(-1deg);
+  }
+}
+
+@keyframes suit-drift-2 {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  40% {
+    transform: translate(-6px, 10px) rotate(-2deg);
+  }
+  70% {
+    transform: translate(10px, -5px) rotate(1.5deg);
+  }
+}
+
+.animate-suit-drift-1 {
+  animation: suit-drift-1 12s ease-in-out infinite;
+}
+
+.animate-suit-drift-2 {
+  animation: suit-drift-2 15s ease-in-out infinite;
+}
+
+/* Copy button checkmark pop */
+@keyframes copy-confirm {
+  0% {
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-copy-confirm {
+  animation: copy-confirm 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Start Game button ready pulse — subtle glow throb */
+@keyframes start-ready-pulse {
+  0%, 100% {
+    box-shadow:
+      0 4px 14px rgba(5, 150, 105, 0.25),
+      0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  50% {
+    box-shadow:
+      0 4px 20px rgba(5, 150, 105, 0.4),
+      0 0 0 6px rgba(16, 185, 129, 0.08);
+  }
+}
+
+.animate-start-ready-pulse {
+  animation: start-ready-pulse 2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* Reduced motion: collapse all lobby animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-lobby-section-in,
+  .animate-seat-breathe,
+  .animate-seat-shimmer,
+  .animate-player-join,
+  .animate-suit-drift-1,
+  .animate-suit-drift-2,
+  .animate-copy-confirm,
+  .animate-start-ready-pulse {
+    animation: none !important;
+  }
+  .animate-lobby-section-in {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .animate-player-join {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

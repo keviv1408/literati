@@ -782,13 +782,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4">
-      {/* Background decoration */}
+      {/* Background decoration — subtle floating drift */}
       <div
         className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none"
         aria-hidden="true"
       >
-        <span className="absolute text-[20rem] -top-16 -right-16 text-white">♦</span>
-        <span className="absolute text-[14rem] bottom-0 -left-8 text-white">♣</span>
+        <span className="absolute text-[20rem] -top-16 -right-16 text-white animate-suit-drift-1">♦</span>
+        <span className="absolute text-[14rem] bottom-0 -left-8 text-white animate-suit-drift-2">♣</span>
       </div>
 
       <main className="relative z-10 w-full max-w-md flex flex-col gap-6">
@@ -856,7 +856,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
           bg-gradient-to-b from-slate-800/80 to-slate-900/80
           border border-emerald-700/40
           rounded-2xl p-6 text-center shadow-xl shadow-black/40
-        ">
+          animate-lobby-section-in
+        " style={{ animationDelay: '0ms' }}>
           <p className="text-sm text-emerald-300/80 font-medium mb-1 uppercase tracking-widest">
             Room Code
           </p>
@@ -895,11 +896,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
                     onClick={handleCopyInvite}
                     aria-label="Copy invite link"
                     data-testid="lobby-copy-invite-btn"
-                    className="
+                    className={`
                       px-3 py-2 rounded-xl text-xs font-semibold shrink-0
-                      bg-emerald-700 hover:bg-emerald-600 text-white
-                      transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-                    "
+                      text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
+                      ${copiedInvite
+                        ? 'bg-emerald-500 animate-copy-confirm'
+                        : 'bg-emerald-700 hover:bg-emerald-600'}
+                    `}
                   >
                     {copiedInvite ? '✓ Copied' : 'Copy'}
                   </button>
@@ -925,11 +928,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
                     onClick={handleCopySpectator}
                     aria-label="Copy spectator link"
                     data-testid="lobby-copy-spectator-btn"
-                    className="
+                    className={`
                       px-3 py-2 rounded-xl text-xs font-semibold shrink-0
-                      bg-slate-600 hover:bg-slate-500 text-white
-                      transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-                    "
+                      text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
+                      ${copiedSpectator
+                        ? 'bg-emerald-500 animate-copy-confirm'
+                        : 'bg-slate-600 hover:bg-slate-500'}
+                    `}
                   >
                     {copiedSpectator ? '✓ Copied' : 'Copy'}
                   </button>
@@ -943,7 +948,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
         <div className="
           bg-slate-800/50 border border-slate-700/50
           rounded-2xl p-5 flex flex-col gap-4
-        ">
+          animate-lobby-section-in
+        " style={{ animationDelay: '80ms' }}>
           <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
             Room Settings
           </h2>
@@ -980,7 +986,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
         <div className="
           bg-slate-800/50 border border-slate-700/50
           rounded-2xl p-5
-        ">
+          animate-lobby-section-in
+        " style={{ animationDelay: '160ms' }}>
           <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
             Players
           </h2>
@@ -1121,7 +1128,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
             className="
               bg-slate-800/50 border border-slate-700/50
               rounded-2xl p-5 flex flex-col gap-4
+              animate-lobby-section-in
             "
+            style={{ animationDelay: '240ms' }}
             data-testid="start-game-panel"
           >
             {/* ── Lobby readiness summary ────────────────────────────────── */}
@@ -1222,7 +1231,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
               aria-label="Start Game"
               aria-busy={isStarting || lobbyStarting}
               data-testid="start-game-btn"
-              className="
+              className={`
                 w-full py-3.5 rounded-xl font-bold text-base
                 bg-emerald-600 hover:bg-emerald-500
                 disabled:bg-emerald-900/50 disabled:cursor-not-allowed
@@ -1232,7 +1241,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
                 focus:ring-offset-slate-800
                 active:scale-[0.98]
                 shadow-lg shadow-emerald-900/30
-              "
+                ${wsPlayers.length >= room.player_count && !isStarting && !lobbyStarting ? 'animate-start-ready-pulse' : ''}
+              `}
             >
               {isStarting || lobbyStarting ? (
                 <span className="flex items-center justify-center gap-2">

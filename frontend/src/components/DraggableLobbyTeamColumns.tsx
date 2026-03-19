@@ -34,7 +34,7 @@
  * />
  */
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -123,6 +123,22 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
       ? { transform: CSS.Translate.toString(transform) }
       : undefined;
 
+  // Track whether this seat just became occupied (for join animation).
+  const prevPlayerRef = useRef<string | null>(null);
+  const [justJoined, setJustJoined] = useState(false);
+
+  useEffect(() => {
+    const prevId = prevPlayerRef.current;
+    const currId = player?.playerId ?? null;
+    prevPlayerRef.current = currId;
+    if (currId && !prevId) {
+      // Seat went from empty → occupied
+      setJustJoined(true);
+      const t = setTimeout(() => setJustJoined(false), 450);
+      return () => clearTimeout(t);
+    }
+  }, [player?.playerId]);
+
   const isOccupied = player !== null;
   // Resolve effective team for colour tokens: use prop, fall back to natural seat assignment.
   const effectiveTeam: Team = team ?? getTeamForSeat(seatIndex);
@@ -143,8 +159,10 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
       ? player?.isCurrentUser
         ? `border ${teamStyle.playerBorder} ${teamStyle.playerBg}`
         : "border border-slate-700/60 bg-slate-800/40"
-      : "border border-dashed border-slate-700 bg-slate-800/30",
+      : "border border-dashed border-slate-700/40 bg-slate-800/20 animate-seat-shimmer",
     "select-none transition-opacity duration-150",
+    // Join animation
+    justJoined && !isOverlay ? "animate-player-join" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -232,8 +250,9 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
       ) : (
         <>
           <span
-            className="text-xl text-slate-600 animate-pulse"
+            className="text-xl text-slate-600 animate-seat-breathe"
             aria-hidden="true"
+            style={{ animationDelay: `${seatIndex * 300}ms` }}
           >
             ⌛
           </span>
