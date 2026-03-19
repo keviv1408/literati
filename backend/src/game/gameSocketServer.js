@@ -2822,7 +2822,7 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
     ...summary,
   });
 
-  if (summary.majorityReached) {
+  if (vote && summary.majorityReached) {
     // ── Rematch room creation preserving teams and seat order ─────
     // getRematchGameConfig must be called BEFORE clearRematch destroys the store.
     const config = getRematchGameConfig(roomCode);

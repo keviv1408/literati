@@ -566,6 +566,9 @@ export function useGameSocket({
         case 'declaration_result': {
           const payload = msg as unknown as DeclarationResultPayload;
           setLastDeclareResult(payload);
+          // Clear the last ask result so its animation doesn't replay when
+          // game_players arrives and invalidates the callback dependencies.
+          setLastAskResult(null);
           // Declaration completed; clear the previous turn timer immediately.
           setTurnTimer(null);
           // update eligible next-turn players list from the server payload
