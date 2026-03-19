@@ -86,100 +86,239 @@ body:has([role="dialog"]) {
   animation: seat-glow 1.4s ease-in-out infinite;
 }
 
-/* ── Card deal animations ─────────────────────────────────────── */
+/* ── Card deal animations — Cinematic Dealer ─────────────────── */
 
 /**
- * Deck shuffle — the stacked face-down cards wobble left/right.
- * Duration applied via.animate-deck-shuffle (0.7 s).
+ * Phase 1 — GATHER: Cards compress into a tight stack with 3D tilt.
+ * The deck vibrates with increasing intensity as cards tighten.
  */
-@keyframes deck-shuffle {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-  14% {
-    transform: translate3d(-12px, 2px, 0) rotate(-7deg) scale(1.02);
-  }
-  31% {
-    transform: translate3d(12px, -4px, 0) rotate(6deg) scale(1.04);
-  }
-  52% {
-    transform: translate3d(-8px, 3px, 0) rotate(-4deg) scale(1.01);
-  }
-  74% {
-    transform: translate3d(8px, -2px, 0) rotate(4deg) scale(1.03);
-  }
-}
-
-.animate-deck-shuffle {
-  animation: deck-shuffle 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@keyframes deck-riffle {
-  0%, 100% {
-    transform: translate(0, 0) rotate(0deg);
-    opacity: 0;
+@keyframes deck-gather {
+  0% {
+    transform: perspective(600px) rotateX(0deg) rotateY(0deg) scale(1);
   }
   20% {
-    transform: translate(-16px, -10px) rotate(-13deg);
-    opacity: 0.9;
+    transform: perspective(600px) rotateX(4deg) rotateY(-3deg) scale(1.01);
   }
-  55% {
-    transform: translate(14px, -6px) rotate(12deg);
-    opacity: 0.65;
+  40% {
+    transform: perspective(600px) rotateX(-3deg) rotateY(5deg) scale(1.03);
+  }
+  60% {
+    transform: perspective(600px) rotateX(5deg) rotateY(-4deg) scale(1.04);
+  }
+  80% {
+    transform: perspective(600px) rotateX(-2deg) rotateY(3deg) scale(1.06);
+  }
+  100% {
+    transform: perspective(600px) rotateX(0deg) rotateY(0deg) scale(1.08);
   }
 }
 
-.animate-deck-riffle {
-  animation: deck-riffle 0.7s ease-in-out infinite;
+.animate-deck-gather {
+  animation: deck-gather 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /**
- * Single flying card — arcs away from the centre deck toward a seat target.
- * Duration and delay are set inline per card via animationDuration / animationDelay.
+ * Phase 2 — RIFFLE: Deck splits in half, cards interleave.
+ * Left half fans left, right half fans right, then they merge.
  */
-@keyframes card-deal-out {
+@keyframes riffle-left {
   0% {
-    transform: translate3d(0, 0, 0) scale(0.98) rotate(-8deg);
+    transform: perspective(600px) translateX(0) rotateY(0deg);
+    opacity: 1;
+  }
+  30% {
+    transform: perspective(600px) translateX(-28px) rotateY(25deg);
+    opacity: 1;
+  }
+  60% {
+    transform: perspective(600px) translateX(-16px) rotateY(15deg);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(600px) translateX(0) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes riffle-right {
+  0% {
+    transform: perspective(600px) translateX(0) rotateY(0deg);
+    opacity: 1;
+  }
+  30% {
+    transform: perspective(600px) translateX(28px) rotateY(-25deg);
+    opacity: 1;
+  }
+  60% {
+    transform: perspective(600px) translateX(16px) rotateY(-15deg);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(600px) translateX(0) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+.animate-riffle-left {
+  animation: riffle-left 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-riffle-right {
+  animation: riffle-right 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/**
+ * Particle burst during riffle — small emerald dots scatter outward.
+ */
+@keyframes riffle-particle {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform:
+      translate(
+        var(--particle-dx, 0px),
+        var(--particle-dy, 0px)
+      )
+      scale(0);
     opacity: 0;
   }
-  12% {
+}
+
+.animate-riffle-particle {
+  animation: riffle-particle 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/**
+ * Phase 3 — DEAL: Cards launch in spiral arcs with 3D rotation.
+ * Each card spirals outward, rotating on X and Y axes while translating.
+ * Uses CSS custom properties for per-card trajectory.
+ */
+@keyframes card-deal-cinematic {
+  0% {
+    transform:
+      translate3d(0, 0, 0)
+      perspective(800px) rotateX(0deg) rotateY(0deg)
+      scale(0.9);
+    opacity: 0;
+  }
+  8% {
     opacity: 1;
   }
-  38% {
+  30% {
     transform:
       translate3d(
-        calc(var(--deal-dx, 0px) * 0.38),
-        calc(var(--deal-dy, 80px) * 0.38 - var(--deal-lift, 22px)),
+        calc(var(--deal-dx, 0px) * 0.3),
+        calc(var(--deal-dy, 0px) * 0.3 - var(--deal-lift, 30px)),
         0
       )
-      scale(1.02)
-      rotate(8deg);
+      perspective(800px) rotateX(var(--deal-rx-mid, -15deg)) rotateY(var(--deal-ry-mid, 20deg))
+      scale(1.08);
     opacity: 1;
   }
-  72% {
+  65% {
     transform:
       translate3d(
-        calc(var(--deal-dx, 0px) * 0.72),
-        calc(var(--deal-dy, 80px) * 0.72 - calc(var(--deal-lift, 22px) * 0.22)),
+        calc(var(--deal-dx, 0px) * 0.7),
+        calc(var(--deal-dy, 0px) * 0.7 - calc(var(--deal-lift, 30px) * 0.15)),
         0
       )
-      scale(0.9)
-      rotate(-3deg);
+      perspective(800px) rotateX(calc(var(--deal-rx-mid, -15deg) * -0.3)) rotateY(calc(var(--deal-ry-mid, 20deg) * -0.4))
+      scale(0.92);
+    opacity: 1;
+  }
+  85% {
+    transform:
+      translate3d(
+        calc(var(--deal-dx, 0px) * 0.92),
+        calc(var(--deal-dy, 0px) * 0.92),
+        0
+      )
+      perspective(800px) rotateX(0deg) rotateY(0deg)
+      scale(var(--deal-scale-end, 0.78));
+    opacity: 1;
+  }
+  /* Landing bounce */
+  92% {
+    transform:
+      translate3d(var(--deal-dx, 0px), var(--deal-dy, 0px), 0)
+      perspective(800px) rotateX(0deg) rotateY(0deg)
+      scale(calc(var(--deal-scale-end, 0.78) * 1.12));
     opacity: 1;
   }
   100% {
     transform:
-      translate3d(var(--deal-dx, 0px), var(--deal-dy, 80px), 0)
-      scale(var(--deal-scale-end, 0.76))
-      rotate(var(--deal-rot-end, 0deg));
+      translate3d(var(--deal-dx, 0px), var(--deal-dy, 0px), 0)
+      perspective(800px) rotateX(0deg) rotateY(0deg)
+      scale(var(--deal-scale-end, 0.78));
     opacity: 0;
   }
 }
 
 .animate-card-deal {
-  animation: card-deal-out 0.62s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation: card-deal-cinematic 0.72s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/**
+ * Seat glow pulse — plays when a card lands at a seat.
+ */
+@keyframes deal-seat-glow {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-deal-seat-glow {
+  animation: deal-seat-glow 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/**
+ * Light trail — a streak that follows each dealing card.
+ */
+@keyframes deal-trail {
+  0% {
+    transform:
+      translate3d(0, 0, 0)
+      scaleX(0.3);
+    opacity: 0.6;
+  }
+  40% {
+    transform:
+      translate3d(
+        calc(var(--deal-dx, 0px) * 0.25),
+        calc(var(--deal-dy, 0px) * 0.25 - var(--deal-lift, 30px) * 0.5),
+        0
+      )
+      scaleX(1);
+    opacity: 0.4;
+  }
+  100% {
+    transform:
+      translate3d(
+        calc(var(--deal-dx, 0px) * 0.55),
+        calc(var(--deal-dy, 0px) * 0.55),
+        0
+      )
+      scaleX(0.1);
+    opacity: 0;
+  }
+}
+
+.animate-deal-trail {
+  animation: deal-trail 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Legacy class alias for deal-seat-pulse (used in tests) */
 @keyframes deal-seat-pulse {
   0%, 100% {
     transform: scale(1);
@@ -193,6 +332,22 @@ body:has([role="dialog"]) {
 
 .animate-deal-seat-pulse {
   animation: deal-seat-pulse 1.2s ease-in-out infinite;
+}
+
+/* Reduced motion: collapse deal animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-deck-gather,
+  .animate-riffle-left,
+  .animate-riffle-right,
+  .animate-riffle-particle,
+  .animate-card-deal,
+  .animate-deal-seat-glow,
+  .animate-deal-trail {
+    animation: none !important;
+  }
+  .animate-card-deal {
+    opacity: 0 !important;
+  }
 }
 
 /* ── Card flight animation (AC 33) ─────────────────────────────────── */

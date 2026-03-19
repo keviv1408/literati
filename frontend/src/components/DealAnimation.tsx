@@ -1,16 +1,14 @@
 'use client';
 
 /**
- * DealAnimation — overlays a brief card shuffle + deal animation (~1.4 s).
+ * DealAnimation — Cinematic Dealer
  *
- * Triggered once when `game_init` is first received (fresh deal).
- * Does NOT fire on reconnect / page-refresh (the parent uses a ref-guard).
+ * A four-phase card deal animation overlay:
  *
- * Visual sequence
- * ───────────────
- *   0 – 400 ms  : deck shuffle  (the stacked face-down cards wobble)
- *   400 – 1400 ms: deal phase   (face-down cards fly outward, one per player)
- *   1400 ms     : onComplete() fires and the component unmounts
+ *   Phase 1 — GATHER  (400 ms) : Cards compress into a tight stack with 3D tilt
+ *   Phase 2 — RIFFLE  (600 ms) : Deck splits, cards interleave, emerald particles scatter
+ *   Phase 3 — DEAL   (2000 ms) : Cards spiral outward in 3D arcs with light trails
+ *   Phase 4 — done              : Component unmounts
  *
  * The overlay is `aria-hidden` and `pointer-events-none` so it never blocks
  * game controls or the accessibility tree while it plays.
@@ -27,26 +25,23 @@ import {
 } from '@/utils/seatPositions';
 
 // ── Timing constants ──────────────────────────────────────────────────────────
-const SHUFFLE_MS = 700;
-const DEAL_CARD_MS = 620;
-const DEAL_STAGGER_MS = 32;
-const DEAL_FINISH_BUFFER_MS = 240;
+const GATHER_MS = 400;
+const RIFFLE_MS = 600;
+const DEAL_CARD_MS = 720;
+const DEAL_STAGGER_MS = 50;
+const DEAL_FINISH_BUFFER_MS = 300;
 const TOTAL_CARDS = 48;
-const DECK_STACK_SIZE = 8;
+const DECK_STACK_SIZE = 10;
+const PARTICLE_COUNT = 16;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface DealAnimationProps {
-  /**
-   * Total number of players (6 or 8).
-   * Controls the number of flying cards — one per player, spread evenly.
-   */
   playerCount: 6 | 8;
-  /** Called once the full animation has finished. */
   onComplete: () => void;
 }
 
-type Phase = 'shuffling' | 'dealing' | 'done';
+type Phase = 'gathering' | 'riffling' | 'dealing' | 'done';
 
 interface DealFlight {
   key: string;
@@ -58,6 +53,20 @@ interface DealFlight {
   lift: number;
   rotationEnd: number;
   scaleEnd: number;
+  /** Mid-flight 3D rotateX */
+  rxMid: number;
+  /** Mid-flight 3D rotateY */
+  ryMid: number;
+  /** Angle from center to seat (degrees) — used for trail rotation */
+  angleDeg: number;
+}
+
+interface Particle {
+  key: string;
+  dx: number;
+  dy: number;
+  delay: number;
+  size: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,7 +76,8 @@ function getCardsPerPlayer(playerCount: 6 | 8): number {
 }
 
 function getTotalAnimationMs(playerCount: 6 | 8): number {
-  return SHUFFLE_MS
+  return GATHER_MS
+    + RIFFLE_MS
     + (getCardsPerPlayer(playerCount) * playerCount - 1) * DEAL_STAGGER_MS
     + DEAL_CARD_MS
     + DEAL_FINISH_BUFFER_MS;
@@ -83,9 +93,13 @@ function buildDealFlights(playerCount: 6 | 8): DealFlight[] {
     const angleRad = (seat.angleDeg * Math.PI) / 180;
     const tangentX = Math.cos(angleRad);
     const tangentY = Math.sin(angleRad);
-    const fanOffset = (round - (cardsPerPlayer - 1) / 2) * 12;
-    const radialLiftX = Math.sin(angleRad) * 18;
-    const radialLiftY = -Math.cos(angleRad) * 14;
+    const fanOffset = (round - (cardsPerPlayer - 1) / 2) * 10;
+    const radialLiftX = Math.sin(angleRad) * 20;
+    const radialLiftY = -Math.cos(angleRad) * 16;
+
+    // 3D rotation at mid-flight — cards spin based on their direction
+    const rxMid = -12 + Math.sin(angleRad) * 18;
+    const ryMid = 15 + Math.cos(angleRad) * 20;
 
     return {
       key: `deal-${dealIndex}`,
@@ -94,9 +108,26 @@ function buildDealFlights(playerCount: 6 | 8): DealFlight[] {
       dx: seat.x - TABLE_CX + tangentX * fanOffset + radialLiftX,
       dy: seat.y - TABLE_CY + tangentY * fanOffset + radialLiftY,
       delay: dealIndex * DEAL_STAGGER_MS,
-      lift: 20 + (round % 3) * 6,
-      rotationEnd: fanOffset * 0.24 + (seat.angleDeg < 180 ? -8 : 8),
+      lift: 24 + (round % 3) * 8,
+      rotationEnd: fanOffset * 0.2,
       scaleEnd: 0.72 + (round % 2) * 0.04,
+      rxMid,
+      ryMid,
+      angleDeg: seat.angleDeg,
+    };
+  });
+}
+
+function buildParticles(): Particle[] {
+  return Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+    const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
+    const distance = 40 + Math.random() * 50;
+    return {
+      key: `particle-${i}`,
+      dx: Math.cos(angle) * distance,
+      dy: Math.sin(angle) * distance,
+      delay: Math.random() * 200,
+      size: 3 + Math.random() * 4,
     };
   });
 }
@@ -104,15 +135,17 @@ function buildDealFlights(playerCount: 6 | 8): DealFlight[] {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DealAnimation({ playerCount, onComplete }: DealAnimationProps) {
-  const [phase, setPhase] = useState<Phase>('shuffling');
+  const [phase, setPhase] = useState<Phase>('gathering');
   const dealFlights = useMemo(() => buildDealFlights(playerCount), [playerCount]);
+  const particles = useMemo(() => buildParticles(), []);
   const totalAnimationMs = useMemo(() => getTotalAnimationMs(playerCount), [playerCount]);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('dealing'), SHUFFLE_MS);
-    const t2 = setTimeout(() => {
+    const t1 = setTimeout(() => setPhase('riffling'), GATHER_MS);
+    const t2 = setTimeout(() => setPhase('dealing'), GATHER_MS + RIFFLE_MS);
+    const t3 = setTimeout(() => {
       setPhase('done');
       onCompleteRef.current();
     }, totalAnimationMs);
@@ -120,10 +153,10 @@ export default function DealAnimation({ playerCount, onComplete }: DealAnimation
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      clearTimeout(t3);
     };
   }, [totalAnimationMs]);
 
-  // Once the phase is 'done' the component renders nothing — it unmounts.
   if (phase === 'done') return null;
 
   return (
@@ -136,21 +169,118 @@ export default function DealAnimation({ playerCount, onComplete }: DealAnimation
         className="relative w-[min(94vw,72rem)] max-w-[72rem]"
         style={{ aspectRatio: `${VIEWBOX_WIDTH} / ${VIEWBOX_HEIGHT}` }}
       >
+        {/* ── Center deck area ─────────────────────────────────────────── */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="absolute left-1/2 top-1/2 h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/12 blur-3xl" />
+          {/* Emerald glow — intensifies during gather, pulses during riffle */}
           <div
-            className={phase === 'shuffling' ? 'animate-deck-shuffle relative' : 'relative'}
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400 blur-3xl transition-all duration-500"
+            style={{
+              width: phase === 'dealing' ? '12rem' : phase === 'riffling' ? '14rem' : '10rem',
+              height: phase === 'dealing' ? '12rem' : phase === 'riffling' ? '14rem' : '10rem',
+              opacity: phase === 'dealing' ? 0.06 : phase === 'riffling' ? 0.18 : 0.1,
+            }}
+          />
+
+          {/* ── Riffle particles ───────────────────────────────── */}
+          {phase === 'riffling' && particles.map((p) => (
+            <div
+              key={p.key}
+              className="absolute left-1/2 top-1/2 rounded-full bg-emerald-400 animate-riffle-particle"
+              style={{
+                width: p.size,
+                height: p.size,
+                '--particle-dx': `${p.dx}px`,
+                '--particle-dy': `${p.dy}px`,
+                animationDelay: `${p.delay}ms`,
+                marginLeft: -p.size / 2,
+                marginTop: -p.size / 2,
+              } as CSSProperties}
+            />
+          ))}
+
+          {/* ── Card deck stack ────────────────────────────────── */}
+          <div
+            className={
+              phase === 'gathering' ? 'animate-deck-gather relative' :
+              phase === 'riffling' ? 'relative' :
+              'relative'
+            }
+            style={{ transformStyle: 'preserve-3d' }}
             data-testid="deal-animation-deck"
           >
-            {Array.from({ length: DECK_STACK_SIZE }, (_, stackIdx) => (
+            {phase !== 'dealing' && Array.from({ length: DECK_STACK_SIZE }, (_, stackIdx) => {
+              const isLeftHalf = stackIdx < DECK_STACK_SIZE / 2;
+              const riffleClass = phase === 'riffling'
+                ? (isLeftHalf ? 'animate-riffle-left' : 'animate-riffle-right')
+                : '';
+
+              return (
+                <div
+                  key={stackIdx}
+                  className={`absolute left-1/2 top-1/2 -ml-8 -mt-12 ${riffleClass}`}
+                  style={{
+                    transform: phase === 'gathering'
+                      ? `translate(${(stackIdx - 4.5) * 1.2}px, ${stackIdx * 0.7}px) rotate(${(stackIdx - 4.5) * 1.8}deg)`
+                      : `translate(${(stackIdx - 4.5) * 0.4}px, ${stackIdx * 0.3}px) rotate(${(stackIdx - 4.5) * 0.5}deg)`,
+                    opacity: 0.5 + stackIdx * 0.05,
+                    zIndex: stackIdx,
+                    transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+                    animationDelay: phase === 'riffling' ? `${stackIdx * 30}ms` : undefined,
+                  }}
+                >
+                  <PlayingCard
+                    cardId="1_s"
+                    faceDown={true}
+                    size="lg"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Flying cards with light trails ─────────────────────────── */}
+        {phase === 'dealing' &&
+          dealFlights.map((flight) => (
+            <div key={flight.key} className="contents">
+              {/* Light trail — emerald streak behind the card */}
               <div
-                key={stackIdx}
-                className="absolute left-1/2 top-1/2 -ml-8 -mt-12"
+                className="absolute left-1/2 top-1/2 animate-deal-trail"
                 style={{
-                  transform: `translate(${(stackIdx - 3.5) * 1.4}px, ${stackIdx * 0.9}px) rotate(${(stackIdx - 3.5) * 2.1}deg)`,
-                  opacity: 0.42 + stackIdx * 0.07,
-                  zIndex: stackIdx,
-                }}
+                  '--deal-dx': `${flight.dx}px`,
+                  '--deal-dy': `${flight.dy}px`,
+                  '--deal-lift': `${flight.lift}px`,
+                  animationDelay: `${flight.delay}ms`,
+                  animationDuration: `${DEAL_CARD_MS * 0.6}ms`,
+                  width: 32,
+                  height: 3,
+                  marginLeft: -16,
+                  marginTop: -1.5,
+                  background: 'linear-gradient(90deg, transparent, rgba(110, 231, 183, 0.5), transparent)',
+                  borderRadius: 2,
+                  transform: `rotate(${flight.angleDeg - 90}deg)`,
+                  transformOrigin: 'center',
+                  zIndex: 55 + flight.round,
+                } as CSSProperties}
+              />
+
+              {/* The flying card */}
+              <div
+                data-testid="deal-animation-card"
+                data-seat-index={flight.seatIndex}
+                data-deal-round={flight.round}
+                className="absolute left-1/2 top-1/2 -ml-8 -mt-12 animate-card-deal"
+                style={{
+                  '--deal-dx': `${flight.dx}px`,
+                  '--deal-dy': `${flight.dy}px`,
+                  '--deal-lift': `${flight.lift}px`,
+                  '--deal-rx-mid': `${flight.rxMid}deg`,
+                  '--deal-ry-mid': `${flight.ryMid}deg`,
+                  '--deal-scale-end': `${flight.scaleEnd}`,
+                  animationDelay: `${flight.delay}ms`,
+                  animationDuration: `${DEAL_CARD_MS}ms`,
+                  zIndex: 60 + flight.round,
+                } as CSSProperties}
               >
                 <PlayingCard
                   cardId="1_s"
@@ -158,47 +288,20 @@ export default function DealAnimation({ playerCount, onComplete }: DealAnimation
                   size="lg"
                 />
               </div>
-            ))}
-            <div className="animate-deck-riffle absolute left-1/2 top-1/2 -ml-8 -mt-12 origin-bottom-left opacity-80">
-              <PlayingCard
-                cardId="1_s"
-                faceDown={true}
-                size="lg"
-              />
-            </div>
-            <div className="animate-deck-riffle absolute left-1/2 top-1/2 -ml-8 -mt-12 origin-bottom-right opacity-75 [animation-delay:120ms]">
-              <PlayingCard
-                cardId="1_s"
-                faceDown={true}
-                size="lg"
-              />
-            </div>
-          </div>
-        </div>
 
-        {phase === 'dealing' &&
-          dealFlights.map((flight) => (
-            <div
-              key={flight.key}
-              data-testid="deal-animation-card"
-              data-seat-index={flight.seatIndex}
-              data-deal-round={flight.round}
-              className="absolute left-1/2 top-1/2 -ml-8 -mt-12 animate-card-deal"
-              style={{
-                '--deal-dx': `${flight.dx}px`,
-                '--deal-dy': `${flight.dy}px`,
-                '--deal-lift': `${flight.lift}px`,
-                '--deal-rot-end': `${flight.rotationEnd}deg`,
-                '--deal-scale-end': `${flight.scaleEnd}`,
-                animationDelay: `${flight.delay}ms`,
-                animationDuration: `${DEAL_CARD_MS}ms`,
-                zIndex: 60 + flight.round,
-              } as CSSProperties}
-            >
-              <PlayingCard
-                cardId="1_s"
-                faceDown={true}
-                size="lg"
+              {/* Seat glow — pulse at landing position */}
+              <div
+                className="absolute left-1/2 top-1/2 animate-deal-seat-glow"
+                style={{
+                  animationDelay: `${flight.delay + DEAL_CARD_MS * 0.85}ms`,
+                  width: 24,
+                  height: 24,
+                  marginLeft: -12 + flight.dx,
+                  marginTop: -12 + flight.dy,
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(110, 231, 183, 0.4), transparent 70%)',
+                  zIndex: 50,
+                } as CSSProperties}
               />
             </div>
           ))}

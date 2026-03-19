@@ -203,19 +203,30 @@ export function playTurnChime(): void {
 }
 
 /**
- * Plays a soft card-deal sound at game start.
+ * Plays a cinematic card-deal sound at game start.
  *
- * Three descending tones (E4 → D4 → C4) played in rapid succession suggest
- * cards being distributed around the table.  Total audible duration ≈ 300 ms.
+ * Two phases matching the visual animation:
+ * 1. Gather/riffle: low rumble build-up with a bright sweep
+ * 2. Deal: rapid descending flicks suggesting cards leaving the deck
  *
- * Silent no-op when muted, SSR, or AudioContext unavailable.
+ * Total audible duration ≈ 1.2 s. Silent no-op when muted/SSR.
  */
 export function playDealSound(): void {
   if (isMuted()) return;
   _playTones([
-    { freq: 329.63, delay: 0.00, duration: 0.18, peak: 0.14 },
-    { freq: 293.66, delay: 0.07, duration: 0.18, peak: 0.12 },
-    { freq: 261.63, delay: 0.14, duration: 0.20, peak: 0.10 },
+    // Gather rumble — low, building
+    { freq: 130.81, delay: 0.00, duration: 0.35, peak: 0.06 },
+    { freq: 164.81, delay: 0.15, duration: 0.30, peak: 0.08 },
+    // Riffle sweep — ascending bright tone
+    { freq: 523.25, delay: 0.40, duration: 0.20, peak: 0.10 },
+    { freq: 659.25, delay: 0.50, duration: 0.18, peak: 0.08 },
+    // Deal flicks — rapid descending
+    { freq: 440.00, delay: 0.70, duration: 0.10, peak: 0.12 },
+    { freq: 392.00, delay: 0.78, duration: 0.10, peak: 0.11 },
+    { freq: 349.23, delay: 0.86, duration: 0.10, peak: 0.10 },
+    { freq: 329.63, delay: 0.94, duration: 0.10, peak: 0.09 },
+    { freq: 293.66, delay: 1.02, duration: 0.12, peak: 0.08 },
+    { freq: 261.63, delay: 1.10, duration: 0.14, peak: 0.07 },
   ]);
 }
 
