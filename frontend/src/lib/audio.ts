@@ -177,6 +177,29 @@ function _playTones(
 }
 
 // ---------------------------------------------------------------------------
+// File-based audio playback
+// ---------------------------------------------------------------------------
+
+/**
+ * Plays an audio file from the /sounds/ directory.
+ * Uses the HTML5 Audio element. Silent no-op when muted, SSR, or on error.
+ */
+function _playFile(path: string): void {
+  if (isMuted()) return;
+  if (!hasUserActivatedAudio()) return;
+  if (typeof window === 'undefined') return;
+
+  try {
+    const audio = new Audio(path);
+    audio.play().catch(() => {
+      // Fail silently — audio is always optional.
+    });
+  } catch {
+    // Fail silently — audio is always optional.
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sound synthesis
 // ---------------------------------------------------------------------------
 
@@ -232,69 +255,32 @@ export function playDealSound(): void {
 
 /**
  * Plays a positive confirmation sound when a card request succeeds.
- *
- * Two-tone ascending: G5 → B5 (784 Hz → 988 Hz) — brighter and higher-pitched
- * than the turn chime to convey success.  Total audible duration ≈ 300 ms.
- *
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playAskSuccess(): void {
-  if (isMuted()) return;
-  _playTones([
-    { freq: 783.99, delay: 0.00, duration: 0.20, peak: 0.15 },
-    { freq: 987.77, delay: 0.08, duration: 0.25, peak: 0.15 },
-  ]);
+  _playFile('/sounds/askSuccess.mp3');
 }
 
 /**
  * Plays a negative sound when a card request fails (opponent doesn't hold it).
- *
- * Two-tone descending: E4 → C4 (330 Hz → 262 Hz) — lower pitched and falling
- * to convey disappointment.  Total audible duration ≈ 300 ms.
- *
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playAskFail(): void {
-  if (isMuted()) return;
-  _playTones([
-    { freq: 329.63, delay: 0.00, duration: 0.22, peak: 0.14 },
-    { freq: 261.63, delay: 0.10, duration: 0.25, peak: 0.13 },
-  ]);
+  _playFile('/sounds/askFail.mp3');
 }
 
 /**
  * Plays a triumphant fanfare when a declaration is correct.
- *
- * Four-note ascending major arpeggio: C5 → E5 → G5 → C6
- * (523 → 659 → 784 → 1047 Hz) with a celebratory feel.
- * Total audible duration ≈ 600 ms.
- *
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playDeclarationSuccess(): void {
-  if (isMuted()) return;
-  _playTones([
-    { freq:  523.25, delay: 0.00, duration: 0.22, peak: 0.16 },
-    { freq:  659.25, delay: 0.09, duration: 0.22, peak: 0.16 },
-    { freq:  783.99, delay: 0.18, duration: 0.22, peak: 0.16 },
-    { freq: 1046.50, delay: 0.27, duration: 0.35, peak: 0.18 },
-  ]);
+  _playFile('/sounds/declarationSuccess.mp3');
 }
 
 /**
  * Plays a somber descending motif when a declaration is incorrect.
- *
- * Three-note descending minor pattern: A4 → F4 → D4
- * (440 → 349 → 294 Hz) — descending and minor to convey failure.
- * Total audible duration ≈ 450 ms.
- *
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playDeclarationFail(): void {
-  if (isMuted()) return;
-  _playTones([
-    { freq: 440.00, delay: 0.00, duration: 0.22, peak: 0.15 },
-    { freq: 349.23, delay: 0.10, duration: 0.22, peak: 0.14 },
-    { freq: 293.66, delay: 0.20, duration: 0.28, peak: 0.13 },
-  ]);
+  _playFile('/sounds/declarationFail.mp3');
 }
