@@ -37,6 +37,27 @@ export const MUTE_STORAGE_KEY = 'literati:muted';
 let _audioUnlocked = false;
 
 // ---------------------------------------------------------------------------
+// Debug overlay (temporary — remove after iOS audio is fixed)
+// ---------------------------------------------------------------------------
+const _debugLines: string[] = [];
+function _dbg(msg: string): void {
+  if (typeof document === 'undefined') return;
+  _debugLines.push(`${Date.now() % 100000}: ${msg}`);
+  if (_debugLines.length > 15) _debugLines.shift();
+  let el = document.getElementById('__audio_debug');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '__audio_debug';
+    el.style.cssText =
+      'position:fixed;bottom:0;left:0;right:0;z-index:99999;' +
+      'background:rgba(0,0,0,0.85);color:#0f0;font:11px/1.3 monospace;' +
+      'padding:6px;max-height:40vh;overflow-y:auto;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  el.textContent = _debugLines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Mute preference helpers
 // ---------------------------------------------------------------------------
 
@@ -81,6 +102,7 @@ export function toggleMuted(): boolean {
  * warnings caused by creating AudioContexts before the page is activated.
  */
 export function unlockGameAudio(): void {
+  _dbg('unlockGameAudio called');
   _audioUnlocked = true;
   _setupFileAudio();
 }
@@ -132,13 +154,14 @@ function getAudioContextConstructor(): (new () => AudioContext) | null {
 function _playTones(
   tones: Array<{ freq: number; delay: number; duration: number; peak?: number }>,
 ): void {
-  if (!hasUserActivatedAudio()) return;
+  if (!hasUserActivatedAudio()) { _dbg('_playTones: no activation'); return; }
 
   const AudioCtx = getAudioContextConstructor();
-  if (!AudioCtx) return;
+  if (!AudioCtx) { _dbg('_playTones: no AudioCtx'); return; }
 
   try {
     const ctx = new AudioCtx();
+    _dbg(`_playTones: ctx.state=${ctx.state}`);
 
     let lastEnd = 0;
 
@@ -223,13 +246,16 @@ let _fileAudioSetUp = false;
 function _setupFileAudio(): void {
   if (_fileAudioSetUp) return;
   _fileAudioSetUp = true;
+  _dbg('_setupFileAudio start');
 
   const AudioCtx = getAudioContextConstructor();
-  if (!AudioCtx) return;
+  if (!AudioCtx) { _dbg('NO AudioCtx constructor'); return; }
 
   try {
     _fileCtx = new AudioCtx();
-  } catch {
+    _dbg(`ctx created, state=${_fileCtx.state}, sr=${_fileCtx.sampleRate}`);
+  } catch (e) {
+    _dbg(`ctx create FAILED: ${e}`);
     return;
   }
 
@@ -237,18 +263,26 @@ function _setupFileAudio(): void {
 
   // Resume immediately (we're inside a user gesture).
   if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
+    ctx.resume().then(() => _dbg(`ctx resumed → ${ctx.state}`)).catch((e) => _dbg(`resume err: ${e}`));
   }
 
   // Fetch + decode all MP3s into this context.
   for (const path of _soundPaths) {
+    const shortPath = path.split('/').pop();
     fetch(path)
-      .then((res) => res.arrayBuffer())
-      .then((data) => ctx.decodeAudioData(data))
+      .then((res) => {
+        _dbg(`fetch ${shortPath}: ${res.status} ${res.ok ? 'OK' : 'FAIL'}`);
+        return res.arrayBuffer();
+      })
+      .then((data) => {
+        _dbg(`decode ${shortPath}: ${data.byteLength}B`);
+        return ctx.decodeAudioData(data);
+      })
       .then((buffer) => {
         _bufferCache.set(path, buffer);
+        _dbg(`decoded ${shortPath}: dur=${buffer.duration.toFixed(2)}s`);
       })
-      .catch(() => {});
+      .catch((e) => _dbg(`ERR ${shortPath}: ${e}`));
   }
 
   // ── Persistent listener: resume context on every user interaction ──
@@ -273,16 +307,19 @@ function _setupFileAudio(): void {
  * have a chance to suspend the context between decode and start.
  */
 function _playFile(path: string): void {
-  if (isMuted()) return;
-  if (!hasUserActivatedAudio()) return;
+  const shortPath = path.split('/').pop();
+  if (isMuted()) { _dbg(`SKIP ${shortPath}: muted`); return; }
+  if (!hasUserActivatedAudio()) { _dbg(`SKIP ${shortPath}: no activation`); return; }
 
   const ctx = _fileCtx;
-  if (!ctx) return;
+  if (!ctx) { _dbg(`SKIP ${shortPath}: no ctx`); return; }
 
   const buffer = _bufferCache.get(path);
-  if (!buffer) return;
+  if (!buffer) { _dbg(`SKIP ${shortPath}: no buffer (cache size=${_bufferCache.size})`); return; }
 
   try {
+    _dbg(`PLAY ${shortPath}: ctx.state=${ctx.state}`);
+
     // Resume just in case (no-op if already running).
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
@@ -292,8 +329,9 @@ function _playFile(path: string): void {
     source.buffer = buffer;
     source.connect(ctx.destination);
     source.start(0);
-  } catch {
-    // Fail silently — audio is always optional.
+    _dbg(`STARTED ${shortPath}`);
+  } catch (e) {
+    _dbg(`ERR play ${shortPath}: ${e}`);
   }
 }
 
