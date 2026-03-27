@@ -82,7 +82,7 @@ export function toggleMuted(): boolean {
  */
 export function unlockGameAudio(): void {
   _audioUnlocked = true;
-  _prefetchSounds();
+  _setupFileAudio();
 }
 
 function hasUserActivatedAudio(): boolean {
@@ -182,13 +182,18 @@ function _playTones(
 // ---------------------------------------------------------------------------
 
 /**
- * Uses the same fresh-AudioContext-per-play pattern as _playTones (which
- * works reliably on iOS). Raw MP3 bytes are cached as ArrayBuffers; each
- * _playFile call creates a short-lived AudioContext, decodes the bytes
- * into it, plays, and closes — identical to how synthesised tones work.
+ * Strategy: one shared AudioContext, pre-decoded AudioBuffers, and a
+ * **persistent** touchstart/pointerdown listener that resumes the context
+ * on every user interaction (not just the first).
  *
- * A persistent shared AudioContext does NOT work on iOS because the OS
- * suspends it unpredictably between events.
+ * Why this works on iOS:
+ * - iOS suspends AudioContexts when there is no recent user gesture.
+ * - BufferSource.start() on a suspended context is silently dropped.
+ * - By resuming the context on EVERY touch (not just once), the context
+ *   stays in "running" state throughout active gameplay.
+ * - Pre-decoded AudioBuffers allow synchronous start() — no async gap.
+ *
+ * This is the same pattern used by Howler.js for iOS Safari.
  */
 
 /** All MP3 sound file paths. */
@@ -199,65 +204,94 @@ const _soundPaths = [
   '/sounds/declarationFail.mp3',
 ] as const;
 
-/** Cached raw MP3 bytes keyed by path (ArrayBuffers are context-independent). */
-const _rawCache = new Map<string, ArrayBuffer>();
+/** Shared AudioContext for file-based playback (created once). */
+let _fileCtx: AudioContext | null = null;
 
-/** Whether we have started fetching. */
-let _fetchStarted = false;
+/** Pre-decoded AudioBuffers keyed by path. */
+const _bufferCache = new Map<string, AudioBuffer>();
 
-/**
- * Fetch all MP3 files and cache their raw bytes.
- * Called once during unlockGameAudio so bytes are ready before any
- * WebSocket event needs them.
- */
-function _prefetchSounds(): void {
-  if (_fetchStarted) return;
-  _fetchStarted = true;
-
-  for (const path of _soundPaths) {
-    fetch(path)
-      .then((res) => res.arrayBuffer())
-      .then((data) => {
-        _rawCache.set(path, data);
-      })
-      .catch(() => {
-        // Fail silently — audio is always optional.
-      });
-  }
-}
+/** Whether setup has run. */
+let _fileAudioSetUp = false;
 
 /**
- * Plays an MP3 file using a fresh AudioContext (same pattern as _playTones).
- * Creates a new context, decodes the cached raw bytes, plays, and closes.
- * This avoids all iOS AudioContext suspension issues.
+ * One-time setup: create shared AudioContext, resume it, pre-decode all
+ * MP3 buffers, and install a persistent touch listener to keep the
+ * context alive on iOS.
+ *
+ * Called from unlockGameAudio() during the first user gesture.
  */
-function _playFile(path: string): void {
-  if (isMuted()) return;
-  if (!hasUserActivatedAudio()) return;
-
-  const raw = _rawCache.get(path);
-  if (!raw) return;
+function _setupFileAudio(): void {
+  if (_fileAudioSetUp) return;
+  _fileAudioSetUp = true;
 
   const AudioCtx = getAudioContextConstructor();
   if (!AudioCtx) return;
 
   try {
-    const ctx = new AudioCtx();
+    _fileCtx = new AudioCtx();
+  } catch {
+    return;
+  }
 
-    // decodeAudioData consumes the buffer, so pass a copy.
-    ctx.decodeAudioData(raw.slice(0)).then((buffer) => {
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start(0);
+  const ctx = _fileCtx;
 
-      // Close the context after the sound finishes.
-      source.onended = () => {
-        ctx.close().catch(() => {});
-      };
-    }).catch(() => {
-      ctx.close().catch(() => {});
-    });
+  // Resume immediately (we're inside a user gesture).
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
+
+  // Fetch + decode all MP3s into this context.
+  for (const path of _soundPaths) {
+    fetch(path)
+      .then((res) => res.arrayBuffer())
+      .then((data) => ctx.decodeAudioData(data))
+      .then((buffer) => {
+        _bufferCache.set(path, buffer);
+      })
+      .catch(() => {});
+  }
+
+  // ── Persistent listener: resume context on every user interaction ──
+  // iOS re-suspends the context after idle periods. This listener
+  // ensures it is always "running" when the user is actively playing.
+  // It is passive and lightweight — just a resume() call.
+  const keepAlive = () => {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  };
+  document.addEventListener('touchstart', keepAlive, { passive: true });
+  document.addEventListener('touchend', keepAlive, { passive: true });
+  document.addEventListener('pointerdown', keepAlive, { passive: true });
+  document.addEventListener('pointerup', keepAlive, { passive: true });
+  document.addEventListener('click', keepAlive, { passive: true });
+}
+
+/**
+ * Plays a pre-decoded AudioBuffer through the shared AudioContext.
+ * The buffer is played synchronously (no async gap) so iOS does not
+ * have a chance to suspend the context between decode and start.
+ */
+function _playFile(path: string): void {
+  if (isMuted()) return;
+  if (!hasUserActivatedAudio()) return;
+
+  const ctx = _fileCtx;
+  if (!ctx) return;
+
+  const buffer = _bufferCache.get(path);
+  if (!buffer) return;
+
+  try {
+    // Resume just in case (no-op if already running).
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
   } catch {
     // Fail silently — audio is always optional.
   }
