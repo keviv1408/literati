@@ -37,27 +37,6 @@ export const MUTE_STORAGE_KEY = 'literati:muted';
 let _audioUnlocked = false;
 
 // ---------------------------------------------------------------------------
-// Debug overlay (temporary — remove after iOS audio is fixed)
-// ---------------------------------------------------------------------------
-const _debugLines: string[] = [];
-function _dbg(msg: string): void {
-  if (typeof document === 'undefined') return;
-  _debugLines.push(`${Date.now() % 100000}: ${msg}`);
-  if (_debugLines.length > 15) _debugLines.shift();
-  let el = document.getElementById('__audio_debug');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = '__audio_debug';
-    el.style.cssText =
-      'position:fixed;bottom:0;left:0;right:0;z-index:99999;' +
-      'background:rgba(0,0,0,0.85);color:#0f0;font:11px/1.3 monospace;' +
-      'padding:6px;max-height:40vh;overflow-y:auto;pointer-events:none;';
-    document.body.appendChild(el);
-  }
-  el.textContent = _debugLines.join('\n');
-}
-
-// ---------------------------------------------------------------------------
 // Mute preference helpers
 // ---------------------------------------------------------------------------
 
@@ -102,9 +81,8 @@ export function toggleMuted(): boolean {
  * warnings caused by creating AudioContexts before the page is activated.
  */
 export function unlockGameAudio(): void {
-  _dbg('unlockGameAudio called');
   _audioUnlocked = true;
-  _setupFileAudio();
+  _warmUpFileAudio();
 }
 
 function hasUserActivatedAudio(): boolean {
@@ -154,14 +132,13 @@ function getAudioContextConstructor(): (new () => AudioContext) | null {
 function _playTones(
   tones: Array<{ freq: number; delay: number; duration: number; peak?: number }>,
 ): void {
-  if (!hasUserActivatedAudio()) { _dbg('_playTones: no activation'); return; }
+  if (!hasUserActivatedAudio()) return;
 
   const AudioCtx = getAudioContextConstructor();
-  if (!AudioCtx) { _dbg('_playTones: no AudioCtx'); return; }
+  if (!AudioCtx) return;
 
   try {
     const ctx = new AudioCtx();
-    _dbg(`_playTones: ctx.state=${ctx.state}`);
 
     let lastEnd = 0;
 
@@ -205,18 +182,11 @@ function _playTones(
 // ---------------------------------------------------------------------------
 
 /**
- * Strategy: one shared AudioContext, pre-decoded AudioBuffers, and a
- * **persistent** touchstart/pointerdown listener that resumes the context
- * on every user interaction (not just the first).
- *
- * Why this works on iOS:
- * - iOS suspends AudioContexts when there is no recent user gesture.
- * - BufferSource.start() on a suspended context is silently dropped.
- * - By resuming the context on EVERY touch (not just once), the context
- *   stays in "running" state throughout active gameplay.
- * - Pre-decoded AudioBuffers allow synchronous start() — no async gap.
- *
- * This is the same pattern used by Howler.js for iOS Safari.
+ * Uses a single shared AudioContext + pre-decoded AudioBuffers so that sounds
+ * triggered from WebSocket callbacks (non-user-gesture) play reliably on
+ * iOS Safari and mobile Chrome. The AudioContext is resumed once during the
+ * first user gesture (unlockGameAudio → _warmUpFileAudio), after which
+ * BufferSource nodes can fire from any execution context.
  */
 
 /** All MP3 sound file paths. */
@@ -227,129 +197,96 @@ const _soundPaths = [
   '/sounds/declarationFail.mp3',
 ] as const;
 
-/** Shared AudioContext for file-based playback (created once). */
+/** Shared AudioContext for file-based playback (created lazily). */
 let _fileCtx: AudioContext | null = null;
 
-/** Pre-decoded AudioBuffers keyed by path. */
+/** Decoded AudioBuffers keyed by path. */
 const _bufferCache = new Map<string, AudioBuffer>();
 
-/** Whether setup has run. */
-let _fileAudioSetUp = false;
+/** Whether buffers are currently being fetched (prevents duplicate fetches). */
+let _buffersLoading = false;
 
-/**
- * One-time setup: create shared AudioContext, resume it, pre-decode all
- * MP3 buffers, and install a persistent touch listener to keep the
- * context alive on iOS.
- *
- * Called from unlockGameAudio() during the first user gesture.
- */
-function _setupFileAudio(): void {
-  if (_fileAudioSetUp) return;
-  _fileAudioSetUp = true;
-  _dbg('_setupFileAudio start');
-
+/** Get or create the shared AudioContext for file playback. */
+function _getFileCtx(): AudioContext | null {
+  if (_fileCtx) return _fileCtx;
   const AudioCtx = getAudioContextConstructor();
-  if (!AudioCtx) { _dbg('NO AudioCtx constructor'); return; }
-
+  if (!AudioCtx) return null;
   try {
     _fileCtx = new AudioCtx();
-    _dbg(`ctx created, state=${_fileCtx.state}, sr=${_fileCtx.sampleRate}`);
-  } catch (e) {
-    _dbg(`ctx create FAILED: ${e}`);
-    return;
+    return _fileCtx;
+  } catch {
+    return null;
   }
+}
 
-  const ctx = _fileCtx;
+/**
+ * Fetch and decode all MP3 files into AudioBuffers.
+ * Called once during unlockGameAudio so buffers are ready before any
+ * WebSocket event needs them.
+ */
+function _preloadBuffers(): void {
+  if (_buffersLoading) return;
+  _buffersLoading = true;
 
-  // Resume immediately (we're inside a user gesture).
-  if (ctx.state === 'suspended') {
-    ctx.resume().then(() => _dbg(`ctx resumed → ${ctx.state}`)).catch((e) => _dbg(`resume err: ${e}`));
-  }
+  const ctx = _getFileCtx();
+  if (!ctx) return;
 
-  // Fetch + decode all MP3s into this context.
   for (const path of _soundPaths) {
-    const shortPath = path.split('/').pop();
+    if (_bufferCache.has(path)) continue;
     fetch(path)
-      .then((res) => {
-        _dbg(`fetch ${shortPath}: ${res.status} ${res.ok ? 'OK' : 'FAIL'}`);
-        return res.arrayBuffer();
-      })
-      .then((data) => {
-        _dbg(`decode ${shortPath}: ${data.byteLength}B`);
-        return ctx.decodeAudioData(data);
-      })
+      .then((res) => res.arrayBuffer())
+      .then((data) => ctx.decodeAudioData(data))
       .then((buffer) => {
         _bufferCache.set(path, buffer);
-        _dbg(`decoded ${shortPath}: dur=${buffer.duration.toFixed(2)}s`);
       })
-      .catch((e) => _dbg(`ERR ${shortPath}: ${e}`));
+      .catch(() => {
+        // Fail silently — audio is always optional.
+      });
+  }
+}
+
+/**
+ * Resume the shared AudioContext (must be called from a user gesture on iOS)
+ * and kick off buffer preloading.
+ */
+function _warmUpFileAudio(): void {
+  const ctx = _getFileCtx();
+  if (!ctx) return;
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
   }
 
-  // ── Test beep: play a short sine tone to verify audio output works ──
-  try {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    g.gain.setValueAtTime(0.2, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-    osc.connect(g);
-    g.connect(ctx.destination);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
-    _dbg('TEST BEEP played (880Hz sine)');
-  } catch (e) {
-    _dbg(`TEST BEEP failed: ${e}`);
-  }
-
-  // ── Persistent listener: resume context on every user interaction ──
-  // iOS re-suspends the context after idle periods. This listener
-  // ensures it is always "running" when the user is actively playing.
-  // It is passive and lightweight — just a resume() call.
-  const keepAlive = () => {
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-  };
-  document.addEventListener('touchstart', keepAlive, { passive: true });
-  document.addEventListener('touchend', keepAlive, { passive: true });
-  document.addEventListener('pointerdown', keepAlive, { passive: true });
-  document.addEventListener('pointerup', keepAlive, { passive: true });
-  document.addEventListener('click', keepAlive, { passive: true });
+  _preloadBuffers();
 }
 
 /**
  * Plays a pre-decoded AudioBuffer through the shared AudioContext.
- * The buffer is played synchronously (no async gap) so iOS does not
- * have a chance to suspend the context between decode and start.
+ * Because the context was resumed during a user gesture, this works
+ * reliably from WebSocket callbacks on mobile browsers.
  */
 function _playFile(path: string): void {
-  const shortPath = path.split('/').pop();
-  if (isMuted()) { _dbg(`SKIP ${shortPath}: muted`); return; }
-  if (!hasUserActivatedAudio()) { _dbg(`SKIP ${shortPath}: no activation`); return; }
-
-  const ctx = _fileCtx;
-  if (!ctx) { _dbg(`SKIP ${shortPath}: no ctx`); return; }
-
-  const buffer = _bufferCache.get(path);
-  if (!buffer) { _dbg(`SKIP ${shortPath}: no buffer (cache size=${_bufferCache.size})`); return; }
+  if (isMuted()) return;
+  if (!hasUserActivatedAudio()) return;
 
   try {
-    _dbg(`PLAY ${shortPath}: ctx.state=${ctx.state}`);
+    const ctx = _getFileCtx();
+    if (!ctx) return;
 
-    // Resume just in case (no-op if already running).
+    // Ensure context is running (may have been suspended by OS power saving).
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
+
+    const buffer = _bufferCache.get(path);
+    if (!buffer) return;
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
     source.start(0);
-    source.onended = () => _dbg(`ENDED ${shortPath} (played through)`);
-    _dbg(`STARTED ${shortPath} dest.channels=${ctx.destination.channelCount} ctx.sr=${ctx.sampleRate}`);
-  } catch (e) {
-    _dbg(`ERR play ${shortPath}: ${e}`);
+  } catch {
+    // Fail silently — audio is always optional.
   }
 }
 
