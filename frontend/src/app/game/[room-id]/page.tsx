@@ -62,7 +62,6 @@ import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
 import MuteToggle from '@/components/MuteToggle';
-import VoiceControls from '@/components/VoiceControls';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
@@ -1220,7 +1219,9 @@ export default function GamePage({ params }: PageProps) {
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <VoiceControls />
+          {/* VoiceControls intentionally hidden to avoid production voice API costs.
+              Uncomment the line below when you want to re-enable voice chat. */}
+          {/* <VoiceControls /> */}
           {/* Mute toggle — persists across page refreshes via localStorage */}
           <MuteToggle muted={muted} onToggle={toggleMute} />
           <div className="flex items-center gap-1.5" title={`Connection: ${wsStatus}`} data-testid="ws-status-indicator">
