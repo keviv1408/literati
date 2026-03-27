@@ -82,7 +82,7 @@ export function toggleMuted(): boolean {
  */
 export function unlockGameAudio(): void {
   _audioUnlocked = true;
-  _warmUpAudioElements();
+  _warmUpFileAudio();
 }
 
 function hasUserActivatedAudio(): boolean {
@@ -178,10 +178,18 @@ function _playTones(
 }
 
 // ---------------------------------------------------------------------------
-// File-based audio playback
+// File-based audio playback (Web Audio API — mobile-safe)
 // ---------------------------------------------------------------------------
 
-/** All MP3 sound file paths used by _playFile. */
+/**
+ * Uses a single shared AudioContext + pre-decoded AudioBuffers so that sounds
+ * triggered from WebSocket callbacks (non-user-gesture) play reliably on
+ * iOS Safari and mobile Chrome. The AudioContext is resumed once during the
+ * first user gesture (unlockGameAudio → _warmUpFileAudio), after which
+ * BufferSource nodes can fire from any execution context.
+ */
+
+/** All MP3 sound file paths. */
 const _soundPaths = [
   '/sounds/askSuccess.mp3',
   '/sounds/askFail.mp3',
@@ -189,62 +197,94 @@ const _soundPaths = [
   '/sounds/declarationFail.mp3',
 ] as const;
 
-/** Cache of pre-loaded Audio elements keyed by path. */
-const _audioCache = new Map<string, HTMLAudioElement>();
+/** Shared AudioContext for file-based playback (created lazily). */
+let _fileCtx: AudioContext | null = null;
 
-/**
- * Returns a cached Audio element for the given path, creating it on first use.
- * Returns null in SSR environments.
- */
-function _getAudio(path: string): HTMLAudioElement | null {
-  if (typeof window === 'undefined') return null;
+/** Decoded AudioBuffers keyed by path. */
+const _bufferCache = new Map<string, AudioBuffer>();
 
-  let audio = _audioCache.get(path);
-  if (!audio) {
-    audio = new Audio(path);
-    audio.preload = 'auto';
-    _audioCache.set(path, audio);
+/** Whether buffers are currently being fetched (prevents duplicate fetches). */
+let _buffersLoading = false;
+
+/** Get or create the shared AudioContext for file playback. */
+function _getFileCtx(): AudioContext | null {
+  if (_fileCtx) return _fileCtx;
+  const AudioCtx = getAudioContextConstructor();
+  if (!AudioCtx) return null;
+  try {
+    _fileCtx = new AudioCtx();
+    return _fileCtx;
+  } catch {
+    return null;
   }
-  return audio;
 }
 
 /**
- * Warm up all cached Audio elements by playing then immediately pausing.
- * Must be called from a user gesture (click/touch/key) so the browser
- * unlocks the elements for future non-gesture playback (WebSocket events).
+ * Fetch and decode all MP3 files into AudioBuffers.
+ * Called once during unlockGameAudio so buffers are ready before any
+ * WebSocket event needs them.
  */
-function _warmUpAudioElements(): void {
+function _preloadBuffers(): void {
+  if (_buffersLoading) return;
+  _buffersLoading = true;
+
+  const ctx = _getFileCtx();
+  if (!ctx) return;
+
   for (const path of _soundPaths) {
-    const audio = _getAudio(path);
-    if (!audio) continue;
-    audio.volume = 0;
-    audio.play().then(() => {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.volume = 1;
-    }).catch(() => {
-      // Fail silently.
-    });
+    if (_bufferCache.has(path)) continue;
+    fetch(path)
+      .then((res) => res.arrayBuffer())
+      .then((data) => ctx.decodeAudioData(data))
+      .then((buffer) => {
+        _bufferCache.set(path, buffer);
+      })
+      .catch(() => {
+        // Fail silently — audio is always optional.
+      });
   }
 }
 
 /**
- * Plays a pre-loaded audio file from the /sounds/ directory.
- * Reuses a single Audio element per path so the browser doesn't throttle
- * playback triggered by WebSocket events (non-user-gesture contexts).
- * Silent no-op when muted, SSR, or on error.
+ * Resume the shared AudioContext (must be called from a user gesture on iOS)
+ * and kick off buffer preloading.
+ */
+function _warmUpFileAudio(): void {
+  const ctx = _getFileCtx();
+  if (!ctx) return;
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
+
+  _preloadBuffers();
+}
+
+/**
+ * Plays a pre-decoded AudioBuffer through the shared AudioContext.
+ * Because the context was resumed during a user gesture, this works
+ * reliably from WebSocket callbacks on mobile browsers.
  */
 function _playFile(path: string): void {
   if (isMuted()) return;
   if (!hasUserActivatedAudio()) return;
 
   try {
-    const audio = _getAudio(path);
-    if (!audio) return;
-    audio.currentTime = 0;
-    audio.play().catch(() => {
-      // Fail silently — audio is always optional.
-    });
+    const ctx = _getFileCtx();
+    if (!ctx) return;
+
+    // Ensure context is running (may have been suspended by OS power saving).
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const buffer = _bufferCache.get(path);
+    if (!buffer) return;
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
   } catch {
     // Fail silently — audio is always optional.
   }
