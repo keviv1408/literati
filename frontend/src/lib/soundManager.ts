@@ -96,6 +96,8 @@ export class SoundManager {
 
   /** Whether preload() has been called at least once. */
   private _preloaded: boolean = false;
+  /** Whether a silent buffer has primed the context for iOS playback. */
+  private _primed: boolean = false;
 
   constructor() {
     this._volume = this._readVolume();
@@ -148,12 +150,8 @@ export class SoundManager {
     const ctx = this._getOrCreateContext();
     if (!ctx) return;
 
-    // Resume a suspended context (required after autoplay policy blocks it).
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {
-        // Ignore — the context will be resumed the next time play() is called.
-      });
-    }
+    this._ensureRunning(ctx);
+    this._primeContext(ctx);
   }
 
   // -------------------------------------------------------------------------
@@ -455,11 +453,26 @@ export class SoundManager {
    * resume it. Fire-and-forget — failure is acceptable.
    */
   private _ensureRunning(ctx: AudioContext): void {
-    if (ctx.state === 'suspended') {
+    if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
       ctx.resume().catch(() => {
         // Ignore — the sound may be silent this time but will work after next
         // user gesture.
       });
+    }
+  }
+
+  private _primeContext(ctx: AudioContext): void {
+    if (this._primed) return;
+
+    try {
+      const source = ctx.createBufferSource();
+      source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      source.connect(ctx.destination);
+      source.start(ctx.currentTime);
+      source.stop(ctx.currentTime + 0.001);
+      this._primed = true;
+    } catch {
+      // Ignore — a future user gesture can try again.
     }
   }
 }

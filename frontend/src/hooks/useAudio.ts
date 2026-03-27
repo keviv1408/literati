@@ -50,6 +50,7 @@ import { useState, useCallback } from 'react';
 import {
   isMuted,
   setMuted,
+  unlockGameAudio,
   playTurnChime as rawPlayChime,
   playDealSound as rawPlayDealSound,
   playAskSuccess as rawPlayAskSuccess,
@@ -139,6 +140,7 @@ export function useAudio(): UseAudioReturn {
   }, []);
 
   const preload = useCallback(() => {
+    unlockGameAudio();
     soundManager.preload();
   }, []);
 

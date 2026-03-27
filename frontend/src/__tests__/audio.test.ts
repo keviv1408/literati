@@ -1,80 +1,24 @@
 /**
  * @jest-environment jsdom
- *
- * Unit tests for /lib/audio.ts — the Browser Audio API utility.
- *
- * Coverage:
- *   • isMuted() — returns false by default, true when localStorage is set
- *   • setMuted() — writes to localStorage
- *   • toggleMuted() — flips the value and returns the new state
- *   • playTurnChime() — no-op when muted; calls AudioContext when unmuted
- *   • playTurnChime() — no-op when AudioContext is unavailable
- *   • playTurnChime() — fail-silently on AudioContext errors
- *   • playDealSound() — plays 3-tone descending card-deal sound
- *   • playAskSuccess() — plays 2-tone ascending success sound
- *   • playAskFail() — plays 2-tone descending fail sound
- *   • playDeclarationSuccess() — plays 4-tone ascending fanfare
- *   • playDeclarationFail() — plays 3-tone descending somber motif
- *   • All new sounds: no-op when muted / AudioContext unavailable
  */
 
-import {
-  isMuted,
-  setMuted,
-  toggleMuted,
-  playTurnChime,
-  playDealSound,
-  playAskSuccess,
-  playAskFail,
-  playDeclarationSuccess,
-  playDeclarationFail,
-  MUTE_STORAGE_KEY,
-  unlockGameAudio,
-} from '@/lib/audio';
+type AudioModule = typeof import('@/lib/audio');
 
-// ---------------------------------------------------------------------------
-// Shared setup helpers
-// ---------------------------------------------------------------------------
-
-/** Simple in-memory localStorage substitute. */
 const makeLocalStorageMock = () => {
   const store: Record<string, string> = {};
   return {
     getItem: jest.fn((key: string) => store[key] ?? null),
-    setItem: jest.fn((key: string, value: string) => { store[key] = value; }),
-    removeItem: jest.fn((key: string) => { delete store[key]; }),
-    clear: jest.fn(() => { Object.keys(store).forEach((k) => delete store[k]); }),
+    setItem: jest.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: jest.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: jest.fn(() => {
+      Object.keys(store).forEach((key) => delete store[key]);
+    }),
   };
 };
-
-let localStorageMock: ReturnType<typeof makeLocalStorageMock>;
-
-// Shorthand for window cast used in several tests
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const win = () => window as any;
-
-beforeEach(() => {
-  localStorageMock = makeLocalStorageMock();
-  Object.defineProperty(window, 'localStorage', {
-    value: localStorageMock,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(window, 'navigator', {
-    value: {
-      ...window.navigator,
-      userActivation: { hasBeenActive: true, isActive: true },
-    },
-    writable: true,
-    configurable: true,
-  });
-  jest.clearAllMocks();
-  unlockGameAudio();
-});
-
-// ---------------------------------------------------------------------------
-// AudioContext mock helpers
-// ---------------------------------------------------------------------------
 
 type MockOscillator = {
   type: OscillatorType;
@@ -93,15 +37,34 @@ type MockGainNode = {
   connect: jest.Mock;
 };
 
-type MockAudioCtx = {
-  currentTime: number;
-  destination: Record<string, never>;
-  createOscillator: jest.Mock<MockOscillator>;
-  createGain: jest.Mock<MockGainNode>;
-  close: jest.Mock<Promise<void>>;
+type MockBufferSource = {
+  buffer: AudioBuffer | null;
+  connect: jest.Mock;
+  start: jest.Mock;
+  stop: jest.Mock;
 };
 
-function buildMockAudioContext(): MockAudioCtx {
+type MockAudioBuffer = {
+  getChannelData: jest.Mock<Float32Array, [number]>;
+};
+
+type MockAudioCtx = {
+  state: 'running' | 'suspended' | 'closed';
+  currentTime: number;
+  sampleRate: number;
+  destination: Record<string, never>;
+  resume: jest.Mock<Promise<void>>;
+  decodeAudioData: jest.Mock<Promise<AudioBuffer>, [ArrayBuffer]>;
+  createOscillator: jest.Mock<MockOscillator>;
+  createGain: jest.Mock<MockGainNode>;
+  createBuffer: jest.Mock<MockAudioBuffer, [number, number, number]>;
+  createBufferSource: jest.Mock<MockBufferSource>;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const win = () => window as any;
+
+function buildMockAudioContext(state: MockAudioCtx['state'] = 'running'): MockAudioCtx {
   const makeOscillator = (): MockOscillator => ({
     type: 'sine',
     frequency: { value: 0 },
@@ -119,12 +82,28 @@ function buildMockAudioContext(): MockAudioCtx {
     connect: jest.fn(),
   });
 
+  const makeBufferSource = (): MockBufferSource => ({
+    buffer: null,
+    connect: jest.fn(),
+    start: jest.fn(),
+    stop: jest.fn(),
+  });
+
+  const makeAudioBuffer = (): MockAudioBuffer => ({
+    getChannelData: jest.fn(() => new Float32Array(1)),
+  });
+
   return {
+    state,
     currentTime: 0,
+    sampleRate: 44100,
     destination: {},
-    createOscillator: jest.fn(() => makeOscillator()),
-    createGain: jest.fn(() => makeGain()),
-    close: jest.fn().mockResolvedValue(undefined),
+    resume: jest.fn().mockResolvedValue(undefined),
+    decodeAudioData: jest.fn(async () => ({ decoded: true } as unknown as AudioBuffer)),
+    createOscillator: jest.fn(makeOscillator),
+    createGain: jest.fn(makeGain),
+    createBuffer: jest.fn(makeAudioBuffer),
+    createBufferSource: jest.fn(makeBufferSource),
   };
 }
 
@@ -133,78 +112,75 @@ function installAudioContext(ctx: MockAudioCtx) {
   delete win().webkitAudioContext;
 }
 
+function installWebkitAudioContext(ctx: MockAudioCtx) {
+  delete win().AudioContext;
+  win().webkitAudioContext = jest.fn(() => ctx);
+}
+
 function removeAudioContext() {
   delete win().AudioContext;
   delete win().webkitAudioContext;
 }
 
-// ---------------------------------------------------------------------------
-// isMuted()
-// ---------------------------------------------------------------------------
+function loadAudioModule(): AudioModule {
+  jest.resetModules();
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('@/lib/audio') as AudioModule;
+}
 
-describe('isMuted()', () => {
-  it('returns false when localStorage has no entry', () => {
-    expect(isMuted()).toBe(false);
+async function flushAsyncWork(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+let localStorageMock: ReturnType<typeof makeLocalStorageMock>;
+
+beforeEach(() => {
+  localStorageMock = makeLocalStorageMock();
+  Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(window, 'navigator', {
+    value: {
+      ...window.navigator,
+      userActivation: { hasBeenActive: true, isActive: true },
+    },
+    writable: true,
+    configurable: true,
   });
 
-  it('returns true when localStorage is set to "true"', () => {
-    localStorageMock.getItem.mockReturnValueOnce('true');
-    expect(isMuted()).toBe(true);
-  });
+  global.fetch = jest.fn(async () => ({
+    ok: true,
+    arrayBuffer: async () => new ArrayBuffer(8),
+  })) as unknown as typeof fetch;
 
-  it('returns false when localStorage is set to "false"', () => {
-    localStorageMock.getItem.mockReturnValueOnce('false');
-    expect(isMuted()).toBe(false);
-  });
+  jest.clearAllMocks();
+});
 
-  it('uses the correct storage key', () => {
-    isMuted();
-    expect(localStorageMock.getItem).toHaveBeenCalledWith(MUTE_STORAGE_KEY);
+afterEach(() => {
+  removeAudioContext();
+});
+
+describe('audio.ts — mute helpers', () => {
+  it('reads and writes the persisted mute preference', () => {
+    const audio = loadAudioModule();
+
+    expect(audio.isMuted()).toBe(false);
+
+    audio.setMuted(true);
+    expect(audio.isMuted()).toBe(true);
+
+    expect(audio.toggleMuted()).toBe(false);
+    expect(audio.isMuted()).toBe(false);
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(audio.MUTE_STORAGE_KEY, 'true');
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(audio.MUTE_STORAGE_KEY, 'false');
   });
 });
 
-// ---------------------------------------------------------------------------
-// setMuted()
-// ---------------------------------------------------------------------------
-
-describe('setMuted()', () => {
-  it('writes "true" to localStorage when called with true', () => {
-    setMuted(true);
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(MUTE_STORAGE_KEY, 'true');
-  });
-
-  it('writes "false" to localStorage when called with false', () => {
-    setMuted(false);
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(MUTE_STORAGE_KEY, 'false');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// toggleMuted()
-// ---------------------------------------------------------------------------
-
-describe('toggleMuted()', () => {
-  it('returns true and sets muted when previously unmuted', () => {
-    localStorageMock.getItem.mockReturnValueOnce(null as unknown as string);
-    const result = toggleMuted();
-    expect(result).toBe(true);
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(MUTE_STORAGE_KEY, 'true');
-  });
-
-  it('returns false and sets unmuted when previously muted', () => {
-    localStorageMock.getItem.mockReturnValueOnce('true');
-    const result = toggleMuted();
-    expect(result).toBe(false);
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(MUTE_STORAGE_KEY, 'false');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// playTurnChime()
-// ---------------------------------------------------------------------------
-
-describe('playTurnChime()', () => {
-  it('does NOT create AudioContext before the page has been user-activated', () => {
+describe('audio.ts — user activation and shared context', () => {
+  it('does not create an AudioContext before the page is user-activated', () => {
     const ctx = buildMockAudioContext();
     installAudioContext(ctx);
     Object.defineProperty(window, 'navigator', {
@@ -216,199 +192,156 @@ describe('playTurnChime()', () => {
       configurable: true,
     });
 
-    jest.resetModules();
-    // Re-import a fresh module so the unlocked flag is reset for this test.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const freshAudio = require('@/lib/audio') as typeof import('@/lib/audio');
-
-    localStorageMock.getItem.mockReturnValue(null as unknown as string);
-    freshAudio.playTurnChime();
+    const audio = loadAudioModule();
+    audio.playTurnChime();
 
     expect(win().AudioContext).not.toHaveBeenCalled();
   });
 
-  it('creates AudioContext and plays two tones when unmuted', () => {
-    const ctx = buildMockAudioContext();
+  it('warms the shared context once and preloads the game sound files', async () => {
+    const ctx = buildMockAudioContext('suspended');
     installAudioContext(ctx);
+    const audio = loadAudioModule();
 
-    localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-    playTurnChime();
+    audio.unlockGameAudio();
+    await flushAsyncWork();
 
     expect(win().AudioContext).toHaveBeenCalledTimes(1);
-    // Two oscillator + gain pairs for the two tones
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+    expect(ctx.createBuffer).toHaveBeenCalledWith(1, 1, ctx.sampleRate);
+    expect(ctx.createBufferSource).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+    expect(ctx.decodeAudioData).toHaveBeenCalledTimes(4);
+  });
+
+  it('reuses the unlocked shared context for synthesized sounds', async () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    const audio = loadAudioModule();
+
+    audio.unlockGameAudio();
+    await flushAsyncWork();
+    expect(win().AudioContext).toHaveBeenCalledTimes(1);
+
+    ctx.createOscillator.mockClear();
+    ctx.createGain.mockClear();
+
+    audio.playTurnChime();
+
+    expect(win().AudioContext).toHaveBeenCalledTimes(1);
     expect(ctx.createOscillator).toHaveBeenCalledTimes(2);
     expect(ctx.createGain).toHaveBeenCalledTimes(2);
   });
 
-  it('does NOT create AudioContext when muted', () => {
+  it('falls back to webkitAudioContext when needed', async () => {
     const ctx = buildMockAudioContext();
-    installAudioContext(ctx);
+    installWebkitAudioContext(ctx);
+    const audio = loadAudioModule();
 
-    localStorageMock.getItem.mockReturnValue('true');
-
-    playTurnChime();
-
-    expect(win().AudioContext).not.toHaveBeenCalled();
-  });
-
-  it('is a no-op when AudioContext is unavailable', () => {
-    removeAudioContext();
-    localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-    // Should not throw even with no AudioContext
-    expect(() => playTurnChime()).not.toThrow();
-  });
-
-  it('falls back to webkitAudioContext when AudioContext is absent', () => {
-    const ctx = buildMockAudioContext();
-    delete win().AudioContext;
-    win().webkitAudioContext = jest.fn(() => ctx);
-
-    localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-    playTurnChime();
+    audio.unlockGameAudio();
+    await flushAsyncWork();
+    audio.playTurnChime();
 
     expect(win().webkitAudioContext).toHaveBeenCalledTimes(1);
-  });
-
-  it('fails silently if AudioContext constructor throws', () => {
-    win().AudioContext = jest.fn(() => {
-      throw new Error('AudioContext not allowed');
-    });
-    localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-    expect(() => playTurnChime()).not.toThrow();
-  });
-
-  it('connects oscillators to the gain node and gain to destination', () => {
-    const ctx = buildMockAudioContext();
-    installAudioContext(ctx);
-
-    localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-    playTurnChime();
-
-    // Each oscillator should have been connected (to its gain node)
-    const calls = ctx.createOscillator.mock.results;
-    calls.forEach((r) => {
-      expect((r.value as MockOscillator).connect).toHaveBeenCalledTimes(1);
-    });
-
-    // Each gain node should have been connected (to the destination)
-    const gainCalls = ctx.createGain.mock.results;
-    gainCalls.forEach((r) => {
-      expect((r.value as MockGainNode).connect).toHaveBeenCalledWith(ctx.destination);
-    });
-  });
-
-  it('schedules oscillator start and stop for each tone', () => {
-    const ctx = buildMockAudioContext();
-    installAudioContext(ctx);
-
-    localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-    playTurnChime();
-
-    ctx.createOscillator.mock.results.forEach((r) => {
-      const osc = r.value as MockOscillator;
-      expect(osc.start).toHaveBeenCalledTimes(1);
-      expect(osc.stop).toHaveBeenCalledTimes(1);
-    });
+    expect(ctx.createOscillator).toHaveBeenCalledTimes(2);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Shared helper: verify a sound function respects mute and calls AudioContext
-// ---------------------------------------------------------------------------
+describe('audio.ts — synthesized gameplay sounds', () => {
+  it('plays the deal cue through the shared context after unlock', async () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    const audio = loadAudioModule();
 
-/**
- * Generates a parameterised suite for any sound function.
- * Verifies:
- *   • No-op when muted
- *   • Calls AudioContext (at least 1 oscillator + gain pair) when unmuted
- *   • No-op when AudioContext is unavailable
- *   • Fail-silently on AudioContext constructor error
- *
- * @param name     Human-readable function name for test descriptions
- * @param fn       The sound function under test
- * @param toneCount Expected number of oscillator+gain pairs (= number of tones)
- */
-function soundFunctionSuite(
-  name: string,
-  fn: () => void,
-  toneCount: number,
-) {
-  describe(`${name}()`, () => {
-    it('is a no-op when muted', () => {
-      const ctx = buildMockAudioContext();
-      installAudioContext(ctx);
-      localStorageMock.getItem.mockReturnValue('true');
+    audio.unlockGameAudio();
+    await flushAsyncWork();
+    ctx.createOscillator.mockClear();
+    ctx.createGain.mockClear();
 
-      fn();
+    audio.playDealSound();
 
-      expect(win().AudioContext).not.toHaveBeenCalled();
-    });
-
-    it(`creates AudioContext and plays ${toneCount} tone(s) when unmuted`, () => {
-      const ctx = buildMockAudioContext();
-      installAudioContext(ctx);
-      localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-      fn();
-
-      expect(win().AudioContext).toHaveBeenCalledTimes(1);
-      expect(ctx.createOscillator).toHaveBeenCalledTimes(toneCount);
-      expect(ctx.createGain).toHaveBeenCalledTimes(toneCount);
-    });
-
-    it('is a no-op when AudioContext is unavailable', () => {
-      removeAudioContext();
-      localStorageMock.getItem.mockReturnValue(null as unknown as string);
-      expect(() => fn()).not.toThrow();
-    });
-
-    it('fails silently if AudioContext constructor throws', () => {
-      win().AudioContext = jest.fn(() => {
-        throw new Error('AudioContext not allowed');
-      });
-      localStorageMock.getItem.mockReturnValue(null as unknown as string);
-      expect(() => fn()).not.toThrow();
-    });
-
-    it('connects all oscillators and gain nodes correctly', () => {
-      const ctx = buildMockAudioContext();
-      installAudioContext(ctx);
-      localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-      fn();
-
-      ctx.createOscillator.mock.results.forEach((r) => {
-        expect((r.value as MockOscillator).connect).toHaveBeenCalledTimes(1);
-      });
-      ctx.createGain.mock.results.forEach((r) => {
-        expect((r.value as MockGainNode).connect).toHaveBeenCalledWith(ctx.destination);
-      });
-    });
-
-    it('starts and stops each oscillator', () => {
-      const ctx = buildMockAudioContext();
-      installAudioContext(ctx);
-      localStorageMock.getItem.mockReturnValue(null as unknown as string);
-
-      fn();
-
-      ctx.createOscillator.mock.results.forEach((r) => {
-        const osc = r.value as MockOscillator;
-        expect(osc.start).toHaveBeenCalledTimes(1);
-        expect(osc.stop).toHaveBeenCalledTimes(1);
-      });
-    });
+    expect(ctx.createOscillator).toHaveBeenCalledTimes(10);
+    expect(ctx.createGain).toHaveBeenCalledTimes(10);
   });
-}
 
-soundFunctionSuite('playDealSound',          playDealSound,          3);
-soundFunctionSuite('playAskSuccess',         playAskSuccess,         2);
-soundFunctionSuite('playAskFail',            playAskFail,            2);
-soundFunctionSuite('playDeclarationSuccess', playDeclarationSuccess, 4);
-soundFunctionSuite('playDeclarationFail',    playDeclarationFail,    3);
+  it('is a no-op for synthesized sounds when muted', () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    localStorageMock.getItem.mockReturnValue('true');
+    const audio = loadAudioModule();
+
+    audio.playDealSound();
+    audio.playTurnChime();
+
+    expect(win().AudioContext).not.toHaveBeenCalled();
+  });
+});
+
+describe('audio.ts — file-backed gameplay sounds', () => {
+  it('plays from the preloaded buffer cache once unlocked', async () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    const audio = loadAudioModule();
+
+    audio.unlockGameAudio();
+    await flushAsyncWork();
+    ctx.createBufferSource.mockClear();
+
+    audio.playAskSuccess();
+
+    expect(ctx.createBufferSource).toHaveBeenCalledTimes(1);
+    const source = ctx.createBufferSource.mock.results[0].value as MockBufferSource;
+    expect(source.connect).toHaveBeenCalledWith(ctx.destination);
+    expect(source.start).toHaveBeenCalledWith(0);
+  });
+
+  it('lazy-loads a file sound and plays it once decoding completes', async () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    const audio = loadAudioModule();
+
+    audio.playAskSuccess();
+    await flushAsyncWork();
+
+    expect(win().AudioContext).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith('/sounds/askSuccess.mp3');
+    expect(ctx.decodeAudioData).toHaveBeenCalledTimes(1);
+    expect(ctx.createBufferSource).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not attempt file playback when muted', () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    localStorageMock.getItem.mockReturnValue('true');
+    const audio = loadAudioModule();
+
+    audio.playAskFail();
+    audio.playDeclarationSuccess();
+    audio.playDeclarationFail();
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(win().AudioContext).not.toHaveBeenCalled();
+  });
+
+  it('fails silently when fetch is unavailable during unlock', () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (global as any).fetch = undefined;
+    const audio = loadAudioModule();
+
+    expect(() => audio.unlockGameAudio()).not.toThrow();
+  });
+
+  it('fails silently when the AudioContext constructor throws', () => {
+    win().AudioContext = jest.fn(() => {
+      throw new Error('blocked');
+    });
+    const audio = loadAudioModule();
+
+    expect(() => audio.unlockGameAudio()).not.toThrow();
+    expect(() => audio.playAskSuccess()).not.toThrow();
+    expect(() => audio.playTurnChime()).not.toThrow();
+  });
+});

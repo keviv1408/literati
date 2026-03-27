@@ -35,6 +35,8 @@ export const MUTE_STORAGE_KEY = 'literati:muted';
 
 /** Whether a real user gesture has unlocked Web Audio for this page session. */
 let _audioUnlocked = false;
+/** Whether the shared AudioContext has been explicitly unlocked for iOS. */
+let _sharedAudioPrimed = false;
 
 // ---------------------------------------------------------------------------
 // Mute preference helpers
@@ -82,7 +84,7 @@ export function toggleMuted(): boolean {
  */
 export function unlockGameAudio(): void {
   _audioUnlocked = true;
-  _warmUpFileAudio();
+  _warmUpSharedAudio();
 }
 
 function hasUserActivatedAudio(): boolean {
@@ -120,9 +122,8 @@ function getAudioContextConstructor(): (new () => AudioContext) | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Plays a sequence of synthesised tones from a single AudioContext.
+ * Plays a sequence of synthesised tones from the shared AudioContext.
  * Each tone uses a linear-attack / exponential-decay envelope.
- * The AudioContext is closed automatically after all tones finish.
  *
  * @param tones  Array of `{ freq, delay, duration, peak }` descriptors.
  *               `delay` is seconds from `ctx.currentTime`.
@@ -133,14 +134,13 @@ function _playTones(
   tones: Array<{ freq: number; delay: number; duration: number; peak?: number }>,
 ): void {
   if (!hasUserActivatedAudio()) return;
-
-  const AudioCtx = getAudioContextConstructor();
-  if (!AudioCtx) return;
+  const ctx = _getSharedCtx();
+  if (!ctx) return;
 
   try {
-    const ctx = new AudioCtx();
+    _ensureContextRunning(ctx);
 
-    let lastEnd = 0;
+    const now = ctx.currentTime;
 
     tones.forEach(({ freq, delay, duration, peak = 0.18 }) => {
       const osc  = ctx.createOscillator();
@@ -149,7 +149,7 @@ function _playTones(
       osc.type = 'sine';
       osc.frequency.value = freq;
 
-      const t = ctx.currentTime + delay;
+      const t = now + delay;
       // Quick linear attack
       gain.gain.setValueAtTime(0, t);
       gain.gain.linearRampToValueAtTime(peak, t + 0.015);
@@ -161,17 +161,7 @@ function _playTones(
 
       osc.start(t);
       osc.stop(t + duration + 0.005);
-
-      const endSec = delay + duration + 0.005;
-      if (endSec > lastEnd) lastEnd = endSec;
     });
-
-    // Release the AudioContext after all tones have finished.
-    setTimeout(() => {
-      ctx.close().catch(() => {
-        // Ignore close errors — context may already be garbage-collected.
-      });
-    }, lastEnd * 1000 + 50);
   } catch {
     // Fail silently — audio is always optional.
   }
@@ -185,7 +175,7 @@ function _playTones(
  * Uses a single shared AudioContext + pre-decoded AudioBuffers so that sounds
  * triggered from WebSocket callbacks (non-user-gesture) play reliably on
  * iOS Safari and mobile Chrome. The AudioContext is resumed once during the
- * first user gesture (unlockGameAudio → _warmUpFileAudio), after which
+ * first user gesture (unlockGameAudio → _warmUpSharedAudio), after which
  * BufferSource nodes can fire from any execution context.
  */
 
@@ -197,26 +187,88 @@ const _soundPaths = [
   '/sounds/declarationFail.mp3',
 ] as const;
 
-/** Shared AudioContext for file-based playback (created lazily). */
-let _fileCtx: AudioContext | null = null;
+/** Shared AudioContext for all gameplay audio (created lazily). */
+let _sharedCtx: AudioContext | null = null;
 
 /** Decoded AudioBuffers keyed by path. */
 const _bufferCache = new Map<string, AudioBuffer>();
 
-/** Whether buffers are currently being fetched (prevents duplicate fetches). */
-let _buffersLoading = false;
+/** In-flight buffer fetch/decode promises keyed by path. */
+const _bufferPromises = new Map<string, Promise<AudioBuffer>>();
 
-/** Get or create the shared AudioContext for file playback. */
-function _getFileCtx(): AudioContext | null {
-  if (_fileCtx) return _fileCtx;
+/** Get or create the shared AudioContext for gameplay audio. */
+function _getSharedCtx(): AudioContext | null {
+  if (_sharedCtx) return _sharedCtx;
   const AudioCtx = getAudioContextConstructor();
   if (!AudioCtx) return null;
   try {
-    _fileCtx = new AudioCtx();
-    return _fileCtx;
+    _sharedCtx = new AudioCtx();
+    return _sharedCtx;
   } catch {
     return null;
   }
+}
+
+function _isContextBlocked(ctx: AudioContext): boolean {
+  return ctx.state === 'suspended' || (ctx.state as string) === 'interrupted';
+}
+
+function _ensureContextRunning(ctx: AudioContext): void {
+  if (_isContextBlocked(ctx)) {
+    ctx.resume().catch(() => {});
+  }
+}
+
+function _primeSharedAudio(ctx: AudioContext): void {
+  if (_sharedAudioPrimed) return;
+
+  try {
+    _ensureContextRunning(ctx);
+
+    const source = ctx.createBufferSource();
+    source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    source.connect(ctx.destination);
+    source.start(ctx.currentTime);
+    source.stop(ctx.currentTime + 0.001);
+
+    _sharedAudioPrimed = true;
+  } catch {
+    // Ignore — the next user gesture can try again.
+  }
+}
+
+function _loadBuffer(path: string): Promise<AudioBuffer> {
+  const cached = _bufferCache.get(path);
+  if (cached) return Promise.resolve(cached);
+
+  const inFlight = _bufferPromises.get(path);
+  if (inFlight) return inFlight;
+
+  const ctx = _getSharedCtx();
+  if (!ctx || typeof fetch !== 'function') {
+    return Promise.reject(new Error('Audio buffers unavailable'));
+  }
+
+  const promise = fetch(path)
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error(`Failed to load ${path}`);
+      }
+      return res.arrayBuffer();
+    })
+    .then((data) => ctx.decodeAudioData(data))
+    .then((buffer) => {
+      _bufferCache.set(path, buffer);
+      _bufferPromises.delete(path);
+      return buffer;
+    })
+    .catch((error) => {
+      _bufferPromises.delete(path);
+      throw error;
+    });
+
+  _bufferPromises.set(path, promise);
+  return promise;
 }
 
 /**
@@ -225,23 +277,10 @@ function _getFileCtx(): AudioContext | null {
  * WebSocket event needs them.
  */
 function _preloadBuffers(): void {
-  if (_buffersLoading) return;
-  _buffersLoading = true;
-
-  const ctx = _getFileCtx();
-  if (!ctx) return;
-
   for (const path of _soundPaths) {
-    if (_bufferCache.has(path)) continue;
-    fetch(path)
-      .then((res) => res.arrayBuffer())
-      .then((data) => ctx.decodeAudioData(data))
-      .then((buffer) => {
-        _bufferCache.set(path, buffer);
-      })
-      .catch(() => {
-        // Fail silently — audio is always optional.
-      });
+    void _loadBuffer(path).catch(() => {
+      // Fail silently — audio is always optional.
+    });
   }
 }
 
@@ -249,14 +288,11 @@ function _preloadBuffers(): void {
  * Resume the shared AudioContext (must be called from a user gesture on iOS)
  * and kick off buffer preloading.
  */
-function _warmUpFileAudio(): void {
-  const ctx = _getFileCtx();
+function _warmUpSharedAudio(): void {
+  const ctx = _getSharedCtx();
   if (!ctx) return;
 
-  if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
-  }
-
+  _primeSharedAudio(ctx);
   _preloadBuffers();
 }
 
@@ -270,21 +306,29 @@ function _playFile(path: string): void {
   if (!hasUserActivatedAudio()) return;
 
   try {
-    const ctx = _getFileCtx();
+    const ctx = _getSharedCtx();
     if (!ctx) return;
 
-    // Ensure context is running (may have been suspended by OS power saving).
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+    _ensureContextRunning(ctx);
+
+    const playBuffer = (buffer: AudioBuffer) => {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+    };
+
+    const cached = _bufferCache.get(path);
+    if (cached) {
+      playBuffer(cached);
+      return;
     }
 
-    const buffer = _bufferCache.get(path);
-    if (!buffer) return;
-
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start(0);
+    void _loadBuffer(path)
+      .then(playBuffer)
+      .catch(() => {
+        // Fail silently — audio is always optional.
+      });
   } catch {
     // Fail silently — audio is always optional.
   }

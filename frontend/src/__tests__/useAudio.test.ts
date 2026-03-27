@@ -22,6 +22,7 @@ import { MUTE_STORAGE_KEY } from '@/lib/audio';
 // Mock the entire audio lib so we can verify calls without synthesising audio.
 const mockIsMuted              = jest.fn<boolean, []>();
 const mockSetMuted             = jest.fn<void, [boolean]>();
+const mockUnlockGameAudio      = jest.fn<void, []>();
 const mockPlayChime            = jest.fn<void, []>();
 const mockPlayDealSound        = jest.fn<void, []>();
 const mockPlayAskSuccess       = jest.fn<void, []>();
@@ -33,6 +34,7 @@ jest.mock('@/lib/audio', () => ({
   MUTE_STORAGE_KEY: 'literati:muted',
   isMuted:               (...args: unknown[]) => mockIsMuted(...(args as [])),
   setMuted:              (...args: unknown[]) => mockSetMuted(...(args as [boolean])),
+  unlockGameAudio:       (...args: unknown[]) => mockUnlockGameAudio(...(args as [])),
   toggleMuted:           jest.fn(),   // not used by the hook directly
   playTurnChime:         (...args: unknown[]) => mockPlayChime(...(args as [])),
   playDealSound:         (...args: unknown[]) => mockPlayDealSound(...(args as [])),
@@ -348,9 +350,10 @@ describe('useAudio — setVolume()', () => {
 });
 
 describe('useAudio — preload()', () => {
-  it('calls soundManager.preload()', () => {
+  it('unlocks legacy audio and preloads soundManager', () => {
     const { result } = renderHook(() => useAudio());
     act(() => result.current.preload());
+    expect(mockUnlockGameAudio).toHaveBeenCalledTimes(1);
     expect(mockSmPreload).toHaveBeenCalledTimes(1);
   });
 

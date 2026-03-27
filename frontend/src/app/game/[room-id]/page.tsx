@@ -22,7 +22,6 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGuestBearerToken, getGameSummary, ApiError } from '@/lib/api';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
-import { unlockGameAudio } from '@/lib/audio';
 import { getCachedToken } from '@/lib/backendSession';
 import { useGuest } from '@/contexts/GuestContext';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -841,10 +840,7 @@ export default function GamePage({ params }: PageProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const unlockAudio = () => {
-      unlockGameAudio();
-      preload();
-    };
+    const unlockAudio = () => preload();
 
     const options: AddEventListenerOptions = { once: true, passive: true };
     window.addEventListener('pointerdown', unlockAudio, options);
