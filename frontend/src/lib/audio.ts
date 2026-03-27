@@ -82,6 +82,7 @@ export function toggleMuted(): boolean {
  */
 export function unlockGameAudio(): void {
   _audioUnlocked = true;
+  _warmUpAudioElements();
 }
 
 function hasUserActivatedAudio(): boolean {
@@ -180,17 +181,67 @@ function _playTones(
 // File-based audio playback
 // ---------------------------------------------------------------------------
 
+/** All MP3 sound file paths used by _playFile. */
+const _soundPaths = [
+  '/sounds/askSuccess.mp3',
+  '/sounds/askFail.mp3',
+  '/sounds/declarationSuccess.mp3',
+  '/sounds/declarationFail.mp3',
+] as const;
+
+/** Cache of pre-loaded Audio elements keyed by path. */
+const _audioCache = new Map<string, HTMLAudioElement>();
+
 /**
- * Plays an audio file from the /sounds/ directory.
- * Uses the HTML5 Audio element. Silent no-op when muted, SSR, or on error.
+ * Returns a cached Audio element for the given path, creating it on first use.
+ * Returns null in SSR environments.
+ */
+function _getAudio(path: string): HTMLAudioElement | null {
+  if (typeof window === 'undefined') return null;
+
+  let audio = _audioCache.get(path);
+  if (!audio) {
+    audio = new Audio(path);
+    audio.preload = 'auto';
+    _audioCache.set(path, audio);
+  }
+  return audio;
+}
+
+/**
+ * Warm up all cached Audio elements by playing then immediately pausing.
+ * Must be called from a user gesture (click/touch/key) so the browser
+ * unlocks the elements for future non-gesture playback (WebSocket events).
+ */
+function _warmUpAudioElements(): void {
+  for (const path of _soundPaths) {
+    const audio = _getAudio(path);
+    if (!audio) continue;
+    audio.volume = 0;
+    audio.play().then(() => {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = 1;
+    }).catch(() => {
+      // Fail silently.
+    });
+  }
+}
+
+/**
+ * Plays a pre-loaded audio file from the /sounds/ directory.
+ * Reuses a single Audio element per path so the browser doesn't throttle
+ * playback triggered by WebSocket events (non-user-gesture contexts).
+ * Silent no-op when muted, SSR, or on error.
  */
 function _playFile(path: string): void {
   if (isMuted()) return;
   if (!hasUserActivatedAudio()) return;
-  if (typeof window === 'undefined') return;
 
   try {
-    const audio = new Audio(path);
+    const audio = _getAudio(path);
+    if (!audio) return;
+    audio.currentTime = 0;
     audio.play().catch(() => {
       // Fail silently — audio is always optional.
     });
