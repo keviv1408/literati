@@ -285,6 +285,23 @@ function _setupFileAudio(): void {
       .catch((e) => _dbg(`ERR ${shortPath}: ${e}`));
   }
 
+  // ── Test beep: play a short sine tone to verify audio output works ──
+  try {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    g.gain.setValueAtTime(0.2, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    _dbg('TEST BEEP played (880Hz sine)');
+  } catch (e) {
+    _dbg(`TEST BEEP failed: ${e}`);
+  }
+
   // ── Persistent listener: resume context on every user interaction ──
   // iOS re-suspends the context after idle periods. This listener
   // ensures it is always "running" when the user is actively playing.
@@ -329,7 +346,8 @@ function _playFile(path: string): void {
     source.buffer = buffer;
     source.connect(ctx.destination);
     source.start(0);
-    _dbg(`STARTED ${shortPath}`);
+    source.onended = () => _dbg(`ENDED ${shortPath} (played through)`);
+    _dbg(`STARTED ${shortPath} dest.channels=${ctx.destination.channelCount} ctx.sr=${ctx.sampleRate}`);
   } catch (e) {
     _dbg(`ERR play ${shortPath}: ${e}`);
   }
