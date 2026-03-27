@@ -245,9 +245,39 @@ function _preloadBuffers(): void {
   }
 }
 
+/** Interval handle for the keep-alive silent ping. */
+let _keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Play a silent buffer every 4 s to prevent iOS from suspending the
+ * AudioContext due to inactivity. Started once during warm-up.
+ */
+function _startKeepAlive(ctx: AudioContext): void {
+  if (_keepAliveInterval) return;
+
+  // Create a tiny silent buffer (1 sample of silence).
+  const silentBuffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+
+  _keepAliveInterval = setInterval(() => {
+    try {
+      if (ctx.state === 'closed') {
+        if (_keepAliveInterval) clearInterval(_keepAliveInterval);
+        _keepAliveInterval = null;
+        return;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = silentBuffer;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch {
+      // Fail silently.
+    }
+  }, 4000);
+}
+
 /**
  * Resume the shared AudioContext (must be called from a user gesture on iOS)
- * and kick off buffer preloading.
+ * and kick off buffer preloading + keep-alive.
  */
 function _warmUpFileAudio(): void {
   const ctx = _getFileCtx();
@@ -257,13 +287,45 @@ function _warmUpFileAudio(): void {
     ctx.resume().catch(() => {});
   }
 
+  // Play a silent buffer immediately to fully unlock the context on iOS.
+  try {
+    const silentBuffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const src = ctx.createBufferSource();
+    src.buffer = silentBuffer;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch {
+    // Fail silently.
+  }
+
+  _startKeepAlive(ctx);
   _preloadBuffers();
 }
 
 /**
+ * Ensure the AudioContext is running, then play the buffer.
+ * If the context needs resuming (iOS re-suspended it), we await resume
+ * before starting playback so the source.start() is not silently dropped.
+ */
+function _playBuffer(ctx: AudioContext, buffer: AudioBuffer): void {
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+
+  if (ctx.state === 'running') {
+    source.start(0);
+  } else {
+    // Context is suspended — resume first, then start.
+    ctx.resume().then(() => {
+      source.start(0);
+    }).catch(() => {});
+  }
+}
+
+/**
  * Plays a pre-decoded AudioBuffer through the shared AudioContext.
- * Because the context was resumed during a user gesture, this works
- * reliably from WebSocket callbacks on mobile browsers.
+ * Handles suspended-context recovery so sounds play reliably from
+ * WebSocket callbacks on mobile browsers.
  */
 function _playFile(path: string): void {
   if (isMuted()) return;
@@ -273,18 +335,10 @@ function _playFile(path: string): void {
     const ctx = _getFileCtx();
     if (!ctx) return;
 
-    // Ensure context is running (may have been suspended by OS power saving).
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-
     const buffer = _bufferCache.get(path);
     if (!buffer) return;
 
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start(0);
+    _playBuffer(ctx, buffer);
   } catch {
     // Fail silently — audio is always optional.
   }
