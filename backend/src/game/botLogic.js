@@ -25,11 +25,17 @@ const {
   getHand,
   getCardCount,
   getHalfSuitCardCount,
+  cardHalfSuit,
   getPlayerTeam,
   getTeamPlayers,
   isHalfSuitDeclared,
 } = require('./gameState');
 const { validateAsk, validateDeclaration } = require('./gameEngine');
+
+const TEAM_SIGNAL_MAX_STRENGTH = 6;
+const TEAM_SIGNAL_SUCCESS_BOOST = 3;
+const TEAM_SIGNAL_FAILED_ASK_BOOST = 2;
+const TEAM_SIGNAL_DECAY_INTERVAL_MOVES = 3;
 
 // ---------------------------------------------------------------------------
 // Inference helpers
@@ -90,6 +96,68 @@ function _getKnown(gs, playerId, cardId) {
 
 function _isKnownMissing(gs, playerId, cardId) {
   return _getKnown(gs, playerId, cardId) === false;
+}
+
+function _ensureTeamIntentMemory(gs) {
+  if (!(gs.teamIntentMemory instanceof Map)) {
+    gs.teamIntentMemory = new Map();
+  }
+  return gs.teamIntentMemory;
+}
+
+function _getOrCreateTeamSignals(gs, teamId) {
+  const memory = _ensureTeamIntentMemory(gs);
+  if (!memory.has(teamId)) {
+    memory.set(teamId, new Map());
+  }
+  return memory.get(teamId);
+}
+
+function _effectiveSignalStrength(entry, currentMoveIndex) {
+  if (!entry) return 0;
+  const lastUpdated = entry.lastUpdatedMoveIndex ?? 0;
+  const age = Math.max(0, currentMoveIndex - lastUpdated);
+  const decay = Math.floor(age / TEAM_SIGNAL_DECAY_INTERVAL_MOVES);
+  return Math.max(0, (entry.strength ?? 0) - decay);
+}
+
+function _getTeamSignalStrength(gs, teamId, halfSuitId, currentMoveIndex = (gs.moveHistory ?? []).length) {
+  if (!(gs.teamIntentMemory instanceof Map)) return 0;
+  const teamSignals = gs.teamIntentMemory.get(teamId);
+  if (!(teamSignals instanceof Map)) return 0;
+  const entry = teamSignals.get(halfSuitId);
+  const strength = _effectiveSignalStrength(entry, currentMoveIndex);
+  if (strength <= 0 && entry) {
+    teamSignals.delete(halfSuitId);
+  }
+  return strength;
+}
+
+function updateTeamIntentAfterAsk(gs, askerId, cardId, success) {
+  const teamId = getPlayerTeam(gs, askerId);
+  const halfSuitId = cardHalfSuit(gs, cardId);
+  if (!teamId || !halfSuitId) return;
+
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
+  const teamSignals = _getOrCreateTeamSignals(gs, teamId);
+  const currentStrength = _getTeamSignalStrength(gs, teamId, halfSuitId, currentMoveIndex);
+  const boost = success ? TEAM_SIGNAL_SUCCESS_BOOST : TEAM_SIGNAL_FAILED_ASK_BOOST;
+
+  teamSignals.set(halfSuitId, {
+    strength: Math.min(TEAM_SIGNAL_MAX_STRENGTH, currentStrength + boost),
+    lastUpdatedMoveIndex: currentMoveIndex,
+    sourcePlayerId: askerId,
+    lastOutcome: success ? 'success' : 'failure',
+  });
+}
+
+function updateTeamIntentAfterDeclaration(gs, halfSuitId) {
+  if (!(gs.teamIntentMemory instanceof Map)) return;
+  for (const teamSignals of gs.teamIntentMemory.values()) {
+    if (teamSignals instanceof Map) {
+      teamSignals.delete(halfSuitId);
+    }
+  }
 }
 
 function _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) {
@@ -373,6 +441,8 @@ function decideBotMove(gs, botId) {
   const teammates  = getTeamPlayers(gs, botTeam).filter((p) => p.playerId !== botId);
   const opponents  = gs.players.filter((p) => getPlayerTeam(gs, p.playerId) !== botTeam);
   const validOpponents = opponents.filter((p) => getCardCount(gs, p.playerId) > 0);
+  const teamPlayers = [{ playerId: botId }, ...teammates];
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
 
   const halfSuitsMap  = buildHalfSuitMap(gs.variant);
   const cardToHalfSuit = buildCardToHalfSuitMap(gs.variant);
@@ -404,8 +474,27 @@ function decideBotMove(gs, botId) {
       }
     }
 
+    const suitPriority = new Map(
+      [...botHalfSuits].map((halfSuitId) => [
+        halfSuitId,
+        {
+          signalStrength: _getTeamSignalStrength(gs, botTeam, halfSuitId, currentMoveIndex),
+          teamCount: _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId),
+        },
+      ])
+    );
+    const prioritizedBotHalfSuits = [...botHalfSuits].sort((a, b) => {
+      const aPriority = suitPriority.get(a);
+      const bPriority = suitPriority.get(b);
+      const signalDiff = (bPriority?.signalStrength ?? 0) - (aPriority?.signalStrength ?? 0);
+      if (signalDiff !== 0) return signalDiff;
+      const teamCountDiff = (bPriority?.teamCount ?? 0) - (aPriority?.teamCount ?? 0);
+      if (teamCountDiff !== 0) return teamCountDiff;
+      return a.localeCompare(b);
+    });
+
     // For each half-suit the bot can ask from, look for known opponent cards
-    for (const halfSuitId of botHalfSuits) {
+    for (const halfSuitId of prioritizedBotHalfSuits) {
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
       const neededCards = cards.filter((card) => !botHand.has(card));
       const knownAsk = _findKnownHolderAsk(gs, botId, validOpponents, neededCards);
@@ -415,22 +504,32 @@ function decideBotMove(gs, botId) {
     // ── Priority 3: Random ask in a half-suit the bot has cards from ──────────
     // Prefer half-suits where public information says the team is closer to completion.
     const halfSuitScores = [];
-    for (const halfSuitId of botHalfSuits) {
+    for (const halfSuitId of prioritizedBotHalfSuits) {
       if (isHalfSuitDeclared(gs, halfSuitId)) continue;
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
-
-      const teamCount = _getPublicTeamHalfSuitCount(gs, [{ playerId: botId }, ...teammates], halfSuitId);
+      const priority = suitPriority.get(halfSuitId) ?? { signalStrength: 0, teamCount: 0 };
 
       // Cards in this suit not held by the bot = potentially askable
       const askableCards = cards.filter((c) => !getHand(gs, botId).has(c));
 
       if (askableCards.length > 0) {
-        halfSuitScores.push({ halfSuitId, teamCount, askableCards });
+        halfSuitScores.push({
+          halfSuitId,
+          signalStrength: priority.signalStrength,
+          teamCount: priority.teamCount,
+          askableCards,
+        });
       }
     }
 
-    // Sort by teamCount descending (prefer suits closer to completion)
-    halfSuitScores.sort((a, b) => b.teamCount - a.teamCount);
+    // Prefer teammate-signaled suits first, then suits closer to completion.
+    halfSuitScores.sort((a, b) => {
+      const signalDiff = b.signalStrength - a.signalStrength;
+      if (signalDiff !== 0) return signalDiff;
+      const teamCountDiff = b.teamCount - a.teamCount;
+      if (teamCountDiff !== 0) return teamCountDiff;
+      return a.halfSuitId.localeCompare(b.halfSuitId);
+    });
 
     for (const { halfSuitId, askableCards } of halfSuitScores) {
       // Keep random fallback from repeating asks that public information has
@@ -673,4 +772,6 @@ module.exports = {
   completeBotFromPartial,
   updateKnowledgeAfterAsk,
   updateKnowledgeAfterDeclaration,
+  updateTeamIntentAfterAsk,
+  updateTeamIntentAfterDeclaration,
 };

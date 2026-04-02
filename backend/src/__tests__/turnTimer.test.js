@@ -84,6 +84,8 @@ jest.mock('../game/botLogic', () => ({
   completeBotFromPartial:          (...args) => mockCompleteBotFromPartial(...args),
   updateKnowledgeAfterAsk:         jest.fn(),
   updateKnowledgeAfterDeclaration: jest.fn(),
+  updateTeamIntentAfterAsk:        jest.fn(),
+  updateTeamIntentAfterDeclaration: jest.fn(),
 }));
 
 // Mock rematchStore so it doesn't interfere

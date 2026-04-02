@@ -24,6 +24,8 @@ const {
   serializePublicState,
   serializeForPlayer,
   serializePlayers,
+  buildPersistedSnapshot,
+  restoreGameState,
   getPlayerTeam,
   getHand,
 } = require('../game/gameState');
@@ -120,6 +122,11 @@ describe('createGameState', () => {
   it('moveHistory starts empty', () => {
     expect(gs.moveHistory).toEqual([]);
   });
+
+  it('teamIntentMemory starts as an empty Map', () => {
+    expect(gs.teamIntentMemory).toBeInstanceOf(Map);
+    expect(gs.teamIntentMemory.size).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -174,6 +181,11 @@ describe('serializePublicState', () => {
   it('does NOT include botKnowledge', () => {
     const pub = serializePublicState(gs);
     expect(pub.botKnowledge).toBeUndefined();
+  });
+
+  it('does NOT include teamIntentMemory', () => {
+    const pub = serializePublicState(gs);
+    expect(pub.teamIntentMemory).toBeUndefined();
   });
 });
 
@@ -272,6 +284,34 @@ describe('serializeForPlayer', () => {
     const r2 = serializeForPlayer(gs, 'p2');
     // Hands are different sets
     expect(r1.myHand.sort()).not.toEqual(r2.myHand.sort());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Persist / restore
+// ---------------------------------------------------------------------------
+
+describe('buildPersistedSnapshot / restoreGameState', () => {
+  it('preserves teamIntentMemory across persistence', () => {
+    const gs = makeGame();
+    gs.teamIntentMemory.set(1, new Map([
+      ['high_s', {
+        strength: 4,
+        lastUpdatedMoveIndex: 9,
+        sourcePlayerId: 'p5',
+        lastOutcome: 'success',
+      }],
+    ]));
+
+    const snapshot = buildPersistedSnapshot(gs);
+    const restored = restoreGameState(snapshot, gs.roomCode, gs.roomId);
+
+    expect(restored.teamIntentMemory.get(1).get('high_s')).toEqual({
+      strength: 4,
+      lastUpdatedMoveIndex: 9,
+      sourcePlayerId: 'p5',
+      lastOutcome: 'success',
+    });
   });
 });
 

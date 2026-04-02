@@ -67,6 +67,8 @@ jest.mock('../game/botLogic', () => ({
   completeBotFromPartial:          (...args) => mockCompleteBotFromPartial(...args),
   updateKnowledgeAfterAsk:         jest.fn(),
   updateKnowledgeAfterDeclaration: jest.fn(),
+  updateTeamIntentAfterAsk:        jest.fn(),
+  updateTeamIntentAfterDeclaration: jest.fn(),
 }));
 
 jest.mock('../game/rematchStore', () => ({

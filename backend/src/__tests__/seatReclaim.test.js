@@ -65,6 +65,8 @@ jest.mock('../game/botLogic', () => ({
   completeBotFromPartial:          jest.fn().mockReturnValue({ action: 'pass' }),
   updateKnowledgeAfterAsk:         jest.fn(),
   updateKnowledgeAfterDeclaration: jest.fn(),
+  updateTeamIntentAfterAsk:        jest.fn(),
+  updateTeamIntentAfterDeclaration: jest.fn(),
 }));
 
 jest.mock('../game/rematchStore', () => ({

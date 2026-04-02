@@ -17,9 +17,19 @@
  *     8. Successful ask records that asker HAS the card
  *   updateKnowledgeAfterDeclaration:
  *     9. After correct declaration, all players known to not have those cards
+ *   team signaling intent memory:
+ *     10. Teammate asks create a suit-intent signal
+ *     11. Declaring a suit clears any stale signal for that suit
+ *     12. Bots prefer teammate-signaled suits when fallback asks are otherwise similar
  */
 
-const { decideBotMove, updateKnowledgeAfterAsk, updateKnowledgeAfterDeclaration } = require('../game/botLogic');
+const {
+  decideBotMove,
+  updateKnowledgeAfterAsk,
+  updateKnowledgeAfterDeclaration,
+  updateTeamIntentAfterAsk,
+  updateTeamIntentAfterDeclaration,
+} = require('../game/botLogic');
 const { buildCardToHalfSuitMap } = require('../game/halfSuits');
 const { getPlayerTeam } = require('../game/gameState');
 
@@ -74,6 +84,7 @@ function buildBotTestGame(handOverrides) {
     winner: null,
     tiebreakerWinner: null,
     botKnowledge: new Map(),
+    teamIntentMemory: new Map(),
     moveHistory: [],
   };
 }
@@ -392,5 +403,54 @@ describe('updateKnowledgeAfterDeclaration', () => {
         }
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Team signaling intent memory
+// ---------------------------------------------------------------------------
+
+describe('team signaling intent memory', () => {
+  let gs;
+
+  beforeEach(() => {
+    gs = buildBotTestGame();
+  });
+
+  it('records teammate suit intent after an ask', () => {
+    updateTeamIntentAfterAsk(gs, 'p2', '11_s', false);
+
+    const teamSignals = gs.teamIntentMemory.get(1);
+    expect(teamSignals).toBeDefined();
+    expect(teamSignals.get('high_s')).toMatchObject({
+      sourcePlayerId: 'p2',
+      lastOutcome: 'failure',
+    });
+    expect(teamSignals.get('high_s').strength).toBeGreaterThan(0);
+  });
+
+  it('clears a half-suit intent signal after that half-suit is declared', () => {
+    updateTeamIntentAfterAsk(gs, 'p2', '11_s', true);
+    updateTeamIntentAfterDeclaration(gs, 'high_s');
+
+    expect(gs.teamIntentMemory.get(1)?.has('high_s')).toBe(false);
+  });
+
+  it('prefers a teammate-signaled suit when fallback asks are otherwise similar', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s', '4_s', '5_s', '8_h', '9_h', '10_h', '11_h', '12_h'])],
+      ['p2', new Set(['1_c'])],
+      ['p3', new Set(['1_d'])],
+      ['p4', new Set(['6_s'])],
+      ['p5', new Set(['13_h'])],
+      ['p6', new Set(['2_c'])],
+    ]);
+    const gsWithSignal = buildBotTestGame(hands);
+
+    updateTeamIntentAfterAsk(gsWithSignal, 'p2', '13_h', false);
+
+    const move = decideBotMove(gsWithSignal, 'p1');
+    expect(move.action).toBe('ask');
+    expect(move.cardId).toBe('13_h');
   });
 });

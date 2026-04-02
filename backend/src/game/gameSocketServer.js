@@ -165,6 +165,8 @@ const {
   completeBotFromPartial,
   updateKnowledgeAfterAsk,
   updateKnowledgeAfterDeclaration,
+  updateTeamIntentAfterAsk,
+  updateTeamIntentAfterDeclaration,
 } = require('./botLogic');
 const {
   setPartialSelection,
@@ -1846,6 +1848,7 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, batchCardIdsOr
 
   // Update bot knowledge
   updateKnowledgeAfterAsk(gs, askerId, targetId, cardId, success);
+  updateTeamIntentAfterAsk(gs, askerId, cardId, success);
 
   // Broadcast ask result to all players
   broadcastToGame(roomCode, {
@@ -2183,6 +2186,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
 
   // Update bot knowledge — cards are gone; no assignment to record
   updateKnowledgeAfterDeclaration(gs, halfSuitId, {}, false);
+  updateTeamIntentAfterDeclaration(gs, halfSuitId);
 
   // compute eligible next-turn players AFTER cards are removed
   // (applyForcedFailedDeclaration has already mutated gs).
@@ -2294,6 +2298,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
 
   // Update bot knowledge
   updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct);
+  updateTeamIntentAfterDeclaration(gs, halfSuitId);
 
   // compute eligible next-turn players AFTER cards are removed
   // (applyDeclaration has already mutated gs — hands are updated, newly

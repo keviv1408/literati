@@ -24,6 +24,9 @@
  * tiebreakerWinner: 1|2|null,
  * // Bot inference: not broadcast to clients
  * botKnowledge: Map<playerId, Map<cardId, boolean>>,
+ * teamIntentMemory: Map<teamId, Map<halfSuitId, {
+ *   strength:number, lastUpdatedMoveIndex:number, sourcePlayerId:string
+ * }>>,
  * // Call history for crash recovery
  * moveHistory: MoveRecord[],
  * }
@@ -128,6 +131,11 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
     // Bot inference state (not broadcast to clients)
     /** @type {Map<string, Map<string, boolean|null>>} */
     botKnowledge: new Map(),
+
+    // Lightweight team signaling memory used by bots to coordinate asks.
+    // Private server-side state: never broadcast, but persisted for recovery.
+    /** @type {Map<1|2, Map<string, { strength:number, lastUpdatedMoveIndex:number, sourcePlayerId:string, lastOutcome:string }>>} */
+    teamIntentMemory: new Map(),
 
     // Move history for crash recovery
     moveHistory: [],
@@ -420,6 +428,12 @@ function buildPersistedSnapshot(gs) {
     winner:         gs.winner,
     tiebreakerWinner: gs.tiebreakerWinner,
     moveHistory:    gs.moveHistory,
+    teamIntentMemory: Object.fromEntries(
+      Array.from(gs.teamIntentMemory ?? new Map()).map(([teamId, suitMap]) => [
+        String(teamId),
+        Object.fromEntries(Array.from(suitMap ?? new Map())),
+      ])
+    ),
     // persist eliminated player IDs and turn recipients
     eliminatedPlayerIds: Array.from(gs.eliminatedPlayerIds ?? []),
     turnRecipients:      Object.fromEntries(gs.turnRecipients ?? new Map()),
@@ -565,6 +579,12 @@ function restoreGameState(snapshot, roomCode, roomId) {
     winner:        snapshot.winner,
     tiebreakerWinner: snapshot.tiebreakerWinner,
     botKnowledge:  new Map(),
+    teamIntentMemory: new Map(
+      Object.entries(snapshot.teamIntentMemory ?? {}).map(([teamId, suitMap]) => [
+        Number(teamId),
+        new Map(Object.entries(suitMap ?? {})),
+      ])
+    ),
     moveHistory:   snapshot.moveHistory ?? [],
     // restore elimination state
     eliminatedPlayerIds: new Set(snapshot.eliminatedPlayerIds ?? []),
