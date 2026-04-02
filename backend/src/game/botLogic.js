@@ -36,6 +36,7 @@ const TEAM_SIGNAL_MAX_STRENGTH = 6;
 const TEAM_SIGNAL_SUCCESS_BOOST = 3;
 const TEAM_SIGNAL_FAILED_ASK_BOOST = 2;
 const TEAM_SIGNAL_DECAY_INTERVAL_MOVES = 3;
+const TEAM_CLOSEOUT_PRIORITY_THRESHOLD = 4;
 
 // ---------------------------------------------------------------------------
 // Inference helpers
@@ -55,7 +56,9 @@ function updateKnowledgeAfterAsk(gs, askerId, targetId, cardId, success) {
     _setKnown(gs, askerId, cardId, true);
     _setKnown(gs, targetId, cardId, false);
   } else {
-    // The target does NOT hold the card.
+    // A failed public ask proves that neither player held the card at that moment:
+    // the target denied it, and the asker could not already have been holding it.
+    _setKnown(gs, askerId, cardId, false);
     _setKnown(gs, targetId, cardId, false);
   }
 }
@@ -211,6 +214,10 @@ function _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) {
     (sum, p) => sum + getHalfSuitCardCount(gs, p.playerId, halfSuitId),
     0
   );
+}
+
+function _getSuitCloseoutPriority(teamCount) {
+  return teamCount >= TEAM_CLOSEOUT_PRIORITY_THRESHOLD ? teamCount : 0;
 }
 
 function _findKnownHolder(gs, cardId) {
@@ -466,6 +473,26 @@ function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
   return null;
 }
 
+function _findAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuitsMap) {
+  const botHand = getHand(gs, askerId);
+
+  for (const halfSuitId of halfSuitIds) {
+    const cards = halfSuitsMap.get(halfSuitId) ?? [];
+    const neededCards = cards.filter((card) => !botHand.has(card));
+    const knownAsk = _findKnownHolderAsk(gs, askerId, validOpponents, neededCards);
+    if (knownAsk) return knownAsk;
+  }
+
+  for (const halfSuitId of halfSuitIds) {
+    const cards = halfSuitsMap.get(halfSuitId) ?? [];
+    const askableCards = cards.filter((c) => !botHand.has(c));
+    const unknownAsk = _findUnknownAsk(gs, askerId, validOpponents, askableCards);
+    if (unknownAsk) return unknownAsk;
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Bot decision
 // ---------------------------------------------------------------------------
@@ -524,6 +551,9 @@ function decideBotMove(gs, botId) {
       [...botHalfSuits].map((halfSuitId) => [
         halfSuitId,
         {
+          closeoutPriority: _getSuitCloseoutPriority(
+            _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId)
+          ),
           signalStrength: _getTeamSignalStrength(gs, botTeam, halfSuitId, currentMoveIndex),
           teamCount: _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId),
         },
@@ -532,28 +562,35 @@ function decideBotMove(gs, botId) {
     const prioritizedBotHalfSuits = [...botHalfSuits].sort((a, b) => {
       const aPriority = suitPriority.get(a);
       const bPriority = suitPriority.get(b);
+      const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
+      if (closeoutDiff !== 0) return closeoutDiff;
       const signalDiff = (bPriority?.signalStrength ?? 0) - (aPriority?.signalStrength ?? 0);
       if (signalDiff !== 0) return signalDiff;
       const teamCountDiff = (bPriority?.teamCount ?? 0) - (aPriority?.teamCount ?? 0);
       if (teamCountDiff !== 0) return teamCountDiff;
       return a.localeCompare(b);
     });
+    const focusHalfSuits = prioritizedBotHalfSuits.filter(
+      (halfSuitId) => (suitPriority.get(halfSuitId)?.closeoutPriority ?? 0) > 0
+    );
 
-    // For each half-suit the bot can ask from, look for known opponent cards
-    for (const halfSuitId of prioritizedBotHalfSuits) {
-      const cards = halfSuitsMap.get(halfSuitId) ?? [];
-      const neededCards = cards.filter((card) => !botHand.has(card));
-      const knownAsk = _findKnownHolderAsk(gs, botId, validOpponents, neededCards);
-      if (knownAsk) return knownAsk;
+    // When the team is close to completing a suit, finish that chase before moving on.
+    if (focusHalfSuits.length > 0) {
+      const focusAsk = _findAskInHalfSuits(gs, botId, validOpponents, focusHalfSuits, halfSuitsMap);
+      if (focusAsk) return focusAsk;
     }
 
-    // ── Priority 3: Random ask in a half-suit the bot has cards from ──────────
-    // Prefer half-suits where public information says the team is closer to completion.
+    // Otherwise, or if closeout suits have no legal ask left, use the broader
+    // suit-priority ordering.
+    const generalAsk = _findAskInHalfSuits(gs, botId, validOpponents, prioritizedBotHalfSuits, halfSuitsMap);
+    if (generalAsk) return generalAsk;
+
+    // ── Priority 3: No ask found from prioritized search — keep old fallback shape ─
     const halfSuitScores = [];
     for (const halfSuitId of prioritizedBotHalfSuits) {
       if (isHalfSuitDeclared(gs, halfSuitId)) continue;
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
-      const priority = suitPriority.get(halfSuitId) ?? { signalStrength: 0, teamCount: 0 };
+      const priority = suitPriority.get(halfSuitId) ?? { closeoutPriority: 0, signalStrength: 0, teamCount: 0 };
 
       // Cards in this suit not held by the bot = potentially askable
       const askableCards = cards.filter((c) => !getHand(gs, botId).has(c));
@@ -561,6 +598,7 @@ function decideBotMove(gs, botId) {
       if (askableCards.length > 0) {
         halfSuitScores.push({
           halfSuitId,
+          closeoutPriority: priority.closeoutPriority,
           signalStrength: priority.signalStrength,
           teamCount: priority.teamCount,
           askableCards,
@@ -568,8 +606,10 @@ function decideBotMove(gs, botId) {
       }
     }
 
-    // Prefer teammate-signaled suits first, then suits closer to completion.
+    // Prefer closeout suits first, then teammate-signaled suits, then suits closer to completion.
     halfSuitScores.sort((a, b) => {
+      const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
+      if (closeoutDiff !== 0) return closeoutDiff;
       const signalDiff = b.signalStrength - a.signalStrength;
       if (signalDiff !== 0) return signalDiff;
       const teamCountDiff = b.teamCount - a.teamCount;

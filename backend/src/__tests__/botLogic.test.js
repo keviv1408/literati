@@ -277,6 +277,24 @@ describe('decideBotMove — asks for a known card', () => {
     expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
   });
 
+  it('focuses on closing an almost-finished suit before moving to another suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s', '5_s', '6_s', '8_h'])],
+      ['p2', new Set(['1_c'])],
+      ['p3', new Set(['9_h'])],
+      ['p4', new Set(['4_s'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    // Teammate signal points at hearts, but spades are one ask away from completion.
+    updateTeamIntentAfterAsk(gs, 'p2', '10_h', false);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
+  });
+
   it('when asking, targetId is an opponent (not a teammate)', () => {
     const gs = buildBotTestGame();
     const move = decideBotMove(gs, 'p1');
@@ -364,15 +382,19 @@ describe('updateKnowledgeAfterAsk', () => {
     expect(targetKnowledge.get('11_s')).toBe(false);
   });
 
-  it('failed ask does NOT mark asker as having the card', () => {
+  it('failed ask marks the asker as not having the card at that moment', () => {
     updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
     const askerKnowledge = gs.botKnowledge.get('p1');
-    // Either undefined or explicitly not true
-    if (askerKnowledge && askerKnowledge.has('4_s')) {
-      expect(askerKnowledge.get('4_s')).not.toBe(true);
-    } else {
-      expect(true).toBe(true); // no knowledge entry is fine
-    }
+    expect(askerKnowledge).toBeDefined();
+    expect(askerKnowledge.get('4_s')).toBe(false);
+  });
+
+  it('failed ask prevents the reverse ask until a public transfer happens', () => {
+    updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
+
+    const reverseAsk = gs.botKnowledge.get('p1');
+    expect(reverseAsk.get('4_s')).toBe(false);
+    expect(gs.botKnowledge.get('p4').get('4_s')).toBe(false);
   });
 
   it('multiple asks accumulate in botKnowledge', () => {
