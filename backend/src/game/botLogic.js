@@ -9,18 +9,26 @@
  *   - When a declaration succeeds, we learn who held what.
  *
  * Decision priority:
- *   1. If the bot's team collectively (with certainty) holds all 6 cards of a
- *      half-suit, declare it.
+ *   1. If public information uniquely identifies all 6 cards of a half-suit
+ *      as being on the bot's team, declare it.
  *   2. If the bot knows an opponent holds a specific card in a half-suit the
  *      bot already has cards from, ask that opponent for it.
  *   3. Otherwise, randomly ask any opponent for any card in a half-suit the
- *      bot holds, preferring half-suits with more friendly cards.
+ *      bot holds, preferring half-suits with more publicly-known team cards.
  *   4. If no valid ask is possible (all opponents empty), declare the
- *      best available half-suit with maximum known friendly cards.
+ *      best available half-suit using only public information plus the
+ *      declarant's own hand.
  */
 
 const { buildHalfSuitMap, buildCardToHalfSuitMap, allHalfSuitIds } = require('./halfSuits');
-const { getHand, getCardCount, getPlayerTeam, getTeamPlayers, isHalfSuitDeclared, cardHalfSuit } = require('./gameState');
+const {
+  getHand,
+  getCardCount,
+  getHalfSuitCardCount,
+  getPlayerTeam,
+  getTeamPlayers,
+  isHalfSuitDeclared,
+} = require('./gameState');
 const { validateAsk, validateDeclaration } = require('./gameEngine');
 
 // ---------------------------------------------------------------------------
@@ -82,6 +90,232 @@ function _getKnown(gs, playerId, cardId) {
 
 function _isKnownMissing(gs, playerId, cardId) {
   return _getKnown(gs, playerId, cardId) === false;
+}
+
+function _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) {
+  return teamPlayers.reduce(
+    (sum, p) => sum + getHalfSuitCardCount(gs, p.playerId, halfSuitId),
+    0
+  );
+}
+
+function _findKnownHolder(gs, cardId) {
+  let holder = null;
+
+  for (const player of gs.players) {
+    if (_getKnown(gs, player.playerId, cardId) !== true) continue;
+    if (holder && holder !== player.playerId) return '__conflict__';
+    holder = player.playerId;
+  }
+
+  return holder;
+}
+
+/**
+ * Search for team-only assignments that are consistent with public information.
+ *
+ * Public constraints considered:
+ *   - per-player half-suit counts
+ *   - publicly observed ask outcomes stored in botKnowledge
+ *   - the declarant's own hand
+ *   - any partial assignments already made in the declaration UI
+ *
+ * @param {Object} gs
+ * @param {string} declarerId
+ * @param {string} halfSuitId
+ * @param {string[]} cards
+ * @param {Array<{playerId:string}>} teamPlayers
+ * @param {Object.<string, string>} partialAssignment
+ * @param {number} maxSolutions
+ * @returns {Array<Object.<string, string>>}
+ */
+function _searchPublicAssignments(
+  gs,
+  declarerId,
+  halfSuitId,
+  cards,
+  teamPlayers,
+  partialAssignment = {},
+  maxSolutions = 2
+) {
+  const teamPlayerIds = new Set(teamPlayers.map((p) => p.playerId));
+  const remainingCounts = new Map(
+    teamPlayers.map((p) => [p.playerId, getHalfSuitCardCount(gs, p.playerId, halfSuitId)])
+  );
+  const assignment = {};
+
+  function applyForced(card, playerId) {
+    const existing = assignment[card];
+    if (existing) return existing === playerId;
+    if (!teamPlayerIds.has(playerId)) return false;
+    if (_isKnownMissing(gs, playerId, card)) return false;
+
+    const remaining = remainingCounts.get(playerId);
+    if (remaining == null || remaining <= 0) return false;
+
+    assignment[card] = playerId;
+    remainingCounts.set(playerId, remaining - 1);
+    return true;
+  }
+
+  for (const [card, playerId] of Object.entries(partialAssignment)) {
+    if (!cards.includes(card)) continue;
+    if (!applyForced(card, playerId)) return [];
+  }
+
+  const declarerHand = getHand(gs, declarerId);
+  for (const card of cards) {
+    if (declarerHand.has(card) && !applyForced(card, declarerId)) {
+      return [];
+    }
+  }
+
+  for (const card of cards) {
+    const knownHolder = _findKnownHolder(gs, card);
+    if (knownHolder === '__conflict__') return [];
+    if (knownHolder && !applyForced(card, knownHolder)) {
+      return [];
+    }
+  }
+
+  const unassignedCards = cards.filter((card) => !assignment[card]);
+  const remainingSlots = Array.from(remainingCounts.values()).reduce((sum, n) => sum + n, 0);
+  if (remainingSlots !== unassignedCards.length) return [];
+
+  const candidateMap = new Map();
+  for (const card of unassignedCards) {
+    const candidates = teamPlayers
+      .map((p) => p.playerId)
+      .filter((playerId) => remainingCounts.get(playerId) > 0 && !_isKnownMissing(gs, playerId, card));
+    if (candidates.length === 0) return [];
+    candidateMap.set(card, candidates);
+  }
+
+  const orderedCards = [...unassignedCards].sort((a, b) => {
+    const diff = candidateMap.get(a).length - candidateMap.get(b).length;
+    return diff !== 0 ? diff : a.localeCompare(b);
+  });
+
+  const solutions = [];
+
+  function backtrack(index) {
+    if (solutions.length >= maxSolutions) return;
+
+    if (index >= orderedCards.length) {
+      if (Array.from(remainingCounts.values()).every((n) => n === 0)) {
+        solutions.push({ ...assignment });
+      }
+      return;
+    }
+
+    const card = orderedCards[index];
+    const candidates = candidateMap
+      .get(card)
+      .filter((playerId) => remainingCounts.get(playerId) > 0)
+      .sort((a, b) => {
+        const diff = remainingCounts.get(a) - remainingCounts.get(b);
+        return diff !== 0 ? diff : a.localeCompare(b);
+      });
+
+    for (const playerId of candidates) {
+      assignment[card] = playerId;
+      remainingCounts.set(playerId, remainingCounts.get(playerId) - 1);
+      backtrack(index + 1);
+      remainingCounts.set(playerId, remainingCounts.get(playerId) + 1);
+      delete assignment[card];
+      if (solutions.length >= maxSolutions) return;
+    }
+  }
+
+  backtrack(0);
+  return solutions;
+}
+
+/**
+ * Fill a declaration assignment without peeking at teammate hands.
+ *
+ * Prefers any assignment that is fully consistent with public information.
+ * If none exists, falls back to a team-only guess while preserving partial
+ * assignments and the declarant's own known cards.
+ *
+ * @param {Object} gs
+ * @param {string} declarerId
+ * @param {string} halfSuitId
+ * @param {string[]} cards
+ * @param {Array<{playerId:string}>} teamPlayers
+ * @param {Object.<string, string>} partialAssignment
+ * @returns {Object.<string, string>}
+ */
+function _buildBestGuessAssignment(
+  gs,
+  declarerId,
+  halfSuitId,
+  cards,
+  teamPlayers,
+  partialAssignment = {}
+) {
+  const publicSolutions = _searchPublicAssignments(
+    gs,
+    declarerId,
+    halfSuitId,
+    cards,
+    teamPlayers,
+    partialAssignment,
+    1
+  );
+  if (publicSolutions.length > 0) {
+    return publicSolutions[0];
+  }
+
+  const teamPlayerIds = teamPlayers.map((p) => p.playerId);
+  const assignment = { ...partialAssignment };
+  const remainingCounts = new Map(
+    teamPlayers.map((p) => [p.playerId, getHalfSuitCardCount(gs, p.playerId, halfSuitId)])
+  );
+
+  function consumeSlot(playerId) {
+    const remaining = remainingCounts.get(playerId);
+    if (remaining == null) return;
+    remainingCounts.set(playerId, Math.max(remaining - 1, 0));
+  }
+
+  for (const [, playerId] of Object.entries(partialAssignment)) {
+    consumeSlot(playerId);
+  }
+
+  const declarerHand = getHand(gs, declarerId);
+  for (const card of cards) {
+    if (!assignment[card] && declarerHand.has(card)) {
+      assignment[card] = declarerId;
+      consumeSlot(declarerId);
+    }
+  }
+
+  for (const card of cards) {
+    if (assignment[card]) continue;
+    const knownHolder = _findKnownHolder(gs, card);
+    if (knownHolder && knownHolder !== '__conflict__' && teamPlayerIds.includes(knownHolder)) {
+      assignment[card] = knownHolder;
+      consumeSlot(knownHolder);
+    }
+  }
+
+  for (const card of cards) {
+    if (assignment[card]) continue;
+
+    const candidates = teamPlayerIds.filter((playerId) => !_isKnownMissing(gs, playerId, card));
+    const safeCandidates = candidates.length > 0 ? candidates : teamPlayerIds;
+    const preferred = safeCandidates.filter((playerId) => (remainingCounts.get(playerId) ?? 0) > 0);
+    const pool = preferred.length > 0 ? preferred : safeCandidates;
+
+    const bestRemaining = Math.max(...pool.map((playerId) => remainingCounts.get(playerId) ?? 0));
+    const strongest = pool.filter((playerId) => (remainingCounts.get(playerId) ?? 0) === bestRemaining);
+    const assignee = strongest[Math.floor(Math.random() * strongest.length)];
+    assignment[card] = assignee;
+    consumeSlot(assignee);
+  }
+
+  return assignment;
 }
 
 function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
@@ -179,19 +413,15 @@ function decideBotMove(gs, botId) {
     }
 
     // ── Priority 3: Random ask in a half-suit the bot has cards from ──────────
-    // Prefer half-suits where the bot + teammates have more cards (closer to declaring)
+    // Prefer half-suits where public information says the team is closer to completion.
     const halfSuitScores = [];
     for (const halfSuitId of botHalfSuits) {
       if (isHalfSuitDeclared(gs, halfSuitId)) continue;
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
 
-      // Count how many cards the bot's team holds in this half-suit
-      const teamCount = cards.filter((c) => {
-        const allTeam = [{ playerId: botId }, ...teammates];
-        return allTeam.some((p) => getHand(gs, p.playerId).has(c));
-      }).length;
+      const teamCount = _getPublicTeamHalfSuitCount(gs, [{ playerId: botId }, ...teammates], halfSuitId);
 
-      // Cards in this suit not held by the bot's team = potentially askable
+      // Cards in this suit not held by the bot = potentially askable
       const askableCards = cards.filter((c) => !getHand(gs, botId).has(c));
 
       if (askableCards.length > 0) {
@@ -237,31 +467,14 @@ function decideBotMove(gs, botId) {
  * @returns {Object|null} { [cardId]: playerId } or null
  */
 function _tryBuildDeclaration(gs, botId, halfSuitId, halfSuitsMap, teammates) {
-  const cards    = halfSuitsMap.get(halfSuitId) ?? [];
+  const cards = halfSuitsMap.get(halfSuitId) ?? [];
   const teamPlayers = [{ playerId: botId }, ...teammates];
-
-  const assignment = {};
-
-  for (const card of cards) {
-    let assignee = null;
-
-    // First check exact knowledge from hand
-    for (const p of teamPlayers) {
-      if (getHand(gs, p.playerId).has(card)) {
-        assignee = p.playerId;
-        break;
-      }
-    }
-
-    if (!assignee) {
-      // Not held by any teammate we can see — can't declare with certainty
-      return null;
-    }
-
-    assignment[card] = assignee;
+  if (_getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) !== cards.length) {
+    return null;
   }
 
-  return assignment;
+  const solutions = _searchPublicAssignments(gs, botId, halfSuitId, cards, teamPlayers, {}, 2);
+  return solutions.length === 1 ? solutions[0] : null;
 }
 
 /**
@@ -277,6 +490,7 @@ function _tryBuildDeclaration(gs, botId, halfSuitId, halfSuitsMap, teammates) {
  */
 function _findBestGuessDeclaration(gs, botId, undeclaredHalfSuits, halfSuitsMap, teammates) {
   const teamPlayers = [{ playerId: botId }, ...teammates];
+  const botHand = getHand(gs, botId);
 
   let bestSuit = null;
   let bestCount = -1;
@@ -284,33 +498,16 @@ function _findBestGuessDeclaration(gs, botId, undeclaredHalfSuits, halfSuitsMap,
 
   for (const halfSuitId of undeclaredHalfSuits) {
     const cards = halfSuitsMap.get(halfSuitId) ?? [];
+    const botHasCard = cards.some((card) => botHand.has(card));
+    if (!botHasCard) continue;
 
-    // Count how many cards the team holds
-    let count = 0;
-    const assignment = {};
-
-    for (const card of cards) {
-      for (const p of teamPlayers) {
-        if (getHand(gs, p.playerId).has(card)) {
-          assignment[card] = p.playerId;
-          count++;
-          break;
-        }
-      }
-    }
-
-    // Only consider half-suits where the team has at least 1 card
+    // Only consider half-suits where public information says the team has
+    // at least one card and the declarer can legally declare the suit.
+    const count = _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId);
     if (count > 0 && count > bestCount) {
       bestCount  = count;
       bestSuit   = halfSuitId;
-
-      // Fill missing cards with random teammates (best guess)
-      const missingCards = cards.filter((c) => !(c in assignment));
-      for (const card of missingCards) {
-        // Assign to a random teammate (it'll probably be wrong, but we must declare)
-        assignment[card] = teamPlayers[Math.floor(Math.random() * teamPlayers.length)].playerId;
-      }
-      bestAssignment = assignment;
+      bestAssignment = _buildBestGuessAssignment(gs, botId, halfSuitId, cards, teamPlayers, {});
     }
   }
 
@@ -441,31 +638,14 @@ function _completeDeclare(gs, playerId, partial, halfSuitsMap) {
 
   const botTeam    = getPlayerTeam(gs, playerId);
   const teamPlayers = getTeamPlayers(gs, botTeam);
-
-  // Build a full assignment starting from the player's partial state.
-  // For each unassigned card:
-  //   1. Use actual hand data (authoritative) to assign to the holder.
-  //   2. If no holder found in actual hands, assign to a random teammate (best guess).
-  const fullAssignment = Object.assign({}, partialAssignment);
-
-  for (const card of cards) {
-    if (fullAssignment[card]) continue; // player already assigned this card
-
-    // Check each teammate's actual hand
-    let found = false;
-    for (const p of teamPlayers) {
-      if (getHand(gs, p.playerId).has(card)) {
-        fullAssignment[card] = p.playerId;
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      // Best guess: random teammate (may be wrong, but we must complete the assignment)
-      fullAssignment[card] = teamPlayers[Math.floor(Math.random() * teamPlayers.length)].playerId;
-    }
-  }
+  const fullAssignment = _buildBestGuessAssignment(
+    gs,
+    playerId,
+    halfSuitId,
+    cards,
+    teamPlayers,
+    partialAssignment
+  );
 
   // Validate before executing — fall back if the completed assignment is still invalid
   const validation = validateDeclaration(gs, playerId, halfSuitId, fullAssignment);

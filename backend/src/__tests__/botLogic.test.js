@@ -6,7 +6,8 @@
  * Coverage:
  *   decideBotMove:
  *     1. Returns { action: 'ask' } or { action: 'declare' } (never undefined)
- *     2. When team holds all 6 cards of a half-suit, action is 'declare'
+ *     2. When public information uniquely identifies all 6 cards of a half-suit,
+ *        action is 'declare'
  *     3. When bot knows an opponent has a specific card it needs, action is 'ask'
  *     4. When bot knows nothing, still returns a valid action (ask or declare)
  *     5. All returned targetId values are opponents (not teammates)
@@ -103,10 +104,10 @@ describe('decideBotMove — basic validity', () => {
 });
 
 // ---------------------------------------------------------------------------
-// decideBotMove — declare when team holds all 6 cards
+// decideBotMove — declare when public information is sufficient
 // ---------------------------------------------------------------------------
 
-describe('decideBotMove — declares when team holds all 6 cards of a half-suit', () => {
+describe('decideBotMove — declares when public information uniquely identifies a half-suit', () => {
   it('returns { action: "declare" } when team holds all 6 low_s cards', () => {
     // Give all low_s cards to team-1 players
     const hands = new Map([
@@ -150,6 +151,24 @@ describe('decideBotMove — declares when team holds all 6 cards of a half-suit'
     const move = decideBotMove(gs, 'p1');
     expect(move.action).toBe('declare');
     expect(Object.keys(move.assignment)).toHaveLength(6);
+  });
+
+  it('does not declare when team holds all 6 cards but teammate ownership is still ambiguous', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '8_h'])],
+      ['p2', new Set(['2_s', '3_s'])],
+      ['p3', new Set(['4_s', '5_s', '6_s'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    // Give the bot a clearly better public ask so the test stays deterministic.
+    gs.botKnowledge.set('p4', new Map([['9_h', true]]));
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '9_h' });
   });
 });
 

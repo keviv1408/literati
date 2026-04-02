@@ -32,7 +32,7 @@
  * 16. Completes a partial assignment — all 6 cards are covered
  * 17. Respects player's existing partial assignments (does not override them)
  * 18. Falls back to decideBotMove if the half-suit is already declared
- * 19. Uses actual hand data to fill gaps in the assignment
+ * 19. Uses declarant/public information to fill gaps in the assignment
  * 20. Result passes validateDeclaration when team holds all cards
  *
  * handlePartialSelection (gameSocketServer integration):
@@ -440,7 +440,7 @@ describe('completeBotFromPartial — declare flow', () => {
     }
   });
 
-  it('19. uses actual hand data to fill assignment gaps', () => {
+  it('19. uses declarant/public information to fill assignment gaps', () => {
     // Give p1 all of low_s cards
     const gs = buildGame({
       handOverrides: {
