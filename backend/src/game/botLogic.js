@@ -37,6 +37,8 @@ const TEAM_SIGNAL_SUCCESS_BOOST = 3;
 const TEAM_SIGNAL_FAILED_ASK_BOOST = 2;
 const TEAM_SIGNAL_DECAY_INTERVAL_MOVES = 3;
 const TEAM_CLOSEOUT_PRIORITY_THRESHOLD = 4;
+const TEAMMATE_ASSIST_PRIORITY_THRESHOLD = 4;
+const TEAMMATE_ASSIST_MEMORY_MOVES = 8;
 
 // ---------------------------------------------------------------------------
 // Inference helpers
@@ -180,6 +182,32 @@ function _getTeamSignalStrength(gs, teamId, halfSuitId, currentMoveIndex = (gs.m
     teamSignals.delete(halfSuitId);
   }
   return strength;
+}
+
+function _getTeamSignalEntry(gs, teamId, halfSuitId) {
+  if (!(gs.teamIntentMemory instanceof Map)) return null;
+  const teamSignals = gs.teamIntentMemory.get(teamId);
+  if (!(teamSignals instanceof Map)) return null;
+  return teamSignals.get(halfSuitId) ?? null;
+}
+
+function _getTeammateAssistPriority(gs, botId, teamId, halfSuitId, teamCount, currentMoveIndex) {
+  if (teamCount < TEAMMATE_ASSIST_PRIORITY_THRESHOLD) return 0;
+
+  const entry = _getTeamSignalEntry(gs, teamId, halfSuitId);
+  if (!entry) return 0;
+  if (!entry.sourcePlayerId || entry.sourcePlayerId === botId) return 0;
+
+  const age = Math.max(0, currentMoveIndex - (entry.lastUpdatedMoveIndex ?? 0));
+  if (age > TEAMMATE_ASSIST_MEMORY_MOVES) return 0;
+
+  const sourcePlayer = gs.players.find((player) => player.playerId === entry.sourcePlayerId);
+  const sourceBonus = sourcePlayer && !sourcePlayer.isBot ? 1 : 0;
+  const signalStrength = _effectiveSignalStrength(entry, currentMoveIndex);
+
+  // Keep a recently signaled teammate chase sticky enough to survive a full
+  // table rotation, especially when a human teammate started the suit.
+  return teamCount + Math.max(signalStrength, 1) + sourceBonus;
 }
 
 function updateTeamIntentAfterAsk(gs, askerId, cardId, success) {
@@ -550,18 +578,29 @@ function decideBotMove(gs, botId) {
     const suitPriority = new Map(
       [...botHalfSuits].map((halfSuitId) => [
         halfSuitId,
-        {
-          closeoutPriority: _getSuitCloseoutPriority(
-            _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId)
-          ),
-          signalStrength: _getTeamSignalStrength(gs, botTeam, halfSuitId, currentMoveIndex),
-          teamCount: _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId),
-        },
+        (() => {
+          const teamCount = _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId);
+          return {
+            teammateAssistPriority: _getTeammateAssistPriority(
+              gs,
+              botId,
+              botTeam,
+              halfSuitId,
+              teamCount,
+              currentMoveIndex
+            ),
+            closeoutPriority: _getSuitCloseoutPriority(teamCount),
+            signalStrength: _getTeamSignalStrength(gs, botTeam, halfSuitId, currentMoveIndex),
+            teamCount,
+          };
+        })(),
       ])
     );
     const prioritizedBotHalfSuits = [...botHalfSuits].sort((a, b) => {
       const aPriority = suitPriority.get(a);
       const bPriority = suitPriority.get(b);
+      const assistDiff = (bPriority?.teammateAssistPriority ?? 0) - (aPriority?.teammateAssistPriority ?? 0);
+      if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
       if (closeoutDiff !== 0) return closeoutDiff;
       const signalDiff = (bPriority?.signalStrength ?? 0) - (aPriority?.signalStrength ?? 0);
@@ -590,7 +629,12 @@ function decideBotMove(gs, botId) {
     for (const halfSuitId of prioritizedBotHalfSuits) {
       if (isHalfSuitDeclared(gs, halfSuitId)) continue;
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
-      const priority = suitPriority.get(halfSuitId) ?? { closeoutPriority: 0, signalStrength: 0, teamCount: 0 };
+      const priority = suitPriority.get(halfSuitId) ?? {
+        teammateAssistPriority: 0,
+        closeoutPriority: 0,
+        signalStrength: 0,
+        teamCount: 0,
+      };
 
       // Cards in this suit not held by the bot = potentially askable
       const askableCards = cards.filter((c) => !getHand(gs, botId).has(c));
@@ -598,6 +642,7 @@ function decideBotMove(gs, botId) {
       if (askableCards.length > 0) {
         halfSuitScores.push({
           halfSuitId,
+          teammateAssistPriority: priority.teammateAssistPriority,
           closeoutPriority: priority.closeoutPriority,
           signalStrength: priority.signalStrength,
           teamCount: priority.teamCount,
@@ -608,6 +653,8 @@ function decideBotMove(gs, botId) {
 
     // Prefer closeout suits first, then teammate-signaled suits, then suits closer to completion.
     halfSuitScores.sort((a, b) => {
+      const assistDiff = b.teammateAssistPriority - a.teammateAssistPriority;
+      if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
       if (closeoutDiff !== 0) return closeoutDiff;
       const signalDiff = b.signalStrength - a.signalStrength;

@@ -513,4 +513,26 @@ describe('team signaling intent memory', () => {
     expect(move.action).toBe('ask');
     expect(move.cardId).toBe('13_h');
   });
+
+  it('helps a recently signaled teammate closeout suit before an unrelated closeout suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '5_s', '8_h'])],
+      ['p2', new Set(['2_s', '6_s', '9_h'])],
+      ['p3', new Set(['3_s', '10_h', '11_h'])],
+      ['p4', new Set(['12_h', '13_h'])],
+      ['p5', new Set(['4_s'])],
+      ['p6', new Set(['1_c'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateTeamIntentAfterAsk(gs, 'p2', '12_h', false);
+
+    // Simulate several intervening moves so the raw signal weakens, but it
+    // should still be recent enough for the bot to assist the teammate's chase.
+    gs.moveHistory = Array.from({ length: 6 }, (_, idx) => ({ type: 'ask', ts: idx }));
+    gs.botKnowledge.set('p4', new Map([['12_h', true]]));
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '12_h' });
+  });
 });
