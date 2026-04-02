@@ -95,7 +95,53 @@ function _getKnown(gs, playerId, cardId) {
 }
 
 function _isKnownMissing(gs, playerId, cardId) {
-  return _getKnown(gs, playerId, cardId) === false;
+  return _getEffectiveKnowledge(gs, playerId, cardId) === false;
+}
+
+function _getEffectiveKnowledge(gs, playerId, cardId) {
+  const explicit = _getKnown(gs, playerId, cardId);
+  if (explicit !== null) return explicit;
+
+  const halfSuitId = cardHalfSuit(gs, cardId);
+  if (!halfSuitId) return null;
+
+  const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
+  const halfSuitCount = getHalfSuitCardCount(gs, playerId, halfSuitId);
+
+  if (halfSuitCount === 0) {
+    return false;
+  }
+
+  let knownTrueCount = 0;
+  let unknownCount = 0;
+  let cardIsUnknown = false;
+
+  for (const candidate of halfSuitCards) {
+    const knowledge = _getKnown(gs, playerId, candidate);
+    if (knowledge === true) {
+      knownTrueCount++;
+      if (candidate === cardId) return true;
+      continue;
+    }
+    if (knowledge === null) {
+      unknownCount++;
+      if (candidate === cardId) cardIsUnknown = true;
+    }
+  }
+
+  if (!cardIsUnknown) {
+    return null;
+  }
+
+  const remainingSlots = halfSuitCount - knownTrueCount;
+  if (remainingSlots <= 0) {
+    return false;
+  }
+  if (unknownCount === remainingSlots) {
+    return true;
+  }
+
+  return null;
 }
 
 function _ensureTeamIntentMemory(gs) {
@@ -171,7 +217,7 @@ function _findKnownHolder(gs, cardId) {
   let holder = null;
 
   for (const player of gs.players) {
-    if (_getKnown(gs, player.playerId, cardId) !== true) continue;
+    if (_getEffectiveKnowledge(gs, player.playerId, cardId) !== true) continue;
     if (holder && holder !== player.playerId) return '__conflict__';
     holder = player.playerId;
   }
@@ -392,7 +438,7 @@ function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
 
   for (const card of shuffledCards) {
     for (const opp of shuffledOpps) {
-      if (_getKnown(gs, opp.playerId, card) !== true) continue;
+      if (_getEffectiveKnowledge(gs, opp.playerId, card) !== true) continue;
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
       if (askVal.valid) {
         return { action: 'ask', targetId: opp.playerId, cardId: card };

@@ -210,7 +210,7 @@ describe('decideBotMove — asks for a known card', () => {
       ['p2', new Set(['8_s'])],
       ['p3', new Set(['8_h'])],
       ['p4', new Set(['9_h'])],
-      ['p5', new Set(['10_h'])],
+      ['p5', new Set(['4_s', '10_h'])],
       ['p6', new Set()],
     ]);
     const gs = buildBotTestGame(hands);
@@ -234,6 +234,44 @@ describe('decideBotMove — asks for a known card', () => {
 
     updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
     updateKnowledgeAfterAsk(gs, 'p4', 'p5', '4_s', true);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
+  });
+
+  it('treats opponents with 0 cards in a half-suit as impossible holders', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s', '5_s', '6_s'])],
+      ['p2', new Set(['8_s'])],
+      ['p3', new Set(['8_h'])],
+      ['p4', new Set(['9_h'])],     // no low_s cards
+      ['p5', new Set(['4_s'])],     // only viable low_s holder
+      ['p6', new Set()],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p5', cardId: '4_s' });
+  });
+
+  it('infers the final card when an opponent has 1 card left in the half-suit and five are ruled out', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s', '5_s', '6_s'])],
+      ['p2', new Set(['8_s'])],
+      ['p3', new Set(['8_h'])],
+      ['p4', new Set(['4_s', '9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set()],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    gs.botKnowledge.set('p4', new Map([
+      ['1_s', false],
+      ['2_s', false],
+      ['3_s', false],
+      ['5_s', false],
+      ['6_s', false],
+    ]));
 
     const move = decideBotMove(gs, 'p1');
     expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });

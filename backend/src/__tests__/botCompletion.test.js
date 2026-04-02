@@ -354,7 +354,7 @@ describe('completeBotFromPartial — ask, step 3 (half-suit + card)', () => {
         p2: new Set(['8_s']),
         p3: new Set(['8_h']),
         p4: new Set(['9_h']),
-        p5: new Set(['10_h']),
+        p5: new Set(['4_s', '10_h']),
         p6: new Set(),
       },
     });
