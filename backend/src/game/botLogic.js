@@ -97,16 +97,21 @@ function updateKnowledgeAfterAsk(gs, askerId, targetId, cardId, success) {
   }
 
   // Game rule: you can only ask for a card in a half-suit you hold at least
-  // one card from. So the asker is publicly known to hold ≥1 card in this
-  // half-suit.
+  // one card from. Track a public lower bound on how many cards each player
+  // must currently hold in this half-suit.
   const hsId = cardHalfSuit(gs, cardId);
   if (hsId) {
-    _markHalfSuitPresence(gs, askerId, hsId);
     if (success) {
+      const currentMinimum = _getHalfSuitPresenceCount(gs, askerId, hsId);
+      // A successful ask proves the asker had at least one other card in the
+      // suit before the transfer and now also holds the requested card.
+      _markHalfSuitPresence(gs, askerId, hsId, Math.max(currentMinimum, 1) + 1);
+
       // A successful ask publicly removes one known card from the target's
-      // hand. Any lower-bound "they must still have at least one card in this
-      // suit" evidence from earlier asks can safely decrease by one.
+      // hand. Any lower-bound evidence in this suit can safely decrease by one.
       _decrementHalfSuitPresence(gs, targetId, hsId);
+    } else {
+      _markHalfSuitPresence(gs, askerId, hsId, 1);
     }
   }
 }
@@ -144,10 +149,10 @@ function updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct) {
   // No additional holder information is needed here; the suit is out of play.
 }
 
-function _markHalfSuitPresence(gs, playerId, halfSuitId) {
+function _markHalfSuitPresence(gs, playerId, halfSuitId, minimumCount = 1) {
   const playerPresence = _getHalfSuitPresenceEntry(gs, playerId, true);
   if (!(playerPresence instanceof Map)) return;
-  playerPresence.set(halfSuitId, Math.max(playerPresence.get(halfSuitId) ?? 0, 1));
+  playerPresence.set(halfSuitId, Math.max(playerPresence.get(halfSuitId) ?? 0, minimumCount));
 }
 
 function _hasHalfSuitPresence(gs, playerId, halfSuitId) {
@@ -509,10 +514,28 @@ function _searchPublicAssignments(
   maxSolutions = 2
 ) {
   const teamPlayerIds = new Set(teamPlayers.map((p) => p.playerId));
+  const teamPlayerIdList = teamPlayers.map((p) => p.playerId);
   const remainingTargetSlots = new Map(
     teamPlayers.map((p) => [p.playerId, _getVisibleTargetCapacity(gs, declarerId, p.playerId, halfSuitId)])
   );
+  const minimumRequiredCounts = new Map(
+    teamPlayers.map((p) => [
+      p.playerId,
+      _getVisibleHalfSuitMinimumCount(gs, declarerId, p.playerId, halfSuitId),
+    ])
+  );
   const assignment = {};
+  const assignedCounts = new Map(teamPlayers.map((p) => [p.playerId, 0]));
+
+  if (Array.from(minimumRequiredCounts.values()).reduce((sum, count) => sum + count, 0) > cards.length) {
+    return [];
+  }
+
+  for (const playerId of teamPlayerIdList) {
+    if ((minimumRequiredCounts.get(playerId) ?? 0) > (remainingTargetSlots.get(playerId) ?? 0)) {
+      return [];
+    }
+  }
 
   function applyForced(card, playerId) {
     const existing = assignment[card];
@@ -525,6 +548,7 @@ function _searchPublicAssignments(
 
     assignment[card] = playerId;
     remainingTargetSlots.set(playerId, remaining - 1);
+    assignedCounts.set(playerId, (assignedCounts.get(playerId) ?? 0) + 1);
     return true;
   }
 
@@ -568,28 +592,23 @@ function _searchPublicAssignments(
 
   const solutions = [];
 
-  // Players publicly known to hold ≥1 card in this half-suit (they asked for
-  // a card from it). Any valid solution must assign them at least one card.
-  const mustHoldPlayerIds = new Set(
-    teamPlayers
-      .map((p) => p.playerId)
-      .filter((pid) => _hasHalfSuitPresence(gs, pid, halfSuitId))
-  );
-
-  // Track how many cards each must-hold player has been assigned so far.
-  // Pre-populated from forced assignments above.
-  const mustHoldAssignCount = new Map();
-  for (const pid of mustHoldPlayerIds) {
-    const count = Object.values(assignment).filter((v) => v === pid).length;
-    mustHoldAssignCount.set(pid, count);
-  }
-
   function backtrack(index) {
     if (solutions.length >= maxSolutions) return;
 
+    const remainingCardsCount = orderedCards.length - index;
+    const remainingMinimumNeed = teamPlayerIdList.reduce(
+      (sum, playerId) => (
+        sum + Math.max(0, (minimumRequiredCounts.get(playerId) ?? 0) - (assignedCounts.get(playerId) ?? 0))
+      ),
+      0
+    );
+    if (remainingMinimumNeed > remainingCardsCount) return;
+
     if (index >= orderedCards.length) {
-      for (const pid of mustHoldPlayerIds) {
-        if ((mustHoldAssignCount.get(pid) ?? 0) === 0) return;
+      for (const playerId of teamPlayerIdList) {
+        if ((assignedCounts.get(playerId) ?? 0) < (minimumRequiredCounts.get(playerId) ?? 0)) {
+          return;
+        }
       }
       solutions.push({ ...assignment });
       return;
@@ -600,21 +619,22 @@ function _searchPublicAssignments(
       .get(card)
       .filter((playerId) => remainingTargetSlots.get(playerId) > 0)
       .sort((a, b) => {
-        const diff = remainingTargetSlots.get(a) - remainingTargetSlots.get(b);
-        return diff !== 0 ? diff : a.localeCompare(b);
+        const aDeficit = Math.max(0, (minimumRequiredCounts.get(a) ?? 0) - (assignedCounts.get(a) ?? 0));
+        const bDeficit = Math.max(0, (minimumRequiredCounts.get(b) ?? 0) - (assignedCounts.get(b) ?? 0));
+        const deficitDiff = bDeficit - aDeficit;
+        if (deficitDiff !== 0) return deficitDiff;
+
+        const remainingDiff = remainingTargetSlots.get(a) - remainingTargetSlots.get(b);
+        return remainingDiff !== 0 ? remainingDiff : a.localeCompare(b);
       });
 
     for (const playerId of candidates) {
       assignment[card] = playerId;
       remainingTargetSlots.set(playerId, remainingTargetSlots.get(playerId) - 1);
-      if (mustHoldPlayerIds.has(playerId)) {
-        mustHoldAssignCount.set(playerId, (mustHoldAssignCount.get(playerId) ?? 0) + 1);
-      }
+      assignedCounts.set(playerId, (assignedCounts.get(playerId) ?? 0) + 1);
       backtrack(index + 1);
       remainingTargetSlots.set(playerId, remainingTargetSlots.get(playerId) + 1);
-      if (mustHoldPlayerIds.has(playerId)) {
-        mustHoldAssignCount.set(playerId, (mustHoldAssignCount.get(playerId) ?? 0) - 1);
-      }
+      assignedCounts.set(playerId, (assignedCounts.get(playerId) ?? 0) - 1);
       delete assignment[card];
       if (solutions.length >= maxSolutions) return;
     }
@@ -738,6 +758,20 @@ function _getVisibleKnownHalfSuitCardCount(gs, observerId, playerId, halfSuitId)
   }
 
   return count;
+}
+
+function _getVisibleHalfSuitMinimumCount(gs, observerId, playerId, halfSuitId) {
+  return Math.max(
+    _getHalfSuitPresenceCount(gs, playerId, halfSuitId),
+    _getVisibleKnownHalfSuitCardCount(gs, observerId, playerId, halfSuitId)
+  );
+}
+
+function _getVisibleTeamHalfSuitMinimumCount(gs, observerId, teamPlayers, halfSuitId) {
+  return teamPlayers.reduce(
+    (sum, player) => sum + _getVisibleHalfSuitMinimumCount(gs, observerId, player.playerId, halfSuitId),
+    0
+  );
 }
 
 function _getRecentHalfSuitActivityStrength(gs, playerId, halfSuitId, currentMoveIndex) {
@@ -1087,7 +1121,10 @@ function decideBotMove(gs, botId) {
       [...botHalfSuits].map((halfSuitId) => [
         halfSuitId,
         (() => {
-          const teamCount = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
+          const teamCount = Math.max(
+            _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId),
+            _getVisibleTeamHalfSuitMinimumCount(gs, botId, teamPlayers, halfSuitId)
+          );
           const opponentCount = _getVisibleOpponentHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
           return {
             teammateAssistPriority: _getTeammateAssistPriority(
@@ -1312,7 +1349,9 @@ function decideBotMove(gs, botId) {
 function _tryBuildDeclaration(gs, botId, halfSuitId, halfSuitsMap, teammates) {
   const cards = halfSuitsMap.get(halfSuitId) ?? [];
   const teamPlayers = [{ playerId: botId }, ...teammates];
-  if (_getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId) !== cards.length) {
+  const exactTeamCount = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
+  const minimumTeamCount = _getVisibleTeamHalfSuitMinimumCount(gs, botId, teamPlayers, halfSuitId);
+  if (Math.max(exactTeamCount, minimumTeamCount) !== cards.length) {
     return null;
   }
 
@@ -1352,7 +1391,10 @@ function _findBestGuessDeclaration(gs, botId, undeclaredHalfSuits, halfSuitsMap,
 
     // Only consider half-suits where public information says the team has
     // at least one card and the declarer can legally declare the suit.
-    const count = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
+    const count = Math.max(
+      _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId),
+      _getVisibleTeamHalfSuitMinimumCount(gs, botId, teamPlayers, halfSuitId)
+    );
     if (count > 0 && count > bestCount) {
       bestCount  = count;
       bestSuit   = halfSuitId;

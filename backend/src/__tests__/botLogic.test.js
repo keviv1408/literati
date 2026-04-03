@@ -216,8 +216,8 @@ describe('decideBotMove — declares when public information uniquely identifies
 
   it('declares once a teammate publicly loses their only ask-proven card in the suit', () => {
     const hands = new Map([
-      ['p1', new Set(['1_h'])],
-      ['p2', new Set(['2_h', '3_h', '4_h', '5_h', '6_h'])],
+      ['p1', new Set(['1_h', '2_h'])],
+      ['p2', new Set(['3_h', '4_h', '5_h', '6_h'])],
       ['p3', new Set(['8_s'])],
       ['p4', new Set(['9_s'])],
       ['p5', new Set(['10_s'])],
@@ -235,15 +235,81 @@ describe('decideBotMove — declares when public information uniquely identifies
     // Later, p3 publicly loses their only lower-heart card to an opponent.
     updateKnowledgeAfterAsk(gs, 'p4', 'p3', '1_h', true);
 
-    // Team 1 later regains that heart and is publicly known to own the whole suit.
+    // p1 can legitimately reclaim 1_h because it still has 2_h in hand.
     updateKnowledgeAfterAsk(gs, 'p1', 'p4', '1_h', true);
-    for (const card of ['2_h', '3_h', '4_h', '5_h', '6_h']) {
+
+    // Once p3 loses their ask-proven heart, p2's public wins complete the suit.
+    for (const card of ['4_h', '5_h', '6_h']) {
       updateKnowledgeAfterAsk(gs, 'p2', 'p5', card, true);
     }
 
     const move = decideBotMove(gs, 'p1');
     expect(move.action).toBe('declare');
     expect(move.halfSuitId).toBe('low_h');
+    expect(Object.keys(move.assignment)).toHaveLength(6);
+  });
+
+  it('declares when a teammate publicly builds a 5+1 split in the half-suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['6_c', '8_h'])],
+      ['p2', new Set(['1_c', '2_c', '3_c', '4_c', '5_c'])],
+      ['p3', new Set(['8_s'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '2_c', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p5', '3_c', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p6', '4_c', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p6', '5_c', true);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move.action).toBe('declare');
+    expect(move.halfSuitId).toBe('low_c');
+    expect(Object.keys(move.assignment)).toHaveLength(6);
+  });
+
+  it('declares when public minimum counts prove a 4+2 split in the half-suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['5_c', '6_c', '8_h'])],
+      ['p2', new Set(['1_c', '2_c', '3_c', '4_c'])],
+      ['p3', new Set(['8_s'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '2_c', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p5', '3_c', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p6', '4_c', true);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move.action).toBe('declare');
+    expect(move.halfSuitId).toBe('low_c');
+    expect(Object.keys(move.assignment)).toHaveLength(6);
+  });
+
+  it('declares when public minimum counts prove a 3+3 split in the half-suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['8_h'])],
+      ['p2', new Set(['1_c', '2_c', '3_c'])],
+      ['p3', new Set(['4_c', '5_c', '6_c'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+    gs.currentTurnPlayerId = 'p3';
+
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '2_c', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p5', '3_c', true);
+
+    const move = decideBotMove(gs, 'p3');
+    expect(move.action).toBe('declare');
+    expect(move.halfSuitId).toBe('low_c');
     expect(Object.keys(move.assignment)).toHaveLength(6);
   });
 
