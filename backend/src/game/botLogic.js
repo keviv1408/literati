@@ -651,6 +651,78 @@ function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
   return null;
 }
 
+function _getVisibleKnownHalfSuitCardCount(gs, observerId, playerId, halfSuitId) {
+  const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
+  let count = 0;
+
+  for (const card of halfSuitCards) {
+    if (_getEffectiveKnowledge(gs, observerId, playerId, card) === true) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+function _getRecentHalfSuitActivityStrength(gs, playerId, halfSuitId, currentMoveIndex) {
+  const teamId = getPlayerTeam(gs, playerId);
+  if (!teamId) return 0;
+
+  const entry = _getTeamSignalEntry(gs, teamId, halfSuitId);
+  if (!entry || entry.sourcePlayerId !== playerId) return 0;
+
+  return _effectiveSignalStrength(entry, currentMoveIndex);
+}
+
+function _getOpponentAskPriority(gs, askerId, playerId, halfSuitId, currentMoveIndex) {
+  return {
+    knownSuitCards: _getVisibleKnownHalfSuitCardCount(gs, askerId, playerId, halfSuitId),
+    recentActivity: _getRecentHalfSuitActivityStrength(gs, playerId, halfSuitId, currentMoveIndex),
+    presence: _hasHalfSuitPresence(gs, playerId, halfSuitId) ? 1 : 0,
+    capacity: _getVisibleTargetCapacity(gs, askerId, playerId, halfSuitId),
+  };
+}
+
+function _compareOpponentAskPriority(a, b) {
+  const knownSuitDiff = (b?.knownSuitCards ?? 0) - (a?.knownSuitCards ?? 0);
+  if (knownSuitDiff !== 0) return knownSuitDiff;
+
+  const recentActivityDiff = (b?.recentActivity ?? 0) - (a?.recentActivity ?? 0);
+  if (recentActivityDiff !== 0) return recentActivityDiff;
+
+  const presenceDiff = (b?.presence ?? 0) - (a?.presence ?? 0);
+  if (presenceDiff !== 0) return presenceDiff;
+
+  return (b?.capacity ?? 0) - (a?.capacity ?? 0);
+}
+
+function _orderOpponentsForCard(gs, askerId, validOpponents, cardId) {
+  const halfSuitId = cardHalfSuit(gs, cardId);
+  const shuffledOpponents = _shuffle([...validOpponents]);
+  if (!halfSuitId) return shuffledOpponents;
+
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
+  const baseOrder = new Map(
+    shuffledOpponents.map((opponent, index) => [opponent.playerId, index])
+  );
+  const priorities = new Map(
+    shuffledOpponents.map((opponent) => [
+      opponent.playerId,
+      _getOpponentAskPriority(gs, askerId, opponent.playerId, halfSuitId, currentMoveIndex),
+    ])
+  );
+
+  return shuffledOpponents.sort((a, b) => {
+    const priorityDiff = _compareOpponentAskPriority(
+      priorities.get(a.playerId),
+      priorities.get(b.playerId)
+    );
+    if (priorityDiff !== 0) return priorityDiff;
+
+    return (baseOrder.get(a.playerId) ?? 0) - (baseOrder.get(b.playerId) ?? 0);
+  });
+}
+
 function _isKnownEmptyInHalfSuit(gs, observerId, playerId, halfSuitId) {
   const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
   for (const card of halfSuitCards) {
@@ -660,11 +732,10 @@ function _isKnownEmptyInHalfSuit(gs, observerId, playerId, halfSuitId) {
 }
 
 function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
-  const shuffledOpps  = _shuffle([...validOpponents]);
-
   for (const card of candidateCards) {
     const hsId = cardHalfSuit(gs, card);
-    for (const opp of shuffledOpps) {
+    const orderedOpponents = _orderOpponentsForCard(gs, askerId, validOpponents, card);
+    for (const opp of orderedOpponents) {
       if (_isKnownMissing(gs, askerId, opp.playerId, card)) continue;
       // Skip opponents known to hold nothing in this half-suit.
       if (hsId && _isKnownEmptyInHalfSuit(gs, askerId, opp.playerId, hsId)) continue;
@@ -679,10 +750,9 @@ function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
 }
 
 function _findSignalAsk(gs, askerId, validOpponents, candidateCards) {
-  const shuffledOpps  = _shuffle([...validOpponents]);
-
   for (const card of candidateCards) {
-    for (const opp of shuffledOpps) {
+    const orderedOpponents = _orderOpponentsForCard(gs, askerId, validOpponents, card);
+    for (const opp of orderedOpponents) {
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
       if (askVal.valid) {
         return { action: 'ask', targetId: opp.playerId, cardId: card };
@@ -721,9 +791,33 @@ function _scoreCardForAsk(gs, askerId, cardId, teamPlayers, validOpponents, pref
     (sum, opp) => sum + (_isKnownMissing(gs, askerId, opp.playerId, cardId) ? 0 : 1),
     0
   );
+  const halfSuitId = cardHalfSuit(gs, cardId);
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
+  let bestTargetPriority = null;
+
+  if (halfSuitId) {
+    for (const opp of validOpponents) {
+      if (_isKnownMissing(gs, askerId, opp.playerId, cardId)) continue;
+      if (_isKnownEmptyInHalfSuit(gs, askerId, opp.playerId, halfSuitId)) continue;
+
+      const priority = _getOpponentAskPriority(
+        gs,
+        askerId,
+        opp.playerId,
+        halfSuitId,
+        currentMoveIndex
+      );
+      if (!bestTargetPriority || _compareOpponentAskPriority(priority, bestTargetPriority) < 0) {
+        bestTargetPriority = priority;
+      }
+    }
+  }
 
   return {
     preferredSignal: cardId === preferredSignalCardId ? 1 : 0,
+    bestTargetKnownSuitCards: bestTargetPriority?.knownSuitCards ?? 0,
+    bestTargetRecentActivity: bestTargetPriority?.recentActivity ?? 0,
+    bestTargetPresence: bestTargetPriority?.presence ?? 0,
     askerPublicUnknown: _getKnown(gs, askerId, cardId) === null ? 1 : 0,
     resolutionStrength: Math.max(0, 6 - publicTeamCandidates),
     opponentSpecificity: publicOpponentCandidates > 0 ? Math.max(0, 6 - publicOpponentCandidates) : 0,
@@ -748,6 +842,15 @@ function _orderCandidateCardsForHalfSuit(gs, askerId, halfSuitId, candidateCards
 
     const preferredDiff = bScore.preferredSignal - aScore.preferredSignal;
     if (preferredDiff !== 0) return preferredDiff;
+
+    const targetKnownDiff = bScore.bestTargetKnownSuitCards - aScore.bestTargetKnownSuitCards;
+    if (targetKnownDiff !== 0) return targetKnownDiff;
+
+    const targetActivityDiff = bScore.bestTargetRecentActivity - aScore.bestTargetRecentActivity;
+    if (targetActivityDiff !== 0) return targetActivityDiff;
+
+    const targetPresenceDiff = bScore.bestTargetPresence - aScore.bestTargetPresence;
+    if (targetPresenceDiff !== 0) return targetPresenceDiff;
 
     const askerUnknownDiff = bScore.askerPublicUnknown - aScore.askerPublicUnknown;
     if (askerUnknownDiff !== 0) return askerUnknownDiff;

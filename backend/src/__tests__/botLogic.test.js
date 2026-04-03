@@ -352,6 +352,32 @@ describe('decideBotMove — asks for a known card', () => {
     expect(['p4', 'p5', 'p6']).toContain(move.targetId);
   });
 
+  it('prefers asking the opponent publicly known to be chasing that half-suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s'])],
+      ['p2', new Set(['8_h'])],
+      ['p3', new Set(['9_h'])],
+      ['p4', new Set(['2_s', '10_h'])],
+      ['p5', new Set(['11_h'])],
+      ['p6', new Set(['12_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateKnowledgeAfterAsk(gs, 'p4', 'p5', '3_s', false);
+    updateTeamIntentAfterAsk(gs, 'p4', '3_s', false);
+
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const move = decideBotMove(gs, 'p1');
+      expect(move.action).toBe('ask');
+      expect(move.targetId).toBe('p4');
+      expect(buildCardToHalfSuitMap('remove_7s').get(move.cardId)).toBe('low_s');
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it('when asking, targetId is an opponent (not a teammate)', () => {
     const gs = buildBotTestGame();
     const move = decideBotMove(gs, 'p1');
