@@ -66,6 +66,11 @@ function askBubbleText(cardId: CardId, askerName?: string): string {
   return `${prefix}an I have the ${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}?`;
 }
 
+function cardPhrase(cardId: CardId): string {
+  const { rank, suit } = parseCard(cardId);
+  return `${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}`;
+}
+
 function formatNaturalList(items: string[]): string {
   if (items.length === 0) return '';
   if (items.length === 1) return items[0];
@@ -77,24 +82,97 @@ function askBubbleTextForCards(cardIds: CardId[], askerName?: string): string {
   if (cardIds.length === 0) return 'Can I have that card?';
   if (cardIds.length === 1) return askBubbleText(cardIds[0], askerName);
 
-  const requestedCards = cardIds.map((cardId) => {
-    const { rank, suit } = parseCard(cardId);
-    return `${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}`;
-  });
+  const requestedCards = cardIds.map((cardId) => cardPhrase(cardId));
 
   const prefix = askerName ? `${askerName}, c` : 'C';
   return `${prefix}an I have the ${formatNaturalList(requestedCards)}?`;
 }
 
+const BOT_ASK_BUBBLE_TEMPLATES = {
+  known_holder: [
+    ({ askClause }: { askClause: string }) => `Alright, this one is pretty pinned down. ${askClause}`,
+    ({ askClause }: { askClause: string }) => `The public trail is narrow here, so I'm leaning into it. ${askClause}`,
+  ],
+  teammate_signal_followup_with_source: [
+    ({ askClause, sourceName }: { askClause: string, sourceName: string }) => `${sourceName} kept tugging at this suit, so I'm following that trail. ${askClause}`,
+    ({ askClause, sourceName }: { askClause: string, sourceName: string }) => `${sourceName} put this suit back on the table for me, so I'm picking up the thread. ${askClause}`,
+  ],
+  teammate_signal_followup_without_source: [
+    ({ askClause }: { askClause: string }) => `A recent ask put this suit back on my radar, so I'm chasing it. ${askClause}`,
+    ({ askClause }: { askClause: string }) => `This suit has been making noise for a round or two, so I'm following up. ${askClause}`,
+  ],
+  closeout_push: [
+    ({ askClause }: { askClause: string }) => `We're close to closing this half-suit, so I'm pressing the strongest lead I have. ${askClause}`,
+    ({ askClause }: { askClause: string }) => `This suit is almost ready to lock up, so I'm pushing where the table points me. ${askClause}`,
+  ],
+  priority_guess: [
+    ({ askClause }: { askClause: string }) => `This isn't certain, but public info points to you more than anyone else. ${askClause}`,
+    ({ askClause }: { askClause: string }) => `I don't have a lock, but you're still the cleanest public bet. ${askClause}`,
+  ],
+  signal_probe: [
+    ({ askClause }: { askClause: string }) => `I don't have a lock yet, so I'm probing the cleanest line in this suit. ${askClause}`,
+    ({ askClause }: { askClause: string }) => `Nothing is confirmed here yet, so I'm testing the best public lead. ${askClause}`,
+  ],
+  emergency_guess: [
+    ({ askClause }: { askClause: string }) => `Nothing is clean now, so I'm taking the safest gamble left. ${askClause}`,
+    ({ askClause }: { askClause: string }) => `The table is muddy, so I'm taking the least risky shot I still have. ${askClause}`,
+  ],
+} as const;
+
+function stableHash(input: string): number {
+  let hash = 2166136261;
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function buildNarratedBotAskBubbleText(
+  result: AskResultPayload,
+  targetName?: string,
+  sourceName?: string,
+): string {
+  const askClause = askBubbleText(result.cardId, targetName);
+  const narration = result.botAskNarration;
+
+  if (!narration) return askClause;
+
+  const templateKey = [
+    result.askerId,
+    result.targetId,
+    result.cardId,
+    narration.reason,
+    narration.sourcePlayerId ?? '',
+  ].join('|');
+
+  if (narration.reason === 'teammate_signal_followup') {
+    if (sourceName) {
+      const templates = BOT_ASK_BUBBLE_TEMPLATES.teammate_signal_followup_with_source;
+      const template = templates[stableHash(templateKey) % templates.length];
+      return template({ askClause, sourceName });
+    }
+
+    const templates = BOT_ASK_BUBBLE_TEMPLATES.teammate_signal_followup_without_source;
+    const template = templates[stableHash(templateKey) % templates.length];
+    return template({ askClause });
+  }
+
+  const templates = BOT_ASK_BUBBLE_TEMPLATES[narration.reason];
+  const template = templates[stableHash(templateKey) % templates.length];
+  return template({ askClause });
+}
+
 function buildAskSpeechBubble(
   playerRect: DOMRect,
-  cardIds: CardId[],
-  targetName?: string,
+  text: string,
   placementOverride?: 'above' | 'below',
 ): AskSpeechBubbleState {
   const placement = placementOverride ?? (playerRect.top > 120 ? 'above' : 'below');
   return {
-    text: askBubbleTextForCards(cardIds, targetName),
+    text,
     anchorX: playerRect.left + playerRect.width / 2,
     anchorY: placement === 'above' ? playerRect.top - 10 : playerRect.bottom + 10,
     placement,
@@ -124,6 +202,9 @@ export function useAskResultAnimations(
     const overrideBubbleCardIds = getAskBubbleCardIds?.(lastAskResult);
     const targetName = getPlayerDisplayName?.(lastAskResult.targetId);
     const placementOverride = getPlayerBubblePlacement?.(lastAskResult.askerId);
+    const sourceName = lastAskResult.botAskNarration?.sourcePlayerId
+      ? getPlayerDisplayName?.(lastAskResult.botAskNarration.sourcePlayerId)
+      : undefined;
     let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
     const frameId = requestAnimationFrame(() => {
       const askerEl = getPlayerSeatElement(lastAskResult.askerId);
@@ -134,8 +215,12 @@ export function useAskResultAnimations(
             : lastAskResult.batchCardIds?.length
               ? lastAskResult.batchCardIds
               : [lastAskResult.cardId];
+        const bubbleText =
+          bubbleCardIds.length === 1 && !lastAskResult.batchCardIds?.length && lastAskResult.botAskNarration
+            ? buildNarratedBotAskBubbleText(lastAskResult, targetName, sourceName)
+            : askBubbleTextForCards(bubbleCardIds, targetName);
         setAskSpeechBubble(
-          buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleCardIds, targetName, placementOverride),
+          buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleText, placementOverride),
         );
         bubbleTimer = setTimeout(() => {
           setAskSpeechBubble(null);

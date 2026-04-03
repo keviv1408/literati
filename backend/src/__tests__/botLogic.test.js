@@ -230,7 +230,8 @@ describe('decideBotMove — declares when public information uniquely identifies
     gs.botKnowledge.set('p4', new Map([['9_h', true]]));
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '9_h' });
+    expect(move).toMatchObject({ action: 'ask', targetId: 'p4', cardId: '9_h' });
+    expect(move.botAskNarration).toEqual({ reason: 'known_holder' });
   });
 });
 
@@ -253,6 +254,7 @@ describe('decideBotMove — asks for a known card', () => {
     expect(move.action).toBe('ask');
     expect(move.targetId).toBe('p4');
     expect(move.cardId).toBe('4_s');
+    expect(move.botAskNarration).toEqual({ reason: 'known_holder' });
   });
 
   it('avoids re-asking an opponent for a card they are known not to have when another opponent remains possible', () => {
@@ -269,7 +271,8 @@ describe('decideBotMove — asks for a known card', () => {
     updateKnowledgeAfterAsk(gs, 'p1', 'p4', '4_s', false);
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p5', cardId: '4_s' });
+    expect(move).toMatchObject({ action: 'ask', targetId: 'p5', cardId: '4_s' });
+    expect(move.botAskNarration).toEqual({ reason: 'closeout_push' });
   });
 
   it('can ask the same opponent for that card again once knowledge says they gained it', () => {
@@ -287,7 +290,8 @@ describe('decideBotMove — asks for a known card', () => {
     updateKnowledgeAfterAsk(gs, 'p4', 'p5', '4_s', true);
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
+    expect(move).toMatchObject({ action: 'ask', targetId: 'p4', cardId: '4_s' });
+    expect(move.botAskNarration).toEqual({ reason: 'known_holder' });
   });
 
   it('does not use hidden half-suit counts to eliminate an opponent', () => {
@@ -350,6 +354,7 @@ describe('decideBotMove — asks for a known card', () => {
     expect(move.action).toBe('ask');
     expect(move.cardId).toBe('4_s');
     expect(['p4', 'p5', 'p6']).toContain(move.targetId);
+    expect(move.botAskNarration).toEqual({ reason: 'closeout_push' });
   });
 
   it('prefers asking the opponent publicly known to be chasing that half-suit', () => {
@@ -373,6 +378,7 @@ describe('decideBotMove — asks for a known card', () => {
       expect(move.action).toBe('ask');
       expect(move.targetId).toBe('p4');
       expect(buildCardToHalfSuitMap('remove_7s').get(move.cardId)).toBe('low_s');
+      expect(move.botAskNarration).toEqual({ reason: 'priority_guess' });
     } finally {
       randomSpy.mockRestore();
     }
@@ -450,6 +456,31 @@ describe('decideBotMove — signaling instead of speculative declarations', () =
     expect(move.action).toBe('ask');
     expect(['p4', 'p5', 'p6']).toContain(move.targetId);
     expect(['3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
+    expect(move.botAskNarration).toEqual({ reason: 'priority_guess' });
+  });
+
+  it('falls back to a signal probe when knowledge rules out every target but a legal ask still exists', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '8_h'])],
+      ['p2', new Set(['2_h'])],
+      ['p3', new Set(['3_h'])],
+      ['p4', new Set(['2_s'])],
+      ['p5', new Set(['4_h'])],
+      ['p6', new Set(['5_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    const ruledOutCards = ['2_s', '3_s', '4_s', '5_s', '6_s', '9_h', '10_h', '11_h', '12_h', '13_h'];
+    for (const opponentId of ['p4', 'p5', 'p6']) {
+      gs.botKnowledge.set(opponentId, new Map(ruledOutCards.map((cardId) => [cardId, false])));
+    }
+
+    const move = decideBotMove(gs, 'p1');
+
+    expect(move.action).toBe('ask');
+    expect(['p4', 'p5', 'p6']).toContain(move.targetId);
+    expect(['2_s', '3_s', '4_s', '5_s', '6_s', '9_h', '10_h', '11_h', '12_h', '13_h']).toContain(move.cardId);
+    expect(move.botAskNarration).toEqual({ reason: 'signal_probe' });
   });
 
   it('does not declare a privately complete suit before there is visible proof', () => {
@@ -661,6 +692,11 @@ describe('team signaling intent memory', () => {
     const move = decideBotMove(gsWithSignal, 'p1');
     expect(move.action).toBe('ask');
     expect(move.cardId).toBe('13_h');
+    expect(move.botAskNarration).toEqual({
+      reason: 'teammate_signal_followup',
+      sourcePlayerId: 'p2',
+      focusCardId: '13_h',
+    });
   });
 
   it('helps a recently signaled teammate closeout suit when visible evidence supports the chase', () => {
@@ -684,7 +720,8 @@ describe('team signaling intent memory', () => {
     gs.botKnowledge.set('p4', new Map([['12_h', true]]));
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '12_h' });
+    expect(move).toMatchObject({ action: 'ask', targetId: 'p4', cardId: '12_h' });
+    expect(move.botAskNarration).toEqual({ reason: 'known_holder' });
   });
 
   it('mirrors a teammate\'s failed card ask before switching to a different card in the same suit', () => {
@@ -704,6 +741,11 @@ describe('team signaling intent memory', () => {
     const move = decideBotMove(gs, 'p1');
     expect(move.action).toBe('ask');
     expect(move.cardId).toBe('12_h');
+    expect(move.botAskNarration).toEqual({
+      reason: 'teammate_signal_followup',
+      sourcePlayerId: 'p2',
+      focusCardId: '12_h',
+    });
   });
 
   it('only switches away from the teammate\'s signaled card once it already holds that card', () => {
@@ -721,6 +763,7 @@ describe('team signaling intent memory', () => {
     updateTeamIntentAfterAsk(gs, 'p2', '12_h', false);
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p5', cardId: '13_h' });
+    expect(move).toMatchObject({ action: 'ask', targetId: 'p5', cardId: '13_h' });
+    expect(move.botAskNarration).toEqual({ reason: 'known_holder' });
   });
 });

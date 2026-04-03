@@ -725,6 +725,52 @@ describe('executeTimedOutTurn with partial state', () => {
     removeConnection('BOTCMP', 'p1');
     cancelTurnTimer('BOTCMP');
   });
+
+  it('30. includes narration metadata in ask_result for bot-originated asks', async () => {
+    const { handleAskCard, cancelTurnTimer } = require('../game/gameSocketServer');
+    const { setGame, registerConnection, removeConnection } = require('../game/gameStore');
+
+    const gs = buildGame({
+      currentTurnPlayerId: 'p1',
+      handOverrides: {
+        p1: new Set(['1_s']),
+        p2: new Set(['8_h']),
+        p3: new Set(['9_h']),
+        p4: new Set(['2_s']),
+        p5: new Set(['10_h']),
+        p6: new Set(['11_h']),
+      },
+    });
+    setGame('BOTCMP', gs);
+
+    const messages = [];
+    const mockWs = { readyState: 1, send: (data) => messages.push(JSON.parse(data)) };
+    registerConnection('BOTCMP', 'p1', mockWs);
+    registerConnection('BOTCMP', 'p4', mockWs);
+
+    await handleAskCard(
+      'BOTCMP',
+      'p1',
+      'p4',
+      '2_s',
+      undefined,
+      null,
+      true,
+      { reason: 'known_holder', focusCardId: '2_s' }
+    );
+
+    const askResult = messages.find((m) => m.type === 'ask_result');
+    expect(askResult).toBeDefined();
+    expect(askResult.askerId).toBe('p1');
+    expect(askResult.botAskNarration).toEqual({
+      reason: 'known_holder',
+      focusCardId: '2_s',
+    });
+
+    removeConnection('BOTCMP', 'p1');
+    removeConnection('BOTCMP', 'p4');
+    cancelTurnTimer('BOTCMP');
+  });
 });
 
 // ---------------------------------------------------------------------------

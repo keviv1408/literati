@@ -1099,7 +1099,16 @@ async function startBotDeclarationCountdown(roomCode, playerId, effectivePartial
   // If bot cannot declare (e.g., fell back to ask or pass), execute immediately.
   if (decision.action !== 'declare') {
     if (decision.action === 'ask') {
-      await handleAskCard(roomCode, playerId, decision.targetId, decision.cardId, undefined, null, false);
+      await handleAskCard(
+        roomCode,
+        playerId,
+        decision.targetId,
+        decision.cardId,
+        undefined,
+        null,
+        false,
+        decision.botAskNarration ?? null
+      );
     }
     return;
   }
@@ -1665,7 +1674,16 @@ async function executeTimedOutTurn(roomCode, playerId) {
   // Complete the action: use partial state if available, otherwise full bot logic.
   const decision = completeBotFromPartial(gs, playerId, effectivePartial);
   if (decision.action === 'ask') {
-    await handleAskCard(roomCode, playerId, decision.targetId, decision.cardId, undefined, null, false);
+    await handleAskCard(
+      roomCode,
+      playerId,
+      decision.targetId,
+      decision.cardId,
+      undefined,
+      null,
+      false,
+      decision.botAskNarration ?? null
+    );
   } else if (decision.action === 'declare') {
     await handleDeclare(roomCode, playerId, decision.halfSuitId, decision.assignment, null, false);
   }
@@ -1755,7 +1773,16 @@ async function executeBotTurn(roomCode, botId) {
   );
 
   if (decision.action === 'ask') {
-    await handleAskCard(roomCode, botId, decision.targetId, decision.cardId, undefined, null, true);
+    await handleAskCard(
+      roomCode,
+      botId,
+      decision.targetId,
+      decision.cardId,
+      undefined,
+      null,
+      true,
+      decision.botAskNarration ?? null
+    );
   } else if (decision.action === 'declare') {
     await handleDeclare(roomCode, botId, decision.halfSuitId, decision.assignment, null, true);
   }
@@ -1851,8 +1878,18 @@ function sanitizeAskBatchCardIds(gs, askerId, targetId, cardId, batchCardIds) {
  * @param {string[]|import('ws').WebSocket|null|undefined} batchCardIdsOrWs
  * @param {import('ws').WebSocket|boolean|null} wsOrIsBot - The asker's WS (null for bots)
  * @param {boolean} maybeIsBot
+ * @param {{ reason: string, sourcePlayerId?: string, focusCardId?: string }|null} [botAskNarration]
  */
-async function handleAskCard(roomCode, askerId, targetId, cardId, batchCardIdsOrWs, wsOrIsBot = null, maybeIsBot = false) {
+async function handleAskCard(
+  roomCode,
+  askerId,
+  targetId,
+  cardId,
+  batchCardIdsOrWs,
+  wsOrIsBot = null,
+  maybeIsBot = false,
+  botAskNarration = null
+) {
   const usingBatchCardIds = Array.isArray(batchCardIdsOrWs) || batchCardIdsOrWs === undefined;
   const batchCardIds = usingBatchCardIds ? batchCardIdsOrWs : undefined;
   const ws = usingBatchCardIds ? wsOrIsBot : batchCardIdsOrWs;
@@ -1903,6 +1940,7 @@ async function handleAskCard(roomCode, askerId, targetId, cardId, batchCardIdsOr
     targetId,
     cardId,
     ...(publicBatchCardIds ? { batchCardIds: publicBatchCardIds } : {}),
+    ...(isBot && botAskNarration ? { botAskNarration } : {}),
     success,
     newTurnPlayerId,
     lastMove,

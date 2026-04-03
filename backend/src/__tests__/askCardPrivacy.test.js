@@ -582,6 +582,7 @@ describe('Ask card privacy — server-side enforcement ', () => {
         expect(result.targetId).toBe(p2Id);
         expect(result.cardId).toBe(ASK_CARD);
         expect(result.batchCardIds).toEqual([ASK_CARD, '5_s']);
+        expect(result.botAskNarration).toBeUndefined();
         expect(typeof result.success).toBe('boolean');
         expect(result.newTurnPlayerId).toBeDefined();
         expect(result.lastMove).toBeDefined();
