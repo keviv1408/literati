@@ -160,6 +160,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   removeAudioContext();
 });
 
@@ -210,8 +211,16 @@ describe('audio.ts — user activation and shared context', () => {
     expect(ctx.resume).toHaveBeenCalledTimes(1);
     expect(ctx.createBuffer).toHaveBeenCalledWith(1, 1, ctx.sampleRate);
     expect(ctx.createBufferSource).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledTimes(4);
-    expect(ctx.decodeAudioData).toHaveBeenCalledTimes(4);
+    expect(global.fetch).toHaveBeenCalledTimes(8);
+    expect(global.fetch).toHaveBeenNthCalledWith(1, '/sounds/askSuccess.mp3');
+    expect(global.fetch).toHaveBeenNthCalledWith(2, '/sounds/woohoo.mp3');
+    expect(global.fetch).toHaveBeenNthCalledWith(3, '/sounds/gunshot.mp3');
+    expect(global.fetch).toHaveBeenNthCalledWith(4, '/sounds/askFail.mp3');
+    expect(global.fetch).toHaveBeenNthCalledWith(5, '/sounds/uhohh.mp3');
+    expect(global.fetch).toHaveBeenNthCalledWith(6, '/sounds/oh-no.mp3');
+    expect(global.fetch).toHaveBeenNthCalledWith(7, '/sounds/declarationSuccess.mp3');
+    expect(global.fetch).toHaveBeenNthCalledWith(8, '/sounds/declarationFail.mp3');
+    expect(ctx.decodeAudioData).toHaveBeenCalledTimes(8);
   });
 
   it('reuses the unlocked shared context for synthesized sounds', async () => {
@@ -295,19 +304,40 @@ describe('audio.ts — file-backed gameplay sounds', () => {
     expect(source.start).toHaveBeenCalledWith(0);
   });
 
-  it('lazy-loads a file sound and plays it once decoding completes', async () => {
+  it('lazy-loads a randomly selected success sound and plays it once decoding completes', async () => {
     const ctx = buildMockAudioContext();
     installAudioContext(ctx);
     const audio = loadAudioModule();
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.4);
 
     audio.playAskSuccess();
     await flushAsyncWork();
 
     expect(win().AudioContext).toHaveBeenCalledTimes(1);
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith('/sounds/askSuccess.mp3');
+    expect(global.fetch).toHaveBeenCalledWith('/sounds/woohoo.mp3');
     expect(ctx.decodeAudioData).toHaveBeenCalledTimes(1);
     expect(ctx.createBufferSource).toHaveBeenCalledTimes(1);
+
+    randomSpy.mockRestore();
+  });
+
+  it('lazy-loads a randomly selected fail sound and plays it once decoding completes', async () => {
+    const ctx = buildMockAudioContext();
+    installAudioContext(ctx);
+    const audio = loadAudioModule();
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.9);
+
+    audio.playAskFail();
+    await flushAsyncWork();
+
+    expect(win().AudioContext).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith('/sounds/oh-no.mp3');
+    expect(ctx.decodeAudioData).toHaveBeenCalledTimes(1);
+    expect(ctx.createBufferSource).toHaveBeenCalledTimes(1);
+
+    randomSpy.mockRestore();
   });
 
   it('does not attempt file playback when muted', () => {

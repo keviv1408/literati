@@ -179,12 +179,27 @@ function _playTones(
  * BufferSource nodes can fire from any execution context.
  */
 
+const _askSuccessSoundPaths = [
+  '/sounds/askSuccess.mp3',
+  '/sounds/woohoo.mp3',
+  '/sounds/gunshot.mp3',
+] as const;
+
+const _askFailSoundPaths = [
+  '/sounds/askFail.mp3',
+  '/sounds/uhohh.mp3',
+  '/sounds/oh-no.mp3',
+] as const;
+
+const _declarationSuccessSoundPath = '/sounds/declarationSuccess.mp3';
+const _declarationFailSoundPath = '/sounds/declarationFail.mp3';
+
 /** All MP3 sound file paths. */
 const _soundPaths = [
-  '/sounds/askSuccess.mp3',
-  '/sounds/askFail.mp3',
-  '/sounds/declarationSuccess.mp3',
-  '/sounds/declarationFail.mp3',
+  ..._askSuccessSoundPaths,
+  ..._askFailSoundPaths,
+  _declarationSuccessSoundPath,
+  _declarationFailSoundPath,
 ] as const;
 
 /** Shared AudioContext for all gameplay audio (created lazily). */
@@ -334,6 +349,12 @@ function _playFile(path: string): void {
   }
 }
 
+function _pickRandomSoundPath(paths: readonly string[]): string {
+  if (paths.length === 0) return '';
+  const index = Math.floor(Math.random() * paths.length);
+  return paths[index] ?? paths[0];
+}
+
 // ---------------------------------------------------------------------------
 // Sound synthesis
 // ---------------------------------------------------------------------------
@@ -389,19 +410,20 @@ export function playDealSound(): void {
 }
 
 /**
- * Plays a positive confirmation sound when a card request succeeds.
+ * Plays a randomly selected positive confirmation sound when a card request succeeds.
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playAskSuccess(): void {
-  _playFile('/sounds/askSuccess.mp3');
+  _playFile(_pickRandomSoundPath(_askSuccessSoundPaths));
 }
 
 /**
- * Plays a negative sound when a card request fails (opponent doesn't hold it).
+ * Plays a randomly selected negative sound when a card request fails
+ * (opponent doesn't hold it).
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playAskFail(): void {
-  _playFile('/sounds/askFail.mp3');
+  _playFile(_pickRandomSoundPath(_askFailSoundPaths));
 }
 
 /**
@@ -409,7 +431,7 @@ export function playAskFail(): void {
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playDeclarationSuccess(): void {
-  _playFile('/sounds/declarationSuccess.mp3');
+  _playFile(_declarationSuccessSoundPath);
 }
 
 /**
@@ -417,5 +439,5 @@ export function playDeclarationSuccess(): void {
  * Silent no-op when muted, SSR, or AudioContext unavailable.
  */
 export function playDeclarationFail(): void {
-  _playFile('/sounds/declarationFail.mp3');
+  _playFile(_declarationFailSoundPath);
 }
