@@ -299,6 +299,21 @@ function _getVisibleTeamHalfSuitCount(gs, observerId, teamPlayers, halfSuitId) {
   return count;
 }
 
+function _getVisibleOpponentHalfSuitCount(gs, observerId, teamPlayers, halfSuitId) {
+  const teamPlayerIds = new Set(teamPlayers.map((p) => p.playerId));
+  const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
+  let count = 0;
+
+  for (const card of halfSuitCards) {
+    const holder = _getVisibleKnownHolder(gs, observerId, card);
+    if (holder && holder !== '__conflict__' && !teamPlayerIds.has(holder)) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
 function _getSuitCloseoutPriority(teamCount) {
   return teamCount >= TEAM_CLOSEOUT_PRIORITY_THRESHOLD ? teamCount : 0;
 }
@@ -536,12 +551,23 @@ function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
   return null;
 }
 
+function _isKnownEmptyInHalfSuit(gs, observerId, playerId, halfSuitId) {
+  const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
+  for (const card of halfSuitCards) {
+    if (!_isKnownMissing(gs, observerId, playerId, card)) return false;
+  }
+  return true;
+}
+
 function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
   const shuffledOpps  = _shuffle([...validOpponents]);
 
   for (const card of candidateCards) {
+    const hsId = cardHalfSuit(gs, card);
     for (const opp of shuffledOpps) {
       if (_isKnownMissing(gs, askerId, opp.playerId, card)) continue;
+      // Skip opponents known to hold nothing in this half-suit.
+      if (hsId && _isKnownEmptyInHalfSuit(gs, askerId, opp.playerId, hsId)) continue;
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
       if (askVal.valid) {
         return { action: 'ask', targetId: opp.playerId, cardId: card };
@@ -774,6 +800,7 @@ function decideBotMove(gs, botId) {
         halfSuitId,
         (() => {
           const teamCount = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
+          const opponentCount = _getVisibleOpponentHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
           return {
             teammateAssistPriority: _getTeammateAssistPriority(
               gs,
@@ -784,6 +811,10 @@ function decideBotMove(gs, botId) {
               currentMoveIndex
             ),
             closeoutPriority: _getSuitCloseoutPriority(teamCount),
+            // Opponents known to hold cards in a half-suit where the bot's
+            // team also has cards — reclaiming these is urgent because the
+            // opponent could declare first.
+            opponentThreat: opponentCount,
             signalStrength: _getTeamSignalStrength(gs, botTeam, halfSuitId, currentMoveIndex),
             teamCount,
           };
@@ -797,6 +828,10 @@ function decideBotMove(gs, botId) {
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
       if (closeoutDiff !== 0) return closeoutDiff;
+      // Prefer half-suits where opponents hold known cards — reclaim before
+      // they can declare.
+      const threatDiff = (bPriority?.opponentThreat ?? 0) - (aPriority?.opponentThreat ?? 0);
+      if (threatDiff !== 0) return threatDiff;
       const signalDiff = (bPriority?.signalStrength ?? 0) - (aPriority?.signalStrength ?? 0);
       if (signalDiff !== 0) return signalDiff;
       const teamCountDiff = (bPriority?.teamCount ?? 0) - (aPriority?.teamCount ?? 0);
@@ -843,6 +878,7 @@ function decideBotMove(gs, botId) {
       const priority = suitPriority.get(halfSuitId) ?? {
         teammateAssistPriority: 0,
         closeoutPriority: 0,
+        opponentThreat: 0,
         signalStrength: 0,
         teamCount: 0,
       };
@@ -855,6 +891,7 @@ function decideBotMove(gs, botId) {
           halfSuitId,
           teammateAssistPriority: priority.teammateAssistPriority,
           closeoutPriority: priority.closeoutPriority,
+          opponentThreat: priority.opponentThreat,
           signalStrength: priority.signalStrength,
           teamCount: priority.teamCount,
           askableCards,
@@ -862,12 +899,13 @@ function decideBotMove(gs, botId) {
       }
     }
 
-    // Prefer closeout suits first, then teammate-signaled suits, then suits closer to completion.
     halfSuitScores.sort((a, b) => {
       const assistDiff = b.teammateAssistPriority - a.teammateAssistPriority;
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
       if (closeoutDiff !== 0) return closeoutDiff;
+      const threatDiff = b.opponentThreat - a.opponentThreat;
+      if (threatDiff !== 0) return threatDiff;
       const signalDiff = b.signalStrength - a.signalStrength;
       if (signalDiff !== 0) return signalDiff;
       const teamCountDiff = b.teamCount - a.teamCount;
