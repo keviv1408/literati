@@ -3,10 +3,11 @@
 /**
  * Bot decision-making for the Literati game.
  *
- * Bots use inference to track card locations:
+ * Bots use only seat-visible information to track card locations:
+ *   - their own hand
  *   - When a player successfully gets a card, we know they have it.
  *   - When a player asks and fails, we know the target doesn't have that card.
- *   - When a declaration succeeds, we learn who held what.
+ *   - public hand sizes, which cap how many unknown cards a player could hold.
  *
  * Decision priority:
  *   1. If public information uniquely identifies all 6 cards of a half-suit
@@ -27,7 +28,6 @@ const { buildHalfSuitMap, buildCardToHalfSuitMap, allHalfSuitIds } = require('./
 const {
   getHand,
   getCardCount,
-  getHalfSuitCardCount,
   cardHalfSuit,
   getPlayerTeam,
   getTeamPlayers,
@@ -76,16 +76,18 @@ function updateKnowledgeAfterAsk(gs, askerId, targetId, cardId, success) {
  * @param {boolean} correct
  */
 function updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct) {
-  if (correct) {
-    // We learn the exact card locations (confirmed).
-    for (const [card, playerId] of Object.entries(assignment)) {
-      // These cards are now removed, but mark as false for everyone since they're gone.
-      for (const player of gs.players) {
-        _setKnown(gs, player.playerId, card, false);
-      }
+  const removedCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? Object.keys(assignment);
+
+  // Regardless of whether the declaration was correct, the entire half-suit is
+  // removed from play and is therefore known to be absent from every hand.
+  for (const card of removedCards) {
+    for (const player of gs.players) {
+      _setKnown(gs, player.playerId, card, false);
     }
   }
-  // After declaration, all 6 cards are removed from play — no knowledge needed.
+
+  if (!correct) return;
+  // No additional holder information is needed here; the suit is out of play.
 }
 
 function _setKnown(gs, playerId, cardId, value) {
@@ -102,54 +104,67 @@ function _getKnown(gs, playerId, cardId) {
   return val === undefined ? null : val;
 }
 
-function _isKnownMissing(gs, playerId, cardId) {
-  return _getEffectiveKnowledge(gs, playerId, cardId) === false;
+function _isKnownMissing(gs, observerId, playerId, cardId) {
+  return _getEffectiveKnowledge(gs, observerId, playerId, cardId) === false;
 }
 
-function _getEffectiveKnowledge(gs, playerId, cardId) {
+function _getVisibleKnownHolder(gs, observerId, cardId) {
+  if (observerId && getHand(gs, observerId).has(cardId)) {
+    return observerId;
+  }
+
+  let holder = null;
+
+  for (const player of gs.players) {
+    if (_getKnown(gs, player.playerId, cardId) !== true) continue;
+    if (holder && holder !== player.playerId) return '__conflict__';
+    holder = player.playerId;
+  }
+
+  return holder;
+}
+
+function _getVisibleKnownCards(gs, observerId, playerId) {
+  if (observerId === playerId) {
+    return new Set(getHand(gs, playerId));
+  }
+
+  const visibleCards = new Set();
+  const knowledge = gs.botKnowledge.get(playerId);
+  if (!(knowledge instanceof Map)) return visibleCards;
+
+  for (const [cardId, value] of knowledge.entries()) {
+    if (value === true) visibleCards.add(cardId);
+  }
+
+  return visibleCards;
+}
+
+function _getVisibleTargetCapacity(gs, observerId, playerId, halfSuitId) {
+  const totalCards = getCardCount(gs, playerId);
+  const visibleCards = _getVisibleKnownCards(gs, observerId, playerId);
+  let knownOutsideSuit = 0;
+
+  for (const cardId of visibleCards) {
+    if (cardHalfSuit(gs, cardId) !== halfSuitId) {
+      knownOutsideSuit++;
+    }
+  }
+
+  return Math.max(0, totalCards - knownOutsideSuit);
+}
+
+function _getEffectiveKnowledge(gs, observerId, playerId, cardId) {
+  if (observerId === playerId) {
+    return getHand(gs, observerId).has(cardId);
+  }
+
   const explicit = _getKnown(gs, playerId, cardId);
   if (explicit !== null) return explicit;
 
-  const halfSuitId = cardHalfSuit(gs, cardId);
-  if (!halfSuitId) return null;
-
-  const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
-  const halfSuitCount = getHalfSuitCardCount(gs, playerId, halfSuitId);
-
-  if (halfSuitCount === 0) {
-    return false;
-  }
-
-  let knownTrueCount = 0;
-  let unknownCount = 0;
-  let cardIsUnknown = false;
-
-  for (const candidate of halfSuitCards) {
-    const knowledge = _getKnown(gs, playerId, candidate);
-    if (knowledge === true) {
-      knownTrueCount++;
-      if (candidate === cardId) return true;
-      continue;
-    }
-    if (knowledge === null) {
-      unknownCount++;
-      if (candidate === cardId) cardIsUnknown = true;
-    }
-  }
-
-  if (!cardIsUnknown) {
-    return null;
-  }
-
-  const remainingSlots = halfSuitCount - knownTrueCount;
-  if (remainingSlots <= 0) {
-    return false;
-  }
-  if (unknownCount === remainingSlots) {
-    return true;
-  }
-
-  return null;
+  const visibleHolder = _getVisibleKnownHolder(gs, observerId, cardId);
+  if (!visibleHolder || visibleHolder === '__conflict__') return null;
+  return visibleHolder === playerId;
 }
 
 function _ensureTeamIntentMemory(gs) {
@@ -252,22 +267,30 @@ function updateTeamIntentAfterDeclaration(gs, halfSuitId) {
   }
 }
 
-function _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) {
-  return teamPlayers.reduce(
-    (sum, p) => sum + getHalfSuitCardCount(gs, p.playerId, halfSuitId),
-    0
-  );
+function _getVisibleTeamHalfSuitCount(gs, observerId, teamPlayers, halfSuitId) {
+  const teamPlayerIds = new Set(teamPlayers.map((p) => p.playerId));
+  const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
+  let count = 0;
+
+  for (const card of halfSuitCards) {
+    const holder = _getVisibleKnownHolder(gs, observerId, card);
+    if (holder && holder !== '__conflict__' && teamPlayerIds.has(holder)) {
+      count++;
+    }
+  }
+
+  return count;
 }
 
 function _getSuitCloseoutPriority(teamCount) {
   return teamCount >= TEAM_CLOSEOUT_PRIORITY_THRESHOLD ? teamCount : 0;
 }
 
-function _findKnownHolder(gs, cardId) {
+function _findKnownHolder(gs, observerId, cardId) {
   let holder = null;
 
   for (const player of gs.players) {
-    if (_getEffectiveKnowledge(gs, player.playerId, cardId) !== true) continue;
+    if (_getEffectiveKnowledge(gs, observerId, player.playerId, cardId) !== true) continue;
     if (holder && holder !== player.playerId) return '__conflict__';
     holder = player.playerId;
   }
@@ -279,7 +302,7 @@ function _findKnownHolder(gs, cardId) {
  * Search for team-only assignments that are consistent with public information.
  *
  * Public constraints considered:
- *   - per-player half-suit counts
+ *   - publicly visible total hand sizes
  *   - publicly observed ask outcomes stored in botKnowledge
  *   - the declarant's own hand
  *   - any partial assignments already made in the declaration UI
@@ -303,8 +326,8 @@ function _searchPublicAssignments(
   maxSolutions = 2
 ) {
   const teamPlayerIds = new Set(teamPlayers.map((p) => p.playerId));
-  const remainingCounts = new Map(
-    teamPlayers.map((p) => [p.playerId, getHalfSuitCardCount(gs, p.playerId, halfSuitId)])
+  const remainingTargetSlots = new Map(
+    teamPlayers.map((p) => [p.playerId, _getVisibleTargetCapacity(gs, declarerId, p.playerId, halfSuitId)])
   );
   const assignment = {};
 
@@ -312,13 +335,13 @@ function _searchPublicAssignments(
     const existing = assignment[card];
     if (existing) return existing === playerId;
     if (!teamPlayerIds.has(playerId)) return false;
-    if (_isKnownMissing(gs, playerId, card)) return false;
+    if (_isKnownMissing(gs, declarerId, playerId, card)) return false;
 
-    const remaining = remainingCounts.get(playerId);
+    const remaining = remainingTargetSlots.get(playerId);
     if (remaining == null || remaining <= 0) return false;
 
     assignment[card] = playerId;
-    remainingCounts.set(playerId, remaining - 1);
+    remainingTargetSlots.set(playerId, remaining - 1);
     return true;
   }
 
@@ -335,7 +358,7 @@ function _searchPublicAssignments(
   }
 
   for (const card of cards) {
-    const knownHolder = _findKnownHolder(gs, card);
+    const knownHolder = _findKnownHolder(gs, declarerId, card);
     if (knownHolder === '__conflict__') return [];
     if (knownHolder && !applyForced(card, knownHolder)) {
       return [];
@@ -343,14 +366,14 @@ function _searchPublicAssignments(
   }
 
   const unassignedCards = cards.filter((card) => !assignment[card]);
-  const remainingSlots = Array.from(remainingCounts.values()).reduce((sum, n) => sum + n, 0);
-  if (remainingSlots !== unassignedCards.length) return [];
+  const remainingSlots = Array.from(remainingTargetSlots.values()).reduce((sum, n) => sum + n, 0);
+  if (remainingSlots < unassignedCards.length) return [];
 
   const candidateMap = new Map();
   for (const card of unassignedCards) {
     const candidates = teamPlayers
       .map((p) => p.playerId)
-      .filter((playerId) => remainingCounts.get(playerId) > 0 && !_isKnownMissing(gs, playerId, card));
+      .filter((playerId) => remainingTargetSlots.get(playerId) > 0 && !_isKnownMissing(gs, declarerId, playerId, card));
     if (candidates.length === 0) return [];
     candidateMap.set(card, candidates);
   }
@@ -366,26 +389,24 @@ function _searchPublicAssignments(
     if (solutions.length >= maxSolutions) return;
 
     if (index >= orderedCards.length) {
-      if (Array.from(remainingCounts.values()).every((n) => n === 0)) {
-        solutions.push({ ...assignment });
-      }
+      solutions.push({ ...assignment });
       return;
     }
 
     const card = orderedCards[index];
     const candidates = candidateMap
       .get(card)
-      .filter((playerId) => remainingCounts.get(playerId) > 0)
+      .filter((playerId) => remainingTargetSlots.get(playerId) > 0)
       .sort((a, b) => {
-        const diff = remainingCounts.get(a) - remainingCounts.get(b);
+        const diff = remainingTargetSlots.get(a) - remainingTargetSlots.get(b);
         return diff !== 0 ? diff : a.localeCompare(b);
       });
 
     for (const playerId of candidates) {
       assignment[card] = playerId;
-      remainingCounts.set(playerId, remainingCounts.get(playerId) - 1);
+      remainingTargetSlots.set(playerId, remainingTargetSlots.get(playerId) - 1);
       backtrack(index + 1);
-      remainingCounts.set(playerId, remainingCounts.get(playerId) + 1);
+      remainingTargetSlots.set(playerId, remainingTargetSlots.get(playerId) + 1);
       delete assignment[card];
       if (solutions.length >= maxSolutions) return;
     }
@@ -433,14 +454,14 @@ function _buildBestGuessAssignment(
 
   const teamPlayerIds = teamPlayers.map((p) => p.playerId);
   const assignment = { ...partialAssignment };
-  const remainingCounts = new Map(
-    teamPlayers.map((p) => [p.playerId, getHalfSuitCardCount(gs, p.playerId, halfSuitId)])
+  const remainingTargetSlots = new Map(
+    teamPlayers.map((p) => [p.playerId, _getVisibleTargetCapacity(gs, declarerId, p.playerId, halfSuitId)])
   );
 
   function consumeSlot(playerId) {
-    const remaining = remainingCounts.get(playerId);
+    const remaining = remainingTargetSlots.get(playerId);
     if (remaining == null) return;
-    remainingCounts.set(playerId, Math.max(remaining - 1, 0));
+    remainingTargetSlots.set(playerId, Math.max(remaining - 1, 0));
   }
 
   for (const [, playerId] of Object.entries(partialAssignment)) {
@@ -457,7 +478,7 @@ function _buildBestGuessAssignment(
 
   for (const card of cards) {
     if (assignment[card]) continue;
-    const knownHolder = _findKnownHolder(gs, card);
+    const knownHolder = _findKnownHolder(gs, declarerId, card);
     if (knownHolder && knownHolder !== '__conflict__' && teamPlayerIds.includes(knownHolder)) {
       assignment[card] = knownHolder;
       consumeSlot(knownHolder);
@@ -467,13 +488,13 @@ function _buildBestGuessAssignment(
   for (const card of cards) {
     if (assignment[card]) continue;
 
-    const candidates = teamPlayerIds.filter((playerId) => !_isKnownMissing(gs, playerId, card));
+    const candidates = teamPlayerIds.filter((playerId) => !_isKnownMissing(gs, declarerId, playerId, card));
     const safeCandidates = candidates.length > 0 ? candidates : teamPlayerIds;
-    const preferred = safeCandidates.filter((playerId) => (remainingCounts.get(playerId) ?? 0) > 0);
+    const preferred = safeCandidates.filter((playerId) => (remainingTargetSlots.get(playerId) ?? 0) > 0);
     const pool = preferred.length > 0 ? preferred : safeCandidates;
 
-    const bestRemaining = Math.max(...pool.map((playerId) => remainingCounts.get(playerId) ?? 0));
-    const strongest = pool.filter((playerId) => (remainingCounts.get(playerId) ?? 0) === bestRemaining);
+    const bestRemaining = Math.max(...pool.map((playerId) => remainingTargetSlots.get(playerId) ?? 0));
+    const strongest = pool.filter((playerId) => (remainingTargetSlots.get(playerId) ?? 0) === bestRemaining);
     const assignee = strongest[Math.floor(Math.random() * strongest.length)];
     assignment[card] = assignee;
     consumeSlot(assignee);
@@ -487,7 +508,7 @@ function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
 
   for (const card of candidateCards) {
     for (const opp of shuffledOpps) {
-      if (_getEffectiveKnowledge(gs, opp.playerId, card) !== true) continue;
+      if (_getEffectiveKnowledge(gs, askerId, opp.playerId, card) !== true) continue;
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
       if (askVal.valid) {
         return { action: 'ask', targetId: opp.playerId, cardId: card };
@@ -503,7 +524,7 @@ function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
 
   for (const card of candidateCards) {
     for (const opp of shuffledOpps) {
-      if (_isKnownMissing(gs, opp.playerId, card)) continue;
+      if (_isKnownMissing(gs, askerId, opp.playerId, card)) continue;
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
       if (askVal.valid) {
         return { action: 'ask', targetId: opp.playerId, cardId: card };
@@ -529,9 +550,9 @@ function _findSignalAsk(gs, askerId, validOpponents, candidateCards) {
   return null;
 }
 
-function _getPublicTeamCardCandidateCount(gs, teamPlayers, cardId) {
+function _getPublicTeamCardCandidateCount(gs, observerId, teamPlayers, cardId) {
   return teamPlayers.reduce(
-    (sum, player) => sum + (_isKnownMissing(gs, player.playerId, cardId) ? 0 : 1),
+    (sum, player) => sum + (_isKnownMissing(gs, observerId, player.playerId, cardId) ? 0 : 1),
     0
   );
 }
@@ -552,9 +573,9 @@ function _getPreferredSignalCardId(gs, askerId, halfSuitId, currentMoveIndex) {
 }
 
 function _scoreCardForAsk(gs, askerId, cardId, teamPlayers, validOpponents, preferredSignalCardId) {
-  const publicTeamCandidates = _getPublicTeamCardCandidateCount(gs, teamPlayers, cardId);
+  const publicTeamCandidates = _getPublicTeamCardCandidateCount(gs, askerId, teamPlayers, cardId);
   const publicOpponentCandidates = validOpponents.reduce(
-    (sum, opp) => sum + (_isKnownMissing(gs, opp.playerId, cardId) ? 0 : 1),
+    (sum, opp) => sum + (_isKnownMissing(gs, askerId, opp.playerId, cardId) ? 0 : 1),
     0
   );
 
@@ -669,7 +690,7 @@ function _isAmbiguousTeamCompleteSuit(gs, botId, halfSuitId, halfSuitsMap, teamm
   if (cards.length === 0) return false;
 
   const teamPlayers = [{ playerId: botId }, ...teammates];
-  if (_getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) !== cards.length) {
+  if (_getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId) !== cards.length) {
     return false;
   }
 
@@ -735,7 +756,7 @@ function decideBotMove(gs, botId) {
       [...botHalfSuits].map((halfSuitId) => [
         halfSuitId,
         (() => {
-          const teamCount = _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId);
+          const teamCount = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
           return {
             teammateAssistPriority: _getTeammateAssistPriority(
               gs,
@@ -888,7 +909,7 @@ function decideBotMove(gs, botId) {
 function _tryBuildDeclaration(gs, botId, halfSuitId, halfSuitsMap, teammates) {
   const cards = halfSuitsMap.get(halfSuitId) ?? [];
   const teamPlayers = [{ playerId: botId }, ...teammates];
-  if (_getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) !== cards.length) {
+  if (_getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId) !== cards.length) {
     return null;
   }
 
@@ -922,7 +943,7 @@ function _findBestGuessDeclaration(gs, botId, undeclaredHalfSuits, halfSuitsMap,
 
     // Only consider half-suits where public information says the team has
     // at least one card and the declarer can legally declare the suit.
-    const count = _getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId);
+    const count = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
     if (count > 0 && count > bestCount) {
       bestCount  = count;
       bestSuit   = halfSuitId;
