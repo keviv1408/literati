@@ -278,7 +278,6 @@ function serializePublicState(gs) {
  * - halfSuitCounts: { [halfSuitId]: number } — how many cards in each half-suit.
  * This is public information and is used for:
  * • Enforcing ask eligibility (server checks target has ≥1 in half-suit)
- * • Bot decision-making
  *
  * @param {Object} gs
  * @returns {Array}

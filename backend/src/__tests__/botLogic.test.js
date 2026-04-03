@@ -119,8 +119,7 @@ describe('decideBotMove — basic validity', () => {
 // ---------------------------------------------------------------------------
 
 describe('decideBotMove — declares when public information uniquely identifies a half-suit', () => {
-  it('returns { action: "declare" } when team holds all 6 low_s cards', () => {
-    // Give all low_s cards to team-1 players
+  it('does not declare solely because teammates privately hold the rest of the suit', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '2_s', '3_s'])],
       ['p2', new Set(['4_s', '5_s', '6_s'])],
@@ -131,10 +130,10 @@ describe('decideBotMove — declares when public information uniquely identifies
     ]);
     const gs = buildBotTestGame(hands);
     const move = decideBotMove(gs, 'p1');
-    expect(move.action).toBe('declare');
+    expect(move.action).toBe('ask');
   });
 
-  it('declare action includes halfSuitId', () => {
+  it('declares when public knowledge reveals the remaining teammate cards', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '2_s', '3_s'])],
       ['p2', new Set(['4_s', '5_s', '6_s'])],
@@ -144,12 +143,18 @@ describe('decideBotMove — declares when public information uniquely identifies
       ['p6', new Set(['3_h', '4_h'])],
     ]);
     const gs = buildBotTestGame(hands);
+    gs.botKnowledge.set('p2', new Map([
+      ['4_s', true],
+      ['5_s', true],
+      ['6_s', true],
+    ]));
+
     const move = decideBotMove(gs, 'p1');
     expect(move.action).toBe('declare');
     expect(move.halfSuitId).toBe('low_s');
   });
 
-  it('declare action includes assignment object covering all 6 cards', () => {
+  it('declare action includes assignment object covering all 6 cards once evidence is public', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '2_s', '3_s'])],
       ['p2', new Set(['4_s', '5_s', '6_s'])],
@@ -159,12 +164,18 @@ describe('decideBotMove — declares when public information uniquely identifies
       ['p6', new Set(['3_h', '4_h'])],
     ]);
     const gs = buildBotTestGame(hands);
+    gs.botKnowledge.set('p2', new Map([
+      ['4_s', true],
+      ['5_s', true],
+      ['6_s', true],
+    ]));
+
     const move = decideBotMove(gs, 'p1');
     expect(move.action).toBe('declare');
     expect(Object.keys(move.assignment)).toHaveLength(6);
   });
 
-  it('does not declare when team holds all 6 cards but teammate ownership is still ambiguous', () => {
+  it('keeps asking when the suit is privately complete but still not publicly provable', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '8_h'])],
       ['p2', new Set(['2_s', '3_s'])],
@@ -180,9 +191,7 @@ describe('decideBotMove — declares when public information uniquely identifies
     gs.botKnowledge.set('p4', new Map([['9_h', true]]));
 
     const move = decideBotMove(gs, 'p1');
-    expect(move.action).toBe('ask');
-    expect(['p4', 'p5', 'p6']).toContain(move.targetId);
-    expect(['2_s', '3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
+    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '9_h' });
   });
 });
 
@@ -242,7 +251,7 @@ describe('decideBotMove — asks for a known card', () => {
     expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
   });
 
-  it('treats opponents with 0 cards in a half-suit as impossible holders', () => {
+  it('does not use hidden half-suit counts to eliminate an opponent', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '2_s', '3_s', '5_s', '6_s'])],
       ['p2', new Set(['8_s'])],
@@ -254,10 +263,12 @@ describe('decideBotMove — asks for a known card', () => {
     const gs = buildBotTestGame(hands);
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p5', cardId: '4_s' });
+    expect(move.action).toBe('ask');
+    expect(move.cardId).toBe('4_s');
+    expect(['p4', 'p5']).toContain(move.targetId);
   });
 
-  it('infers the final card when an opponent has 1 card left in the half-suit and five are ruled out', () => {
+  it('does not infer the final holder from five exclusions alone without visible suit evidence', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '2_s', '3_s', '5_s', '6_s'])],
       ['p2', new Set(['8_s'])],
@@ -277,7 +288,9 @@ describe('decideBotMove — asks for a known card', () => {
     ]));
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
+    expect(move.action).toBe('ask');
+    expect(move.cardId).toBe('4_s');
+    expect(['p4', 'p5']).toContain(move.targetId);
   });
 
   it('focuses on closing an almost-finished suit before moving to another suit', () => {
@@ -295,7 +308,9 @@ describe('decideBotMove — asks for a known card', () => {
     updateTeamIntentAfterAsk(gs, 'p2', '10_h', false);
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '4_s' });
+    expect(move.action).toBe('ask');
+    expect(move.cardId).toBe('4_s');
+    expect(['p4', 'p5', 'p6']).toContain(move.targetId);
   });
 
   it('when asking, targetId is an opponent (not a teammate)', () => {
@@ -372,7 +387,7 @@ describe('decideBotMove — signaling instead of speculative declarations', () =
     expect(['3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
   });
 
-  it('prioritizes signaling a team-complete but ambiguous suit before chasing unrelated asks', () => {
+  it('does not declare a privately complete suit before there is visible proof', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '8_h'])],
       ['p2', new Set(['2_s', '3_s'])],
@@ -386,8 +401,6 @@ describe('decideBotMove — signaling instead of speculative declarations', () =
     const move = decideBotMove(gs, 'p1');
 
     expect(move.action).toBe('ask');
-    expect(['p4', 'p5', 'p6']).toContain(move.targetId);
-    expect(['2_s', '3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
   });
 });
 
@@ -486,22 +499,19 @@ describe('updateKnowledgeAfterDeclaration', () => {
     }
   });
 
-  it('incorrect declaration: knowledge not updated (cards location remains uncertain)', () => {
+  it('incorrect declaration still clears those cards from all hands in bot knowledge', () => {
     const assignment = {
       '1_s': 'p1', '2_s': 'p1', '3_s': 'p1',
       '4_s': 'p2', '5_s': 'p2', '6_s': 'p2',
     };
     updateKnowledgeAfterDeclaration(gs, 'low_s', assignment, false);
-    // After incorrect declaration, the function doesn't update knowledge (by design)
-    // botKnowledge should remain empty or at least not have these entries as true
-    // The actual cards are still removed from play, but inference doesn't record positions
-    // Just verify it doesn't throw and doesn't set any to true
+
+    const lowSCards = ['1_s', '2_s', '3_s', '4_s', '5_s', '6_s'];
     for (const player of gs.players) {
       const knowledge = gs.botKnowledge.get(player.playerId);
-      if (knowledge) {
-        for (const [, val] of knowledge) {
-          expect(val).not.toBe(true);
-        }
+      expect(knowledge).toBeDefined();
+      for (const card of lowSCards) {
+        expect(knowledge.get(card)).toBe(false);
       }
     }
   });
@@ -556,7 +566,7 @@ describe('team signaling intent memory', () => {
     expect(move.cardId).toBe('13_h');
   });
 
-  it('helps a recently signaled teammate closeout suit before an unrelated closeout suit', () => {
+  it('helps a recently signaled teammate closeout suit when visible evidence supports the chase', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '5_s', '8_h'])],
       ['p2', new Set(['2_s', '6_s', '9_h'])],
@@ -572,6 +582,8 @@ describe('team signaling intent memory', () => {
     // Simulate several intervening moves so the raw signal weakens, but it
     // should still be recent enough for the bot to assist the teammate's chase.
     gs.moveHistory = Array.from({ length: 6 }, (_, idx) => ({ type: 'ask', ts: idx }));
+    gs.botKnowledge.set('p2', new Map([['9_h', true]]));
+    gs.botKnowledge.set('p3', new Map([['10_h', true], ['11_h', true]]));
     gs.botKnowledge.set('p4', new Map([['12_h', true]]));
 
     const move = decideBotMove(gs, 'p1');
