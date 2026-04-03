@@ -1080,8 +1080,9 @@ describe('GamePage — game controls always available', () => {
         });
 
         const bubbleText = screen.getByTestId('ask-speech-bubble-text').textContent ?? '';
-        expect(bubbleText).toContain('Me, can I have the Ace of hearts?');
-        expect(bubbleText).not.toBe('Me, can I have the Ace of hearts?');
+        expect(bubbleText).toMatch(
+          /^(Locking in|Pretty sure)\. Me, can I have the Ace of hearts\?$/,
+        );
       } finally {
         jest.useRealTimers();
       }

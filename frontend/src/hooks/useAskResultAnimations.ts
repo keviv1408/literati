@@ -88,35 +88,13 @@ function askBubbleTextForCards(cardIds: CardId[], askerName?: string): string {
   return `${prefix}an I have the ${formatNaturalList(requestedCards)}?`;
 }
 
-const BOT_ASK_BUBBLE_TEMPLATES = {
-  known_holder: [
-    ({ askClause }: { askClause: string }) => `Alright, this one is pretty pinned down. ${askClause}`,
-    ({ askClause }: { askClause: string }) => `The public trail is narrow here, so I'm leaning into it. ${askClause}`,
-  ],
-  teammate_signal_followup_with_source: [
-    ({ askClause, sourceName }: { askClause: string, sourceName: string }) => `${sourceName} kept tugging at this suit, so I'm following that trail. ${askClause}`,
-    ({ askClause, sourceName }: { askClause: string, sourceName: string }) => `${sourceName} put this suit back on the table for me, so I'm picking up the thread. ${askClause}`,
-  ],
-  teammate_signal_followup_without_source: [
-    ({ askClause }: { askClause: string }) => `A recent ask put this suit back on my radar, so I'm chasing it. ${askClause}`,
-    ({ askClause }: { askClause: string }) => `This suit has been making noise for a round or two, so I'm following up. ${askClause}`,
-  ],
-  closeout_push: [
-    ({ askClause }: { askClause: string }) => `We're close to closing this half-suit, so I'm pressing the strongest lead I have. ${askClause}`,
-    ({ askClause }: { askClause: string }) => `This suit is almost ready to lock up, so I'm pushing where the table points me. ${askClause}`,
-  ],
-  priority_guess: [
-    ({ askClause }: { askClause: string }) => `This isn't certain, but public info points to you more than anyone else. ${askClause}`,
-    ({ askClause }: { askClause: string }) => `I don't have a lock, but you're still the cleanest public bet. ${askClause}`,
-  ],
-  signal_probe: [
-    ({ askClause }: { askClause: string }) => `I don't have a lock yet, so I'm probing the cleanest line in this suit. ${askClause}`,
-    ({ askClause }: { askClause: string }) => `Nothing is confirmed here yet, so I'm testing the best public lead. ${askClause}`,
-  ],
-  emergency_guess: [
-    ({ askClause }: { askClause: string }) => `Nothing is clean now, so I'm taking the safest gamble left. ${askClause}`,
-    ({ askClause }: { askClause: string }) => `The table is muddy, so I'm taking the least risky shot I still have. ${askClause}`,
-  ],
+const BOT_ASK_BUBBLE_LEAD_INS = {
+  known_holder: ['Locking in', 'Pretty sure'],
+  teammate_signal_followup: ['Following clues', 'Reading signals'],
+  closeout_push: ['Closing in', 'Pressing now'],
+  priority_guess: ['Highly likely', 'Best guess'],
+  signal_probe: ['Testing waters', 'Worth probing'],
+  emergency_guess: ['Just guessing', 'Last resort'],
 } as const;
 
 function stableHash(input: string): number {
@@ -133,7 +111,6 @@ function stableHash(input: string): number {
 function buildNarratedBotAskBubbleText(
   result: AskResultPayload,
   targetName?: string,
-  sourceName?: string,
 ): string {
   const askClause = askBubbleText(result.cardId, targetName);
   const narration = result.botAskNarration;
@@ -148,21 +125,9 @@ function buildNarratedBotAskBubbleText(
     narration.sourcePlayerId ?? '',
   ].join('|');
 
-  if (narration.reason === 'teammate_signal_followup') {
-    if (sourceName) {
-      const templates = BOT_ASK_BUBBLE_TEMPLATES.teammate_signal_followup_with_source;
-      const template = templates[stableHash(templateKey) % templates.length];
-      return template({ askClause, sourceName });
-    }
-
-    const templates = BOT_ASK_BUBBLE_TEMPLATES.teammate_signal_followup_without_source;
-    const template = templates[stableHash(templateKey) % templates.length];
-    return template({ askClause });
-  }
-
-  const templates = BOT_ASK_BUBBLE_TEMPLATES[narration.reason];
-  const template = templates[stableHash(templateKey) % templates.length];
-  return template({ askClause });
+  const leadIns = BOT_ASK_BUBBLE_LEAD_INS[narration.reason];
+  const leadIn = leadIns[stableHash(templateKey) % leadIns.length];
+  return `${leadIn}. ${askClause}`;
 }
 
 function buildAskSpeechBubble(
@@ -202,9 +167,6 @@ export function useAskResultAnimations(
     const overrideBubbleCardIds = getAskBubbleCardIds?.(lastAskResult);
     const targetName = getPlayerDisplayName?.(lastAskResult.targetId);
     const placementOverride = getPlayerBubblePlacement?.(lastAskResult.askerId);
-    const sourceName = lastAskResult.botAskNarration?.sourcePlayerId
-      ? getPlayerDisplayName?.(lastAskResult.botAskNarration.sourcePlayerId)
-      : undefined;
     let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
     const frameId = requestAnimationFrame(() => {
       const askerEl = getPlayerSeatElement(lastAskResult.askerId);
@@ -217,7 +179,7 @@ export function useAskResultAnimations(
               : [lastAskResult.cardId];
         const bubbleText =
           bubbleCardIds.length === 1 && !lastAskResult.batchCardIds?.length && lastAskResult.botAskNarration
-            ? buildNarratedBotAskBubbleText(lastAskResult, targetName, sourceName)
+            ? buildNarratedBotAskBubbleText(lastAskResult, targetName)
             : askBubbleTextForCards(bubbleCardIds, targetName);
         setAskSpeechBubble(
           buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleText, placementOverride),

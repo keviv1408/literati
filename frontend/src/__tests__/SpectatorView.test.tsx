@@ -351,8 +351,9 @@ describe('SpectatorView', () => {
         });
 
         const bubbleText = screen.getByTestId('ask-speech-bubble-text').textContent ?? '';
-        expect(bubbleText).toContain('Alice, can I have the Ace of hearts?');
-        expect(bubbleText).not.toBe('Alice, can I have the Ace of hearts?');
+        expect(bubbleText).toMatch(
+          /^(Following clues|Reading signals)\. Alice, can I have the Ace of hearts\?$/,
+        );
       } finally {
         jest.useRealTimers();
       }
