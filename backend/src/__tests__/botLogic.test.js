@@ -175,13 +175,12 @@ describe('decideBotMove — declares when public information uniquely identifies
     expect(Object.keys(move.assignment)).toHaveLength(6);
   });
 
-  it('signals an ambiguous team-complete suit when all opponents are eliminated but 2 teammates remain possible', () => {
+  it('declares an ambiguous team-complete suit with best-guess assignment instead of wasting moves signaling', () => {
     // Scenario: team1 holds all 6 low_s cards.  Bot (p1) has 3 of them, p2 has
     // the other 3.  All opponents are known to NOT hold any low_s card, but
     // public info can't distinguish whether p2 or p3 holds the remaining cards
-    // (both are candidates).  The bot should detect that the team owns the suit
-    // (team-level inference) and signal to resolve ambiguity — NOT stay stuck
-    // asking opponents about other suits.
+    // (both are candidates).  The bot should declare immediately with a
+    // best-guess assignment rather than wasting moves on signal asks.
     const hands = new Map([
       ['p1', new Set(['1_s', '2_s', '3_s'])],
       ['p2', new Set(['4_s', '5_s', '6_s'])],
@@ -193,8 +192,6 @@ describe('decideBotMove — declares when public information uniquely identifies
     const gs = buildBotTestGame(hands);
 
     // Publicly eliminate all opponents from low_s cards.
-    // Also eliminate p3 from those cards.  This leaves p2 as
-    // the only option — but we want 2 candidates, so skip p3.
     for (const opp of ['p4', 'p5', 'p6']) {
       for (const card of ['4_s', '5_s', '6_s']) {
         updateKnowledgeAfterAsk(gs, 'p1', opp, card, false);
@@ -205,21 +202,16 @@ describe('decideBotMove — declares when public information uniquely identifies
     // That leaves p2 and p3 as candidates.
     // Both are team1 → team-level inference says team1 owns the suit.
 
-    // The bot's visible team count for low_s should now be 6 (3 in hand + 3 team-inferred).
     const move = decideBotMove(gs, 'p1');
 
-    // The bot should either declare (if unique solution) or signal the
-    // ambiguous suit.  Since p2 and p3 are both candidates, solutions > 1,
-    // so it should signal with an ask in low_s to resolve the ambiguity.
-    if (move.action === 'ask') {
-      const cardToHalfSuit = buildCardToHalfSuitMap('remove_7s');
-      expect(cardToHalfSuit.get(move.cardId)).toBe('low_s');
-    } else {
-      // If it declares, that's also acceptable — the solver might find
-      // only 1 solution if p3 has 0 capacity.
-      expect(move.action).toBe('declare');
-      expect(move.halfSuitId).toBe('low_s');
-    }
+    // The bot should declare immediately rather than signaling.
+    expect(move.action).toBe('declare');
+    expect(move.halfSuitId).toBe('low_s');
+    expect(Object.keys(move.assignment)).toHaveLength(6);
+    // Bot's own cards must be assigned to itself.
+    expect(move.assignment['1_s']).toBe('p1');
+    expect(move.assignment['2_s']).toBe('p1');
+    expect(move.assignment['3_s']).toBe('p1');
   });
 
   it('keeps asking when the suit is privately complete but still not publicly provable', () => {
@@ -448,6 +440,38 @@ describe('decideBotMove — signaling instead of speculative declarations', () =
     const move = decideBotMove(gs, 'p1');
 
     expect(move.action).toBe('ask');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decideBotMove — defensive suit priority from opponent asking signals
+// ---------------------------------------------------------------------------
+
+describe('decideBotMove — defensive suit priority from opponent ask signals', () => {
+  it('prioritizes a suit opponents are aggressively asking about over an equally-progressed suit', () => {
+    // Bot holds cards in both low_s and high_h. Both suits have similar
+    // team progress (1 card each). But opponents have been asking about
+    // low_s — the bot should prioritize low_s to defend it.
+    const hands = new Map([
+      ['p1', new Set(['1_s', '8_h'])],
+      ['p2', new Set(['2_s', '9_h'])],
+      ['p3', new Set(['3_s', '10_h'])],
+      ['p4', new Set(['4_s', '11_h'])],
+      ['p5', new Set(['5_s', '12_h'])],
+      ['p6', new Set(['6_s', '13_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    // Opponents (team 2) have been asking about low_s cards.
+    updateTeamIntentAfterAsk(gs, 'p4', '1_s', false);
+    updateTeamIntentAfterAsk(gs, 'p5', '2_s', false);
+    gs.moveHistory = [{ type: 'ask' }, { type: 'ask' }];
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move.action).toBe('ask');
+    // Should ask about low_s (defending) rather than high_h.
+    const cardToHalfSuit = buildCardToHalfSuitMap('remove_7s');
+    expect(cardToHalfSuit.get(move.cardId)).toBe('low_s');
   });
 });
 

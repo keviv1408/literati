@@ -828,18 +828,6 @@ function _findSignalAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, hal
   return null;
 }
 
-function _isAmbiguousTeamCompleteSuit(gs, botId, halfSuitId, halfSuitsMap, teammates) {
-  const cards = halfSuitsMap.get(halfSuitId) ?? [];
-  if (cards.length === 0) return false;
-
-  const teamPlayers = [{ playerId: botId }, ...teammates];
-  if (_getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId) !== cards.length) {
-    return false;
-  }
-
-  const solutions = _searchPublicAssignments(gs, botId, halfSuitId, cards, teamPlayers, {}, 2);
-  return solutions.length > 1;
-}
 
 // ---------------------------------------------------------------------------
 // Bot decision
@@ -895,6 +883,7 @@ function decideBotMove(gs, botId) {
       }
     }
 
+    const opponentTeam = botTeam === 1 ? 2 : 1;
     const suitPriority = new Map(
       [...botHalfSuits].map((halfSuitId) => [
         halfSuitId,
@@ -915,6 +904,9 @@ function decideBotMove(gs, botId) {
             // team also has cards — reclaiming these is urgent because the
             // opponent could declare first.
             opponentThreat: opponentCount,
+            // Opponents actively asking about this suit — defend before they
+            // collect enough info to declare it away from us.
+            opponentAskThreat: _getTeamSignalStrength(gs, opponentTeam, halfSuitId, currentMoveIndex),
             signalStrength: _getTeamSignalStrength(gs, botTeam, halfSuitId, currentMoveIndex),
             teamCount,
           };
@@ -928,6 +920,9 @@ function decideBotMove(gs, botId) {
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
       if (closeoutDiff !== 0) return closeoutDiff;
+      // Defend suits opponents are actively asking about before they steal them.
+      const askThreatDiff = (bPriority?.opponentAskThreat ?? 0) - (aPriority?.opponentAskThreat ?? 0);
+      if (askThreatDiff !== 0) return askThreatDiff;
       // Prefer half-suits where opponents hold known cards — reclaim before
       // they can declare.
       const threatDiff = (bPriority?.opponentThreat ?? 0) - (aPriority?.opponentThreat ?? 0);
@@ -948,23 +943,6 @@ function decideBotMove(gs, botId) {
       if (focusAsk) return focusAsk;
     }
 
-    // If the team already owns an entire suit but public information still
-    // leaves ownership ambiguous, spend the turn signaling that suit before
-    // drifting into unrelated asks. This helps human teammates finish the book.
-    const teamCompleteSignalHalfSuits = prioritizedBotHalfSuits.filter((halfSuitId) =>
-      _isAmbiguousTeamCompleteSuit(gs, botId, halfSuitId, halfSuitsMap, teammates)
-    );
-    if (teamCompleteSignalHalfSuits.length > 0) {
-      const signalCriticalAsk = _findSignalAskInHalfSuits(
-        gs,
-        botId,
-        validOpponents,
-        teamCompleteSignalHalfSuits,
-        halfSuitsMap
-      );
-      if (signalCriticalAsk) return signalCriticalAsk;
-    }
-
     // Otherwise, or if closeout suits have no legal ask left, use the broader
     // suit-priority ordering.
     const generalAsk = _findAskInHalfSuits(gs, botId, validOpponents, prioritizedBotHalfSuits, halfSuitsMap);
@@ -979,6 +957,7 @@ function decideBotMove(gs, botId) {
         teammateAssistPriority: 0,
         closeoutPriority: 0,
         opponentThreat: 0,
+        opponentAskThreat: 0,
         signalStrength: 0,
         teamCount: 0,
       };
@@ -992,6 +971,7 @@ function decideBotMove(gs, botId) {
           teammateAssistPriority: priority.teammateAssistPriority,
           closeoutPriority: priority.closeoutPriority,
           opponentThreat: priority.opponentThreat,
+          opponentAskThreat: priority.opponentAskThreat,
           signalStrength: priority.signalStrength,
           teamCount: priority.teamCount,
           askableCards,
@@ -1004,6 +984,8 @@ function decideBotMove(gs, botId) {
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
       if (closeoutDiff !== 0) return closeoutDiff;
+      const askThreatDiff = b.opponentAskThreat - a.opponentAskThreat;
+      if (askThreatDiff !== 0) return askThreatDiff;
       const threatDiff = b.opponentThreat - a.opponentThreat;
       if (threatDiff !== 0) return threatDiff;
       const signalDiff = b.signalStrength - a.signalStrength;
@@ -1069,7 +1051,13 @@ function _tryBuildDeclaration(gs, botId, halfSuitId, halfSuitsMap, teammates) {
   }
 
   const solutions = _searchPublicAssignments(gs, botId, halfSuitId, cards, teamPlayers, {}, 2);
-  return solutions.length === 1 ? solutions[0] : null;
+  if (solutions.length === 1) return solutions[0];
+  // Team provably owns all 6 cards but exact assignment is ambiguous.
+  // Declare with best-guess rather than wasting moves on signal asks.
+  if (solutions.length > 1) {
+    return _buildBestGuessAssignment(gs, botId, halfSuitId, cards, teamPlayers, {});
+  }
+  return null;
 }
 
 /**
