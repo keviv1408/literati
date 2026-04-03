@@ -1759,12 +1759,30 @@ async function executeBotTurn(roomCode, botId) {
   } else if (decision.action === 'declare') {
     await handleDeclare(roomCode, botId, decision.halfSuitId, decision.assignment, null, true);
   }
-  // 'pass' — should not normally happen; just schedule next bot turn if needed
+  // 'pass' — decideBotMove could not find any valid move.
+  // This should be extremely rare; the emergency fallbacks in decideBotMove
+  // should have caught it first. If we reach here the game state is genuinely
+  // stuck (e.g. all remaining cards on the bot's team but declare is blocked).
+  // Advance the turn past this bot to prevent an infinite loop.
   else {
-    console.warn(
-      `[game-ws] Bot returned pass in room ${roomCode} for ${botId}; re-scheduling bot turn`
+    console.error(
+      `[game-ws] Bot returned pass in room ${roomCode} for ${botId}; ` +
+      `advancing turn to prevent infinite loop`
     );
-    scheduleBotTurnIfNeeded(gs);
+
+    // Attempt to find any player other than this bot who can take the turn.
+    const gs2 = getGame(roomCode);
+    if (gs2 && gs2.status === 'active' && gs2.currentTurnPlayerId === botId) {
+      const next = gs2.players.find(
+        (p) => p.playerId !== botId && getCardCount(gs2, p.playerId) > 0
+      );
+      if (next) {
+        gs2.currentTurnPlayerId = next.playerId;
+        broadcastStateUpdate(gs2, new Set());
+      }
+    }
+    scheduleBotTurnIfNeeded(gs2 ?? gs);
+    scheduleTurnTimerIfNeeded(gs2 ?? gs);
   }
 }
 

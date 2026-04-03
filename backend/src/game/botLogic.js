@@ -1127,7 +1127,52 @@ function decideBotMove(gs, botId) {
     }
   }
 
+  // ── Emergency brute-force fallback ─────────────────────────────────────────
+  // If ALL knowledge-filtered paths above returned null but opponents still
+  // have cards, do a raw scan of every askable card × every valid opponent
+  // ignoring all inference. This prevents stalling due to edge cases in the
+  // knowledge system (e.g. exhausted knowledge maps, stale inference state).
+  if (validOpponents.length > 0) {
+    for (const hs of undeclaredHalfSuits) {
+      const hsCards = halfSuitsMap.get(hs) ?? [];
+      if (!hsCards.some((c) => getHand(gs, botId).has(c))) continue;
+      for (const card of hsCards) {
+        if (getHand(gs, botId).has(card)) continue;
+        for (const opp of validOpponents) {
+          const askVal = validateAsk(gs, botId, opp.playerId, card);
+          if (askVal.valid) {
+            console.warn(
+              `[bot] Emergency ask fallback: bot=${botId} room=${gs.roomCode} ` +
+              `card=${card} target=${opp.playerId} (knowledge filters exhausted all options)`
+            );
+            return { action: 'ask', targetId: opp.playerId, cardId: card };
+          }
+        }
+      }
+    }
+  }
+
+  // ── Emergency best-guess declaration fallback ───────────────────────────────
+  // If there are truly no valid asks at all (all opponents have 0 cards, or the
+  // bot has no cards left in undeclared suits), guess-declare the best suit.
+  const emergencyDecl = _findBestGuessDeclaration(gs, botId, undeclaredHalfSuits, halfSuitsMap, teammates);
+  if (emergencyDecl) {
+    const emergencyValidation = validateDeclaration(gs, botId, emergencyDecl.halfSuitId, emergencyDecl.assignment);
+    if (emergencyValidation.valid) {
+      console.warn(
+        `[bot] Emergency declare fallback: bot=${botId} room=${gs.roomCode} ` +
+        `suit=${emergencyDecl.halfSuitId} (no valid ask found)`
+      );
+      return emergencyDecl;
+    }
+  }
+
   // Absolute fallback: should not reach here in a valid game state
+  console.error(
+    `[bot] Absolute pass fallback reached: bot=${botId} room=${gs.roomCode} ` +
+    `validOpponents=${validOpponents.length} botHand=${[...getHand(gs, botId)].join(',')} ` +
+    `undeclared=${undeclaredHalfSuits.join(',')}`
+  );
   return { action: 'pass' };
 }
 
