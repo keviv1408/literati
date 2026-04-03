@@ -3285,6 +3285,26 @@ function attachGameSocketServer(httpServer) {
         );
       }
     }
+    const isExplicitSpectator = Boolean(spectatorToken);
+
+    // Never silently downgrade a player connection to spectator mode.
+    // If a bearer-token user is not part of this game and did not provide an
+    // explicit spectator token, reject so the client can retry with its
+    // room-membership token / recovery key instead of entering read-only mode.
+    if (!playerInGame && !isExplicitSpectator) {
+      console.warn(
+        `[game-ws] Rejecting non-member player connection for room ${roomCode}: ` +
+        `playerId=${playerId}, tokenProvided=${Boolean(token)}, guestRecoveryKey=${Boolean(guestRecoveryKey)}`
+      );
+      sendJson(ws, {
+        type:    'error',
+        code:    'PLAYER_NOT_IN_GAME',
+        message: 'You are not a player in this game',
+      });
+      ws.close(4003, 'Player not in game');
+      return;
+    }
+
     const isSpectator  = !playerInGame;
 
     // ── Seat reclaim ──────────────────────────────────

@@ -446,6 +446,7 @@ export function useGameSocket({
       wsRef.current = null;
       setStatus(statusRef.current === 'error' ? 'error' : 'disconnected');
       if (e.code === 4001) setError('Authentication failed');
+      else if (e.code === 4003) setError('You are no longer recognized as a player in this game. Please rejoin from the room page.');
       else if (e.code === 4004) setError('Room not found');
       else if (e.code === 4005) setError('Game has not started yet');
     };

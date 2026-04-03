@@ -445,6 +445,22 @@ describe('Game WebSocket spectator connection', () => {
     expect(msg.code).toBe('UNAUTHORIZED');
   });
 
+  it('rejects bearer-token users who are not players in the game', async () => {
+    mockSupabase.auth.getUser.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'not-in-game-user',
+          user_metadata: { display_name: 'Outsider' },
+        },
+      },
+      error: null,
+    });
+
+    const msg = await firstMessage('token=valid-bearer-token');
+    expect(msg.type).toBe('error');
+    expect(msg.code).toBe('PLAYER_NOT_IN_GAME');
+  });
+
   // ── invalid format spectator token → error ─────────────────────────────────
   it('rejects connections with a malformed spectator token', async () => {
     // 31 chars — fails the 32-char hex check in resolveSpectatorToken

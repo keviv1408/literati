@@ -22,6 +22,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
+import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
 import { useGuest } from '@/contexts/GuestContext';
 import { useReconnect } from '@/hooks/useReconnect';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -141,8 +142,25 @@ export default function GamePage({ params }: PageProps) {
   const [loading, setLoading]             = useState(true);
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
+  const [gameBearerToken, setGameBearerToken] = useState<string | null>(null);
   const spectatorToken                    = searchParams.get('spectatorToken');
-  const bearerToken                       = reconnectStatus === 'ready' ? reconnectBearerToken : null;
+
+  // Prefer the room-specific token that originally joined this game.
+  // This prevents refresh from drifting to a new backend identity.
+  useEffect(() => {
+    if (!roomCode || reconnectStatus !== 'ready') {
+      setGameBearerToken(null);
+      return;
+    }
+
+    const membership = loadRoomMembership(roomCode);
+    if (membership?.bearerToken) {
+      setGameBearerToken(membership.bearerToken);
+      return;
+    }
+
+    setGameBearerToken(reconnectBearerToken);
+  }, [roomCode, reconnectStatus, reconnectBearerToken]);
 
   const [declareMode, setDeclareMode]     = useState(false);
   const [declareSelectedSuit, setDeclareSelectedSuit] = useState<HalfSuitId | null>(null);
@@ -257,7 +275,7 @@ export default function GamePage({ params }: PageProps) {
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
-    bearerToken,
+    bearerToken: gameBearerToken,
     guestRecoveryKey: guestSession?.sessionId ?? null,
     spectatorToken,
     onGameOver: (payload) => {
@@ -279,6 +297,13 @@ export default function GamePage({ params }: PageProps) {
       hasDealtRef.current = false;
     },
   });
+
+  // Persist the exact token that was accepted by the game WS server.
+  // On refresh this lets us reconnect as the same player identity.
+  useEffect(() => {
+    if (!roomCode || !myPlayerId || !gameBearerToken) return;
+    saveRoomMembership(roomCode, gameBearerToken, myPlayerId, 'player');
+  }, [roomCode, myPlayerId, gameBearerToken]);
 
   // ── Host detection for private-room Rematch button ───────────
   //
@@ -1169,7 +1194,7 @@ export default function GamePage({ params }: PageProps) {
     }}>
     <VoiceProvider
       roomCode={room.code}
-      bearerToken={bearerToken}
+      bearerToken={gameBearerToken}
       canJoin={Boolean(myPlayerId)}
     >
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden" data-testid="game-view">
