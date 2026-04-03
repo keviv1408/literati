@@ -102,18 +102,24 @@ interface GuestAuthResponse {
  * Otherwise the guest is registered with the backend and the returned token
  * is cached for future calls.
  */
-export async function getGuestBearerToken(displayName: string): Promise<string> {
+export async function getGuestBearerToken(
+  displayName: string,
+  recoveryKey?: string | null,
+): Promise<string> {
   // 1. Check cache — avoids a network round-trip on every action.
-  const cached = getCachedToken(displayName);
+  const cached = getCachedToken(displayName, recoveryKey);
   if (cached) return cached;
 
   // 2. Register with the backend and get a fresh token.
   const data = await apiFetch<GuestAuthResponse>('/api/auth/guest', {
     method: 'POST',
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({
+      displayName,
+      ...(recoveryKey ? { recoveryKey } : {}),
+    }),
   });
 
-  saveToken(data.token, data.session.expiresAt, displayName);
+  saveToken(data.token, data.session.expiresAt, displayName, recoveryKey);
   return data.token;
 }
 
@@ -239,7 +245,8 @@ export async function refreshAccessToken(
 export async function createRoom(
   payload: CreateRoomPayload,
   displayName: string,
-  bearerToken?: string
+  bearerToken?: string,
+  recoveryKey?: string | null,
 ): Promise<CreateRoomResponse> {
   const submitCreateRoom = async (token: string) =>
     apiFetch<CreateRoomResponse>('/api/rooms', {
@@ -249,7 +256,7 @@ export async function createRoom(
     });
 
   // Registered users supply their own Supabase JWT; guests need a backend token.
-  const token = bearerToken ?? (await getGuestBearerToken(displayName));
+  const token = bearerToken ?? (await getGuestBearerToken(displayName, recoveryKey));
 
   try {
     return await submitCreateRoom(token);
@@ -259,7 +266,7 @@ export async function createRoom(
     // retry once transparently so the user does not need to refresh.
     if (err instanceof ApiError && err.status === 401 && !bearerToken) {
       clearToken();
-      const retryToken = await getGuestBearerToken(displayName);
+      const retryToken = await getGuestBearerToken(displayName, recoveryKey);
       return submitCreateRoom(retryToken);
     }
     throw err;

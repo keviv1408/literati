@@ -29,6 +29,21 @@ const { getSupabaseClient } = require('./db/supabase');
 const app = express();
 const PORT = process.env.PORT || 3012;
 
+// Render and similar hosts terminate TLS / proxy requests before they reach
+// Express. Trust the first proxy hop in production so request.ip and
+// express-rate-limit behave correctly with X-Forwarded-For.
+if (process.env.TRUST_PROXY_HOPS) {
+  const trustedProxyValue = Number(process.env.TRUST_PROXY_HOPS);
+  app.set(
+    'trust proxy',
+    Number.isFinite(trustedProxyValue)
+      ? trustedProxyValue
+      : process.env.TRUST_PROXY_HOPS
+  );
+} else if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // ── CORS (must be before helmet so preflight OPTIONS get headers) ─────────────
 app.use(
   cors({

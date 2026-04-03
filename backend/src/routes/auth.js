@@ -18,6 +18,7 @@ const {
   VALID_AVATAR_IDS,
   MAX_DISPLAY_NAME_LENGTH,
   MIN_DISPLAY_NAME_LENGTH,
+  MAX_RECOVERY_KEY_LENGTH,
   SESSION_TTL_MS,
 } = require('../sessions/guestSessionStore');
 
@@ -78,7 +79,7 @@ const guestCreateLimiter = rateLimit({
  * (or _noDbWrites) before attempting a database write.
  */
 router.post('/guest', guestCreateLimiter, (req, res) => {
-  const { displayName, avatarId } = req.body || {};
+  const { displayName, avatarId, recoveryKey } = req.body || {};
 
   // ── Input validation ───────────────────────────────────────────────────────
 
@@ -110,6 +111,14 @@ router.post('/guest', guestCreateLimiter, (req, res) => {
     }
   }
 
+  if (recoveryKey !== undefined && recoveryKey !== null) {
+    if (typeof recoveryKey !== 'string') {
+      errors.push('recoveryKey must be a string');
+    } else if (recoveryKey.trim().length > MAX_RECOVERY_KEY_LENGTH) {
+      errors.push(`recoveryKey must be at most ${MAX_RECOVERY_KEY_LENGTH} characters`);
+    }
+  }
+
   if (errors.length > 0) {
     return res.status(400).json({
       error: 'Validation failed',
@@ -120,7 +129,7 @@ router.post('/guest', guestCreateLimiter, (req, res) => {
   // ── Create session ─────────────────────────────────────────────────────────
 
   try {
-    const { token, session } = createGuestSession(displayName, avatarId);
+    const { token, session } = createGuestSession(displayName, avatarId, recoveryKey);
 
     return res.status(201).json({
       token,

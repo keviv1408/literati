@@ -44,11 +44,17 @@ import { sortHandByHalfSuit, type CardVariant } from '@/utils/cardSort';
 
 export type GameWsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
 
-function toWsUrl(roomCode: string, token: string | null, spectatorToken: string | null): string {
+function toWsUrl(
+  roomCode: string,
+  token: string | null,
+  spectatorToken: string | null,
+  guestRecoveryKey: string | null,
+): string {
   const wsBase = API_URL.replace(/^https?/, (p) => (p === 'https' ? 'wss' : 'ws'));
   const params = new URLSearchParams();
   if (token) params.set('token', token);
   if (spectatorToken) params.set('spectatorToken', spectatorToken);
+  if (guestRecoveryKey) params.set('guestRecoveryKey', guestRecoveryKey);
   return `${wsBase}/ws/game/${roomCode}?${params.toString()}`;
 }
 
@@ -56,6 +62,7 @@ interface UseGameSocketOptions {
   roomCode: string | null;
   bearerToken: string | null;
   spectatorToken?: string | null;
+  guestRecoveryKey?: string | null;
   onGameOver?: (payload: GameOverPayload) => void;
   onRematchStart?: (payload: RematchStartPayload) => void;
   /** called when a new game is spun up in-place after a rematch vote. */
@@ -364,6 +371,7 @@ export function useGameSocket({
   roomCode,
   bearerToken,
   spectatorToken = null,
+  guestRecoveryKey = null,
   onGameOver,
   onRematchStart,
   onRematchStarting,
@@ -419,7 +427,7 @@ export function useGameSocket({
 
     let ws: WebSocket;
     try {
-      ws = new WebSocket(toWsUrl(roomCode, bearerToken, spectatorToken));
+      ws = new WebSocket(toWsUrl(roomCode, bearerToken, spectatorToken, guestRecoveryKey));
     } catch {
       setStatus('error');
       setError('Failed to create WebSocket connection');
@@ -826,7 +834,7 @@ export function useGameSocket({
       ws.close(1000, 'unmount');
       wsRef.current = null;
     };
-  }, [roomCode, bearerToken, spectatorToken]);
+  }, [roomCode, bearerToken, spectatorToken, guestRecoveryKey]);
 
   // ── Send helpers ──────────────────────────────────────────────────────────
 

@@ -12,6 +12,8 @@
  * sessionId : string — UUIDv4, stable identity for this guest
  * token : string — cryptographically random hex string used as the
  * bearer token; treated as a secret
+ * recoveryKey: string|null — browser-held secret used to recover the same
+ * guest seat after a backend restart without exposing a public playerId
  * displayName: string — chosen display name (1–20 chars, trimmed)
  * avatarId : string — one of VALID_AVATAR_IDS
  * isGuest : true — always true; used by middleware to gate DB writes
@@ -36,6 +38,7 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 /** Maximum display name length (matches frontend validation). */
 const MAX_DISPLAY_NAME_LENGTH = 20;
 const MIN_DISPLAY_NAME_LENGTH = 1;
+const MAX_RECOVERY_KEY_LENGTH = 128;
 
 /**
  * Allowed avatar identifiers.
@@ -75,7 +78,7 @@ function _generateToken() {
  * (sent only over HTTPS / WSS).
  * @throws {Error} if displayName fails validation.
  */
-function createGuestSession(displayName, avatarId) {
+function createGuestSession(displayName, avatarId, recoveryKey = null) {
   // --- validate displayName ---
   if (typeof displayName !== 'string') {
     throw new Error('displayName must be a string');
@@ -94,9 +97,22 @@ function createGuestSession(displayName, avatarId) {
   const resolvedAvatar =
     avatarId && VALID_AVATAR_IDS.includes(avatarId) ? avatarId : DEFAULT_AVATAR_ID;
 
+  const resolvedRecoveryKey =
+    typeof recoveryKey === 'string'
+      ? recoveryKey.trim()
+      : '';
+
+  if (
+    resolvedRecoveryKey &&
+    resolvedRecoveryKey.length > MAX_RECOVERY_KEY_LENGTH
+  ) {
+    throw new Error(`recoveryKey must be at most ${MAX_RECOVERY_KEY_LENGTH} characters`);
+  }
+
   const now = Date.now();
   const session = {
     sessionId: uuidv4(),
+    recoveryKey: resolvedRecoveryKey || null,
     displayName: trimmedName,
     avatarId: resolvedAvatar,
     isGuest: true,
@@ -237,6 +253,7 @@ module.exports = {
   DEFAULT_AVATAR_ID,
   MAX_DISPLAY_NAME_LENGTH,
   MIN_DISPLAY_NAME_LENGTH,
+  MAX_RECOVERY_KEY_LENGTH,
   SESSION_TTL_MS,
 
   // Test helpers

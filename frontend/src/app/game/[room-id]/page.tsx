@@ -20,10 +20,10 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getRoomByCode, getGuestBearerToken, getGameSummary, ApiError } from '@/lib/api';
+import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
-import { getCachedToken } from '@/lib/backendSession';
 import { useGuest } from '@/contexts/GuestContext';
+import { useReconnect } from '@/hooks/useReconnect';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
@@ -134,14 +134,15 @@ export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { guestSession } = useGuest();
+  const { status: reconnectStatus, bearerToken: reconnectBearerToken } = useReconnect();
 
   const [roomCode, setRoomCode]           = useState<string | null>(null);
   const [room, setRoom]                   = useState<Room | null>(null);
   const [loading, setLoading]             = useState(true);
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
-  const [bearerToken, setBearerToken]     = useState<string | null>(null);
   const spectatorToken                    = searchParams.get('spectatorToken');
+  const bearerToken                       = reconnectStatus === 'ready' ? reconnectBearerToken : null;
 
   const [declareMode, setDeclareMode]     = useState(false);
   const [declareSelectedSuit, setDeclareSelectedSuit] = useState<HalfSuitId | null>(null);
@@ -215,15 +216,6 @@ export default function GamePage({ params }: PageProps) {
   }, [params]);
 
   useEffect(() => {
-    if (!roomCode) return;
-    if (guestSession?.displayName) {
-      const cached = getCachedToken(guestSession.displayName);
-      if (cached) { setBearerToken(cached); return; }
-      getGuestBearerToken(guestSession.displayName).then(setBearerToken).catch(() => {});
-    }
-  }, [roomCode, guestSession]);
-
-  useEffect(() => {
     if (roomCode === null) return;
     if (!ROOM_CODE_RE.test(roomCode)) { setInvalidFormat(true); setLoading(false); return; }
     let cancelled = false;
@@ -266,6 +258,7 @@ export default function GamePage({ params }: PageProps) {
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
     bearerToken,
+    guestRecoveryKey: guestSession?.sessionId ?? null,
     spectatorToken,
     onGameOver: (payload) => {
       setGameOver(payload);

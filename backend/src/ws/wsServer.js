@@ -86,7 +86,7 @@ function _getGameServer() {
  * 2. Supabase JWT verification
  *
  * @param {string|null|undefined} token
- * @returns {Promise<{ playerId: string, displayName: string, avatarId: string|null, isGuest: boolean }|null>}
+ * @returns {Promise<{ playerId: string, displayName: string, avatarId: string|null, isGuest: boolean, guestRecoveryKey?: string|null }|null>}
  */
 async function resolveTokenToUser(token) {
   if (!token || typeof token !== 'string' || token.length === 0) return null;
@@ -99,6 +99,7 @@ async function resolveTokenToUser(token) {
       displayName: guestSession.displayName,
       avatarId: guestSession.avatarId,
       isGuest: true,
+      guestRecoveryKey: guestSession.recoveryKey ?? null,
     };
   }
 
@@ -504,6 +505,7 @@ async function handleJoinRoom(ws, connectionId, user, msg) {
     displayName: user.displayName,
     avatarId:    user.avatarId,
     isGuest:     user.isGuest,
+    ...(user.guestRecoveryKey ? { guestRecoveryKey: user.guestRecoveryKey } : {}),
     ws,
   });
 
@@ -521,6 +523,7 @@ async function handleJoinRoom(ws, connectionId, user, msg) {
         teamId:      /** @type {1|2} */ (seatIndex % 2 === 0 ? 1 : 2),
         isBot:       false,
         isGuest:     user.isGuest,
+        ...(user.guestRecoveryKey ? { guestRecoveryKey: user.guestRecoveryKey } : {}),
       });
     }
   }

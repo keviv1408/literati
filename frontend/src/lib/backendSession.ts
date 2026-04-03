@@ -19,6 +19,8 @@ interface StoredBackendToken {
   expiresAt: number;
   /** The display name that was used when this token was issued. */
   displayName: string;
+  /** Browser-held guest recovery secret associated with this token. */
+  recoveryKey?: string;
 }
 
 // ── Private helpers ──────────────────────────────────────────────────────────
@@ -32,7 +34,8 @@ function load(): StoredBackendToken | null {
     if (
       typeof parsed.token === 'string' &&
       typeof parsed.expiresAt === 'number' &&
-      typeof parsed.displayName === 'string'
+      typeof parsed.displayName === 'string' &&
+      (parsed.recoveryKey === undefined || typeof parsed.recoveryKey === 'string')
     ) {
       return parsed;
     }
@@ -65,10 +68,11 @@ function clear(): void {
  *
  * We refresh 60 s before the server-side expiry to avoid race conditions.
  */
-export function getCachedToken(displayName: string): string | null {
+export function getCachedToken(displayName: string, recoveryKey?: string | null): string | null {
   const stored = load();
   if (!stored) return null;
   if (stored.displayName !== displayName) return null;
+  if ((recoveryKey ?? null) !== (stored.recoveryKey ?? null)) return null;
   const BUFFER_MS = 60_000;
   if (Date.now() + BUFFER_MS >= stored.expiresAt) {
     clear();
@@ -83,9 +87,15 @@ export function getCachedToken(displayName: string): string | null {
 export function saveToken(
   token: string,
   expiresAt: number,
-  displayName: string
+  displayName: string,
+  recoveryKey?: string | null
 ): void {
-  save({ token, expiresAt, displayName });
+  save({
+    token,
+    expiresAt,
+    displayName,
+    ...(recoveryKey ? { recoveryKey } : {}),
+  });
 }
 
 /**

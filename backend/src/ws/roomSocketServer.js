@@ -496,7 +496,7 @@ function broadcastToSpectators(roomCode, message) {
  * 2. Supabase JWT — for registered users.
  *
  * @param {string|null} token
- * @returns {Promise<{userId: string, displayName: string, isGuest: boolean}|null>}
+ * @returns {Promise<{userId: string, displayName: string, isGuest: boolean, guestRecoveryKey?: string|null}|null>}
  */
 async function resolveUserFromToken(token) {
   if (!token) return null;
@@ -508,6 +508,7 @@ async function resolveUserFromToken(token) {
       userId: guestSession.sessionId,
       displayName: guestSession.displayName,
       isGuest: true,
+      guestRecoveryKey: guestSession.recoveryKey ?? null,
     };
   }
 
@@ -985,7 +986,7 @@ function buildOccupiedSeats(clients, playerCount) {
 
   t1.slice(0, maxPerTeam).forEach((p, i) => {
     const seatIndex = i * 2;
-    occupiedSeats.set(seatIndex, {
+      occupiedSeats.set(seatIndex, {
       seatIndex,
       playerId:    p.userId,
       displayName: p.displayName,
@@ -994,6 +995,7 @@ function buildOccupiedSeats(clients, playerCount) {
       isBot:       false,
       isGuest:     p.isGuest,
       isHost:      p.isHost,
+      ...(p.guestRecoveryKey ? { guestRecoveryKey: p.guestRecoveryKey } : {}),
     });
   });
 
@@ -1008,6 +1010,7 @@ function buildOccupiedSeats(clients, playerCount) {
       isBot:       false,
       isGuest:     p.isGuest,
       isHost:      p.isHost,
+      ...(p.guestRecoveryKey ? { guestRecoveryKey: p.guestRecoveryKey } : {}),
     });
   });
 
@@ -1684,7 +1687,12 @@ function attachRoomSocketServer(httpServer) {
       return;
     }
 
-    const { userId, displayName, isGuest } = userInfo;
+    const {
+      userId,
+      displayName,
+      isGuest,
+      guestRecoveryKey = null,
+    } = userInfo;
 
     // ── Verify room exists and is joinable ──────────────────────────────────
     // For spectator connections we also need the spectator_token from the DB
@@ -1804,7 +1812,15 @@ function attachRoomSocketServer(httpServer) {
     }
 
     // ── Register client ─────────────────────────────────────────────────────
-    clients.set(userId, { ws, userId, displayName, isGuest, isHost, teamId });
+    clients.set(userId, {
+      ws,
+      userId,
+      displayName,
+      isGuest,
+      isHost,
+      teamId,
+      ...(guestRecoveryKey ? { guestRecoveryKey } : {}),
+    });
 
     // ── Cancel any pending host-transfer timer for this room ─────────────────
     // If the ORIGINAL host reconnects before the grace window elapses, cancel

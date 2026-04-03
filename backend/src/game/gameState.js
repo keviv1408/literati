@@ -46,6 +46,7 @@
  * seatIndex: number,
  * isBot: boolean,
  * isGuest: boolean,
+ * guestRecoveryKey?: string,
  * }
  */
 
@@ -68,6 +69,7 @@ const { buildCardToHalfSuitMap, halfSuitLabel } = require('./halfSuits');
  * teamId: 1|2,
  * isBot: boolean,
  * isGuest: boolean,
+ * guestRecoveryKey?: string,
  * }>,
  * }} options
  * @returns {Object} A fresh GameState
@@ -107,6 +109,7 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
       seatIndex:   s.seatIndex,
       isBot:       s.isBot,
       isGuest:     s.isGuest,
+      ...(s.guestRecoveryKey ? { guestRecoveryKey: s.guestRecoveryKey } : {}),
     })),
 
     hands,

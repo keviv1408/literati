@@ -120,7 +120,7 @@ export default function MatchmakingPage() {
       }
 
       // Obtain backend bearer token (uses cached token if still valid)
-      const token = await getGuestBearerToken(session.displayName);
+      const token = await getGuestBearerToken(session.displayName, session.sessionId);
 
       // Setting bearerToken + autoJoinFilter triggers the hook to:
       //   1. Open a WebSocket to /ws?token=<token>

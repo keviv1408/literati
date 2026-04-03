@@ -31,20 +31,22 @@ jest.mock('@/contexts/GuestContext', () => ({
 }));
 
 // Mock backendSession
-const mockGetCachedToken = jest.fn<string | null, [string]>();
+const mockGetCachedToken = jest.fn<string | null, [string, string | null | undefined]>();
 const mockClearToken = jest.fn();
 jest.mock('@/lib/backendSession', () => ({
-  getCachedToken: (name: string) => mockGetCachedToken(name),
+  getCachedToken: (name: string, recoveryKey?: string | null) =>
+    mockGetCachedToken(name, recoveryKey),
   clearToken: () => mockClearToken(),
   saveToken: jest.fn(),
 }));
 
 // Mock api module
 const mockValidateSession = jest.fn();
-const mockGetGuestBearerToken = jest.fn<Promise<string>, [string]>();
+const mockGetGuestBearerToken = jest.fn<Promise<string>, [string, string | null | undefined]>();
 jest.mock('@/lib/api', () => ({
   validateSession: (...args: unknown[]) => mockValidateSession(...args),
-  getGuestBearerToken: (...args: unknown[]) => mockGetGuestBearerToken(...args as [string]),
+  getGuestBearerToken: (...args: unknown[]) =>
+    mockGetGuestBearerToken(...args as [string, string | null | undefined]),
   ApiError: class ApiError extends Error {
     status: number;
     constructor(status: number, message: string) {
@@ -248,7 +250,7 @@ describe('useReconnect', () => {
       const { result } = renderHook(() => useReconnect());
 
       await waitFor(() => expect(result.current.status).toBe('ready'));
-      expect(mockGetGuestBearerToken).toHaveBeenCalledWith('GuestPlayer');
+      expect(mockGetGuestBearerToken).toHaveBeenCalledWith('GuestPlayer', 'client-sid');
     });
 
     it('returns status="ready" after transparently re-creating the guest session', async () => {
@@ -291,7 +293,7 @@ describe('useReconnect', () => {
       renderHook(() => useReconnect());
 
       await waitFor(() =>
-        expect(mockGetCachedToken).toHaveBeenCalledWith('GuestPlayer')
+        expect(mockGetCachedToken).toHaveBeenCalledWith('GuestPlayer', 'client-sid')
       );
       await act(async () => {});
       expect(mockClearToken).not.toHaveBeenCalled();
@@ -312,7 +314,9 @@ describe('useReconnect', () => {
 
       renderHook(() => useReconnect());
 
-      await waitFor(() => expect(mockGetGuestBearerToken).toHaveBeenCalledWith('GuestPlayer'));
+      await waitFor(() =>
+        expect(mockGetGuestBearerToken).toHaveBeenCalledWith('GuestPlayer', 'client-sid')
+      );
     });
 
     it('returns status="ready" with the fresh token', async () => {

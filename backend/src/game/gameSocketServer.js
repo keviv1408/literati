@@ -411,7 +411,7 @@ const _botControlledDeclarations = new Map();
 /**
  * Resolve a bearer token to a user identity.
  * @param {string|null} token
- * @returns {Promise<{playerId: string, displayName: string, isGuest: boolean}|null>}
+ * @returns {Promise<{playerId: string, displayName: string, isGuest: boolean, guestRecoveryKey?: string|null}|null>}
  */
 async function resolveUser(token) {
   if (!token) return null;
@@ -424,6 +424,7 @@ async function resolveUser(token) {
       displayName: guestSession.displayName,
       avatarId:    guestSession.avatarId ?? null,
       isGuest:     true,
+      guestRecoveryKey: guestSession.recoveryKey ?? null,
     };
   }
 
@@ -3064,6 +3065,8 @@ function attachGameSocketServer(httpServer) {
     const roomCode       = match ? match[1].toUpperCase() : null;
     const token          = typeof parsed.query.token === 'string' ? parsed.query.token : null;
     const spectatorToken = typeof parsed.query.spectatorToken === 'string' ? parsed.query.spectatorToken : null;
+    const guestRecoveryKey =
+      typeof parsed.query.guestRecoveryKey === 'string' ? parsed.query.guestRecoveryKey : null;
 
     // Validate room code format
     if (!roomCode || !/^[A-Z0-9]{6}$/.test(roomCode)) {
@@ -3110,7 +3113,7 @@ function attachGameSocketServer(httpServer) {
       return;
     }
 
-    const { playerId, displayName } = user;
+    let { playerId, displayName } = user;
 
     // Find game state — try in-memory first, then Supabase
     let gs = getGame(roomCode);
@@ -3166,7 +3169,27 @@ function attachGameSocketServer(httpServer) {
     }
 
     // Verify this player is in the game (or is a spectator)
-    const playerInGame = gs.players.find((p) => p.playerId === playerId);
+    let playerInGame = gs.players.find((p) => p.playerId === playerId);
+    if (
+      !playerInGame &&
+      user.isGuest &&
+      guestRecoveryKey
+    ) {
+      const recoveredGuestPlayer = gs.players.find(
+        (player) =>
+          player.isGuest &&
+          !player.isBot &&
+          player.guestRecoveryKey === guestRecoveryKey,
+      );
+      if (recoveredGuestPlayer) {
+        playerId = recoveredGuestPlayer.playerId;
+        displayName = recoveredGuestPlayer.displayName || displayName;
+        playerInGame = recoveredGuestPlayer;
+        console.log(
+          `[game-ws] Rebound guest recovery key to player ${playerId} in room ${roomCode}`,
+        );
+      }
+    }
     const isSpectator  = !playerInGame;
 
     // ── Seat reclaim ──────────────────────────────────

@@ -130,7 +130,7 @@ export function useReconnect(): ReconnectResult {
 
         try {
           // 1. Try the locally-cached bearer token first (no network).
-          const cachedToken = getCachedToken(name);
+          const cachedToken = getCachedToken(name, guestSession.sessionId);
 
           if (cachedToken) {
             try {
@@ -172,7 +172,7 @@ export function useReconnect(): ReconnectResult {
           // 2. No valid cached token — register a fresh guest session.
           // POST /api/auth/guest creates a new in-memory session and
           // caches the returned token in backendSession.ts.
-          const freshToken = await getGuestBearerToken(name);
+          const freshToken = await getGuestBearerToken(name, guestSession.sessionId);
           if (cancelled) return;
 
           // Validate to get the server-assigned sessionId.

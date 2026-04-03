@@ -30,6 +30,7 @@ import React, {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { createRoom, ApiError } from '@/lib/api';
+import { useGuest } from '@/contexts/GuestContext';
 import {
   PLAYER_COUNT_OPTIONS,
   VARIANT_OPTIONS,
@@ -97,6 +98,7 @@ export default function CreateRoomModal({
   onClose,
 }: CreateRoomModalProps) {
   const router = useRouter();
+  const { guestSession } = useGuest();
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [playerCount, setPlayerCount] = useState<6 | 8>(6);
@@ -154,7 +156,12 @@ export default function CreateRoomModal({
       setIsSubmitting(true);
 
       try {
-        const { room } = await createRoom({ playerCount, cardRemovalVariant: variant }, displayName);
+        const { room } = await createRoom(
+          { playerCount, cardRemovalVariant: variant },
+          displayName,
+          undefined,
+          guestSession?.sessionId ?? null,
+        );
         // Cache room data so the lobby page can render without an extra fetch
         cacheCreatedRoom(room);
         // Show the success confirmation panel immediately
@@ -184,7 +191,7 @@ export default function CreateRoomModal({
         setIsSubmitting(false);
       }
     },
-    [isSubmitting, playerCount, variant, displayName, onClose, router]
+    [isSubmitting, playerCount, variant, displayName, guestSession, onClose, router]
   );
 
   // ── Enter room (from success phase) ────────────────────────────────────────

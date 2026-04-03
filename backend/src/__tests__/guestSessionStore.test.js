@@ -102,6 +102,11 @@ describe('createGuestSession', () => {
     expect(session.avatarId).toBe(DEFAULT_AVATAR_ID);
   });
 
+  it('stores an optional recoveryKey for restart-safe guest reconnects', () => {
+    const { session } = createGuestSession('Grace', undefined, 'client-sid');
+    expect(session.recoveryKey).toBe('client-sid');
+  });
+
   it('generates unique tokens for each call', () => {
     const tokens = new Set();
     for (let i = 0; i < 50; i++) {
