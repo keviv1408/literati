@@ -56,7 +56,10 @@
 import React from 'react';
 import Avatar from '@/components/Avatar';
 import { BotBadge } from '@/components/BotBadge';
+import PlayingCard from '@/components/PlayingCard';
+import { cardLabel } from '@/types/game';
 import type { GamePlayer } from '@/types/game';
+import type { DeclarationSeatRevealCard } from '@/lib/declarationSeatReveal';
 import type { VoiceSeatState } from '@/hooks/useDailyVoice';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -121,6 +124,12 @@ export interface GamePlayerSeatProps {
   isAskTargetable?: boolean;
 
   /**
+   * Compact post-failure declaration reveal cards attached to this seat.
+   * Each card is coloured by whether the declarant placed it correctly.
+   */
+  declarationRevealCards?: DeclarationSeatRevealCard[] | null;
+
+  /**
    * Called when the local player taps/clicks this seat as the ask target.
    * Only provided when the ask flow has a selected card and the seat belongs
    * to an eligible opponent with cards remaining.
@@ -166,6 +175,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   onHighlightClick,
   isAskTargetable = false,
   onAskTargetClick,
+  declarationRevealCards = null,
   className = '',
   voiceState = null,
 }) => {
@@ -233,6 +243,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   // comfortably clears the 44 px minimum tap-target height. On desktop the
   // 'sm' size remains — layout is denser and pointer precision is higher.
   const avatarSize = isClickable ? 'md' : 'sm';
+  const revealPlacement = teamId === 2 ? 'below' : 'above';
 
   // ── Occupied seat ───────────────────────────────────────────────────────────
   return (
@@ -314,6 +325,43 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           aria-hidden="true"
           data-testid="ask-target-ring"
         />
+      )}
+
+      {declarationRevealCards && declarationRevealCards.length > 0 && (
+        <div
+          className={[
+            'pointer-events-none absolute left-1/2 z-20 flex max-w-[7.75rem] -translate-x-1/2 flex-wrap justify-center gap-1 animate-fade-in',
+            revealPlacement === 'below' ? 'top-full mt-1.5' : 'bottom-full mb-1.5',
+          ].join(' ')}
+          aria-hidden="true"
+          data-testid="declaration-seat-reveal"
+          data-placement={revealPlacement}
+        >
+          {declarationRevealCards.map(({ cardId, isWrong, claimedByName }) => (
+            <div
+              key={cardId}
+              className="relative"
+              data-testid={`declaration-seat-reveal-card-${cardId}`}
+              data-status={isWrong ? 'wrong' : 'correct'}
+              title={
+                isWrong
+                  ? `${cardLabel(cardId)} — guessed for ${claimedByName ?? 'another player'}`
+                  : `${cardLabel(cardId)} — correctly assigned`
+              }
+            >
+              <PlayingCard
+                cardId={cardId}
+                size="sm"
+                className={[
+                  'w-7 h-10 rounded-[8px] shadow-[0_8px_16px_rgba(2,6,23,0.42)]',
+                  isWrong
+                    ? 'border-red-300/95 ring-1 ring-red-400/90'
+                    : 'border-emerald-300/95 ring-1 ring-emerald-400/90',
+                ].join(' ')}
+              />
+            </div>
+          ))}
+        </div>
       )}
 
       {/* ── Eliminated overlay ───────────────────────── */}

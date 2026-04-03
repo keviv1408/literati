@@ -45,11 +45,14 @@
 
 import React, { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
+import {
+  buildDeclarationSeatRevealMap,
+  FAILED_DECLARATION_SEAT_REVEAL_MS,
+} from '@/lib/declarationSeatReveal';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import CardHand from '@/components/CardHand';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
-import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
@@ -123,12 +126,7 @@ export interface SpectatorViewProps {
    * can see the same countdown the declaring player sees.
    */
   declarationTimer?: DeclarationTimerPayload | null;
-  /**
-   * Per-card diff from a failed declaration.
-   * Non-null when the server broadcasts `declarationFailed` after an incorrect
-   * declaration. The FailedDeclarationReveal overlay is rendered when set.
-   * Cleared when the next ask_result / declaration_result arrives.
-   */
+  /** Per-card diff from a failed declaration, used for the seat-level reveal. */
   declarationFailed?: DeclarationFailedPayload | null;
   /**
    * Active post-declaration turn-selection timer (AC 28).
@@ -165,7 +163,7 @@ export default function SpectatorView({
   gamePlayerCount,
   onGoHome,
 }: SpectatorViewProps) {
-  // ── Failed Declaration Reveal dismiss state ───────────────────
+  // ── Failed Declaration Seat Reveal dismiss state ──────────────
   const [dismissedDeclarationFailed, setDismissedDeclarationFailed] =
     React.useState<DeclarationFailedPayload | null>(null);
   const showFailedReveal = Boolean(
@@ -241,6 +239,15 @@ export default function SpectatorView({
     showTransientLastResult(msg, null);
   }, [lastDeclareResult]);
 
+  useEffect(() => {
+    if (!declarationFailed) return;
+    const timer = setTimeout(
+      () => setDismissedDeclarationFailed(declarationFailed),
+      FAILED_DECLARATION_SEAT_REVEAL_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [declarationFailed]);
+
   // ── Derived values ─────────────────────────────────────────────────────────
   const effectiveVariant    = variant ?? (cardRemovalVariant as 'remove_2s' | 'remove_7s' | 'remove_8s');
   const effectivePlayerCount = playerCount ?? gamePlayerCount;
@@ -252,6 +259,10 @@ export default function SpectatorView({
   const currentTurnPlayer = gameState?.currentTurnPlayerId
     ? players.find((p) => p.playerId === gameState.currentTurnPlayerId)
     : null;
+  const declarationSeatRevealByPlayerId =
+    showFailedReveal && declarationFailed
+      ? buildDeclarationSeatRevealMap(declarationFailed, players, effectiveVariant)
+      : null;
 
   const displayedMove = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove ?? null;
   const selectedPlayer = selectedPlayerId
@@ -485,6 +496,7 @@ export default function SpectatorView({
             godModeEnabled={godModeEnabled}
             selectedPlayerId={selectedPlayerId}
             onSelectPlayer={setSelectedPlayerId}
+            declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
           />
         </div>
 
@@ -513,6 +525,7 @@ export default function SpectatorView({
             godModeEnabled={godModeEnabled}
             selectedPlayerId={selectedPlayerId}
             onSelectPlayer={setSelectedPlayerId}
+            declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
           />
           <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">
             Team 1
@@ -658,19 +671,6 @@ export default function SpectatorView({
         </div>
       </footer>
 
-      {/* ── Failed Declaration Reveal overlay ──────────────────
-       * Spectators also receive the `declarationFailed` broadcast and see
-       * the same diff overlay as the players so they can follow along.
-       */}
-      {showFailedReveal && declarationFailed && (
-        <FailedDeclarationReveal
-          payload={declarationFailed}
-          players={players}
-          variant={effectiveVariant}
-          onDismiss={() => setDismissedDeclarationFailed(declarationFailed)}
-        />
-      )}
-
       {cardFlight && (
         <CardFlightAnimation
           cardId={cardFlight.cardId}
@@ -801,6 +801,7 @@ function SpectatorPlayerRow({
   godModeEnabled,
   selectedPlayerId,
   onSelectPlayer,
+  declarationSeatRevealByPlayerId,
 }: {
   players: GamePlayer[];
   currentTurnPlayerId: string | null;
@@ -808,6 +809,7 @@ function SpectatorPlayerRow({
   godModeEnabled: boolean;
   selectedPlayerId: string | null;
   onSelectPlayer: (playerId: string) => void;
+  declarationSeatRevealByPlayerId?: Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null;
 }) {
   const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
 
@@ -856,6 +858,9 @@ function SpectatorPlayerRow({
               player={player}
               myPlayerId={null}
               currentTurnPlayerId={currentTurnPlayerId}
+              declarationRevealCards={
+                declarationSeatRevealByPlayerId?.get(player.playerId) ?? null
+              }
             />
           </button>
         );

@@ -22,6 +22,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import type { GamePlayer } from '@/types/game';
+import type { DeclarationSeatRevealCard } from '@/lib/declarationSeatReveal';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1047,6 +1048,55 @@ describe('GamePlayerSeat —  highlight ring', () => {
     );
     const seat = screen.getByTestId('game-player-seat');
     expect(seat.getAttribute('aria-label')).not.toContain('eligible for next turn');
+  });
+});
+
+describe('GamePlayerSeat — declaration seat reveal', () => {
+  const declarationRevealCards: DeclarationSeatRevealCard[] = [
+    { cardId: '1_s', isWrong: false, claimedByName: null },
+    { cardId: '2_s', isWrong: true, claimedByName: 'Bob' },
+  ];
+
+  it('does not render a declaration reveal by default', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+      />,
+    );
+    expect(screen.queryByTestId('declaration-seat-reveal')).toBeNull();
+  });
+
+  it('renders compact reveal cards when declarationRevealCards is provided', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={0}
+        player={makePlayer()}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        declarationRevealCards={declarationRevealCards}
+      />,
+    );
+
+    expect(screen.getByTestId('declaration-seat-reveal')).toBeInTheDocument();
+    expect(screen.getByTestId('declaration-seat-reveal-card-1_s')).toHaveAttribute('data-status', 'correct');
+    expect(screen.getByTestId('declaration-seat-reveal-card-2_s')).toHaveAttribute('data-status', 'wrong');
+  });
+
+  it('places the reveal below team 2 seats so it points toward the center', () => {
+    render(
+      <GamePlayerSeat
+        seatIndex={1}
+        player={makePlayer({ teamId: 2, seatIndex: 1 })}
+        myPlayerId="other"
+        currentTurnPlayerId={null}
+        declarationRevealCards={declarationRevealCards}
+      />,
+    );
+
+    expect(screen.getByTestId('declaration-seat-reveal')).toHaveAttribute('data-placement', 'below');
   });
 });
 

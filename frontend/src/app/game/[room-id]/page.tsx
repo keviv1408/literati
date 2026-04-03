@@ -22,6 +22,10 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
+import {
+  buildDeclarationSeatRevealMap,
+  FAILED_DECLARATION_SEAT_REVEAL_MS,
+} from '@/lib/declarationSeatReveal';
 import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
 import { useGuest } from '@/contexts/GuestContext';
 import { useReconnect } from '@/hooks/useReconnect';
@@ -46,7 +50,6 @@ import {
 } from '@dnd-kit/core';
 import { DeclareDropSeat } from '@/components/InlineDeclare';
 import InlineDeclareTray from '@/components/InlineDeclareTray';
-import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
@@ -184,20 +187,17 @@ export default function GamePage({ params }: PageProps) {
 
   // ── Declaration result overlay ────────────────────────────────
   //
-  // Shown immediately after `declaration_result` arrives. Auto-dismisses after
-  // 3 seconds (with a visible countdown) or earlier if the player presses the
-  // explicit "Dismiss" button. On dismiss, `sendGameAdvance()` is called to
-  // notify the server that the client is ready for the next turn.
+  // Shown after correct declarations only. Auto-dismisses after 3 seconds
+  // (with a visible countdown) or earlier if the player presses the explicit
+  // "Dismiss" button. On dismiss, `sendGameAdvance()` is called to notify the
+  // server that the client is ready for the next turn.
   const [showDeclarationOverlay, setShowDeclarationOverlay] = useState(false);
 
-  // ── Failed Declaration Reveal ────────────────────────────────
+  // ── Failed Declaration Seat Reveal ───────────────────────────
   //
-  // When declarationFailed arrives from the socket, the overlay is shown.
-  // The player (or the auto-dismiss timer inside the component) can dismiss it
-  // by setting failedRevealDismissed to true. The flag resets automatically
-  // when declarationFailed changes (new failed declaration in the same game).
-  // NOTE: `declarationFailed` is destructured from useGameSocket below.
-  // `showFailedReveal` is therefore computed after the useGameSocket call.
+  // When declarationFailed arrives from the socket, affected seats briefly
+  // show the declared half-suit cards with compact green/red outlines. The
+  // reveal auto-dismisses after a short delay and resets on the next failure.
   const [failedRevealDismissed, setFailedRevealDismissed] = useState(false);
 
   // ── Score flash ───────────────────────────────────────────────
@@ -547,11 +547,9 @@ export default function GamePage({ params }: PageProps) {
         scoreFlashTimer.current = setTimeout(() => setScoreFlash(null), 2000);
       }
 
-      // ── Declaration result overlay ─────────────────────────
-      // Show the overlay with a 3-second auto-dismiss countdown.
-      // The overlay is closed by handleDeclarationOverlayDismiss which also
-      // dispatches game_advance to the server.
-      setShowDeclarationOverlay(true);
+      // Correct declarations still use the countdown overlay. Incorrect
+      // declarations now rely on the inline seat reveal instead.
+      setShowDeclarationOverlay(lastDeclareResult.correct);
 
       updatePendingAskBatch(null);
       setActionLoading(false);
@@ -566,14 +564,15 @@ export default function GamePage({ params }: PageProps) {
     }
   }, [lastDeclareResult, playDeclarationSuccess, playDeclarationFail, publishMoveMessage, updatePendingAskBatch]);
 
-  // ── Reset FailedDeclarationReveal dismissed flag on new failure ─
-  // When a fresh declarationFailed payload arrives (a new failed declaration
-  // in the same game), re-show the overlay even if the player dismissed the
-  // previous one. The effect also covers the first arrival (null → payload).
+  // ── Reset / auto-dismiss failed declaration seat reveal ──────
   useEffect(() => {
-    if (declarationFailed) {
-      setFailedRevealDismissed(false);
-    }
+    if (!declarationFailed) return;
+    setFailedRevealDismissed(false);
+    const timer = setTimeout(
+      () => setFailedRevealDismissed(true),
+      FAILED_DECLARATION_SEAT_REVEAL_MS,
+    );
+    return () => clearTimeout(timer);
   }, [declarationFailed]);
 
   // ── Trigger deal animation on first game_init ─────────────────────────────
@@ -657,6 +656,10 @@ export default function GamePage({ params }: PageProps) {
   const currentLastMoveMessage = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove;
   const resolvedVariant = variant ?? room?.card_removal_variant ?? 'remove_7s';
   const declaredSuits = gameState?.declaredSuits ?? [];
+  const declarationSeatRevealByPlayerId =
+    showFailedReveal && declarationFailed
+      ? buildDeclarationSeatRevealMap(declarationFailed, players, resolvedVariant)
+      : null;
   const availableAskHalfSuits = getAvailableAskHalfSuits(myHand, declaredSuits, resolvedVariant);
   const validAskTargetIds = new Set(
     players
@@ -1405,6 +1408,7 @@ export default function GamePage({ params }: PageProps) {
                   onSeatClick={seatClickHandler}
                   askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
                   onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
+                  declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
                   renderSeatWrapper={declareSeatWrapper}
                 />
               </div>
@@ -1427,6 +1431,7 @@ export default function GamePage({ params }: PageProps) {
                   onSeatClick={seatClickHandler}
                   askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
                   onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
+                  declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
                   renderSeatWrapper={declareSeatWrapper}
                 />
                 <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
@@ -1689,7 +1694,7 @@ export default function GamePage({ params }: PageProps) {
       )}
 
       {/* ── Declaration result overlay ─────────────────────── */}
-      {/* Shown to all players immediately after declaration_result arrives. */}
+      {/* Shown to all players after a correct declaration. */}
       {/* Auto-dismisses after 3 s; explicit Dismiss button cancels early. */}
       {/* On dismiss, dispatches game_advance to the server. */}
       {showDeclarationOverlay && lastDeclareResult && (
@@ -1698,21 +1703,6 @@ export default function GamePage({ params }: PageProps) {
           players={players}
           myTeamId={myTeamId}
           onDismiss={handleDeclarationOverlayDismiss}
-        />
-      )}
-      {/* ── Failed Declaration Reveal overlay ─────────────────
-       * Shown to ALL clients (players + spectators) when the server broadcasts
-       * a declarationFailed event (incorrect declaration only). Displays each
-       * card in the half-suit with the claimed holder crossed out in red and
-       * the actual holder highlighted in green.
-       * Auto-dismisses after 6 seconds; player can also dismiss manually.
-       */}
-      {showFailedReveal && declarationFailed && (
-        <FailedDeclarationReveal
-          payload={declarationFailed}
-          players={players}
-          variant={effectiveVariant}
-          onDismiss={() => setFailedRevealDismissed(true)}
         />
       )}
     </div>
@@ -1743,6 +1733,7 @@ function PlayerRow({
   onSeatClick,
   askTargetPlayerIds,
   onAskTargetClick,
+  declarationSeatRevealByPlayerId,
   renderSeatWrapper,
 }: {
   players: import('@/types/game').GamePlayer[];
@@ -1754,6 +1745,7 @@ function PlayerRow({
   onSeatClick?: (playerId: string) => void;
   askTargetPlayerIds?: Set<string>;
   onAskTargetClick?: (playerId: string) => void;
+  declarationSeatRevealByPlayerId?: Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null;
   /** Optional wrapper for individual seats — used by inline declare to make teammate seats droppable. */
   renderSeatWrapper?: (player: import('@/types/game').GamePlayer, seatElement: React.ReactNode) => React.ReactNode;
 }) {
@@ -1786,6 +1778,11 @@ function PlayerRow({
               isAskTarget && onAskTargetClick && player
                 ? () => onAskTargetClick(player.playerId)
                 : undefined
+            }
+            declarationRevealCards={
+              player
+                ? declarationSeatRevealByPlayerId?.get(player.playerId) ?? null
+                : null
             }
           />
         );
