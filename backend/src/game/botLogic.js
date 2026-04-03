@@ -1336,7 +1336,7 @@ function decideBotMove(gs, botId) {
       return a.halfSuitId.localeCompare(b.halfSuitId);
     });
 
-    for (const { halfSuitId, askableCards } of halfSuitScores) {
+    for (const { halfSuitId, askableCards, closeoutPriority } of halfSuitScores) {
       // Keep random fallback from repeating asks that public information has
       // already ruled out for that target/card combination.
       const unknownAsk = _findUnknownAsk(gs, botId, validOpponents, askableCards);
@@ -1422,49 +1422,135 @@ function decideBotMove(gs, botId) {
   return { action: 'pass' };
 }
 
-function buildBotCardKnowledgeMatrix(gs, botId) {
-  const { cardLabel, buildDeck } = require('./deck');
+function _formatPublicAssignmentSummary(gs, assignment) {
+  const { cardLabel } = require('./deck');
+  const byPlayer = new Map();
 
-  // Get the bot's display name
-  const botPlayer = gs.players.find((p) => p.playerId === botId);
-  const botName = botPlayer?.displayName || botId;
-
-  // Get all cards in the current variant
-  const allCardIds = buildDeck(gs.variant);
-
-  const matrix = {};
-  for (const player of gs.players) {
-    const playerId = player.playerId;
-    const playerName = player.displayName || playerId;
-    const cardKnowledge = {};
-
-    // For this player, from the bot's perspective, map each card to what is known
-    for (const cardId of allCardIds) {
-      const knowledge = _getEffectiveKnowledge(gs, botId, playerId, cardId);
-      if (knowledge === true) {
-        cardKnowledge[cardLabel(cardId)] = 'HOLDS';
-      } else if (knowledge === false) {
-        cardKnowledge[cardLabel(cardId)] = 'MISSING';
-      } else {
-        cardKnowledge[cardLabel(cardId)] = '?';
-      }
-    }
-
-    matrix[playerName] = {
-      playerId,
-      knownHolds: Object.keys(cardKnowledge).filter((c) => cardKnowledge[c] === 'HOLDS').length,
-      knownMissing: Object.keys(cardKnowledge).filter((c) => cardKnowledge[c] === 'MISSING').length,
-      unknown: Object.keys(cardKnowledge).filter((c) => cardKnowledge[c] === '?').length,
-      cards: cardKnowledge,
-    };
+  for (const [cardId, playerId] of Object.entries(assignment ?? {})) {
+    const player = gs.players.find((p) => p.playerId === playerId);
+    const playerName = player?.displayName || playerId;
+    if (!byPlayer.has(playerName)) byPlayer.set(playerName, []);
+    byPlayer.get(playerName).push(cardLabel(cardId));
   }
 
-  return {
-    botName,
-    moveIndex: (gs.moveHistory ?? []).length,
-    timestamp: new Date().toISOString(),
-    matrix,
-  };
+  return [...byPlayer.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([playerName, cards]) => `${playerName}: ${cards.sort((a, b) => a.localeCompare(b)).join(', ')}`)
+    .join(' | ');
+}
+
+function _getAskCategoryFromPriority(priority) {
+  if (!priority) return 'public team count';
+  if ((priority.teammateAssistPriority ?? 0) > 0) return 'teammate-assist priority';
+  if ((priority.closeoutPriority ?? 0) > 0) return 'closeout priority';
+  if ((priority.opponentAskThreat ?? 0) > 0) return 'opponent ask threat';
+  if ((priority.opponentKnownCardThreat ?? 0) > 0) return 'opponent known-card threat';
+  if ((priority.sameTeamSignalStrength ?? 0) > 0) return 'same-team signal strength';
+  return 'public team count';
+}
+
+function buildBotTurnReasonSummary(gs, botId, decision) {
+  const { cardLabel } = require('./deck');
+
+  const botPlayer = gs.players.find((p) => p.playerId === botId);
+  const botName = botPlayer?.displayName || botId;
+  const botTeam = getPlayerTeam(gs, botId);
+  const teammates = getTeamPlayers(gs, botTeam).filter((p) => p.playerId !== botId);
+  const teamPlayers = [{ playerId: botId }, ...teammates];
+  const undeclaredHalfSuits = allHalfSuitIds().filter((id) => !isHalfSuitDeclared(gs, id));
+  const halfSuitsMap = buildHalfSuitMap(gs.variant);
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
+
+  const lines = [];
+  lines.push(`BOT: ${botName}`);
+  lines.push('1) _tryBuildDeclaration / _getVisibleTeamHalfSuitCount');
+
+  for (const halfSuitId of undeclaredHalfSuits) {
+    const exactTeamCount = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
+    lines.push(`- ${halfSuitId}: visibleTeamCount=${exactTeamCount}`);
+
+    if (exactTeamCount === 6) {
+      const cards = halfSuitsMap.get(halfSuitId) ?? [];
+      const publicAssignments = _searchPublicAssignments(gs, botId, halfSuitId, cards, teamPlayers, {}, 3);
+      const assignmentStatus =
+        publicAssignments.length === 0 ? 'none' :
+        publicAssignments.length === 1 ? 'unique' :
+        'ambiguous';
+
+      lines.push(`  _searchPublicAssignments: status=${assignmentStatus}, solutions=${publicAssignments.length}`);
+      for (let index = 0; index < publicAssignments.length; index += 1) {
+        lines.push(`  solution_${index + 1}: ${_formatPublicAssignmentSummary(gs, publicAssignments[index])}`);
+      }
+    }
+  }
+
+  lines.push('2) Ask phase (if switched to asks)');
+
+  if (decision?.action !== 'ask') {
+    lines.push(`- switched_to_asks=no (action=${decision?.action ?? 'unknown'})`);
+    return lines.join('\n');
+  }
+
+  const cardToHalfSuit = buildCardToHalfSuitMap(gs.variant);
+  const botHand = getHand(gs, botId);
+  const botHalfSuits = new Set();
+  for (const card of botHand) {
+    const hs = cardToHalfSuit.get(card);
+    if (hs && !isHalfSuitDeclared(gs, hs)) {
+      botHalfSuits.add(hs);
+    }
+  }
+
+  const opponentTeam = botTeam === 1 ? 2 : 1;
+  const suitPriority = new Map(
+    [...botHalfSuits].map((halfSuitId) => {
+      const teamCount = Math.max(
+        _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId),
+        _getVisibleTeamHalfSuitMinimumCount(gs, botId, teamPlayers, halfSuitId)
+      );
+      const opponentKnownCardThreat = _getVisibleOpponentHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
+
+      return [
+        halfSuitId,
+        {
+          teammateAssistPriority: _getTeammateAssistPriority(
+            gs,
+            botId,
+            botTeam,
+            halfSuitId,
+            teamCount,
+            currentMoveIndex
+          ),
+          closeoutPriority: _getSuitCloseoutPriority(teamCount),
+          opponentAskThreat: _getTeamSignalStrength(gs, opponentTeam, halfSuitId, currentMoveIndex),
+          opponentKnownCardThreat,
+          sameTeamSignalStrength: _getTeamSignalStrength(gs, botTeam, halfSuitId, currentMoveIndex),
+          publicTeamCount: teamCount,
+        },
+      ];
+    })
+  );
+
+  const askedHalfSuitId = cardHalfSuit(gs, decision.cardId);
+  const selectedPriority = suitPriority.get(askedHalfSuitId) ?? null;
+  const whyCategory = _getAskCategoryFromPriority(selectedPriority);
+  const targetPlayer = gs.players.find((p) => p.playerId === decision.targetId);
+  const targetName = targetPlayer?.displayName || decision.targetId;
+
+  lines.push(`- switched_to_asks=yes`);
+  lines.push(`- ask: ${targetName} for ${cardLabel(decision.cardId)} (halfSuit=${askedHalfSuitId})`);
+  lines.push(`- why_category: ${whyCategory}`);
+  lines.push(
+    '- why_values: ' +
+      `teammate-assist=${selectedPriority?.teammateAssistPriority ?? 0}, ` +
+      `closeout=${selectedPriority?.closeoutPriority ?? 0}, ` +
+      `opponent-ask-threat=${selectedPriority?.opponentAskThreat ?? 0}, ` +
+      `opponent-known-card-threat=${selectedPriority?.opponentKnownCardThreat ?? 0}, ` +
+      `same-team-signal=${selectedPriority?.sameTeamSignalStrength ?? 0}, ` +
+      `public-team-count=${selectedPriority?.publicTeamCount ?? 0}`
+  );
+
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -1697,7 +1783,7 @@ function _shuffle(arr) {
 
 module.exports = {
   decideBotMove,
-  buildBotCardKnowledgeMatrix,
+  buildBotTurnReasonSummary,
   completeBotFromPartial,
   chooseBotPostDeclarationTurnPlayer,
   updateKnowledgeAfterAsk,
