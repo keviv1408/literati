@@ -102,6 +102,12 @@ function updateKnowledgeAfterAsk(gs, askerId, targetId, cardId, success) {
   const hsId = cardHalfSuit(gs, cardId);
   if (hsId) {
     _markHalfSuitPresence(gs, askerId, hsId);
+    if (success) {
+      // A successful ask publicly removes one known card from the target's
+      // hand. Any lower-bound "they must still have at least one card in this
+      // suit" evidence from earlier asks can safely decrease by one.
+      _decrementHalfSuitPresence(gs, targetId, hsId);
+    }
   }
 }
 
@@ -125,8 +131,12 @@ function updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct) {
 
   // Clear half-suit presence flags — the suit is out of play.
   if (gs.botHalfSuitPresence instanceof Map) {
-    for (const set of gs.botHalfSuitPresence.values()) {
-      if (set instanceof Set) set.delete(halfSuitId);
+    for (const entry of gs.botHalfSuitPresence.values()) {
+      if (entry instanceof Set) {
+        entry.delete(halfSuitId);
+      } else if (entry instanceof Map) {
+        entry.delete(halfSuitId);
+      }
     }
   }
 
@@ -135,19 +145,56 @@ function updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct) {
 }
 
 function _markHalfSuitPresence(gs, playerId, halfSuitId) {
-  if (!(gs.botHalfSuitPresence instanceof Map)) {
-    gs.botHalfSuitPresence = new Map();
-  }
-  if (!gs.botHalfSuitPresence.has(playerId)) {
-    gs.botHalfSuitPresence.set(playerId, new Set());
-  }
-  gs.botHalfSuitPresence.get(playerId).add(halfSuitId);
+  const playerPresence = _getHalfSuitPresenceEntry(gs, playerId, true);
+  if (!(playerPresence instanceof Map)) return;
+  playerPresence.set(halfSuitId, Math.max(playerPresence.get(halfSuitId) ?? 0, 1));
 }
 
 function _hasHalfSuitPresence(gs, playerId, halfSuitId) {
-  if (!(gs.botHalfSuitPresence instanceof Map)) return false;
-  const set = gs.botHalfSuitPresence.get(playerId);
-  return set instanceof Set && set.has(halfSuitId);
+  return _getHalfSuitPresenceCount(gs, playerId, halfSuitId) > 0;
+}
+
+function _decrementHalfSuitPresence(gs, playerId, halfSuitId) {
+  const playerPresence = _getHalfSuitPresenceEntry(gs, playerId);
+  if (!(playerPresence instanceof Map)) return;
+
+  const current = playerPresence.get(halfSuitId) ?? 0;
+  if (current <= 1) {
+    playerPresence.delete(halfSuitId);
+    return;
+  }
+
+  playerPresence.set(halfSuitId, current - 1);
+}
+
+function _getHalfSuitPresenceCount(gs, playerId, halfSuitId) {
+  const playerPresence = _getHalfSuitPresenceEntry(gs, playerId);
+  if (playerPresence instanceof Map) {
+    return playerPresence.get(halfSuitId) ?? 0;
+  }
+  return 0;
+}
+
+function _getHalfSuitPresenceEntry(gs, playerId, create = false) {
+  if (!(gs.botHalfSuitPresence instanceof Map)) {
+    if (!create) return null;
+    gs.botHalfSuitPresence = new Map();
+  }
+
+  const existing = gs.botHalfSuitPresence.get(playerId);
+  if (existing instanceof Map) return existing;
+
+  if (existing instanceof Set) {
+    const migrated = new Map([...existing].map((halfSuitId) => [halfSuitId, 1]));
+    gs.botHalfSuitPresence.set(playerId, migrated);
+    return migrated;
+  }
+
+  if (!create) return null;
+
+  const created = new Map();
+  gs.botHalfSuitPresence.set(playerId, created);
+  return created;
 }
 
 function _setKnown(gs, playerId, cardId, value) {

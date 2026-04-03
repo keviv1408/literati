@@ -214,6 +214,39 @@ describe('decideBotMove — declares when public information uniquely identifies
     expect(move.assignment['3_s']).toBe('p1');
   });
 
+  it('declares once a teammate publicly loses their only ask-proven card in the suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_h'])],
+      ['p2', new Set(['2_h', '3_h', '4_h', '5_h', '6_h'])],
+      ['p3', new Set(['8_s'])],
+      ['p4', new Set(['9_s'])],
+      ['p5', new Set(['10_s'])],
+      ['p6', new Set(['11_s'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    // Publicly known outside-suit card: p3's lone remaining card is 8_s.
+    gs.botKnowledge.set('p3', new Map([['8_s', true]]));
+
+    // p3 previously asked about low_h, so older logic treated them as needing
+    // at least one heart forever.
+    updateKnowledgeAfterAsk(gs, 'p3', 'p4', '2_h', false);
+
+    // Later, p3 publicly loses their only lower-heart card to an opponent.
+    updateKnowledgeAfterAsk(gs, 'p4', 'p3', '1_h', true);
+
+    // Team 1 later regains that heart and is publicly known to own the whole suit.
+    updateKnowledgeAfterAsk(gs, 'p1', 'p4', '1_h', true);
+    for (const card of ['2_h', '3_h', '4_h', '5_h', '6_h']) {
+      updateKnowledgeAfterAsk(gs, 'p2', 'p5', card, true);
+    }
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move.action).toBe('declare');
+    expect(move.halfSuitId).toBe('low_h');
+    expect(Object.keys(move.assignment)).toHaveLength(6);
+  });
+
   it('keeps asking when the suit is privately complete but still not publicly provable', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '8_h'])],
