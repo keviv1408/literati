@@ -43,6 +43,35 @@ const TEAM_CLOSEOUT_PRIORITY_THRESHOLD = 4;
 const TEAMMATE_ASSIST_PRIORITY_THRESHOLD = 4;
 const TEAMMATE_ASSIST_MEMORY_MOVES = 8;
 
+/**
+ * Attach public-safe narration metadata to a bot ask decision.
+ *
+ * This is intentionally not literal chain-of-thought. It only carries the
+ * high-level public reason bucket that led to the ask choice so the client can
+ * render more expressive bot speech bubbles.
+ *
+ * @param {{ action: string }|null} move
+ * @param {'known_holder'|'teammate_signal_followup'|'closeout_push'|'priority_guess'|'signal_probe'|'emergency_guess'} reason
+ * @param {{ sourcePlayerId?: string, focusCardId?: string }} [extras]
+ * @returns {typeof move}
+ */
+function _withBotAskNarration(move, reason, extras = {}) {
+  if (!move || move.action !== 'ask') return move;
+
+  const narration = { reason };
+  if (typeof extras.sourcePlayerId === 'string') {
+    narration.sourcePlayerId = extras.sourcePlayerId;
+  }
+  if (typeof extras.focusCardId === 'string') {
+    narration.focusCardId = extras.focusCardId;
+  }
+
+  return {
+    ...move,
+    botAskNarration: narration,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Inference helpers
 // ---------------------------------------------------------------------------
@@ -865,13 +894,28 @@ function _orderCandidateCardsForHalfSuit(gs, askerId, halfSuitId, candidateCards
   });
 }
 
-function _findAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuitsMap) {
+function _findAskInHalfSuits(
+  gs,
+  askerId,
+  validOpponents,
+  halfSuitIds,
+  halfSuitsMap,
+  options = {}
+) {
   const botHand = getHand(gs, askerId);
   const currentMoveIndex = (gs.moveHistory ?? []).length;
+  const fallbackUnknownReason = options.fallbackUnknownReason ?? 'priority_guess';
 
   for (const halfSuitId of halfSuitIds) {
     const cards = halfSuitsMap.get(halfSuitId) ?? [];
     const askableCards = cards.filter((card) => !botHand.has(card));
+    const preferredSignalEntry = _getRecentTeammateSignalEntry(
+      gs,
+      askerId,
+      getPlayerTeam(gs, askerId),
+      halfSuitId,
+      currentMoveIndex
+    );
     const orderedCards = _orderCandidateCardsForHalfSuit(
       gs,
       askerId,
@@ -880,30 +924,35 @@ function _findAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuits
       validOpponents,
       currentMoveIndex
     );
-    const preferredSignalCardId = _getPreferredSignalCardId(
-      gs,
-      askerId,
-      halfSuitId,
-      currentMoveIndex
-    );
+    const preferredSignalCardId = _getPreferredSignalCardId(gs, askerId, halfSuitId, currentMoveIndex);
 
     if (preferredSignalCardId) {
+      const signalNarrationExtras = {
+        focusCardId: preferredSignalCardId,
+        sourcePlayerId: preferredSignalEntry?.sourcePlayerId,
+      };
       const preferredKnownAsk = _findKnownHolderAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
-      if (preferredKnownAsk) return preferredKnownAsk;
+      if (preferredKnownAsk) {
+        return _withBotAskNarration(preferredKnownAsk, 'teammate_signal_followup', signalNarrationExtras);
+      }
 
       const preferredUnknownAsk = _findUnknownAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
-      if (preferredUnknownAsk) return preferredUnknownAsk;
+      if (preferredUnknownAsk) {
+        return _withBotAskNarration(preferredUnknownAsk, 'teammate_signal_followup', signalNarrationExtras);
+      }
 
       const preferredSignalAsk = _findSignalAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
-      if (preferredSignalAsk) return preferredSignalAsk;
+      if (preferredSignalAsk) {
+        return _withBotAskNarration(preferredSignalAsk, 'teammate_signal_followup', signalNarrationExtras);
+      }
     }
 
     const remainingCards = orderedCards.filter((card) => card !== preferredSignalCardId);
     const knownAsk = _findKnownHolderAsk(gs, askerId, validOpponents, remainingCards);
-    if (knownAsk) return knownAsk;
+    if (knownAsk) return _withBotAskNarration(knownAsk, 'known_holder');
 
     const unknownAsk = _findUnknownAsk(gs, askerId, validOpponents, remainingCards);
-    if (unknownAsk) return unknownAsk;
+    if (unknownAsk) return _withBotAskNarration(unknownAsk, fallbackUnknownReason);
   }
 
   return null;
@@ -1042,13 +1091,27 @@ function decideBotMove(gs, botId) {
 
     // When the team is close to completing a suit, finish that chase before moving on.
     if (focusHalfSuits.length > 0) {
-      const focusAsk = _findAskInHalfSuits(gs, botId, validOpponents, focusHalfSuits, halfSuitsMap);
+      const focusAsk = _findAskInHalfSuits(
+        gs,
+        botId,
+        validOpponents,
+        focusHalfSuits,
+        halfSuitsMap,
+        { fallbackUnknownReason: 'closeout_push' }
+      );
       if (focusAsk) return focusAsk;
     }
 
     // Otherwise, or if closeout suits have no legal ask left, use the broader
     // suit-priority ordering.
-    const generalAsk = _findAskInHalfSuits(gs, botId, validOpponents, prioritizedBotHalfSuits, halfSuitsMap);
+    const generalAsk = _findAskInHalfSuits(
+      gs,
+      botId,
+      validOpponents,
+      prioritizedBotHalfSuits,
+      halfSuitsMap,
+      { fallbackUnknownReason: 'priority_guess' }
+    );
     if (generalAsk) return generalAsk;
 
     // ── Priority 3: No ask found from prioritized search — keep old fallback shape ─
@@ -1102,7 +1165,12 @@ function decideBotMove(gs, botId) {
       // Keep random fallback from repeating asks that public information has
       // already ruled out for that target/card combination.
       const unknownAsk = _findUnknownAsk(gs, botId, validOpponents, askableCards);
-      if (unknownAsk) return unknownAsk;
+      if (unknownAsk) {
+        return _withBotAskNarration(
+          unknownAsk,
+          closeoutPriority > 0 ? 'closeout_push' : 'priority_guess'
+        );
+      }
     }
 
     // If inference says every target is bad but opponents still have cards,
@@ -1114,7 +1182,7 @@ function decideBotMove(gs, botId) {
       prioritizedBotHalfSuits,
       halfSuitsMap
     );
-    if (signalAsk) return signalAsk;
+    if (signalAsk) return _withBotAskNarration(signalAsk, 'signal_probe');
   }
 
   // ── Fallback: only guess a declaration when no legal ask exists at all ───────
@@ -1145,7 +1213,10 @@ function decideBotMove(gs, botId) {
               `[bot] Emergency ask fallback: bot=${botId} room=${gs.roomCode} ` +
               `card=${card} target=${opp.playerId} (knowledge filters exhausted all options)`
             );
-            return { action: 'ask', targetId: opp.playerId, cardId: card };
+            return _withBotAskNarration(
+              { action: 'ask', targetId: opp.playerId, cardId: card },
+              'emergency_guess'
+            );
           }
         }
       }

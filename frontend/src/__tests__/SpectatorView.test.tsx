@@ -18,7 +18,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Lightweight mock for GamePlayerSeat — the real component renders SVG icons
@@ -26,8 +26,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 // ---------------------------------------------------------------------------
 jest.mock('@/components/GamePlayerSeat', () => ({
   __esModule: true,
-  default: ({ player }: { player: { displayName: string } | null }) => (
-    <div data-testid="mock-player-seat">
+  default: ({ player }: { player: { playerId: string, displayName: string } | null }) => (
+    <div data-testid="mock-player-seat" data-player-id={player?.playerId}>
       {player ? player.displayName : 'Empty'}
     </div>
   ),
@@ -320,6 +320,42 @@ describe('SpectatorView', () => {
         />,
       );
       expect(screen.queryByTestId('spectator-last-move')).toBeNull();
+    });
+
+    it('renders narrated bot ask bubbles using the same copy path as players', () => {
+      jest.useFakeTimers();
+      try {
+        render(
+          <SpectatorView
+            {...buildProps({
+              lastAskResult: {
+                type: 'ask_result',
+                askerId: 'p2',
+                targetId: 'p1',
+                cardId: '1_h',
+                botAskNarration: {
+                  reason: 'teammate_signal_followup',
+                  sourcePlayerId: 'p4',
+                },
+                success: true,
+                newTurnPlayerId: 'p2',
+                lastMove: 'Bob asked Alice for A♥ — got it',
+              },
+            })}
+          />,
+        );
+        expect(screen.getAllByTestId('mock-player-seat')).toHaveLength(6);
+
+        act(() => {
+          jest.advanceTimersByTime(20);
+        });
+
+        const bubbleText = screen.getByTestId('ask-speech-bubble-text').textContent ?? '';
+        expect(bubbleText).toContain('Alice, can I have the Ace of hearts?');
+        expect(bubbleText).not.toBe('Alice, can I have the Ace of hearts?');
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

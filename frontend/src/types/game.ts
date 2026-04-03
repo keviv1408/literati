@@ -94,6 +94,20 @@ export interface SpectatorInitPayload {
   gameState: PublicGameState;
 }
 
+export type BotAskNarrationReason =
+  | 'known_holder'
+  | 'teammate_signal_followup'
+  | 'closeout_push'
+  | 'priority_guess'
+  | 'signal_probe'
+  | 'emergency_guess';
+
+export interface BotAskNarration {
+  reason: BotAskNarrationReason;
+  sourcePlayerId?: string;
+  focusCardId?: CardId;
+}
+
 /** Result of an ask-card action. */
 export interface AskResultPayload {
   type: 'ask_result';
@@ -101,6 +115,7 @@ export interface AskResultPayload {
   targetId: string;
   cardId: CardId;
   batchCardIds?: CardId[];
+  botAskNarration?: BotAskNarration;
   success: boolean;
   newTurnPlayerId: string;
   lastMove: string;

@@ -650,7 +650,7 @@ describe('GamePage — in_progress game view', () => {
       });
 
       expect(screen.getByTestId('ask-speech-bubble-overlay')).toBeTruthy();
-      expect(screen.getByTestId('ask-speech-bubble-text').textContent).toContain(
+      expect(screen.getByTestId('ask-speech-bubble-text').textContent).toBe(
         'Carol, can I have the 5 of hearts?',
       );
       expect(screen.getByTestId('ask-denied-animation')).toBeTruthy();
@@ -835,6 +835,39 @@ describe('GamePage — game controls always available', () => {
       });
     });
 
+    it('disables the self seat during inline declare because self cards are auto-assigned', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('toggle-declare'));
+
+      const spadeCardWrapper = document.querySelector('[data-testid="card-wrapper-1_s"]') as HTMLElement;
+      expect(spadeCardWrapper).toBeTruthy();
+      const spadeCard = spadeCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(spadeCard).toBeTruthy();
+      fireEvent.click(spadeCard);
+
+      const tray = await screen.findByTestId('inline-declare-tray');
+      expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
+
+      const mySeat = screen.getAllByTestId('declare-drop-seat')
+        .find((seat) => seat.getAttribute('data-player-id') === MY_PLAYER_ID);
+      expect(mySeat).toBeTruthy();
+      expect(mySeat).toHaveAttribute('aria-disabled', 'true');
+
+      const cards = within(tray).getAllByTestId('declare-draggable-card');
+      fireEvent.click(cards[0]);
+      fireEvent.click(mySeat!);
+
+      expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
+    });
+
     it('submits an ask when the player picks an inline ask card and taps an opponent seat', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
@@ -985,8 +1018,51 @@ describe('GamePage — game controls always available', () => {
           jest.advanceTimersByTime(20);
         });
 
-        expect(screen.getByTestId('ask-speech-bubble-text').textContent).toContain('Ace of hearts');
-        expect(screen.getByTestId('ask-speech-bubble-text').textContent).toContain('2 of hearts');
+        expect(screen.getByTestId('ask-speech-bubble-text').textContent).toBe(
+          'Carol, can I have the Ace of hearts and 2 of hearts?',
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('shows narrated reasoning copy for bot asks while keeping the actual ask at the end', async () => {
+      const playersWithBot = [
+        makePlayer(MY_PLAYER_ID, 'Me', 1, 0),
+        makePlayer('p2', 'Alice', 1, 2),
+        makePlayer('p3', 'Bob', 1, 4),
+        makePlayer('p4', 'CarolBot', 2, 1, { isBot: true }),
+        makePlayer('p5', 'Dave', 2, 3),
+        makePlayer('p6', 'Eve', 2, 5),
+      ];
+
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, playersWithBot)));
+
+      jest.useFakeTimers();
+      try {
+        act(() => sendWsMessage({
+          type: 'ask_result',
+          askerId: 'p4',
+          targetId: MY_PLAYER_ID,
+          cardId: '1_h',
+          botAskNarration: {
+            reason: 'known_holder',
+          },
+          success: true,
+          newTurnPlayerId: 'p4',
+          lastMove: 'CarolBot asked Me for A♥ — got it',
+        }));
+
+        act(() => {
+          jest.advanceTimersByTime(20);
+        });
+
+        const bubbleText = screen.getByTestId('ask-speech-bubble-text').textContent ?? '';
+        expect(bubbleText).toContain('Me, can I have the Ace of hearts?');
+        expect(bubbleText).not.toBe('Me, can I have the Ace of hearts?');
       } finally {
         jest.useRealTimers();
       }
