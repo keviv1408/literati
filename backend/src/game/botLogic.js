@@ -121,7 +121,24 @@ function _getVisibleKnownHolder(gs, observerId, cardId) {
     holder = player.playerId;
   }
 
-  return holder;
+  if (holder) return holder;
+
+  // Process-of-elimination: if all players except one are known to NOT hold
+  // this card, the remaining player must hold it. This uses only public ask
+  // outcomes and the observer's own hand — no hidden information.
+  let candidate = null;
+  for (const player of gs.players) {
+    const known = _getKnown(gs, player.playerId, cardId);
+    if (known === true) return player.playerId;
+    if (known === false) continue;
+    // Empty-handed players can't hold any card.
+    if (getCardCount(gs, player.playerId) === 0) continue;
+    // More than one possible holder — can't deduce.
+    if (candidate) return null;
+    candidate = player.playerId;
+  }
+
+  return candidate;
 }
 
 function _getVisibleKnownCards(gs, observerId, playerId) {
