@@ -25,7 +25,8 @@
  * // Bot inference: not broadcast to clients
  * botKnowledge: Map<playerId, Map<cardId, boolean>>,
  * teamIntentMemory: Map<teamId, Map<halfSuitId, {
- *   strength:number, lastUpdatedMoveIndex:number, sourcePlayerId:string
+ *   strength:number, lastUpdatedMoveIndex:number, sourcePlayerId:string,
+ *   focusCardId:string, lastOutcome:string
  * }>>,
  * // Call history for crash recovery
  * moveHistory: MoveRecord[],
@@ -134,7 +135,7 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
 
     // Lightweight team signaling memory used by bots to coordinate asks.
     // Private server-side state: never broadcast, but persisted for recovery.
-    /** @type {Map<1|2, Map<string, { strength:number, lastUpdatedMoveIndex:number, sourcePlayerId:string, lastOutcome:string }>>} */
+    /** @type {Map<1|2, Map<string, { strength:number, lastUpdatedMoveIndex:number, sourcePlayerId:string, focusCardId:string, lastOutcome:string }>>} */
     teamIntentMemory: new Map(),
 
     // Move history for crash recovery

@@ -299,6 +299,7 @@ describe('buildPersistedSnapshot / restoreGameState', () => {
         strength: 4,
         lastUpdatedMoveIndex: 9,
         sourcePlayerId: 'p5',
+        focusCardId: '11_s',
         lastOutcome: 'success',
       }],
     ]));
@@ -310,6 +311,7 @@ describe('buildPersistedSnapshot / restoreGameState', () => {
       strength: 4,
       lastUpdatedMoveIndex: 9,
       sourcePlayerId: 'p5',
+      focusCardId: '11_s',
       lastOutcome: 'success',
     });
   });

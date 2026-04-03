@@ -213,6 +213,17 @@ function _getTeammateAssistPriority(gs, botId, teamId, halfSuitId, teamCount, cu
   return teamCount + Math.max(signalStrength, 1) + sourceBonus;
 }
 
+function _getRecentTeammateSignalEntry(gs, botId, teamId, halfSuitId, currentMoveIndex) {
+  const entry = _getTeamSignalEntry(gs, teamId, halfSuitId);
+  if (!entry) return null;
+  if (!entry.sourcePlayerId || entry.sourcePlayerId === botId) return null;
+
+  const age = Math.max(0, currentMoveIndex - (entry.lastUpdatedMoveIndex ?? 0));
+  if (age > TEAMMATE_ASSIST_MEMORY_MOVES) return null;
+
+  return entry;
+}
+
 function updateTeamIntentAfterAsk(gs, askerId, cardId, success) {
   const teamId = getPlayerTeam(gs, askerId);
   const halfSuitId = cardHalfSuit(gs, cardId);
@@ -227,6 +238,7 @@ function updateTeamIntentAfterAsk(gs, askerId, cardId, success) {
     strength: Math.min(TEAM_SIGNAL_MAX_STRENGTH, currentStrength + boost),
     lastUpdatedMoveIndex: currentMoveIndex,
     sourcePlayerId: askerId,
+    focusCardId: cardId,
     lastOutcome: success ? 'success' : 'failure',
   });
 }
@@ -471,10 +483,9 @@ function _buildBestGuessAssignment(
 }
 
 function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
-  const shuffledCards = _shuffle([...candidateCards]);
   const shuffledOpps  = _shuffle([...validOpponents]);
 
-  for (const card of shuffledCards) {
+  for (const card of candidateCards) {
     for (const opp of shuffledOpps) {
       if (_getEffectiveKnowledge(gs, opp.playerId, card) !== true) continue;
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
@@ -488,10 +499,9 @@ function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
 }
 
 function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
-  const shuffledCards = _shuffle([...candidateCards]);
   const shuffledOpps  = _shuffle([...validOpponents]);
 
-  for (const card of shuffledCards) {
+  for (const card of candidateCards) {
     for (const opp of shuffledOpps) {
       if (_isKnownMissing(gs, opp.playerId, card)) continue;
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
@@ -505,10 +515,9 @@ function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
 }
 
 function _findSignalAsk(gs, askerId, validOpponents, candidateCards) {
-  const shuffledCards = _shuffle([...candidateCards]);
   const shuffledOpps  = _shuffle([...validOpponents]);
 
-  for (const card of shuffledCards) {
+  for (const card of candidateCards) {
     for (const opp of shuffledOpps) {
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
       if (askVal.valid) {
@@ -520,20 +529,113 @@ function _findSignalAsk(gs, askerId, validOpponents, candidateCards) {
   return null;
 }
 
+function _getPublicTeamCardCandidateCount(gs, teamPlayers, cardId) {
+  return teamPlayers.reduce(
+    (sum, player) => sum + (_isKnownMissing(gs, player.playerId, cardId) ? 0 : 1),
+    0
+  );
+}
+
+function _getPreferredSignalCardId(gs, askerId, halfSuitId, currentMoveIndex) {
+  const teamId = getPlayerTeam(gs, askerId);
+  if (!teamId) return null;
+
+  const entry = _getRecentTeammateSignalEntry(gs, askerId, teamId, halfSuitId, currentMoveIndex);
+  if (!entry || entry.lastOutcome !== 'failure') return null;
+
+  const focusCardId = entry.focusCardId;
+  if (!focusCardId || cardHalfSuit(gs, focusCardId) !== halfSuitId) return null;
+  if (getHand(gs, askerId).has(focusCardId)) return null;
+  if (_getKnown(gs, askerId, focusCardId) === false) return null;
+
+  return focusCardId;
+}
+
+function _scoreCardForAsk(gs, askerId, cardId, teamPlayers, validOpponents, preferredSignalCardId) {
+  const publicTeamCandidates = _getPublicTeamCardCandidateCount(gs, teamPlayers, cardId);
+  const publicOpponentCandidates = validOpponents.reduce(
+    (sum, opp) => sum + (_isKnownMissing(gs, opp.playerId, cardId) ? 0 : 1),
+    0
+  );
+
+  return {
+    preferredSignal: cardId === preferredSignalCardId ? 1 : 0,
+    askerPublicUnknown: _getKnown(gs, askerId, cardId) === null ? 1 : 0,
+    resolutionStrength: Math.max(0, 6 - publicTeamCandidates),
+    opponentSpecificity: publicOpponentCandidates > 0 ? Math.max(0, 6 - publicOpponentCandidates) : 0,
+  };
+}
+
+function _orderCandidateCardsForHalfSuit(gs, askerId, halfSuitId, candidateCards, validOpponents, currentMoveIndex) {
+  const teamId = getPlayerTeam(gs, askerId);
+  if (!teamId) return [...candidateCards];
+
+  const teamPlayers = getTeamPlayers(gs, teamId);
+  const preferredSignalCardId = _getPreferredSignalCardId(
+    gs,
+    askerId,
+    halfSuitId,
+    currentMoveIndex
+  );
+
+  return [...candidateCards].sort((a, b) => {
+    const aScore = _scoreCardForAsk(gs, askerId, a, teamPlayers, validOpponents, preferredSignalCardId);
+    const bScore = _scoreCardForAsk(gs, askerId, b, teamPlayers, validOpponents, preferredSignalCardId);
+
+    const preferredDiff = bScore.preferredSignal - aScore.preferredSignal;
+    if (preferredDiff !== 0) return preferredDiff;
+
+    const askerUnknownDiff = bScore.askerPublicUnknown - aScore.askerPublicUnknown;
+    if (askerUnknownDiff !== 0) return askerUnknownDiff;
+
+    const resolutionDiff = bScore.resolutionStrength - aScore.resolutionStrength;
+    if (resolutionDiff !== 0) return resolutionDiff;
+
+    const opponentDiff = bScore.opponentSpecificity - aScore.opponentSpecificity;
+    if (opponentDiff !== 0) return opponentDiff;
+
+    return a.localeCompare(b);
+  });
+}
+
 function _findAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuitsMap) {
   const botHand = getHand(gs, askerId);
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
 
   for (const halfSuitId of halfSuitIds) {
     const cards = halfSuitsMap.get(halfSuitId) ?? [];
-    const neededCards = cards.filter((card) => !botHand.has(card));
-    const knownAsk = _findKnownHolderAsk(gs, askerId, validOpponents, neededCards);
+    const askableCards = cards.filter((card) => !botHand.has(card));
+    const orderedCards = _orderCandidateCardsForHalfSuit(
+      gs,
+      askerId,
+      halfSuitId,
+      askableCards,
+      validOpponents,
+      currentMoveIndex
+    );
+    const preferredSignalCardId = _getPreferredSignalCardId(
+      gs,
+      askerId,
+      halfSuitId,
+      currentMoveIndex
+    );
+
+    if (preferredSignalCardId) {
+      const preferredKnownAsk = _findKnownHolderAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
+      if (preferredKnownAsk) return preferredKnownAsk;
+
+      const preferredUnknownAsk = _findUnknownAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
+      if (preferredUnknownAsk) return preferredUnknownAsk;
+
+      const preferredSignalAsk = _findSignalAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
+      if (preferredSignalAsk) return preferredSignalAsk;
+    }
+
+    const remainingCards = orderedCards.filter((card) => card !== preferredSignalCardId);
+    const knownAsk = _findKnownHolderAsk(gs, askerId, validOpponents, remainingCards);
     if (knownAsk) return knownAsk;
-  }
 
-  for (const halfSuitId of halfSuitIds) {
-    const cards = halfSuitsMap.get(halfSuitId) ?? [];
-    const askableCards = cards.filter((c) => !botHand.has(c));
-    const unknownAsk = _findUnknownAsk(gs, askerId, validOpponents, askableCards);
+    const unknownAsk = _findUnknownAsk(gs, askerId, validOpponents, remainingCards);
     if (unknownAsk) return unknownAsk;
   }
 
@@ -542,15 +644,37 @@ function _findAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuits
 
 function _findSignalAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuitsMap) {
   const botHand = getHand(gs, askerId);
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
 
   for (const halfSuitId of halfSuitIds) {
     const cards = halfSuitsMap.get(halfSuitId) ?? [];
     const askableCards = cards.filter((c) => !botHand.has(c));
-    const signalAsk = _findSignalAsk(gs, askerId, validOpponents, askableCards);
+    const orderedCards = _orderCandidateCardsForHalfSuit(
+      gs,
+      askerId,
+      halfSuitId,
+      askableCards,
+      validOpponents,
+      currentMoveIndex
+    );
+    const signalAsk = _findSignalAsk(gs, askerId, validOpponents, orderedCards);
     if (signalAsk) return signalAsk;
   }
 
   return null;
+}
+
+function _isAmbiguousTeamCompleteSuit(gs, botId, halfSuitId, halfSuitsMap, teammates) {
+  const cards = halfSuitsMap.get(halfSuitId) ?? [];
+  if (cards.length === 0) return false;
+
+  const teamPlayers = [{ playerId: botId }, ...teammates];
+  if (_getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) !== cards.length) {
+    return false;
+  }
+
+  const solutions = _searchPublicAssignments(gs, botId, halfSuitId, cards, teamPlayers, {}, 2);
+  return solutions.length > 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -649,6 +773,23 @@ function decideBotMove(gs, botId) {
     if (focusHalfSuits.length > 0) {
       const focusAsk = _findAskInHalfSuits(gs, botId, validOpponents, focusHalfSuits, halfSuitsMap);
       if (focusAsk) return focusAsk;
+    }
+
+    // If the team already owns an entire suit but public information still
+    // leaves ownership ambiguous, spend the turn signaling that suit before
+    // drifting into unrelated asks. This helps human teammates finish the book.
+    const teamCompleteSignalHalfSuits = prioritizedBotHalfSuits.filter((halfSuitId) =>
+      _isAmbiguousTeamCompleteSuit(gs, botId, halfSuitId, halfSuitsMap, teammates)
+    );
+    if (teamCompleteSignalHalfSuits.length > 0) {
+      const signalCriticalAsk = _findSignalAskInHalfSuits(
+        gs,
+        botId,
+        validOpponents,
+        teamCompleteSignalHalfSuits,
+        halfSuitsMap
+      );
+      if (signalCriticalAsk) return signalCriticalAsk;
     }
 
     // Otherwise, or if closeout suits have no legal ask left, use the broader

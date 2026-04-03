@@ -175,11 +175,14 @@ describe('decideBotMove — declares when public information uniquely identifies
     ]);
     const gs = buildBotTestGame(hands);
 
-    // Give the bot a clearly better public ask so the test stays deterministic.
+    // Give the bot another available ask so the test proves it still prefers
+    // signaling the ambiguous team-owned suit over drifting into a different one.
     gs.botKnowledge.set('p4', new Map([['9_h', true]]));
 
     const move = decideBotMove(gs, 'p1');
-    expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '9_h' });
+    expect(move.action).toBe('ask');
+    expect(['p4', 'p5', 'p6']).toContain(move.targetId);
+    expect(['2_s', '3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
   });
 });
 
@@ -368,6 +371,24 @@ describe('decideBotMove — signaling instead of speculative declarations', () =
     expect(['p4', 'p5', 'p6']).toContain(move.targetId);
     expect(['3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
   });
+
+  it('prioritizes signaling a team-complete but ambiguous suit before chasing unrelated asks', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '8_h'])],
+      ['p2', new Set(['2_s', '3_s'])],
+      ['p3', new Set(['4_s', '5_s', '6_s'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    const move = decideBotMove(gs, 'p1');
+
+    expect(move.action).toBe('ask');
+    expect(['p4', 'p5', 'p6']).toContain(move.targetId);
+    expect(['2_s', '3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -504,6 +525,7 @@ describe('team signaling intent memory', () => {
     expect(teamSignals).toBeDefined();
     expect(teamSignals.get('high_s')).toMatchObject({
       sourcePlayerId: 'p2',
+      focusCardId: '11_s',
       lastOutcome: 'failure',
     });
     expect(teamSignals.get('high_s').strength).toBeGreaterThan(0);
@@ -554,5 +576,42 @@ describe('team signaling intent memory', () => {
 
     const move = decideBotMove(gs, 'p1');
     expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '12_h' });
+  });
+
+  it('mirrors a teammate\'s failed card ask before switching to a different card in the same suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['8_h', '9_h'])],
+      ['p2', new Set(['10_h'])],
+      ['p3', new Set(['1_s'])],
+      ['p4', new Set(['1_c'])],
+      ['p5', new Set(['13_h'])],
+      ['p6', new Set(['2_c'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    gs.botKnowledge.set('p5', new Map([['13_h', true]]));
+    updateTeamIntentAfterAsk(gs, 'p2', '12_h', false);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move.action).toBe('ask');
+    expect(move.cardId).toBe('12_h');
+  });
+
+  it('only switches away from the teammate\'s signaled card once it already holds that card', () => {
+    const hands = new Map([
+      ['p1', new Set(['8_h', '9_h', '12_h'])],
+      ['p2', new Set(['10_h'])],
+      ['p3', new Set(['1_s'])],
+      ['p4', new Set(['1_c'])],
+      ['p5', new Set(['13_h'])],
+      ['p6', new Set(['2_c'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    gs.botKnowledge.set('p5', new Map([['13_h', true]]));
+    updateTeamIntentAfterAsk(gs, 'p2', '12_h', false);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p5', cardId: '13_h' });
   });
 });
