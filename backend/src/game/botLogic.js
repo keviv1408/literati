@@ -66,6 +66,14 @@ function updateKnowledgeAfterAsk(gs, askerId, targetId, cardId, success) {
     _setKnown(gs, askerId, cardId, false);
     _setKnown(gs, targetId, cardId, false);
   }
+
+  // Game rule: you can only ask for a card in a half-suit you hold at least
+  // one card from. So the asker is publicly known to hold ≥1 card in this
+  // half-suit.
+  const hsId = cardHalfSuit(gs, cardId);
+  if (hsId) {
+    _markHalfSuitPresence(gs, askerId, hsId);
+  }
 }
 
 /**
@@ -86,8 +94,31 @@ function updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct) {
     }
   }
 
+  // Clear half-suit presence flags — the suit is out of play.
+  if (gs.botHalfSuitPresence instanceof Map) {
+    for (const set of gs.botHalfSuitPresence.values()) {
+      if (set instanceof Set) set.delete(halfSuitId);
+    }
+  }
+
   if (!correct) return;
   // No additional holder information is needed here; the suit is out of play.
+}
+
+function _markHalfSuitPresence(gs, playerId, halfSuitId) {
+  if (!(gs.botHalfSuitPresence instanceof Map)) {
+    gs.botHalfSuitPresence = new Map();
+  }
+  if (!gs.botHalfSuitPresence.has(playerId)) {
+    gs.botHalfSuitPresence.set(playerId, new Set());
+  }
+  gs.botHalfSuitPresence.get(playerId).add(halfSuitId);
+}
+
+function _hasHalfSuitPresence(gs, playerId, halfSuitId) {
+  if (!(gs.botHalfSuitPresence instanceof Map)) return false;
+  const set = gs.botHalfSuitPresence.get(playerId);
+  return set instanceof Set && set.has(halfSuitId);
 }
 
 function _setKnown(gs, playerId, cardId, value) {
@@ -417,10 +448,29 @@ function _searchPublicAssignments(
 
   const solutions = [];
 
+  // Players publicly known to hold ≥1 card in this half-suit (they asked for
+  // a card from it). Any valid solution must assign them at least one card.
+  const mustHoldPlayerIds = new Set(
+    teamPlayers
+      .map((p) => p.playerId)
+      .filter((pid) => _hasHalfSuitPresence(gs, pid, halfSuitId))
+  );
+
+  // Track how many cards each must-hold player has been assigned so far.
+  // Pre-populated from forced assignments above.
+  const mustHoldAssignCount = new Map();
+  for (const pid of mustHoldPlayerIds) {
+    const count = Object.values(assignment).filter((v) => v === pid).length;
+    mustHoldAssignCount.set(pid, count);
+  }
+
   function backtrack(index) {
     if (solutions.length >= maxSolutions) return;
 
     if (index >= orderedCards.length) {
+      for (const pid of mustHoldPlayerIds) {
+        if ((mustHoldAssignCount.get(pid) ?? 0) === 0) return;
+      }
       solutions.push({ ...assignment });
       return;
     }
@@ -437,8 +487,14 @@ function _searchPublicAssignments(
     for (const playerId of candidates) {
       assignment[card] = playerId;
       remainingTargetSlots.set(playerId, remainingTargetSlots.get(playerId) - 1);
+      if (mustHoldPlayerIds.has(playerId)) {
+        mustHoldAssignCount.set(playerId, (mustHoldAssignCount.get(playerId) ?? 0) + 1);
+      }
       backtrack(index + 1);
       remainingTargetSlots.set(playerId, remainingTargetSlots.get(playerId) + 1);
+      if (mustHoldPlayerIds.has(playerId)) {
+        mustHoldAssignCount.set(playerId, (mustHoldAssignCount.get(playerId) ?? 0) - 1);
+      }
       delete assignment[card];
       if (solutions.length >= maxSolutions) return;
     }
