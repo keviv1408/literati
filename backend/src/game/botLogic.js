@@ -553,6 +553,19 @@ function _findSignalAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, hal
   return null;
 }
 
+function _isAmbiguousTeamCompleteSuit(gs, botId, halfSuitId, halfSuitsMap, teammates) {
+  const cards = halfSuitsMap.get(halfSuitId) ?? [];
+  if (cards.length === 0) return false;
+
+  const teamPlayers = [{ playerId: botId }, ...teammates];
+  if (_getPublicTeamHalfSuitCount(gs, teamPlayers, halfSuitId) !== cards.length) {
+    return false;
+  }
+
+  const solutions = _searchPublicAssignments(gs, botId, halfSuitId, cards, teamPlayers, {}, 2);
+  return solutions.length > 1;
+}
+
 // ---------------------------------------------------------------------------
 // Bot decision
 // ---------------------------------------------------------------------------
@@ -649,6 +662,23 @@ function decideBotMove(gs, botId) {
     if (focusHalfSuits.length > 0) {
       const focusAsk = _findAskInHalfSuits(gs, botId, validOpponents, focusHalfSuits, halfSuitsMap);
       if (focusAsk) return focusAsk;
+    }
+
+    // If the team already owns an entire suit but public information still
+    // leaves ownership ambiguous, spend the turn signaling that suit before
+    // drifting into unrelated asks. This helps human teammates finish the book.
+    const teamCompleteSignalHalfSuits = prioritizedBotHalfSuits.filter((halfSuitId) =>
+      _isAmbiguousTeamCompleteSuit(gs, botId, halfSuitId, halfSuitsMap, teammates)
+    );
+    if (teamCompleteSignalHalfSuits.length > 0) {
+      const signalCriticalAsk = _findSignalAskInHalfSuits(
+        gs,
+        botId,
+        validOpponents,
+        teamCompleteSignalHalfSuits,
+        halfSuitsMap
+      );
+      if (signalCriticalAsk) return signalCriticalAsk;
     }
 
     // Otherwise, or if closeout suits have no legal ask left, use the broader
