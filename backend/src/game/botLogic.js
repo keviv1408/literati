@@ -13,11 +13,14 @@
  *      as being on the bot's team, declare it.
  *   2. If the bot knows an opponent holds a specific card in a half-suit the
  *      bot already has cards from, ask that opponent for it.
- *   3. Otherwise, randomly ask any opponent for any card in a half-suit the
- *      bot holds, preferring half-suits with more publicly-known team cards.
- *   4. If no valid ask is possible (all opponents empty), declare the
- *      best available half-suit using only public information plus the
- *      declarant's own hand.
+ *   3. Otherwise, ask any opponent for any card in a half-suit the bot holds,
+ *      preferring half-suits with more publicly-known team cards.
+ *   4. If public information has ruled out every reasonable target but
+ *      opponents still have cards, make a signaling ask instead of guessing a
+ *      declaration.
+ *   5. If no legal ask is possible at all (for example, all opponents are
+ *      empty), declare the best available half-suit using only public
+ *      information plus the declarant's own hand.
  */
 
 const { buildHalfSuitMap, buildCardToHalfSuitMap, allHalfSuitIds } = require('./halfSuits');
@@ -501,6 +504,22 @@ function _findUnknownAsk(gs, askerId, validOpponents, candidateCards) {
   return null;
 }
 
+function _findSignalAsk(gs, askerId, validOpponents, candidateCards) {
+  const shuffledCards = _shuffle([...candidateCards]);
+  const shuffledOpps  = _shuffle([...validOpponents]);
+
+  for (const card of shuffledCards) {
+    for (const opp of shuffledOpps) {
+      const askVal = validateAsk(gs, askerId, opp.playerId, card);
+      if (askVal.valid) {
+        return { action: 'ask', targetId: opp.playerId, cardId: card };
+      }
+    }
+  }
+
+  return null;
+}
+
 function _findAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuitsMap) {
   const botHand = getHand(gs, askerId);
 
@@ -516,6 +535,19 @@ function _findAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuits
     const askableCards = cards.filter((c) => !botHand.has(c));
     const unknownAsk = _findUnknownAsk(gs, askerId, validOpponents, askableCards);
     if (unknownAsk) return unknownAsk;
+  }
+
+  return null;
+}
+
+function _findSignalAskInHalfSuits(gs, askerId, validOpponents, halfSuitIds, halfSuitsMap) {
+  const botHand = getHand(gs, askerId);
+
+  for (const halfSuitId of halfSuitIds) {
+    const cards = halfSuitsMap.get(halfSuitId) ?? [];
+    const askableCards = cards.filter((c) => !botHand.has(c));
+    const signalAsk = _findSignalAsk(gs, askerId, validOpponents, askableCards);
+    if (signalAsk) return signalAsk;
   }
 
   return null;
@@ -670,13 +702,27 @@ function decideBotMove(gs, botId) {
       const unknownAsk = _findUnknownAsk(gs, botId, validOpponents, askableCards);
       if (unknownAsk) return unknownAsk;
     }
+
+    // If inference says every target is bad but opponents still have cards,
+    // keep signaling instead of jumping to a speculative declaration.
+    const signalAsk = _findSignalAskInHalfSuits(
+      gs,
+      botId,
+      validOpponents,
+      prioritizedBotHalfSuits,
+      halfSuitsMap
+    );
+    if (signalAsk) return signalAsk;
   }
 
-  // ── Fallback: Declare whichever half-suit has the most team cards ────────────
-  // Even if we're not 100% sure — use best-guess assignment
-  const bestGuessDecl = _findBestGuessDeclaration(gs, botId, undeclaredHalfSuits, halfSuitsMap, teammates);
-  if (bestGuessDecl) {
-    return bestGuessDecl;
+  // ── Fallback: only guess a declaration when no legal ask exists at all ───────
+  // If opponents still have cards, prefer signaling asks over speculative
+  // declarations so teammates get more public information first.
+  if (validOpponents.length === 0) {
+    const bestGuessDecl = _findBestGuessDeclaration(gs, botId, undeclaredHalfSuits, halfSuitsMap, teammates);
+    if (bestGuessDecl) {
+      return bestGuessDecl;
+    }
   }
 
   // Absolute fallback: should not reach here in a valid game state

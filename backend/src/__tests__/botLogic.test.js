@@ -350,6 +350,26 @@ describe('decideBotMove — fallback when bot knows nothing', () => {
   });
 });
 
+describe('decideBotMove — signaling instead of speculative declarations', () => {
+  it('keeps asking to signal a suit when opponents still have cards, rather than guessing a declaration', () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s'])],
+      ['p2', new Set(['3_s', '4_s'])],
+      ['p3', new Set(['5_s', '8_h'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    const move = decideBotMove(gs, 'p1');
+
+    expect(move.action).toBe('ask');
+    expect(['p4', 'p5', 'p6']).toContain(move.targetId);
+    expect(['3_s', '4_s', '5_s', '6_s']).toContain(move.cardId);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // updateKnowledgeAfterAsk
 // ---------------------------------------------------------------------------

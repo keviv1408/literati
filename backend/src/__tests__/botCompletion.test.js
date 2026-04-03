@@ -249,7 +249,7 @@ describe('completeBotFromPartial — ask, step 2 (half-suit only)', () => {
   });
 
   it('10. falls back to decideBotMove if the half-suit is already declared', () => {
-    const gs = buildGame();
+    const gs = buildGame({ currentTurnPlayerId: 'p3' });
     gs.declaredSuits.set('high_h', { teamId: 1, declaredBy: 'p1' });
 
     const result = completeBotFromPartial(gs, 'p3', { flow: 'ask', halfSuitId: 'high_h' });
@@ -315,7 +315,7 @@ describe('completeBotFromPartial — ask, step 3 (half-suit + card)', () => {
   });
 
   it('14. falls back to decideBotMove if the card is no longer askable', () => {
-    const gs = buildGame();
+    const gs = buildGame({ currentTurnPlayerId: 'p3' });
     // Make 11_h already held by p3 (so p3 can't ask for it)
     gs.hands.get('p3').add('11_h');
     gs.hands.get('p4').delete('11_h');
