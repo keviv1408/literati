@@ -383,11 +383,7 @@ function Step3Opponent({
   isLoading,
 }: {
   selectedCard: CardId;
-  /**
-   * The half-suit that was selected in Step 1. Used to grey out opponents
-   * whose server-reported halfSuitCounts[halfSuitId] === 0, meaning they
-   * cannot hold the requested card even though they have other cards.
-   */
+  /** The half-suit that was selected in Step 1. */
   halfSuitId: HalfSuitId;
   myPlayerId: string;
   players: GamePlayer[];

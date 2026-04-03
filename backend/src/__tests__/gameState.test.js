@@ -239,46 +239,6 @@ describe('serializeForPlayer', () => {
     }
   });
 
-  it('each player entry includes halfSuitCounts with 8 half-suit keys', () => {
-    const result = serializeForPlayer(gs, 'p1');
-    const expectedKeys = [
-      'low_s', 'low_h', 'low_d', 'low_c',
-      'high_s', 'high_h', 'high_d', 'high_c',
-    ];
-    for (const p of result.players) {
-      expect(p).toHaveProperty('halfSuitCounts');
-      expect(Object.keys(p.halfSuitCounts).sort()).toEqual(expectedKeys.slice().sort());
-    }
-  });
-
-  it('halfSuitCounts values are non-negative integers and sum to cardCount', () => {
-    const result = serializeForPlayer(gs, 'p1');
-    for (const p of result.players) {
-      let total = 0;
-      for (const [, count] of Object.entries(p.halfSuitCounts)) {
-        expect(typeof count).toBe('number');
-        expect(count).toBeGreaterThanOrEqual(0);
-        total += count;
-      }
-      expect(total).toBe(p.cardCount);
-    }
-  });
-
-  it('halfSuitCounts are consistent with the actual hand contents', () => {
-    const gs2 = makeGame();
-    // Give p1 a known hand by directly checking what they hold.
-    const { serializePlayers } = require('../game/gameState');
-    const players = serializePlayers(gs2);
-    const p1 = players.find((p) => p.playerId === 'p1');
-    // cardCount must equal sum of all halfSuitCounts
-    const sum = Object.values(p1.halfSuitCounts).reduce((a, b) => a + b, 0);
-    expect(sum).toBe(p1.cardCount);
-    // All values must be >= 0
-    for (const v of Object.values(p1.halfSuitCounts)) {
-      expect(v).toBeGreaterThanOrEqual(0);
-    }
-  });
-
   it('different players get different myHand arrays', () => {
     const r1 = serializeForPlayer(gs, 'p1');
     const r2 = serializeForPlayer(gs, 'p2');

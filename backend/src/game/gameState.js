@@ -50,16 +50,7 @@
  */
 
 const { buildDeck, shuffleDeck, dealCards, cardLabel } = require('./deck');
-const { buildHalfSuitMap, buildCardToHalfSuitMap, allHalfSuitIds, halfSuitLabel } = require('./halfSuits');
-
-// Memoized half-suit maps per variant to avoid rebuilding on every serialization.
-const _halfSuitMapCache = {};
-function _cachedHalfSuitMap(variant) {
-  if (!_halfSuitMapCache[variant]) {
-    _halfSuitMapCache[variant] = buildHalfSuitMap(variant);
-  }
-  return _halfSuitMapCache[variant];
-}
+const { buildCardToHalfSuitMap, halfSuitLabel } = require('./halfSuits');
 
 /**
  * Create a brand-new game state from a lobby seat snapshot.
@@ -202,25 +193,6 @@ function getCardCount(gs, playerId) {
 }
 
 /**
- * Return the number of cards a player holds in a specific half-suit.
- * This is public information — all players know opponents' per-half-suit counts.
- *
- * @param {Object} gs - GameState
- * @param {string} playerId
- * @param {string} halfSuitId - e.g. "low_s", "high_d"
- * @returns {number}
- */
-function getHalfSuitCardCount(gs, playerId, halfSuitId) {
-  const hand = getHand(gs, playerId);
-  const hsCards = _cachedHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
-  let count = 0;
-  for (const c of hsCards) {
-    if (hand.has(c)) count++;
-  }
-  return count;
-}
-
-/**
  * Return the half-suit ID for a card given the game's variant.
  * Uses the shared card-to-half-suit map.
  * @param {Object} gs
@@ -275,30 +247,13 @@ function serializePublicState(gs) {
  *
  * Each player entry includes:
  * - cardCount: total cards held
- * - halfSuitCounts: { [halfSuitId]: number } — how many cards in each half-suit.
- * This is public information and is used for:
- * • Enforcing ask eligibility (server checks target has ≥1 in half-suit)
  *
  * @param {Object} gs
  * @returns {Array}
  */
 function serializePlayers(gs) {
-  const halfSuitMap = _cachedHalfSuitMap(gs.variant);
-  const halfSuitIds = allHalfSuitIds();
-
   return gs.players.map((p) => {
     const hand = getHand(gs, p.playerId);
-
-    // Compute per-half-suit card counts for this player.
-    const halfSuitCounts = {};
-    for (const hsId of halfSuitIds) {
-      const cards = halfSuitMap.get(hsId) ?? [];
-      let count = 0;
-      for (const c of cards) {
-        if (hand.has(c)) count++;
-      }
-      halfSuitCounts[hsId] = count;
-    }
 
     return {
       playerId:      p.playerId,
@@ -310,7 +265,6 @@ function serializePlayers(gs) {
       isGuest:       p.isGuest,
       cardCount:     hand.size,
       isCurrentTurn: p.playerId === gs.currentTurnPlayerId,
-      halfSuitCounts,
       // true when this player has no cards left (hand emptied by declaration)
       isEliminated:  gs.eliminatedPlayerIds ? gs.eliminatedPlayerIds.has(p.playerId) : false,
     };
@@ -599,7 +553,6 @@ module.exports = {
   getPlayerTeam,
   getHand,
   getCardCount,
-  getHalfSuitCardCount,
   cardHalfSuit,
   isHalfSuitDeclared,
   serializePublicState,

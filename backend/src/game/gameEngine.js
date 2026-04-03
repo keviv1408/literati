@@ -25,7 +25,6 @@ const { cardLabel } = require('./deck');
 const {
   getHand,
   getCardCount,
-  getHalfSuitCardCount,
   getPlayerTeam,
   getTeamPlayers,
   cardHalfSuit,

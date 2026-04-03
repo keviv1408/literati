@@ -32,14 +32,6 @@ export interface GamePlayer {
   teamId: 1 | 2;
   seatIndex: number;
   cardCount: number;
-  /**
-   * Per-half-suit card count map. Keys are HalfSuitId strings (e.g. "low_s").
-   * Populated by the server in every game_players / game_init broadcast.
-   * Used by CardRequestWizard to grey out opponents with 0 cards in the
-   * currently selected half-suit so the player can't ask them.
-   * Optional for backward-compatibility with older snapshots.
-   */
-  halfSuitCounts?: Record<string, number>;
   isBot: boolean;
   isGuest: boolean;
   isCurrentTurn: boolean;

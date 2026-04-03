@@ -34,7 +34,7 @@
 
 const { validateAsk, applyAsk, getDeclarantLockedCards, validateDeclaration, applyDeclaration, applyForcedFailedDeclaration, _nextClockwiseOpponent } = require('../game/gameEngine');
 const { buildHalfSuitMap } = require('../game/halfSuits');
-const { serializePlayers, getHalfSuitCardCount } = require('../game/gameState');
+const { serializePlayers } = require('../game/gameState');
 
 // ---------------------------------------------------------------------------
 // Helper: build a minimal 6-player game state with known hands
@@ -701,97 +701,6 @@ describe('applyDeclaration', () => {
     expect(gs.status).toBe('completed');
     expect(gs.winner).toBe(1);
     expect(gs.tiebreakerWinner).toBe(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getHalfSuitCardCount + serializePlayers halfSuitCounts
-// ---------------------------------------------------------------------------
-
-describe('getHalfSuitCardCount', () => {
-  let gs;
-
-  beforeEach(() => {
-    gs = buildTestGame();
-  });
-
-  it('returns the correct count for a player who holds cards in a half-suit', () => {
-    // p1 holds 1_s, 2_s, 3_s — all low_s cards
-    expect(getHalfSuitCardCount(gs, 'p1', 'low_s')).toBe(3);
-  });
-
-  it('returns 0 for a player who holds NO cards in a half-suit', () => {
-    // p1 holds only low_s cards; they hold 0 high_s cards
-    expect(getHalfSuitCardCount(gs, 'p1', 'high_s')).toBe(0);
-  });
-
-  it('returns 0 for a player with an empty hand', () => {
-    gs.hands.set('p1', new Set());
-    expect(getHalfSuitCardCount(gs, 'p1', 'low_s')).toBe(0);
-  });
-
-  it('returns 0 after cards in that half-suit are removed (post-declaration)', () => {
-    // Simulate declaration: remove all low_s cards from p1
-    gs.hands.set('p1', new Set(['1_h'])); // only holds a heart now
-    expect(getHalfSuitCardCount(gs, 'p1', 'low_s')).toBe(0);
-  });
-});
-
-describe('serializePlayers — halfSuitCounts', () => {
-  let gs;
-
-  beforeEach(() => {
-    gs = buildTestGame();
-  });
-
-  it('each serialized player includes a halfSuitCounts object', () => {
-    const players = serializePlayers(gs);
-    for (const p of players) {
-      expect(p).toHaveProperty('halfSuitCounts');
-      expect(typeof p.halfSuitCounts).toBe('object');
-    }
-  });
-
-  it('halfSuitCounts has entries for all 8 half-suits', () => {
-    const players = serializePlayers(gs);
-    const expected = ['low_s','high_s','low_h','high_h','low_d','high_d','low_c','high_c'];
-    for (const p of players) {
-      for (const hsId of expected) {
-        expect(p.halfSuitCounts).toHaveProperty(hsId);
-      }
-    }
-  });
-
-  it('p1 halfSuitCounts.low_s === 3 (holds 1_s,2_s,3_s)', () => {
-    const players = serializePlayers(gs);
-    const p1 = players.find((p) => p.playerId === 'p1');
-    expect(p1.halfSuitCounts.low_s).toBe(3);
-  });
-
-  it('p4 halfSuitCounts.high_s === 3 (holds 11_s,12_s,13_s) and low_s === 0', () => {
-    const players = serializePlayers(gs);
-    const p4 = players.find((p) => p.playerId === 'p4');
-    expect(p4.halfSuitCounts.high_s).toBe(3);
-    expect(p4.halfSuitCounts.low_s).toBe(0);
-  });
-
-  it('halfSuitCounts correctly becomes 0 after cards are removed from a hand', () => {
-    // Remove all low_s cards from p1
-    gs.hands.set('p1', new Set());
-    const players = serializePlayers(gs);
-    const p1 = players.find((p) => p.playerId === 'p1');
-    expect(p1.halfSuitCounts.low_s).toBe(0);
-    expect(p1.cardCount).toBe(0);
-  });
-
-  it('all halfSuitCounts values are non-negative integers', () => {
-    const players = serializePlayers(gs);
-    for (const p of players) {
-      for (const [, count] of Object.entries(p.halfSuitCounts)) {
-        expect(Number.isInteger(count)).toBe(true);
-        expect(count).toBeGreaterThanOrEqual(0);
-      }
-    }
   });
 });
 
