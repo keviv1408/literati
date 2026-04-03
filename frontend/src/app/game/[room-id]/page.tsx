@@ -47,7 +47,6 @@ import {
 import { DeclareDropSeat } from '@/components/InlineDeclare';
 import InlineDeclareTray from '@/components/InlineDeclareTray';
 import FailedDeclarationReveal from '@/components/FailedDeclarationReveal';
-import EliminationModal from '@/components/EliminationModal';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
@@ -268,7 +267,6 @@ export default function GamePage({ params }: PageProps) {
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting, sendGameAdvance,
     declareProgress,
-    eliminationPrompt, sendChooseTurnRecipient,
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight, sendChooseNextTurn,
     postDeclarationTimer, pendingTurnPassAck,
@@ -1715,18 +1713,6 @@ export default function GamePage({ params }: PageProps) {
           players={players}
           variant={effectiveVariant}
           onDismiss={() => setFailedRevealDismissed(true)}
-        />
-      )}
-
-      {/* ── Elimination modal ───────────────────────────────────
-       * Shown ONLY to the human player whose hand was just emptied by a
-       * declaration. Prompts them to pick a teammate to receive future turns
-       * on their behalf. The game continues regardless of this choice.
-       */}
-      {eliminationPrompt && (
-        <EliminationModal
-          prompt={eliminationPrompt}
-          onChoose={sendChooseTurnRecipient}
         />
       )}
     </div>

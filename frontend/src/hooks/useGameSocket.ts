@@ -38,7 +38,6 @@ import type {
   PlayerReconnectedPayload,
   ReconnectExpiredPayload,
   PlayerEliminatedPayload,
-  ChooseTurnRecipientPromptPayload,
 } from '@/types/game';
 import { sortHandByHalfSuit, type CardVariant } from '@/utils/cardSort';
 
@@ -248,22 +247,6 @@ export interface UseGameSocketReturn {
    */
   sendGameAdvance: () => void;
   /**
-   * Non-null when this player has just been eliminated (hand
-   * emptied by a declaration) and the server is prompting them to choose
-   * a teammate to receive future turns.
-   *
-   * Cleared after the player calls `sendChooseTurnRecipient` or dismisses.
-   */
-  eliminationPrompt: ChooseTurnRecipientPromptPayload | null;
-  /**
-   * Notify the server of which teammate this eliminated player
-   * has chosen to receive future turns. Fire-and-forget.
-   *
-   * Only meaningful when `eliminationPrompt` is non-null.
-   * Pass the `playerId` of the chosen teammate.
-   */
-  sendChooseTurnRecipient: (recipientId: string) => void;
-  /**
    * IDs of all non-eliminated players with at least one card
    * remaining, as of the most recent declaration.
    *
@@ -398,8 +381,6 @@ export function useGameSocket({
   const [reconnectWindows, setReconnectWindows] = useState<
     Record<string, { expiresAt: number; reconnectWindowMs: number }>
   >({});
-  // non-null when this player was eliminated and should choose a turn recipient
-  const [eliminationPrompt, setEliminationPrompt] = useState<ChooseTurnRecipientPromptPayload | null>(null);
   // IDs of all non-eliminated players with cards remaining (updated on declaration_result)
   const [eligibleNextTurnPlayerIds, setEligibleNextTurnPlayerIds] = useState<string[]>([]);
   // non-null after a correct declaration — lets the turn player click a seat to redirect
@@ -792,10 +773,9 @@ export function useGameSocket({
         }
 
         case 'choose_turn_recipient_prompt': {
-          // Targeted: sent ONLY to the eliminated human player.
-          // Show them a modal to choose which teammate receives future turns.
-          const payload = msg as unknown as ChooseTurnRecipientPromptPayload;
-          setEliminationPrompt(payload);
+          // Eliminated players no longer see a chooser in the frontend.
+          // The server can still fall back to its default turn resolution when
+          // no preferred recipient is selected.
           break;
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -947,20 +927,6 @@ export function useGameSocket({
   }, []);
 
   /**
-   * Notify the server which teammate should receive future turns
-   * on behalf of this eliminated player. Fire-and-forget.
-   *
-   * Also clears the local `eliminationPrompt` state so the modal is dismissed.
-   */
-  const sendChooseTurnRecipient = useCallback((recipientId: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'choose_turn_recipient', recipientId }));
-    // Clear the prompt so the modal closes
-    setEliminationPrompt(null);
-  }, []);
-
-  /**
    * 56c: Redirect the current turn to a same-team teammate after
    * a correct declaration. Sends `choose_next_turn` to the server,
    * immediately clears the post-declaration highlight so the seat glow
@@ -999,7 +965,6 @@ export function useGameSocket({
     roomDissolved,
     botTakeover,
     reconnectWindows,
-    eliminationPrompt,
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight,
     postDeclarationTimer,
@@ -1012,7 +977,6 @@ export function useGameSocket({
     sendPartialSelection,
     sendDeclareSelecting,
     sendGameAdvance,
-    sendChooseTurnRecipient,
     sendChooseNextTurn,
     error,
   };

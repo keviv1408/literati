@@ -835,6 +835,25 @@ describe('GamePage — game controls always available', () => {
       });
     });
 
+    it('does not show an elimination chooser when the server sends a turn-recipient prompt', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      act(() => sendWsMessage({
+        type: 'choose_turn_recipient_prompt',
+        eliminatedPlayerId: MY_PLAYER_ID,
+        eligibleTeammates: [
+          { playerId: 'p2', displayName: 'Alice' },
+          { playerId: 'p3', displayName: 'Bob' },
+        ],
+      }));
+
+      expect(screen.queryByRole('heading', { name: /you've been eliminated/i })).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
     it('disables the self seat during inline declare because self cards are auto-assigned', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
