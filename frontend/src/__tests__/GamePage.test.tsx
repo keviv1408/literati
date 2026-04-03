@@ -835,6 +835,39 @@ describe('GamePage — game controls always available', () => {
       });
     });
 
+    it('disables the self seat during inline declare because self cards are auto-assigned', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('toggle-declare'));
+
+      const spadeCardWrapper = document.querySelector('[data-testid="card-wrapper-1_s"]') as HTMLElement;
+      expect(spadeCardWrapper).toBeTruthy();
+      const spadeCard = spadeCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(spadeCard).toBeTruthy();
+      fireEvent.click(spadeCard);
+
+      const tray = await screen.findByTestId('inline-declare-tray');
+      expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
+
+      const mySeat = screen.getAllByTestId('declare-drop-seat')
+        .find((seat) => seat.getAttribute('data-player-id') === MY_PLAYER_ID);
+      expect(mySeat).toBeTruthy();
+      expect(mySeat).toHaveAttribute('aria-disabled', 'true');
+
+      const cards = within(tray).getAllByTestId('declare-draggable-card');
+      fireEvent.click(cards[0]);
+      fireEvent.click(mySeat!);
+
+      expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
+    });
+
     it('submits an ask when the player picks an inline ask card and taps an opponent seat', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());

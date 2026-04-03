@@ -120,7 +120,11 @@ function TeammateDropZone({
   hasSelectedCard: boolean;
   isSubmitted: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: playerId });
+  const isDisabled = isMe;
+  const { setNodeRef, isOver } = useDroppable({
+    id: playerId,
+    disabled: isDisabled || isSubmitted,
+  });
 
   const handCards = assignedCards.filter((c) => myHand.includes(c));
   const nonHandCards = assignedCards.filter((c) => !myHand.includes(c));
@@ -128,20 +132,22 @@ function TeammateDropZone({
   return (
     <div
       ref={setNodeRef}
-      onClick={!isSubmitted && hasSelectedCard ? onTapZone : undefined}
+      onClick={!isDisabled && !isSubmitted && hasSelectedCard ? onTapZone : undefined}
       className={[
         'flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 transition-all duration-150',
         'min-h-[7rem] flex-1 min-w-0',
-        isOver
+        isDisabled
+          ? 'border-slate-700/60 bg-slate-900/45 opacity-70 cursor-not-allowed'
+          : isOver
           ? 'border-amber-400 bg-amber-900/30 scale-[1.03] shadow-lg shadow-amber-900/20'
           : hasSelectedCard && !isSubmitted
           ? 'border-dashed border-amber-600/50 bg-slate-800/50 cursor-pointer hover:border-amber-500'
-          : isMe
-          ? 'border-emerald-600/50 bg-emerald-900/20'
           : 'border-slate-600/40 bg-slate-800/30',
       ].filter(Boolean).join(' ')}
       role="region"
-      aria-label={`${player.displayName}${isMe ? ' (you)' : ''} — ${assignedCards.length} card${assignedCards.length !== 1 ? 's' : ''} assigned`}
+      aria-label={`${player.displayName}${isMe ? ' (you, auto-assigned only)' : ''} — ${assignedCards.length} card${assignedCards.length !== 1 ? 's' : ''} assigned`}
+      aria-disabled={isDisabled}
+      title={isDisabled ? 'Your cards are auto-assigned during declaration' : undefined}
       data-testid="teammate-drop-zone"
       data-player-id={playerId}
     >
@@ -150,8 +156,13 @@ function TeammateDropZone({
         {player.displayName}
       </span>
       {isMe && (
-        <span className="text-[0.5rem] font-semibold text-emerald-400 uppercase tracking-wider -mt-0.5">
+        <span className="text-[0.5rem] font-semibold text-slate-400 uppercase tracking-wider -mt-0.5">
           You
+        </span>
+      )}
+      {isMe && (
+        <span className="text-[0.45rem] font-medium text-slate-500 uppercase tracking-[0.18em] -mt-1">
+          Auto-assigned
         </span>
       )}
 
@@ -181,7 +192,7 @@ function TeammateDropZone({
         )}
       </div>
 
-      {isOver && (
+      {isOver && !isDisabled && (
         <span className="text-[0.5rem] text-amber-300 font-medium animate-pulse">
           Release to assign
         </span>
@@ -319,12 +330,12 @@ export default function DeclareModal({
     } else {
       // Assign to teammate (overStr is playerId)
       // Verify the target is actually a teammate
-      if (teammates.some((t) => t.playerId === overStr)) {
+      if (teammates.some((t) => t.playerId === overStr && t.playerId !== myPlayerId)) {
         setAssignment((prev) => ({ ...prev, [cardId]: overStr }));
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myHand, teammates]);
+  }, [myHand, teammates, myPlayerId]);
 
   // ── Tap-to-assign handlers (mobile-friendly alternative to drag) ─────────
   const handleTapUnassignedCard = useCallback((cardId: CardId) => {
@@ -333,10 +344,10 @@ export default function DeclareModal({
   }, [myHand]);
 
   const handleTapZone = useCallback((playerId: string) => {
-    if (!selectedCard) return;
+    if (!selectedCard || playerId === myPlayerId) return;
     setAssignment((prev) => ({ ...prev, [selectedCard]: playerId }));
     setSelectedCard(null);
-  }, [selectedCard]);
+  }, [selectedCard, myPlayerId]);
 
   const handleRemoveCard = useCallback((cardId: CardId) => {
     if (myHand.includes(cardId)) return;

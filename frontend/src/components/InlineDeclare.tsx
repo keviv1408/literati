@@ -107,7 +107,8 @@ export function DeclareDropSeat({
   onRemoveCard: (cardId: CardId) => void;
   isMe: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: playerId });
+  const isDisabled = isMe;
+  const { setNodeRef, isOver } = useDroppable({ id: playerId, disabled: isDisabled });
 
   const handCards = assignedCards.filter((c) => myHand.includes(c));
   const nonHandCards = assignedCards.filter((c) => !myHand.includes(c));
@@ -115,14 +116,17 @@ export function DeclareDropSeat({
   return (
     <div
       ref={setNodeRef}
-      onClick={hasSelectedCard ? onTapZone : undefined}
+      onClick={!isDisabled && hasSelectedCard ? onTapZone : undefined}
       className={[
         'relative flex flex-col items-center transition-all duration-150',
+        isDisabled ? 'opacity-65 cursor-not-allowed' : '',
         isOver ? 'scale-110 z-20' : '',
-        hasSelectedCard && !isMe ? 'cursor-pointer' : '',
+        hasSelectedCard && !isDisabled ? 'cursor-pointer' : '',
       ]
         .filter(Boolean)
         .join(' ')}
+      aria-disabled={isDisabled}
+      title={isDisabled ? 'Your cards are auto-assigned during declaration' : undefined}
       data-testid="declare-drop-seat"
       data-player-id={playerId}
     >
@@ -130,13 +134,21 @@ export function DeclareDropSeat({
       <div
         className={[
           'rounded-xl transition-all duration-150',
-          isOver
+          isDisabled
+            ? 'ring-1 ring-slate-600/60 ring-offset-1 ring-offset-slate-950 bg-slate-950/30'
+            : isOver
             ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-amber-500/20'
             : 'ring-2 ring-violet-500/60 ring-offset-1 ring-offset-slate-950',
         ].join(' ')}
       >
         {children}
       </div>
+
+      {isDisabled && (
+        <span className="mt-1 text-[0.45rem] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          Auto-assigned
+        </span>
+      )}
 
       {/* Assigned cards underneath the seat */}
       {assignedCards.length > 0 && (
@@ -174,7 +186,7 @@ export function DeclareDropSeat({
         </div>
       )}
 
-      {isOver && (
+      {isOver && !isDisabled && (
         <span className="text-[0.45rem] text-amber-300 font-medium animate-pulse mt-0.5">
           Drop here
         </span>

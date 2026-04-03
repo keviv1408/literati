@@ -754,7 +754,7 @@ export default function GamePage({ params }: PageProps) {
 
     const overStr = String(overId);
     // Verify the target is a teammate
-    const teammates = players.filter((p) => p.teamId === myTeamId);
+    const teammates = players.filter((p) => p.teamId === myTeamId && p.playerId !== myPlayerId);
     if (teammates.some((t) => t.playerId === overStr)) {
       setDeclareAssignment((prev) => {
         const next = { ...prev, [cardId]: overStr };
@@ -762,7 +762,7 @@ export default function GamePage({ params }: PageProps) {
         return next;
       });
     }
-  }, [myHand, players, myTeamId, declareSelectedSuit, sendDeclareProgress]);
+  }, [myHand, players, myTeamId, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
 
   // ── Inline declare: tap-to-assign ────────────────────────────
   const handleDeclareTapCard = useCallback((cardId: CardId) => {
@@ -771,14 +771,14 @@ export default function GamePage({ params }: PageProps) {
   }, [myHand]);
 
   const handleDeclareTapZone = useCallback((playerId: string) => {
-    if (!declareSelectedCard) return;
+    if (!declareSelectedCard || playerId === myPlayerId) return;
     setDeclareAssignment((prev) => {
       const next = { ...prev, [declareSelectedCard]: playerId };
       if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
       return next;
     });
     setDeclareSelectedCard(null);
-  }, [declareSelectedCard, declareSelectedSuit, sendDeclareProgress]);
+  }, [declareSelectedCard, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
 
   const handleDeclareRemoveCard = useCallback((cardId: CardId) => {
     if (myHand.includes(cardId)) return;

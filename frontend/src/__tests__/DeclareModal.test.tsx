@@ -253,6 +253,16 @@ describe('DeclareModal — card assignment step structure', () => {
     expect(myZone!.textContent).toMatch(/You/);
   });
 
+  it('marks the player\'s own zone as disabled because self cards are auto-assigned', () => {
+    renderModal({ myHand: ['1_s'], players: build6Players() });
+    openLowSpades();
+    const myZone = screen.getAllByTestId('teammate-drop-zone')
+      .find((z) => z.getAttribute('data-player-id') === 'p1');
+    expect(myZone).toBeTruthy();
+    expect(myZone).toHaveAttribute('aria-disabled', 'true');
+    expect(myZone!.textContent).toMatch(/Auto-assigned/i);
+  });
+
   it('hand cards appear in the "You" zone with a check mark', () => {
     renderModal({ myHand: ['1_s'], players: build6Players() });
     openLowSpades();
@@ -308,6 +318,18 @@ describe('DeclareModal — tap-to-assign', () => {
       .find((z) => z.getAttribute('data-player-id') === 'p2');
     fireEvent.click(aliceZone!);
     expect(screen.getByText(/2\/6 assigned/)).toBeTruthy();
+  });
+
+  it('ignores taps on the disabled self zone after selecting a card', () => {
+    renderModal({ myHand: ['1_s'], players: build6Players() });
+    openLowSpades();
+    const pool = screen.getByTestId('unassigned-pool');
+    const cards = within(pool).getAllByTestId('draggable-card');
+    fireEvent.click(cards[0]);
+    const myZone = screen.getAllByTestId('teammate-drop-zone')
+      .find((z) => z.getAttribute('data-player-id') === 'p1');
+    fireEvent.click(myZone!);
+    expect(screen.getByText(/1\/6 assigned/)).toBeTruthy();
   });
 
   it('tapping the same card again deselects it', () => {
