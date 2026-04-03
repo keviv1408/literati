@@ -207,6 +207,13 @@ function makeDeclarationResult(opts: { correct?: boolean } = {}) {
   };
 }
 
+function makeSingleEligibleDeclarationResult() {
+  return {
+    ...makeDeclarationResult({ correct: true }),
+    eligibleNextTurnPlayerIds: [MY_PLAYER_ID],
+  };
+}
+
 /** Helper: render + connect + send game_init */
 async function setupActiveGame(opts: { currentTurnPlayerId?: string } = {}) {
   render(<GamePage params={makeParams('ABC123')} />);
@@ -327,6 +334,19 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
     // Wait for declaration result to be processed
     await waitFor(() => expect(screen.queryByTestId('turn-pass-action-prompt')).toBeNull());
     // After incorrect decl it's now someone else's turn (no isTurnPassMode for me)
+  });
+
+  it('does NOT activate turn-pass mode when only one same-team player is eligible', async () => {
+    await setupActiveGame();
+    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+
+    act(() => sendWsMessage(makeSingleEligibleDeclarationResult()));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ask-button')).toBeTruthy();
+      expect(screen.getByTestId('declare-button')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('turn-pass-action-prompt')).toBeNull();
   });
 });
 

@@ -617,12 +617,14 @@ export function useGameSocket({
                 const eligibleSameTeam = (payload.eligibleNextTurnPlayerIds ?? []).filter(
                   (id) => sameTeamIds.has(id)
                 );
-                if (eligibleSameTeam.length > 0) {
+                if (eligibleSameTeam.length > 1) {
                   setPostDeclarationHighlight({
                     declarerId:          payload.declarerId,
                     declarerTeamId:      declarant.teamId,
                     eligibleSameTeamIds: eligibleSameTeam,
                   });
+                } else {
+                  setPostDeclarationHighlight(null);
                 }
               }
               return currentPlayers; // no change to players

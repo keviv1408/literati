@@ -18,7 +18,7 @@
  * 7. On timer expiry, selected player has cards (still eligible)
  * 8. `handleChooseNextTurn` cancels the timer and broadcasts `post_declaration_turn_selected`
  * 9. `handleChooseNextTurn` resolves reason:'player_choice' correctly
- * 10. Correct declaration with only ONE eligible player still starts the timer
+ * 10. Correct declaration with only ONE eligible player skips the timer
  * 11. Game over after declaration: no post_declaration_timer is broadcast
  */
 
@@ -65,6 +65,8 @@ const {
   handleChooseNextTurn,
   startPostDeclarationTimer,
   cancelPostDeclarationTimer,
+  cancelTurnTimer,
+  cancelBotTimer,
   _postDeclarationTimers,
   POST_DECLARATION_TURN_SELECTION_MS,
 } = require('../game/gameSocketServer');
@@ -187,6 +189,8 @@ beforeEach(() => {
 afterEach(() => {
   // Always cancel timers to prevent "Cannot log after tests are done" warnings
   cancelPostDeclarationTimer(ROOM);
+  cancelTurnTimer(ROOM);
+  cancelBotTimer(ROOM);
   jest.useRealTimers();
   _clearAll();
 });
@@ -286,13 +290,33 @@ describe('post_declaration_timer — broadcast', () => {
       expect(player.teamId).toBe(1);
     }
   });
+
+  test('7. correct declaration with only one eligible player skips post_declaration_timer', async () => {
+    jest.useFakeTimers();
+
+    // After low_s is removed, only p5 still has cards on team 1.
+    gs.hands.set('p1', new Set(['1_s', '2_s']));
+    gs.hands.set('p3', new Set(['3_s', '4_s']));
+    gs.hands.set('p5', new Set(['5_s', '6_s', '5_h', '6_h']));
+
+    await handleDeclare(ROOM, 'p1', 'low_s', CORRECT_ASSIGNMENT, wsP1, false);
+
+    const allWs = [wsP1, wsP2, wsP3, wsP4, wsP5, wsP6, wsSpectator];
+    for (const ws of allWs) {
+      const timerMsg = ws._sent.find((m) => m.type === 'post_declaration_timer');
+      expect(timerMsg).toBeUndefined();
+    }
+
+    expect(_postDeclarationTimers.has(ROOM)).toBe(false);
+    expect(getGame(ROOM).currentTurnPlayerId).toBe('p5');
+  });
 });
 
 describe('post_declaration_timer — expiry (bot auto-selection)', () => {
   // These tests call startPostDeclarationTimer directly (bypassing handleDeclare's
   // async Supabase persist) to avoid fake-timer deadlocks in async code.
 
-  test('7. On expiry, post_declaration_turn_selected broadcast with reason:timeout', () => {
+  test('8. On expiry, post_declaration_turn_selected broadcast with reason:timeout', () => {
     jest.useFakeTimers();
 
     // Eligible players on team 1 who have cards
@@ -312,7 +336,7 @@ describe('post_declaration_timer — expiry (bot auto-selection)', () => {
     }
   });
 
-  test('8. On expiry, selected player is in the eligible list', () => {
+  test('9. On expiry, selected player is in the eligible list', () => {
     jest.useFakeTimers();
 
     const eligiblePlayers = ['p1', 'p3', 'p5'];
@@ -328,7 +352,7 @@ describe('post_declaration_timer — expiry (bot auto-selection)', () => {
     expect(selMsg.selectedPlayerId.length).toBeGreaterThan(0);
   });
 
-  test('9. After expiry, _postDeclarationTimers is cleared', () => {
+  test('10. After expiry, _postDeclarationTimers is cleared', () => {
     jest.useFakeTimers();
 
     startPostDeclarationTimer(ROOM, 'p1', ['p1', 'p3', 'p5']);
@@ -341,7 +365,7 @@ describe('post_declaration_timer — expiry (bot auto-selection)', () => {
 });
 
 describe('handleChooseNextTurn — manual selection', () => {
-  test('10. handleChooseNextTurn cancels the timer and broadcasts post_declaration_turn_selected', async () => {
+  test('11. handleChooseNextTurn cancels the timer and broadcasts post_declaration_turn_selected', async () => {
     jest.useFakeTimers();
 
     await handleDeclare(ROOM, 'p1', 'low_s', CORRECT_ASSIGNMENT, wsP1, false);
@@ -377,7 +401,7 @@ describe('handleChooseNextTurn — manual selection', () => {
     }
   });
 
-  test('11. handleChooseNextTurn is a no-op when no timer is active', () => {
+  test('12. handleChooseNextTurn is a no-op when no timer is active', () => {
     // Ensure no timer is active
     cancelPostDeclarationTimer(ROOM);
 
@@ -391,7 +415,7 @@ describe('handleChooseNextTurn — manual selection', () => {
     expect(selMsg).toBeUndefined();
   });
 
-  test('12. Game-over declaration does not broadcast post_declaration_timer', async () => {
+  test('13. Game-over declaration does not broadcast post_declaration_timer', async () => {
     jest.useFakeTimers();
 
     // Set up a game that's about to end (7 suits already declared, this is the 8th)
@@ -440,7 +464,7 @@ describe('handleChooseNextTurn — manual selection', () => {
 });
 
 describe('startPostDeclarationTimer — direct tests', () => {
-  test('13. startPostDeclarationTimer adds entry to _postDeclarationTimers', () => {
+  test('14. startPostDeclarationTimer adds entry to _postDeclarationTimers', () => {
     jest.useFakeTimers();
 
     const eligiblePlayers = ['p1', 'p3', 'p5'];
@@ -453,7 +477,7 @@ describe('startPostDeclarationTimer — direct tests', () => {
     cancelPostDeclarationTimer(ROOM);
   });
 
-  test('14. startPostDeclarationTimer replaces any existing timer', () => {
+  test('15. startPostDeclarationTimer replaces any existing timer', () => {
     jest.useFakeTimers();
 
     startPostDeclarationTimer(ROOM, 'p1', ['p1', 'p3']);

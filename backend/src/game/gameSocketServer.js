@@ -159,6 +159,7 @@ const {
   applyDeclaration,
   applyForcedFailedDeclaration,
   getEligibleNextTurnPlayers,
+  _resolveValidTurn,
 } = require('./gameEngine');
 const {
   decideBotMove,
@@ -624,6 +625,19 @@ async function updateStats(gs) {
 function scheduleBotTurnIfNeeded(gs) {
   if (gs.status !== 'active') return;
 
+  if (getCardCount(gs, gs.currentTurnPlayerId) === 0) {
+    const previousTurn = gs.currentTurnPlayerId;
+    const recoveredTurn = _resolveValidTurn(gs, previousTurn);
+    if (recoveredTurn !== previousTurn) {
+      console.warn(
+        `[game-ws] Recovered invalid turn holder in room ${gs.roomCode}: ` +
+        `${previousTurn} had no cards, advanced turn to ${recoveredTurn}`
+      );
+      gs.currentTurnPlayerId = recoveredTurn;
+      broadcastStateUpdate(gs, new Set());
+    }
+  }
+
   const currentPlayer = gs.players.find((p) => p.playerId === gs.currentTurnPlayerId);
   if (!currentPlayer || !currentPlayer.isBot) return;
 
@@ -648,9 +662,15 @@ function scheduleBotTurnIfNeeded(gs) {
 
   const timer = setTimeout(() => {
     _botTimers.delete(gs.roomCode);
+    console.log(
+      `[game-ws] Bot turn timer fired in room ${gs.roomCode} for ${gs.currentTurnPlayerId}`
+    );
     executeBotTurn(gs.roomCode, gs.currentTurnPlayerId);
   }, BOT_TURN_DELAY_MS);
 
+  console.log(
+    `[game-ws] Scheduled bot turn in room ${gs.roomCode}: player=${gs.currentTurnPlayerId}, delayMs=${BOT_TURN_DELAY_MS}`
+  );
   _botTimers.set(gs.roomCode, timer);
 }
 
@@ -1730,6 +1750,10 @@ async function executeBotTurn(roomCode, botId) {
 
   const decision = decideBotMove(gs, botId);
 
+  console.log(
+    `[game-ws] Bot decision in room ${roomCode}: bot=${botId}, action=${decision.action}`
+  );
+
   if (decision.action === 'ask') {
     await handleAskCard(roomCode, botId, decision.targetId, decision.cardId, undefined, null, true);
   } else if (decision.action === 'declare') {
@@ -1737,6 +1761,9 @@ async function executeBotTurn(roomCode, botId) {
   }
   // 'pass' — should not normally happen; just schedule next bot turn if needed
   else {
+    console.warn(
+      `[game-ws] Bot returned pass in room ${roomCode} for ${botId}; re-scheduling bot turn`
+    );
     scheduleBotTurnIfNeeded(gs);
   }
 }
@@ -1973,6 +2000,45 @@ function handleChooseTurnRecipient(roomCode, playerId, recipientId) {
 
   if (!gs.turnRecipients) gs.turnRecipients = new Map();
   gs.turnRecipients.set(playerId, recipientId);
+
+  console.log(
+    `[game-ws] Stored turn recipient in room ${roomCode}: eliminated=${playerId}, recipient=${recipientId}`
+  );
+
+  // Defensive recovery: if the eliminated player is still the active turn
+  // holder, immediately resolve and schedule the recovered turn.
+  if (gs.currentTurnPlayerId === playerId && getCardCount(gs, playerId) === 0) {
+    const recoveredTurn = _resolveValidTurn(gs, playerId);
+    if (recoveredTurn !== playerId) {
+      gs.currentTurnPlayerId = recoveredTurn;
+
+      console.warn(
+        `[game-ws] Recovered stalled turn after recipient choice in room ${roomCode}: ` +
+        `${playerId} -> ${recoveredTurn}`
+      );
+
+      // If a post-declaration timer is still active, resolve it immediately.
+      if (_postDeclarationTimers.has(roomCode)) {
+        cancelPostDeclarationTimer(roomCode);
+        broadcastToGame(roomCode, {
+          type:             'post_declaration_turn_selected',
+          selectedPlayerId: recoveredTurn,
+          chooserId:        playerId,
+          reason:           'recipient_choice_recovery',
+        });
+      }
+
+      broadcastStateUpdate(gs, new Set());
+      cancelTurnTimer(roomCode);
+      scheduleBotTurnIfNeeded(gs);
+      scheduleTurnTimerIfNeeded(gs);
+    } else {
+      console.error(
+        `[game-ws] Could not recover turn in room ${roomCode}: ` +
+        `currentTurnPlayerId=${playerId} still has no cards`
+      );
+    }
+  }
 }
 
 /**
@@ -2006,6 +2072,10 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
 
   // Only the current turn player may redirect the turn.
   if (gs.currentTurnPlayerId !== requesterId) {
+    console.warn(
+      `[game-ws] Rejected choose_next_turn in room ${roomCode}: requester=${requesterId}, ` +
+      `currentTurn=${gs.currentTurnPlayerId}, chosen=${chosenPlayerId}`
+    );
     if (ws) sendJson(ws, { type: 'error', message: 'Not your turn', code: 'NOT_YOUR_TURN' });
     return;
   }
@@ -2014,12 +2084,18 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
   const requester = gs.players.find((p) => p.playerId === requesterId);
   const chosen    = gs.players.find((p) => p.playerId === chosenPlayerId);
   if (!requester || !chosen) {
+    console.warn(
+      `[game-ws] Rejected choose_next_turn in room ${roomCode}: requester=${requesterId}, chosen=${chosenPlayerId}, reason=PLAYER_NOT_FOUND`
+    );
     if (ws) sendJson(ws, { type: 'error', message: 'Player not found', code: 'PLAYER_NOT_FOUND' });
     return;
   }
 
   // Must redirect within the same team.
   if (requester.teamId !== chosen.teamId) {
+    console.warn(
+      `[game-ws] Rejected choose_next_turn in room ${roomCode}: requester=${requesterId}, chosen=${chosenPlayerId}, reason=WRONG_TEAM`
+    );
     if (ws) sendJson(ws, { type: 'error', message: 'Must choose a teammate', code: 'WRONG_TEAM' });
     return;
   }
@@ -2027,9 +2103,16 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
   // Chosen player must still have cards (not eliminated).
   if ((gs.eliminatedPlayerIds && gs.eliminatedPlayerIds.has(chosenPlayerId)) ||
       getCardCount(gs, chosenPlayerId) === 0) {
+    console.warn(
+      `[game-ws] Rejected choose_next_turn in room ${roomCode}: requester=${requesterId}, chosen=${chosenPlayerId}, reason=TARGET_EMPTY_HAND`
+    );
     if (ws) sendJson(ws, { type: 'error', message: 'Chosen player has no cards', code: 'TARGET_EMPTY_HAND' });
     return;
   }
+
+  console.log(
+    `[game-ws] Accepted choose_next_turn in room ${roomCode}: requester=${requesterId}, chosen=${chosenPlayerId}`
+  );
 
   // Redirect the turn.
   gs.currentTurnPlayerId = chosenPlayerId;
@@ -2400,7 +2483,9 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   // 1. The declaration was correct (declaring team keeps the turn).
   // 2. The game is still active (not just ended by this declaration).
   // 3. The declarer is human (bots auto-choose immediately).
-  // 4. There are eligible players on the declaring team (at least 1 with cards).
+  // 4. There are at least TWO eligible players on the declaring team.
+  //    With only one survivor, there is no choice to make, so play should
+  //    continue immediately instead of stalling behind a no-op timer.
   if (correct && gs.status === 'active' && !isBot) {
     const declaringPlayer = gs.players.find((p) => p.playerId === declarerId);
     if (declaringPlayer) {
@@ -2408,11 +2493,21 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
         .filter((p) => p.teamId === declaringPlayer.teamId && getCardCount(gs, p.playerId) > 0)
         .map((p) => p.playerId);
 
-      if (eligiblePlayers.length > 0) {
+      console.log(
+        `[game-ws] Post-declaration turn candidates in room ${roomCode}: ` +
+        `declarer=${declarerId}, currentTurn=${gs.currentTurnPlayerId}, ` +
+        `eligible=[${eligiblePlayers.join(', ')}], newlyEliminated=[${(newlyEliminated ?? []).join(', ')}]`
+      );
+
+      if (eligiblePlayers.length > 1) {
         startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers);
         // Timer will schedule the next turn after selection (or on expiry).
         return;
       }
+
+      console.log(
+        `[game-ws] Skipping post-declaration timer in room ${roomCode}: only ${eligiblePlayers.length} eligible player(s)`
+      );
     }
   }
 

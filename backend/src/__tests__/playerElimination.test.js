@@ -321,6 +321,17 @@ describe('handleChooseTurnRecipient', () => {
     expect(gs.turnRecipients.get('p1')).toBe('p3');
   });
 
+  test('recovers turn immediately when eliminated chooser is currentTurnPlayerId', () => {
+    const gs = setup();
+    // Simulate a stalled state where the eliminated player still owns the turn.
+    gs.currentTurnPlayerId = 'p1';
+
+    handleChooseTurnRecipient('ELIM01', 'p1', 'p2');
+
+    expect(gs.turnRecipients.get('p1')).toBe('p2');
+    expect(gs.currentTurnPlayerId).toBe('p2');
+  });
+
   test('handles missing game gracefully', () => {
     expect(() => handleChooseTurnRecipient('XXXXX', 'p1', 'p2')).not.toThrow();
   });
