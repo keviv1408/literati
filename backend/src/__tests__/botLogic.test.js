@@ -525,6 +525,7 @@ describe('team signaling intent memory', () => {
     expect(teamSignals).toBeDefined();
     expect(teamSignals.get('high_s')).toMatchObject({
       sourcePlayerId: 'p2',
+      focusCardId: '11_s',
       lastOutcome: 'failure',
     });
     expect(teamSignals.get('high_s').strength).toBeGreaterThan(0);
@@ -575,5 +576,42 @@ describe('team signaling intent memory', () => {
 
     const move = decideBotMove(gs, 'p1');
     expect(move).toEqual({ action: 'ask', targetId: 'p4', cardId: '12_h' });
+  });
+
+  it('mirrors a teammate\'s failed card ask before switching to a different card in the same suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['8_h', '9_h'])],
+      ['p2', new Set(['10_h'])],
+      ['p3', new Set(['1_s'])],
+      ['p4', new Set(['1_c'])],
+      ['p5', new Set(['13_h'])],
+      ['p6', new Set(['2_c'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    gs.botKnowledge.set('p5', new Map([['13_h', true]]));
+    updateTeamIntentAfterAsk(gs, 'p2', '12_h', false);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move.action).toBe('ask');
+    expect(move.cardId).toBe('12_h');
+  });
+
+  it('only switches away from the teammate\'s signaled card once it already holds that card', () => {
+    const hands = new Map([
+      ['p1', new Set(['8_h', '9_h', '12_h'])],
+      ['p2', new Set(['10_h'])],
+      ['p3', new Set(['1_s'])],
+      ['p4', new Set(['1_c'])],
+      ['p5', new Set(['13_h'])],
+      ['p6', new Set(['2_c'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    gs.botKnowledge.set('p5', new Map([['13_h', true]]));
+    updateTeamIntentAfterAsk(gs, 'p2', '12_h', false);
+
+    const move = decideBotMove(gs, 'p1');
+    expect(move).toEqual({ action: 'ask', targetId: 'p5', cardId: '13_h' });
   });
 });
