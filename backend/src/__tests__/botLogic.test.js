@@ -175,6 +175,53 @@ describe('decideBotMove — declares when public information uniquely identifies
     expect(Object.keys(move.assignment)).toHaveLength(6);
   });
 
+  it('signals an ambiguous team-complete suit when all opponents are eliminated but 2 teammates remain possible', () => {
+    // Scenario: team1 holds all 6 low_s cards.  Bot (p1) has 3 of them, p2 has
+    // the other 3.  All opponents are known to NOT hold any low_s card, but
+    // public info can't distinguish whether p2 or p3 holds the remaining cards
+    // (both are candidates).  The bot should detect that the team owns the suit
+    // (team-level inference) and signal to resolve ambiguity — NOT stay stuck
+    // asking opponents about other suits.
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s'])],
+      ['p2', new Set(['4_s', '5_s', '6_s'])],
+      ['p3', new Set(['8_h'])],
+      ['p4', new Set(['9_h'])],
+      ['p5', new Set(['10_h'])],
+      ['p6', new Set(['11_h'])],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    // Publicly eliminate all opponents from low_s cards.
+    // Also eliminate p3 from those cards.  This leaves p2 as
+    // the only option — but we want 2 candidates, so skip p3.
+    for (const opp of ['p4', 'p5', 'p6']) {
+      for (const card of ['4_s', '5_s', '6_s']) {
+        updateKnowledgeAfterAsk(gs, 'p1', opp, card, false);
+      }
+    }
+    // p1 asked for these cards → p1 marked as not-having them.
+    // p4/p5/p6 also marked as not-having them.
+    // That leaves p2 and p3 as candidates.
+    // Both are team1 → team-level inference says team1 owns the suit.
+
+    // The bot's visible team count for low_s should now be 6 (3 in hand + 3 team-inferred).
+    const move = decideBotMove(gs, 'p1');
+
+    // The bot should either declare (if unique solution) or signal the
+    // ambiguous suit.  Since p2 and p3 are both candidates, solutions > 1,
+    // so it should signal with an ask in low_s to resolve the ambiguity.
+    if (move.action === 'ask') {
+      const cardToHalfSuit = buildCardToHalfSuitMap('remove_7s');
+      expect(cardToHalfSuit.get(move.cardId)).toBe('low_s');
+    } else {
+      // If it declares, that's also acceptable — the solver might find
+      // only 1 solution if p3 has 0 capacity.
+      expect(move.action).toBe('declare');
+      expect(move.halfSuitId).toBe('low_s');
+    }
+  });
+
   it('keeps asking when the suit is privately complete but still not publicly provable', () => {
     const hands = new Map([
       ['p1', new Set(['1_s', '8_h'])],

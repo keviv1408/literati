@@ -172,6 +172,39 @@ function _getVisibleKnownHolder(gs, observerId, cardId) {
   return candidate;
 }
 
+/**
+ * Return the team that publicly must hold a card, even if the exact holder is
+ * unknown.  When process-of-elimination narrows a card's possible holders to
+ * multiple players who are ALL on the same team, we can infer the team without
+ * knowing which player holds it.
+ *
+ * Returns 1|2 if the team is deterministic, null otherwise.
+ */
+function _getVisibleKnownTeam(gs, observerId, cardId) {
+  const holder = _getVisibleKnownHolder(gs, observerId, cardId);
+  if (holder && holder !== '__conflict__') {
+    return getPlayerTeam(gs, holder);
+  }
+
+  // holder is null — multiple candidates exist.  Check if they all share a team.
+  let team = null;
+  for (const player of gs.players) {
+    const known = _getKnown(gs, player.playerId, cardId);
+    if (known === true) return getPlayerTeam(gs, player.playerId);
+    if (known === false) continue;
+    if (getCardCount(gs, player.playerId) === 0) continue;
+    // This player is a candidate.
+    const pTeam = player.teamId;
+    if (team === null) {
+      team = pTeam;
+    } else if (team !== pTeam) {
+      return null; // candidates span both teams
+    }
+  }
+
+  return team;
+}
+
 function _getVisibleKnownCards(gs, observerId, playerId) {
   if (observerId === playerId) {
     return new Set(getHand(gs, playerId));
@@ -316,6 +349,8 @@ function updateTeamIntentAfterDeclaration(gs, halfSuitId) {
 }
 
 function _getVisibleTeamHalfSuitCount(gs, observerId, teamPlayers, halfSuitId) {
+  const firstPlayer = teamPlayers[0];
+  const teamId = firstPlayer?.teamId ?? getPlayerTeam(gs, firstPlayer?.playerId);
   const teamPlayerIds = new Set(teamPlayers.map((p) => p.playerId));
   const halfSuitCards = buildHalfSuitMap(gs.variant).get(halfSuitId) ?? [];
   let count = 0;
@@ -324,6 +359,15 @@ function _getVisibleTeamHalfSuitCount(gs, observerId, teamPlayers, halfSuitId) {
     const holder = _getVisibleKnownHolder(gs, observerId, card);
     if (holder && holder !== '__conflict__' && teamPlayerIds.has(holder)) {
       count++;
+      continue;
+    }
+    // Even when the exact holder is unknown, if all remaining candidates are
+    // on this team the card is provably team-owned.
+    if (!holder || holder === '__conflict__') {
+      const knownTeam = _getVisibleKnownTeam(gs, observerId, card);
+      if (knownTeam === teamId) {
+        count++;
+      }
     }
   }
 
