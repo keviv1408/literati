@@ -645,12 +645,12 @@ describe('E. _handleTimerExpiry', () => {
 describe('F. Bot name generation', () => {
   const { fillWithBots, _keyToDisplayName } = require('../matchmaking/botFiller');
 
-  it('_keyToDisplayName converts "quirky_turing" to "Quirky Turing"', () => {
-    expect(_keyToDisplayName('quirky_turing')).toBe('Quirky Turing');
+  it('_keyToDisplayName converts "ziggy" to "Ziggy"', () => {
+    expect(_keyToDisplayName('ziggy')).toBe('Ziggy');
   });
 
-  it('_keyToDisplayName handles multi-segment keys', () => {
-    expect(_keyToDisplayName('admiring_von_neumann')).toContain('Admiring');
+  it('_keyToDisplayName handles suffixed fallback keys', () => {
+    expect(_keyToDisplayName('nova_2')).toBe('Nova 2');
   });
 
   it('fillWithBots returns 0 bots when all seats occupied', () => {

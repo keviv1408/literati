@@ -27,7 +27,7 @@ export interface LobbyPlayer {
    * snapshot; absent in empty-seat placeholders built by buildEmptySeats().
    */
   playerId?: string;
-  /** Human-readable display name (or bot-generated Docker-style name). */
+  /** Human-readable display name (or bot-generated memorable name). */
   displayName: string;
   /** Whether this player is an AI bot. */
   isBot: boolean;

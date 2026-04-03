@@ -398,7 +398,7 @@ describe('H. Name uniqueness', () => {
 
   it('does not reuse bot names already present in occupiedSeats', () => {
     // Pre-place a bot with a known name at seat 0
-    const existingBotName = 'Admiring Turing';
+    const existingBotName = 'Ziggy';
     const occupied = new Map();
     occupied.set(0, {
       seatIndex:   0,
@@ -511,14 +511,14 @@ describe('J. Balance with non-standard seat layouts (robustness)', () => {
 
 describe('_keyToDisplayName', () => {
   it('capitalises the first letter of each word', () => {
-    expect(_keyToDisplayName('quirky_turing')).toBe('Quirky Turing');
+    expect(_keyToDisplayName('ziggy')).toBe('Ziggy');
   });
 
   it('handles a single-segment key without crashing', () => {
-    expect(_keyToDisplayName('brave')).toBe('Brave');
+    expect(_keyToDisplayName('vega')).toBe('Vega');
   });
 
   it('lowercases the rest of each word', () => {
-    expect(_keyToDisplayName('ADMIRING_LOVELACE')).toBe('Admiring Lovelace');
+    expect(_keyToDisplayName('MOCHI')).toBe('Mochi');
   });
 });

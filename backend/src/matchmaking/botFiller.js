@@ -7,42 +7,18 @@
  * an unfull room), this module generates bot players to occupy any empty seats.
  *
  * Bot IDs follow the "bot_<timestamp>_<seatIndex>" format and bot names use
- * the same adjective_noun convention surfaced in the frontend UI.
+ * the same memorable fixed-name pool surfaced in the frontend UI.
  */
 
-// Docker-style adjective + scientist/pioneer noun lists.
-
-const BOT_ADJECTIVES = [
-  'admiring',   'adoring',    'amazing',    'blissful',   'bold',
-  'brave',      'charming',   'clever',     'compassionate', 'confident',
-  'cool',       'dazzling',   'determined', 'dreamy',     'eager',
-  'elastic',    'elegant',    'epic',       'fervent',    'festive',
-  'focused',    'friendly',   'funny',      'gallant',    'gifted',
-  'gracious',   'happy',      'hardcore',   'hopeful',    'hungry',
-  'infallible', 'inspiring',  'intelligent','jolly',      'jovial',
-  'keen',       'kind',       'laughing',   'loving',     'lucid',
-  'magical',    'nifty',      'nostalgic',  'optimistic', 'peaceful',
-  'quirky',     'relaxed',    'reverent',   'romantic',   'serene',
-  'sharp',      'silly',      'sleepy',     'stoic',      'sweet',
-  'tender',     'trusting',   'upbeat',     'vibrant',    'vigilant',
-  'wonderful',  'youthful',   'zealous',    'zen',
-];
-
-const BOT_NOUNS = [
-  // Computing & Math
-  'turing',     'lovelace',   'hopper',     'dijkstra',   'knuth',
-  'torvalds',   'wozniak',    'ritchie',    'thompson',   'shannon',
-  'babbage',    'boole',      'hamming',    'liskov',     'lamport',
-  // Physics
-  'curie',      'einstein',   'feynman',    'hawking',    'tesla',
-  'faraday',    'newton',     'galileo',    'fermi',      'planck',
-  'noether',    'bohr',       'dirac',
-  // Math
-  'euler',      'gauss',      'ramanujan',  'pascal',     'archimedes',
-  'fibonacci',  'hilbert',    'godel',      'cantor',     'riemann',
-  // Biology & CS
-  'darwin',     'pasteur',    'franklin',   'crick',
-  'edison',     'bell',       'hubble',     'sagan',
+const BOT_NAME_KEYS = [
+  'ziggy',
+  'mochi',
+  'nova',
+  'tango',
+  'pebble',
+  'echo',
+  'jinx',
+  'vega',
 ];
 
 // Helpers
@@ -58,7 +34,7 @@ function _cap(word) {
 }
 
 /**
- * Convert an adjective_noun key to a display name ("Quirky Turing").
+ * Convert a bot name key to a display name ("ziggy" -> "Ziggy").
  *
  * @param {string} key
  * @returns {string}
@@ -68,26 +44,24 @@ function _keyToDisplayName(key) {
 }
 
 /**
- * Generate a unique bot name key (adjective_noun) that is not already taken.
+ * Generate a unique bot name key that is not already taken.
  *
  * @param {Set<string>} usedKeys - Keys already assigned in this session.
- * @returns {string} A unique adjective_noun key.
+ * @returns {string} A unique bot name key.
  */
 function _generateUniqueBotKey(usedKeys) {
   let attempts = 0;
-  const maxAttempts = 300;
+  const maxAttempts = BOT_NAME_KEYS.length * 4;
 
   while (attempts < maxAttempts) {
-    const adj  = BOT_ADJECTIVES[Math.floor(Math.random() * BOT_ADJECTIVES.length)];
-    const noun = BOT_NOUNS[Math.floor(Math.random() * BOT_NOUNS.length)];
-    const key  = `${adj}_${noun}`;
+    const key = BOT_NAME_KEYS[Math.floor(Math.random() * BOT_NAME_KEYS.length)];
     if (!usedKeys.has(key)) return key;
     attempts++;
   }
 
-  // Fallback: attach a numeric suffix (astronomically unlikely to be needed)
+  // Fallback: attach a numeric suffix if the full pool is already occupied.
   for (let suffix = 2; ; suffix++) {
-    const base = `${BOT_ADJECTIVES[0]}_${BOT_NOUNS[0]}_${suffix}`;
+    const base = `${BOT_NAME_KEYS[0]}_${suffix}`;
     if (!usedKeys.has(base)) return base;
   }
 }

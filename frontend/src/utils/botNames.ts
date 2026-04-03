@@ -1,214 +1,21 @@
 /**
- * Docker-style bot name generator for Literati card game bots.
+ * Memorable bot name generator for Literati card game bots.
  *
- * Names follow the pattern: {adjective}_{noun}
- * Inspired by Docker's name generator (e.g., "quirky_torvalds", "elegant_curie").
+ * The pool is intentionally small and distinctive so players can quickly
+ * remember who has which card during play.
  *
  * Bot IDs always start with "bot_" so the server can gate them separately.
  */
 
-export const BOT_ADJECTIVES: readonly string[] = [
-  "admiring",
-  "adoring",
-  "affectionate",
-  "agitated",
-  "amazing",
-  "angry",
-  "awesome",
-  "blissful",
-  "bold",
-  "boring",
-  "brave",
-  "busy",
-  "charming",
-  "clever",
-  "compassionate",
-  "competent",
-  "condescending",
-  "confident",
-  "cool",
-  "cranky",
-  "crazy",
-  "dazzling",
-  "determined",
-  "distracted",
-  "dreamy",
-  "eager",
-  "ecstatic",
-  "elastic",
-  "elated",
-  "elegant",
-  "eloquent",
-  "epic",
-  "exciting",
-  "fervent",
-  "festive",
-  "flamboyant",
-  "focused",
-  "friendly",
-  "frosty",
-  "funny",
-  "gallant",
-  "gifted",
-  "goofy",
-  "gracious",
-  "great",
-  "happy",
-  "hardcore",
-  "heuristic",
-  "hopeful",
-  "hungry",
-  "infallible",
-  "inspiring",
-  "intelligent",
-  "interesting",
-  "jolly",
-  "jovial",
-  "keen",
-  "kind",
-  "laughing",
-  "loving",
-  "lucid",
-  "magical",
-  "mystifying",
-  "naughty",
-  "nervous",
-  "nice",
-  "nifty",
-  "nostalgic",
-  "objective",
-  "optimistic",
-  "peaceful",
-  "pedantic",
-  "pensive",
-  "practical",
-  "quirky",
-  "quizzical",
-  "recursing",
-  "relaxed",
-  "reverent",
-  "romantic",
-  "sad",
-  "serene",
-  "sharp",
-  "silly",
-  "sleepy",
-  "stoic",
-  "strange",
-  "stupefied",
-  "suspicious",
-  "sweet",
-  "tender",
-  "thirsty",
-  "trusting",
-  "unruffled",
-  "upbeat",
-  "vibrant",
-  "vigilant",
-  "vigorous",
-  "wizardly",
-  "wonderful",
-  "xenodochial",
-  "youthful",
-  "zealous",
-  "zen",
-] as const;
-
-/**
- * Famous scientists, mathematicians, engineers, and computing pioneers.
- * Drawn from science and tech history — in the spirit of Docker's generator.
- */
-export const BOT_NOUNS: readonly string[] = [
-  // Computing pioneers
-  "turing",
-  "lovelace",
-  "hopper",
-  "dijkstra",
-  "knuth",
-  "torvalds",
-  "wozniak",
-  "ritchie",
-  "thompson",
-  "kernighan",
-  "mccarthy",
-  "minsky",
-  "backus",
-  "lamport",
-  "liskov",
-  "hamming",
-  "shannon",
-  "babbage",
-  "boole",
-  "von_neumann",
-  "berners_lee",
-  "cerf",
-  "postel",
-  "stallman",
-  // Physics
-  "curie",
-  "einstein",
-  "feynman",
-  "hawking",
-  "bohr",
-  "heisenberg",
-  "dirac",
-  "tesla",
-  "faraday",
-  "maxwell",
-  "newton",
-  "galileo",
-  "fermi",
-  "planck",
-  "schrodinger",
-  "pauli",
-  "noether",
-  // Mathematics
-  "euler",
-  "gauss",
-  "ramanujan",
-  "poincare",
-  "riemann",
-  "hilbert",
-  "godel",
-  "cantor",
-  "fibonacci",
-  "pascal",
-  "archimedes",
-  "pythagoras",
-  "fermat",
-  "leibniz",
-  "cauchy",
-  "galois",
-  "laplace",
-  // Biology & Chemistry
-  "darwin",
-  "pasteur",
-  "mendel",
-  "lavoisier",
-  "mendeleev",
-  "franklin",
-  "crick",
-  "watson",
-  "mcclintock",
-  // Inventors & Astronomers
-  "edison",
-  "bell",
-  "marconi",
-  "wright",
-  "morse",
-  "nobel",
-  "herschel",
-  "hubble",
-  "sagan",
-  "tyson",
-  // CS pioneers
-  "allen",
-  "stroustrup",
-  "gosling",
-  "van_rossum",
-  "hickey",
-  "odersky",
-  "kay",
+export const BOT_NAME_KEYS: readonly string[] = [
+  "ziggy",
+  "mochi",
+  "nova",
+  "tango",
+  "pebble",
+  "echo",
+  "jinx",
+  "vega",
 ] as const;
 
 export type BotName = string;
@@ -227,32 +34,28 @@ function seedHash(seed: string): number {
 }
 
 /**
- * Generate a Docker-style bot name.
+ * Generate a memorable bot name key.
  *
  * @param seed - Optional seed for deterministic output. If omitted, random.
- * @returns e.g. "quirky_turing" or "elegant_curie"
+ * @returns e.g. "ziggy" or "vega"
  */
 export function generateBotName(seed?: string): BotName {
-  let adjIndex: number;
-  let nounIndex: number;
+  let index: number;
 
   if (seed !== undefined) {
     const hash = seedHash(seed);
-    adjIndex = hash % BOT_ADJECTIVES.length;
-    nounIndex =
-      Math.floor(hash / BOT_ADJECTIVES.length) % BOT_NOUNS.length;
+    index = hash % BOT_NAME_KEYS.length;
   } else {
-    adjIndex = Math.floor(Math.random() * BOT_ADJECTIVES.length);
-    nounIndex = Math.floor(Math.random() * BOT_NOUNS.length);
+    index = Math.floor(Math.random() * BOT_NAME_KEYS.length);
   }
 
-  return `${BOT_ADJECTIVES[adjIndex]}_${BOT_NOUNS[nounIndex]}`;
+  return BOT_NAME_KEYS[index];
 }
 
 /**
  * Convert a raw bot name key to a human-readable display name.
- * "quirky_turing" → "Quirky Turing"
- * "elegant_von_neumann" → "Elegant Von Neumann"
+ * "ziggy" → "Ziggy"
+ * "nova_2" → "Nova 2"
  */
 export function formatBotName(name: BotName): string {
   return name
@@ -265,14 +68,7 @@ export function formatBotName(name: BotName): string {
  * Return true when a name was auto-generated by this system.
  */
 export function isBotName(name: string): boolean {
-  const parts = name.split("_");
-  if (parts.length < 2) return false;
-  const adjective = parts[0];
-  const noun = parts.slice(1).join("_");
-  return (
-    (BOT_ADJECTIVES as readonly string[]).includes(adjective) &&
-    (BOT_NOUNS as readonly string[]).includes(noun)
-  );
+  return (BOT_NAME_KEYS as readonly string[]).includes(name.toLowerCase());
 }
 
 /**

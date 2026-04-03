@@ -93,7 +93,7 @@ function detectEmptySeats(playerCount, occupiedSeats) {
  * {
  * seatIndex: number, // empty slot index
  * playerId: string, // "bot_<timestamp>_<seatIndex>"
- * displayName: string, // Docker-style adjective_noun name
+ * displayName: string, // Memorable bot display name
  * avatarId: null,
  * teamId: 1|2, // parity of seatIndex
  * isBot: true,

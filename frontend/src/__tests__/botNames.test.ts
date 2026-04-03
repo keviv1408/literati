@@ -7,21 +7,19 @@ import {
   formatBotName,
   isBotName,
   generateUniqueBotNames,
-  BOT_ADJECTIVES,
-  BOT_NOUNS,
+  BOT_NAME_KEYS,
 } from "@/utils/botNames";
 
 describe("generateBotName", () => {
-  it("returns a string in adjective_noun format", () => {
+  it("returns a string from the configured bot name pool", () => {
     const name = generateBotName();
     expect(typeof name).toBe("string");
-    expect(name.includes("_")).toBe(true);
+    expect(BOT_NAME_KEYS).toContain(name);
   });
 
-  it("uses known adjectives", () => {
+  it("uses known bot names", () => {
     const name = generateBotName();
-    const adjective = name.split("_")[0];
-    expect(BOT_ADJECTIVES).toContain(adjective);
+    expect(BOT_NAME_KEYS).toContain(name);
   });
 
   it("produces deterministic output for the same seed", () => {
@@ -34,17 +32,18 @@ describe("generateBotName", () => {
     for (let i = 0; i < 20; i++) {
       names.add(generateBotName(`seed-${i}`));
     }
-    expect(names.size).toBeGreaterThan(10);
+    expect(names.size).toBeGreaterThan(1);
+    expect(names.size).toBeLessThanOrEqual(BOT_NAME_KEYS.length);
   });
 });
 
 describe("formatBotName", () => {
-  it("capitalises each word", () => {
-    expect(formatBotName("quirky_turing")).toBe("Quirky Turing");
+  it("capitalises a single-word bot key", () => {
+    expect(formatBotName("ziggy")).toBe("Ziggy");
   });
 
-  it("handles multi-part nouns correctly", () => {
-    expect(formatBotName("elegant_von_neumann")).toBe("Elegant Von Neumann");
+  it("handles suffixed fallback names correctly", () => {
+    expect(formatBotName("nova_2")).toBe("Nova 2");
   });
 
   it("handles single-word input", () => {
@@ -65,8 +64,8 @@ describe("isBotName", () => {
     expect(isBotName("super_mario")).toBe(false);
   });
 
-  it("returns false for names without underscore", () => {
-    expect(isBotName("quirkyturing")).toBe(false);
+  it("returns false for unknown single-word names", () => {
+    expect(isBotName("apollo")).toBe(false);
   });
 });
 
@@ -96,16 +95,11 @@ describe("generateUniqueBotNames", () => {
 });
 
 describe("word list integrity", () => {
-  it("adjective list has no duplicates", () => {
-    expect(new Set(BOT_ADJECTIVES).size).toBe(BOT_ADJECTIVES.length);
+  it("name list has no duplicates", () => {
+    expect(new Set(BOT_NAME_KEYS).size).toBe(BOT_NAME_KEYS.length);
   });
 
-  it("noun list has no duplicates", () => {
-    expect(new Set(BOT_NOUNS).size).toBe(BOT_NOUNS.length);
-  });
-
-  it("both lists are non-empty", () => {
-    expect(BOT_ADJECTIVES.length).toBeGreaterThan(50);
-    expect(BOT_NOUNS.length).toBeGreaterThan(50);
+  it("includes the full configured eight-bot set", () => {
+    expect(BOT_NAME_KEYS).toHaveLength(8);
   });
 });

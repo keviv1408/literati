@@ -231,11 +231,10 @@ describe('buildBotSeats()', () => {
     }
   });
 
-  it('bot display names follow the "Adjective Noun" format', () => {
+  it('bot display names use the configured memorable-name format', () => {
     const bots = buildBotSeats(6, new Map());
     for (const bot of bots) {
-      // Two words, each starting with an uppercase letter
-      expect(bot.displayName).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+/);
+      expect(bot.displayName).toMatch(/^[A-Z][a-z]+$/);
     }
   });
 
