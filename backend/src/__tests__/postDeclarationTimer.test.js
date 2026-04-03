@@ -60,6 +60,7 @@ jest.mock('../game/rematchStore', () => ({
 // ---------------------------------------------------------------------------
 
 const { setGame, getGame, registerConnection, _clearAll } = require('../game/gameStore');
+const { updateKnowledgeAfterAsk, updateTeamIntentAfterAsk } = require('../game/botLogic');
 const {
   handleDeclare,
   handleChooseNextTurn,
@@ -244,6 +245,43 @@ describe('post_declaration_timer — broadcast', () => {
       const timerMsg = ws._sent.find((m) => m.type === 'post_declaration_timer');
       expect(timerMsg).toBeUndefined();
     }
+  });
+
+  test('3b. bot correct declaration can hand the turn to a blocked teammate immediately', async () => {
+    jest.useFakeTimers();
+
+    gs = makeGame(ROOM, { p1Bot: true });
+    setGame(ROOM, gs);
+
+    // Teammate p3 has publicly built a 4-card lower-heart chase.
+    updateKnowledgeAfterAsk(gs, 'p3', 'p2', '1_h', true);
+    updateKnowledgeAfterAsk(gs, 'p3', 'p4', '2_h', true);
+    updateKnowledgeAfterAsk(gs, 'p3', 'p6', '5_h', true);
+    updateTeamIntentAfterAsk(gs, 'p3', '5_h', true);
+
+    // p2 and p6 are publicly cleared of lower hearts. p4 remains dangerous.
+    gs.botKnowledge.set('p2', new Map([
+      ['1_h', false],
+      ['2_h', false],
+      ['3_h', false],
+      ['4_h', false],
+      ['5_h', false],
+      ['6_h', false],
+    ]));
+    gs.botKnowledge.set('p6', new Map([
+      ['1_h', false],
+      ['2_h', false],
+      ['3_h', false],
+      ['4_h', false],
+      ['5_h', false],
+      ['6_h', false],
+    ]));
+
+    await handleDeclare(ROOM, 'p1', 'low_s', CORRECT_ASSIGNMENT, null, true);
+
+    expect(getGame(ROOM).currentTurnPlayerId).toBe('p3');
+    const resultMsg = wsP1._sent.find((m) => m.type === 'declaration_result');
+    expect(resultMsg?.newTurnPlayerId).toBe('p3');
   });
 
   test('4. _postDeclarationTimers map has entry with correct fields after correct declaration', async () => {

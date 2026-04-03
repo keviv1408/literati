@@ -590,7 +590,7 @@ export function useGameSocket({
             // Use a functional update to access the latest players snapshot.
             setPlayers((currentPlayers) => {
               const declarant = currentPlayers.find((p) => p.playerId === payload.declarerId);
-              if (declarant) {
+              if (declarant && !declarant.isBot) {
                 const sameTeamIds = new Set(
                   currentPlayers
                     .filter((p) => p.teamId === declarant.teamId)
@@ -608,6 +608,8 @@ export function useGameSocket({
                 } else {
                   setPostDeclarationHighlight(null);
                 }
+              } else {
+                setPostDeclarationHighlight(null);
               }
               return currentPlayers; // no change to players
             });

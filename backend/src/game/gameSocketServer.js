@@ -163,6 +163,7 @@ const {
 } = require('./gameEngine');
 const {
   decideBotMove,
+  chooseBotPostDeclarationTurnPlayer,
   completeBotFromPartial,
   updateKnowledgeAfterAsk,
   updateKnowledgeAfterDeclaration,
@@ -2440,6 +2441,28 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   updateKnowledgeAfterDeclaration(gs, halfSuitId, assignment, correct);
   updateTeamIntentAfterDeclaration(gs, halfSuitId);
 
+  let resolvedTurnPlayerId = newTurnPlayerId;
+  if (correct && gs.status === 'active' && isBot) {
+    const chosenTeammateId = chooseBotPostDeclarationTurnPlayer(gs, declarerId);
+    const currentTurnPlayer = gs.players.find((player) => player.playerId === gs.currentTurnPlayerId);
+    const chosenTeammate = gs.players.find((player) => player.playerId === chosenTeammateId);
+
+    if (
+      currentTurnPlayer &&
+      chosenTeammate &&
+      currentTurnPlayer.teamId === chosenTeammate.teamId &&
+      getCardCount(gs, chosenTeammateId) > 0
+    ) {
+      gs.currentTurnPlayerId = chosenTeammateId;
+      resolvedTurnPlayerId = chosenTeammateId;
+
+      console.log(
+        `[game-ws] Bot declaration handoff in room ${roomCode}: ` +
+        `declarer=${declarerId}, recipient=${chosenTeammateId}, halfSuit=${halfSuitId}`
+      );
+    }
+  }
+
   // compute eligible next-turn players AFTER cards are removed
   // (applyDeclaration has already mutated gs — hands are updated, newly
   // eliminated players have been added to gs.eliminatedPlayerIds).
@@ -2452,7 +2475,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     halfSuitId,
     correct,
     winningTeam,
-    newTurnPlayerId,
+    newTurnPlayerId: resolvedTurnPlayerId,
     assignment,
     lastMove,
     // IDs of all non-eliminated players with cards remaining,
