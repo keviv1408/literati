@@ -163,7 +163,7 @@ const {
 } = require('./gameEngine');
 const {
   decideBotMove,
-  buildBotCardKnowledgeMatrix,
+  buildBotDecisionThinkingSnapshot,
   chooseBotPostDeclarationTurnPlayer,
   completeBotFromPartial,
   updateKnowledgeAfterAsk,
@@ -1763,8 +1763,8 @@ async function executeBotTurn(roomCode, botId) {
   if (!currentPlayer || !currentPlayer.isBot) return;
 
   const decision = decideBotMove(gs, botId);
-  const knowledgeMatrix = buildBotCardKnowledgeMatrix(gs, botId);
-  console.info('[game-ws][bot-knowledge]', JSON.stringify(knowledgeMatrix, null, 2));
+  const thinkingSnapshot = buildBotDecisionThinkingSnapshot(gs, botId, decision);
+  console.info('[game-ws][bot-think]', JSON.stringify(thinkingSnapshot));
 
   if (decision.action === 'ask') {
     await handleAskCard(
