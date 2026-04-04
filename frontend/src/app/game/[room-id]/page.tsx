@@ -193,6 +193,7 @@ export default function GamePage({ params }: PageProps) {
   const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
     useState<Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null>(null);
   const declarationSeatRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processedDeclarationFailedKeyRef = useRef<string | null>(null);
 
   // ── Score flash ───────────────────────────────────────────────
   //
@@ -565,7 +566,19 @@ export default function GamePage({ params }: PageProps) {
 
   // ── Reset / auto-dismiss failed declaration seat reveal ──────
   useEffect(() => {
-    if (!declarationFailed) return;
+    if (!declarationFailed) {
+      processedDeclarationFailedKeyRef.current = null;
+      setDeclarationSeatRevealByPlayerId(null);
+      return;
+    }
+    const declarationFailedKey = [
+      declarationFailed.declarerId,
+      declarationFailed.halfSuitId,
+      declarationFailed.winningTeam,
+      declarationFailed.lastMove,
+    ].join('|');
+    if (processedDeclarationFailedKeyRef.current === declarationFailedKey) return;
+    processedDeclarationFailedKeyRef.current = declarationFailedKey;
     const revealVariant = (variant ?? room?.card_removal_variant ?? 'remove_7s') as
       'remove_2s' | 'remove_7s' | 'remove_8s';
     setDeclarationSeatRevealByPlayerId(

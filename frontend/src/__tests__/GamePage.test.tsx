@@ -1523,6 +1523,60 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
     expect(screen.queryByTestId('declaration-result-overlay')).toBeNull();
   });
 
+  it('clears failed declaration seat reveals after 9.5 seconds', async () => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({
+      ...makeGameInit(MY_PLAYER_ID, players6),
+      gameState: makeGameState(),
+    }));
+
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    jest.useFakeTimers();
+    try {
+      act(() => sendWsMessage({
+        type: 'declarationFailed',
+        declarerId: MY_PLAYER_ID,
+        halfSuitId: 'low_c',
+        winningTeam: 2,
+        assignment: {
+          '1_c': MY_PLAYER_ID,
+          '2_c': 'p2',
+          '3_c': 'p3',
+          '4_c': 'p4',
+          '5_c': 'p5',
+          '6_c': 'p6',
+        },
+        wrongAssignmentDiffs: [
+          { card: '1_c', claimedPlayerId: MY_PLAYER_ID, actualPlayerId: 'p4' },
+          { card: '4_c', claimedPlayerId: 'p4', actualPlayerId: MY_PLAYER_ID },
+        ],
+        actualHolders: {
+          '1_c': 'p4',
+          '2_c': 'p2',
+          '3_c': 'p3',
+          '4_c': MY_PLAYER_ID,
+          '5_c': 'p5',
+          '6_c': 'p6',
+        },
+        lastMove: 'Me declared Low Clubs — incorrect! Team 2 scores',
+      }));
+
+      expect(screen.getAllByTestId('declaration-seat-reveal').length).toBeGreaterThan(0);
+
+      act(() => {
+        jest.advanceTimersByTime(9_500);
+      });
+
+      expect(screen.queryByTestId('declaration-seat-reveal')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('6. declare modal is closed after declaration_result is received', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());

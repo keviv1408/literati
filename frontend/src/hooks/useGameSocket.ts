@@ -16,6 +16,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { API_URL } from '@/lib/api';
+import { FAILED_DECLARATION_SEAT_REVEAL_MS } from '@/lib/declarationSeatReveal';
 import type {
   CardId,
   GamePlayer,
@@ -393,6 +394,7 @@ export function useGameSocket({
 
   const wsRef      = useRef<WebSocket | null>(null);
   const statusRef  = useRef<GameWsStatus>('idle');
+  const declarationFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Persist the variant across message handlers so hand_update (which only
   // carries the new hand array) can still apply the half-suit sort.
   const variantRef = useRef<CardVariant | null>(null);
@@ -820,6 +822,26 @@ export function useGameSocket({
       wsRef.current = null;
     };
   }, [roomCode, bearerToken, spectatorToken, guestRecoveryKey]);
+
+  useEffect(() => {
+    if (declarationFailedTimerRef.current) {
+      clearTimeout(declarationFailedTimerRef.current);
+      declarationFailedTimerRef.current = null;
+    }
+
+    if (!declarationFailed) return;
+
+    declarationFailedTimerRef.current = setTimeout(() => {
+      setDeclarationFailed(null);
+    }, FAILED_DECLARATION_SEAT_REVEAL_MS);
+
+    return () => {
+      if (declarationFailedTimerRef.current) {
+        clearTimeout(declarationFailedTimerRef.current);
+        declarationFailedTimerRef.current = null;
+      }
+    };
+  }, [declarationFailed]);
 
   // ── Send helpers ──────────────────────────────────────────────────────────
 

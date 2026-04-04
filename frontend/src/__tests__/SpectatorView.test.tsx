@@ -26,9 +26,20 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 // ---------------------------------------------------------------------------
 jest.mock('@/components/GamePlayerSeat', () => ({
   __esModule: true,
-  default: ({ player }: { player: { playerId: string, displayName: string } | null }) => (
+  default: ({
+    player,
+    declarationRevealCards,
+  }: {
+    player: { playerId: string, displayName: string } | null;
+    declarationRevealCards?: { cardId: string }[] | null;
+  }) => (
     <div data-testid="mock-player-seat" data-player-id={player?.playerId}>
       {player ? player.displayName : 'Empty'}
+      {player && declarationRevealCards && declarationRevealCards.length > 0 ? (
+        <div data-testid={`mock-declaration-reveal-${player.playerId}`}>
+          {declarationRevealCards.map(({ cardId }) => cardId).join(',')}
+        </div>
+      ) : null}
     </div>
   ),
 }));
@@ -387,6 +398,57 @@ describe('SpectatorView', () => {
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(screen.queryByTestId('declaration-result-overlay')).toBeNull();
       expect(screen.getByTestId('spectator-last-move').textContent).toContain('Team 2 scores');
+    });
+
+    it('clears failed declaration seat reveals after 9.5 seconds', () => {
+      jest.useFakeTimers();
+      try {
+        render(
+          <SpectatorView
+            {...buildProps({
+              declarationFailed: {
+                type: 'declarationFailed',
+                declarerId: 'p1',
+                halfSuitId: 'low_c',
+                winningTeam: 2,
+                assignment: {
+                  '1_c': 'p1',
+                  '2_c': 'p2',
+                  '3_c': 'p3',
+                  '4_c': 'p4',
+                  '5_c': 'p5',
+                  '6_c': 'p6',
+                },
+                wrongAssignmentDiffs: [
+                  { card: '1_c', claimedPlayerId: 'p1', actualPlayerId: 'p4' },
+                  { card: '4_c', claimedPlayerId: 'p4', actualPlayerId: 'p1' },
+                ],
+                actualHolders: {
+                  '1_c': 'p4',
+                  '2_c': 'p2',
+                  '3_c': 'p3',
+                  '4_c': 'p1',
+                  '5_c': 'p5',
+                  '6_c': 'p6',
+                },
+                lastMove: 'Alice declared Low Clubs — incorrect! Team 2 scores',
+              },
+            })}
+          />,
+        );
+
+        expect(screen.getByTestId('mock-declaration-reveal-p1')).toBeTruthy();
+        expect(screen.getByTestId('mock-declaration-reveal-p4')).toBeTruthy();
+
+        act(() => {
+          jest.advanceTimersByTime(9_500);
+        });
+
+        expect(screen.queryByTestId('mock-declaration-reveal-p1')).toBeNull();
+        expect(screen.queryByTestId('mock-declaration-reveal-p4')).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

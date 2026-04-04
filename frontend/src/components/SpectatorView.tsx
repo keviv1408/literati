@@ -177,6 +177,7 @@ export default function SpectatorView({
   const observedAskBatchRef = useRef<AskMoveBatch | null>(null);
   const processedAskResultKeyRef = useRef<string | null>(null);
   const processedDeclareResultKeyRef = useRef<string | null>(null);
+  const processedDeclarationFailedKeyRef = useRef<string | null>(null);
   const getPlayerDisplayName = useCallback((playerId: string) => {
     return players.find((p) => p.playerId === playerId)?.displayName;
   }, [players]);
@@ -263,7 +264,19 @@ export default function SpectatorView({
   }, [effectiveVariant, lastDeclareResult]);
 
   useEffect(() => {
-    if (!declarationFailed) return;
+    if (!declarationFailed) {
+      processedDeclarationFailedKeyRef.current = null;
+      setDeclarationSeatRevealByPlayerId(null);
+      return;
+    }
+    const declarationFailedKey = [
+      declarationFailed.declarerId,
+      declarationFailed.halfSuitId,
+      declarationFailed.winningTeam,
+      declarationFailed.lastMove,
+    ].join('|');
+    if (processedDeclarationFailedKeyRef.current === declarationFailedKey) return;
+    processedDeclarationFailedKeyRef.current = declarationFailedKey;
     setDeclarationSeatRevealByPlayerId(
       buildDeclarationSeatRevealMap(declarationFailed, players, effectiveVariant),
     );
