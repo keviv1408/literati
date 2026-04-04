@@ -515,27 +515,6 @@ describe('decideBotMove — asks for a known card', () => {
 });
 
 describe('bot blocking support', () => {
-  it('blocks for the bot itself when it has a public 5-card closeout chase', () => {
-    const hands = new Map([
-      ['p1', new Set(['8_d', '9_d', '10_d', '11_d', '12_d'])],
-      ['p2', new Set(['1_s'])],
-      ['p3', new Set(['8_h'])],
-      ['p4', new Set(['1_h'])],
-      ['p5', new Set(['2_h'])],
-      ['p6', new Set()],
-    ]);
-    const gs = buildBotTestGame(hands);
-
-    // Publicly, p1 is clearly chasing high_d and p4 is the dangerous opponent.
-    updateKnowledgeAfterAsk(gs, 'p1', 'p4', '13_d', false);
-    updateTeamIntentAfterAsk(gs, 'p1', '13_d', false);
-    updateTeamIntentAfterAsk(gs, 'p4', '8_d', false);
-
-    const move = decideBotMove(gs, 'p1');
-
-    expect(move).toMatchObject({ action: 'ask', cardId: '13_d', targetId: 'p5' });
-  });
-
   function buildBlockingGame() {
     const hands = new Map([
       ['p1', new Set(['1_s'])],

@@ -401,7 +401,7 @@ function _getRecentTeammateSignalEntry(gs, botId, teamId, halfSuitId, currentMov
   return entry;
 }
 
-function _getBlockingTeamChases(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
+function _getBlockingTeammateChases(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
   const teamId = getPlayerTeam(gs, botId);
   if (!teamId) return [];
 
@@ -410,50 +410,42 @@ function _getBlockingTeamChases(gs, botId, currentMoveIndex = (gs.moveHistory ??
   );
   if (liveOpponents.length === 0) return [];
 
-  const teamPlayers = getTeamPlayers(gs, teamId).filter((player) => getCardCount(gs, player.playerId) > 0);
   const chases = [];
   for (const halfSuitId of allHalfSuitIds()) {
     if (isHalfSuitDeclared(gs, halfSuitId)) continue;
+
+    const entry = _getRecentTeammateSignalEntry(gs, botId, teamId, halfSuitId, currentMoveIndex);
+    if (!entry?.sourcePlayerId) continue;
+    if (getCardCount(gs, entry.sourcePlayerId) === 0) continue;
+
+    const teammateMinimum = _getVisibleHalfSuitMinimumCount(
+      gs,
+      botId,
+      entry.sourcePlayerId,
+      halfSuitId
+    );
+    if (teammateMinimum < TEAM_CLOSEOUT_PRIORITY_THRESHOLD) continue;
 
     const blockedOpponentIds = liveOpponents
       .filter((player) => !_isKnownEmptyInHalfSuit(gs, botId, player.playerId, halfSuitId))
       .map((player) => player.playerId);
     if (blockedOpponentIds.length === 0) continue;
 
-    for (const teamPlayer of teamPlayers) {
-      const visibleMinimumCount = _getVisibleHalfSuitMinimumCount(
-        gs,
-        botId,
-        teamPlayer.playerId,
-        halfSuitId
-      );
-      if (visibleMinimumCount < TEAM_CLOSEOUT_PRIORITY_THRESHOLD) continue;
-
-      chases.push({
-        halfSuitId,
-        playerId: teamPlayer.playerId,
-        visibleMinimumCount,
-        recentActivity: _getRecentHalfSuitActivityStrength(
-          gs,
-          teamPlayer.playerId,
-          halfSuitId,
-          currentMoveIndex
-        ),
-        humanBonus: teamPlayer.isBot ? 0 : 1,
-        blockedOpponentIds,
-      });
-    }
+    chases.push({
+      halfSuitId,
+      teammateId: entry.sourcePlayerId,
+      teammateMinimum,
+      signalStrength: _effectiveSignalStrength(entry, currentMoveIndex),
+      blockedOpponentIds,
+    });
   }
 
   return chases.sort((a, b) => {
-    const minimumDiff = b.visibleMinimumCount - a.visibleMinimumCount;
+    const minimumDiff = b.teammateMinimum - a.teammateMinimum;
     if (minimumDiff !== 0) return minimumDiff;
 
-    const recentDiff = b.recentActivity - a.recentActivity;
-    if (recentDiff !== 0) return recentDiff;
-
-    const humanDiff = b.humanBonus - a.humanBonus;
-    if (humanDiff !== 0) return humanDiff;
+    const signalDiff = b.signalStrength - a.signalStrength;
+    if (signalDiff !== 0) return signalDiff;
 
     const blockedDiff = b.blockedOpponentIds.length - a.blockedOpponentIds.length;
     if (blockedDiff !== 0) return blockedDiff;
@@ -461,14 +453,14 @@ function _getBlockingTeamChases(gs, botId, currentMoveIndex = (gs.moveHistory ??
     const suitDiff = a.halfSuitId.localeCompare(b.halfSuitId);
     if (suitDiff !== 0) return suitDiff;
 
-    return a.playerId.localeCompare(b.playerId);
+    return a.teammateId.localeCompare(b.teammateId);
   });
 }
 
 function _getBlockedOpponentIds(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
   const blockedOpponentIds = new Set();
 
-  for (const chase of _getBlockingTeamChases(gs, botId, currentMoveIndex)) {
+  for (const chase of _getBlockingTeammateChases(gs, botId, currentMoveIndex)) {
     for (const opponentId of chase.blockedOpponentIds) {
       blockedOpponentIds.add(opponentId);
     }
@@ -482,8 +474,8 @@ function _isBlockedAskTarget(gs, botId, targetId, currentMoveIndex = (gs.moveHis
 }
 
 function chooseBotPostDeclarationTurnPlayer(gs, botId) {
-  const bestChase = _getBlockingTeamChases(gs, botId)[0];
-  return bestChase?.playerId ?? null;
+  const bestChase = _getBlockingTeammateChases(gs, botId)[0];
+  return bestChase?.teammateId ?? null;
 }
 
 function updateTeamIntentAfterAsk(gs, askerId, cardId, success) {
@@ -1471,16 +1463,13 @@ function buildBotTurnReasonSummary(gs, botId, decision) {
 
   const lines = [];
   lines.push(`BOT: ${botName}`);
-  lines.push('1) _tryBuildDeclaration / visible team counts');
+  lines.push('1) _tryBuildDeclaration / _getVisibleTeamHalfSuitCount');
 
   for (const halfSuitId of undeclaredHalfSuits) {
     const exactTeamCount = _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
-    const minimumTeamCount = _getVisibleTeamHalfSuitMinimumCount(gs, botId, teamPlayers, halfSuitId);
-    lines.push(
-      `- ${halfSuitId}: visibleTeamCount=${exactTeamCount}, minimumTeamCount=${minimumTeamCount}`
-    );
+    lines.push(`- ${halfSuitId}: visibleTeamCount=${exactTeamCount}`);
 
-    if (Math.max(exactTeamCount, minimumTeamCount) === 6) {
+    if (exactTeamCount === 6) {
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
       const publicAssignments = _searchPublicAssignments(gs, botId, halfSuitId, cards, teamPlayers, {}, 3);
       const assignmentStatus =
