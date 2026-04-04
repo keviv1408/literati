@@ -64,6 +64,7 @@ import type {
   SpectatorHands,
   SpectatorMoveEntry,
   AskResultPayload,
+  DeclarationResultPayload,
   DeclarationFailedPayload,
   DeclareProgressPayload,
 } from '@/types/game';
