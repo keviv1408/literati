@@ -32,7 +32,6 @@ const {
   cancelTurnTimer,
   scheduleBotTurnIfNeeded,
   scheduleTurnTimerIfNeeded,
-  _postDeclarationTimers,
 } = require('../game/gameSocketServer');
 
 const {
@@ -115,7 +114,6 @@ describe('handleChooseNextTurn — ', () => {
   afterEach(() => {
     // Clean up game state after each test
     setGame(ROOM, null);
-    _postDeclarationTimers.delete(ROOM);
   });
 
   // ── 1. Happy path ─────────────────────────────────────────────────────────
@@ -294,40 +292,5 @@ describe('handleChooseNextTurn — ', () => {
 
     expect(gs.currentTurnPlayerId).toBe('p2');
     expect(ws._messages).toHaveLength(0);
-  });
-
-  it('test 15: active post-declaration timer lets declarer choose even when current turn moved', () => {
-    const gs = buildGame({ currentTurnPlayerId: 'p2', roomCode: ROOM });
-    const ws = mockWs();
-
-    _postDeclarationTimers.set(ROOM, {
-      timerId: null,
-      expiresAt: Date.now() + 30000,
-      eligiblePlayers: ['p2', 'p3'],
-      declarerId: 'p1',
-    });
-
-    handleChooseNextTurn(ROOM, 'p1', 'p3', ws);
-
-    expect(gs.currentTurnPlayerId).toBe('p3');
-    expect(ws._messages).toHaveLength(0);
-  });
-
-  it('test 16: active post-declaration timer rejects non-declarer chooser', () => {
-    const gs = buildGame({ currentTurnPlayerId: 'p2', roomCode: ROOM });
-    const ws = mockWs();
-
-    _postDeclarationTimers.set(ROOM, {
-      timerId: null,
-      expiresAt: Date.now() + 30000,
-      eligiblePlayers: ['p2', 'p3'],
-      declarerId: 'p1',
-    });
-
-    handleChooseNextTurn(ROOM, 'p2', 'p3', ws);
-
-    expect(gs.currentTurnPlayerId).toBe('p2');
-    expect(ws._messages).toHaveLength(1);
-    expect(ws._messages[0].code).toBe('NOT_YOUR_TURN');
   });
 });

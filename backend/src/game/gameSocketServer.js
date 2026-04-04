@@ -1008,7 +1008,7 @@ function startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers) {
     scheduleTurnTimerIfNeeded(gs);
   }, POST_DECLARATION_TURN_SELECTION_MS);
 
-  _postDeclarationTimers.set(roomCode, { timerId, expiresAt, eligiblePlayers, declarerId });
+  _postDeclarationTimers.set(roomCode, { timerId, expiresAt, eligiblePlayers });
 
   // Broadcast timer start to ALL clients (players + spectators).
   broadcastToGame(roomCode, {
@@ -2120,20 +2120,11 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
   const gs = getGame(roomCode);
   if (!gs || gs.status !== 'active') return;
 
-  const activePostDeclarationTimer = _postDeclarationTimers.get(roomCode);
-
-  // During the post-declaration selection window, the declarer owns the choice
-  // even if the engine advanced currentTurnPlayerId to a teammate with cards.
-  // Outside that window, keep the legacy "current turn player chooses" rule.
-  const requesterCanChoose = activePostDeclarationTimer
-    ? activePostDeclarationTimer.declarerId === requesterId
-    : gs.currentTurnPlayerId === requesterId;
-
-  if (!requesterCanChoose) {
+  // Only the current turn player may redirect the turn.
+  if (gs.currentTurnPlayerId !== requesterId) {
     console.warn(
       `[game-ws] Rejected choose_next_turn in room ${roomCode}: requester=${requesterId}, ` +
-      `currentTurn=${gs.currentTurnPlayerId}, chosen=${chosenPlayerId}, ` +
-      `postDeclDeclarer=${activePostDeclarationTimer?.declarerId ?? 'none'}`
+      `currentTurn=${gs.currentTurnPlayerId}, chosen=${chosenPlayerId}`
     );
     if (ws) sendJson(ws, { type: 'error', message: 'Not your turn', code: 'NOT_YOUR_TURN' });
     return;
