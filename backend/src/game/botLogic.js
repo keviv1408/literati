@@ -481,6 +481,101 @@ function _isBlockedAskTarget(gs, botId, targetId, currentMoveIndex = (gs.moveHis
   return _getBlockedOpponentIds(gs, botId, currentMoveIndex).has(targetId);
 }
 
+function _getSafeAskOpponents(gs, askerId, validOpponents, currentMoveIndex = (gs.moveHistory ?? []).length) {
+  const blockedOpponentIds = _getBlockedOpponentIds(gs, askerId, currentMoveIndex);
+  return validOpponents.filter(
+    (opponent) => !blockedOpponentIds.has(opponent.playerId)
+  );
+}
+
+function _getOpponentBlockingRisk(gs, botId, opponentId, currentMoveIndex = (gs.moveHistory ?? []).length) {
+  const relevantChases = _getBlockingTeamChases(gs, botId, currentMoveIndex).filter(
+    (chase) => chase.blockedOpponentIds.includes(opponentId)
+  );
+
+  if (relevantChases.length === 0) {
+    return {
+      chaseCount: 0,
+      maxVisibleMinimumCount: 0,
+      maxKnownSuitCards: 0,
+      maxRecentActivity: 0,
+      maxPresence: 0,
+      maxCapacity: 0,
+    };
+  }
+
+  return relevantChases.reduce(
+    (risk, chase) => {
+      const priority = _getOpponentAskPriority(
+        gs,
+        botId,
+        opponentId,
+        chase.halfSuitId,
+        currentMoveIndex
+      );
+
+      return {
+        chaseCount: risk.chaseCount + 1,
+        maxVisibleMinimumCount: Math.max(risk.maxVisibleMinimumCount, chase.visibleMinimumCount),
+        maxKnownSuitCards: Math.max(risk.maxKnownSuitCards, priority.knownSuitCards),
+        maxRecentActivity: Math.max(risk.maxRecentActivity, priority.recentActivity),
+        maxPresence: Math.max(risk.maxPresence, priority.presence),
+        maxCapacity: Math.max(risk.maxCapacity, priority.capacity),
+      };
+    },
+    {
+      chaseCount: 0,
+      maxVisibleMinimumCount: 0,
+      maxKnownSuitCards: 0,
+      maxRecentActivity: 0,
+      maxPresence: 0,
+      maxCapacity: 0,
+    }
+  );
+}
+
+function _compareBlockingRisk(a, b) {
+  const chaseDiff = (a?.chaseCount ?? 0) - (b?.chaseCount ?? 0);
+  if (chaseDiff !== 0) return chaseDiff;
+
+  const minimumDiff = (a?.maxVisibleMinimumCount ?? 0) - (b?.maxVisibleMinimumCount ?? 0);
+  if (minimumDiff !== 0) return minimumDiff;
+
+  const recentDiff = (a?.maxRecentActivity ?? 0) - (b?.maxRecentActivity ?? 0);
+  if (recentDiff !== 0) return recentDiff;
+
+  const presenceDiff = (a?.maxPresence ?? 0) - (b?.maxPresence ?? 0);
+  if (presenceDiff !== 0) return presenceDiff;
+
+  const knownSuitDiff = (a?.maxKnownSuitCards ?? 0) - (b?.maxKnownSuitCards ?? 0);
+  if (knownSuitDiff !== 0) return knownSuitDiff;
+
+  return (a?.maxCapacity ?? 0) - (b?.maxCapacity ?? 0);
+}
+
+function _getOrderedAskOpponents(gs, askerId, validOpponents, currentMoveIndex = (gs.moveHistory ?? []).length) {
+  const blockedOpponentIds = _getBlockedOpponentIds(gs, askerId, currentMoveIndex);
+  const blockingRisk = new Map(
+    validOpponents.map((opponent) => [
+      opponent.playerId,
+      _getOpponentBlockingRisk(gs, askerId, opponent.playerId, currentMoveIndex),
+    ])
+  );
+
+  return [...validOpponents].sort((a, b) => {
+    const blockingDiff =
+      Number(blockedOpponentIds.has(a.playerId)) - Number(blockedOpponentIds.has(b.playerId));
+    if (blockingDiff !== 0) return blockingDiff;
+
+    const riskDiff = _compareBlockingRisk(
+      blockingRisk.get(a.playerId),
+      blockingRisk.get(b.playerId)
+    );
+    if (riskDiff !== 0) return riskDiff;
+    return a.playerId.localeCompare(b.playerId);
+  });
+}
+
 function getBotPostDeclarationTurnPassDiagnostics(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
   const teamId = getPlayerTeam(gs, botId);
   const botPlayer = gs.players.find((player) => player.playerId === botId);
@@ -935,11 +1030,23 @@ function _orderOpponentsForCard(gs, askerId, validOpponents, cardId) {
       _getOpponentAskPriority(gs, askerId, opponent.playerId, halfSuitId, currentMoveIndex),
     ])
   );
+  const blockingRisk = new Map(
+    shuffledOpponents.map((opponent) => [
+      opponent.playerId,
+      _getOpponentBlockingRisk(gs, askerId, opponent.playerId, currentMoveIndex),
+    ])
+  );
 
   return shuffledOpponents.sort((a, b) => {
     const blockingDiff =
       Number(blockedOpponentIds.has(a.playerId)) - Number(blockedOpponentIds.has(b.playerId));
     if (blockingDiff !== 0) return blockingDiff;
+
+    const riskDiff = _compareBlockingRisk(
+      blockingRisk.get(a.playerId),
+      blockingRisk.get(b.playerId)
+    );
+    if (riskDiff !== 0) return riskDiff;
 
     const priorityDiff = _compareOpponentAskPriority(
       priorities.get(a.playerId),
@@ -1114,6 +1221,23 @@ function _findAskInHalfSuits(
   const botHand = getHand(gs, askerId);
   const currentMoveIndex = (gs.moveHistory ?? []).length;
   const fallbackUnknownReason = options.fallbackUnknownReason ?? 'priority_guess';
+  const restrictToSafeOpponents = options.restrictToSafeOpponents ?? false;
+  const speculativeOpponents = restrictToSafeOpponents
+    ? _getSafeAskOpponents(gs, askerId, validOpponents, currentMoveIndex)
+    : _getOrderedAskOpponents(
+      gs,
+      askerId,
+      validOpponents,
+      currentMoveIndex
+    );
+
+  if (speculativeOpponents.length === 0) {
+    return null;
+  }
+
+  const orderedSpeculativeOpponents = restrictToSafeOpponents
+    ? speculativeOpponents
+    : speculativeOpponents;
 
   for (const halfSuitId of halfSuitIds) {
     const cards = halfSuitsMap.get(halfSuitId) ?? [];
@@ -1130,7 +1254,7 @@ function _findAskInHalfSuits(
       askerId,
       halfSuitId,
       askableCards,
-      validOpponents,
+      orderedSpeculativeOpponents,
       currentMoveIndex
     );
     const preferredSignalCardId = _getPreferredSignalCardId(gs, askerId, halfSuitId, currentMoveIndex);
@@ -1145,12 +1269,12 @@ function _findAskInHalfSuits(
         return _withBotAskNarration(preferredKnownAsk, 'teammate_signal_followup', signalNarrationExtras);
       }
 
-      const preferredUnknownAsk = _findUnknownAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
+      const preferredUnknownAsk = _findUnknownAsk(gs, askerId, orderedSpeculativeOpponents, [preferredSignalCardId]);
       if (preferredUnknownAsk) {
         return _withBotAskNarration(preferredUnknownAsk, 'teammate_signal_followup', signalNarrationExtras);
       }
 
-      const preferredSignalAsk = _findSignalAsk(gs, askerId, validOpponents, [preferredSignalCardId]);
+      const preferredSignalAsk = _findSignalAsk(gs, askerId, orderedSpeculativeOpponents, [preferredSignalCardId]);
       if (preferredSignalAsk) {
         return _withBotAskNarration(preferredSignalAsk, 'teammate_signal_followup', signalNarrationExtras);
       }
@@ -1160,7 +1284,7 @@ function _findAskInHalfSuits(
     const knownAsk = _findKnownHolderAsk(gs, askerId, validOpponents, remainingCards);
     if (knownAsk) return _withBotAskNarration(knownAsk, 'known_holder');
 
-    const unknownAsk = _findUnknownAsk(gs, askerId, validOpponents, remainingCards);
+    const unknownAsk = _findUnknownAsk(gs, askerId, orderedSpeculativeOpponents, remainingCards);
     if (unknownAsk) return _withBotAskNarration(unknownAsk, fallbackUnknownReason);
   }
 
@@ -1213,6 +1337,18 @@ function decideBotMove(gs, botId) {
   const validOpponents = opponents.filter((p) => getCardCount(gs, p.playerId) > 0);
   const teamPlayers = [{ playerId: botId }, ...teammates];
   const currentMoveIndex = (gs.moveHistory ?? []).length;
+  const safeOpponents = _getSafeAskOpponents(
+    gs,
+    botId,
+    validOpponents,
+    currentMoveIndex
+  );
+  const orderedOpponents = _getOrderedAskOpponents(
+    gs,
+    botId,
+    validOpponents,
+    currentMoveIndex
+  );
 
   const halfSuitsMap  = buildHalfSuitMap(gs.variant);
   const cardToHalfSuit = buildCardToHalfSuitMap(gs.variant);
@@ -1303,6 +1439,34 @@ function decideBotMove(gs, botId) {
 
     // When the team is close to completing a suit, finish that chase before moving on.
     if (focusHalfSuits.length > 0) {
+      if (safeOpponents.length > 0) {
+        const safeFocusAsk = _findAskInHalfSuits(
+          gs,
+          botId,
+          validOpponents,
+          focusHalfSuits,
+          halfSuitsMap,
+          { fallbackUnknownReason: 'closeout_push', restrictToSafeOpponents: true }
+        );
+        if (safeFocusAsk) return safeFocusAsk;
+      }
+    }
+
+    // Before risking a blocked opponent in the closeout suit, look for a safe
+    // ask anywhere else on the board that keeps the dangerous opponent off turn.
+    if (safeOpponents.length > 0) {
+      const safeGeneralAsk = _findAskInHalfSuits(
+        gs,
+        botId,
+        validOpponents,
+        prioritizedBotHalfSuits,
+        halfSuitsMap,
+        { fallbackUnknownReason: 'priority_guess', restrictToSafeOpponents: true }
+      );
+      if (safeGeneralAsk) return safeGeneralAsk;
+    }
+
+    if (focusHalfSuits.length > 0) {
       const focusAsk = _findAskInHalfSuits(
         gs,
         botId,
@@ -1376,7 +1540,7 @@ function decideBotMove(gs, botId) {
     for (const { halfSuitId, askableCards, closeoutPriority } of halfSuitScores) {
       // Keep random fallback from repeating asks that public information has
       // already ruled out for that target/card combination.
-      const unknownAsk = _findUnknownAsk(gs, botId, validOpponents, askableCards);
+      const unknownAsk = _findUnknownAsk(gs, botId, orderedOpponents, askableCards);
       if (unknownAsk) {
         return _withBotAskNarration(
           unknownAsk,
@@ -1390,7 +1554,7 @@ function decideBotMove(gs, botId) {
     const signalAsk = _findSignalAskInHalfSuits(
       gs,
       botId,
-      validOpponents,
+      orderedOpponents,
       prioritizedBotHalfSuits,
       halfSuitsMap
     );
@@ -1418,7 +1582,7 @@ function decideBotMove(gs, botId) {
       if (!hsCards.some((c) => getHand(gs, botId).has(c))) continue;
       for (const card of hsCards) {
         if (getHand(gs, botId).has(card)) continue;
-        for (const opp of _orderOpponentsForCard(gs, botId, validOpponents, card)) {
+        for (const opp of _orderOpponentsForCard(gs, botId, orderedOpponents, card)) {
           const askVal = validateAsk(gs, botId, opp.playerId, card);
           if (askVal.valid) {
             console.warn(
@@ -1736,6 +1900,9 @@ function _completeAsk(gs, playerId, partial, halfSuitsMap) {
   const botTeam        = getPlayerTeam(gs, playerId);
   const opponents      = gs.players.filter((p) => getPlayerTeam(gs, p.playerId) !== botTeam);
   const validOpponents = opponents.filter((p) => getCardCount(gs, p.playerId) > 0);
+  const currentMoveIndex = (gs.moveHistory ?? []).length;
+  const safeOpponents = _getSafeAskOpponents(gs, playerId, validOpponents, currentMoveIndex);
+  const orderedOpponents = _getOrderedAskOpponents(gs, playerId, validOpponents, currentMoveIndex);
 
   if (validOpponents.length === 0) {
     // No opponents to ask — must declare instead
@@ -1747,7 +1914,12 @@ function _completeAsk(gs, playerId, partial, halfSuitsMap) {
     const knownAsk = _findKnownHolderAsk(gs, playerId, validOpponents, [partialCardId]);
     if (knownAsk) return knownAsk;
 
-    const unknownAsk = _findUnknownAsk(gs, playerId, validOpponents, [partialCardId]);
+    if (safeOpponents.length > 0) {
+      const safeUnknownAsk = _findUnknownAsk(gs, playerId, safeOpponents, [partialCardId]);
+      if (safeUnknownAsk) return safeUnknownAsk;
+    }
+
+    const unknownAsk = _findUnknownAsk(gs, playerId, orderedOpponents, [partialCardId]);
     if (unknownAsk) return unknownAsk;
 
     // Chosen card is no longer askable (e.g. game state changed) — full fallback
@@ -1766,7 +1938,12 @@ function _completeAsk(gs, playerId, partial, halfSuitsMap) {
   const knownAsk = _findKnownHolderAsk(gs, playerId, validOpponents, askable);
   if (knownAsk) return knownAsk;
 
-  const unknownAsk = _findUnknownAsk(gs, playerId, validOpponents, askable);
+  if (safeOpponents.length > 0) {
+    const safeUnknownAsk = _findUnknownAsk(gs, playerId, safeOpponents, askable);
+    if (safeUnknownAsk) return safeUnknownAsk;
+  }
+
+  const unknownAsk = _findUnknownAsk(gs, playerId, orderedOpponents, askable);
   if (unknownAsk) return unknownAsk;
 
   return decideBotMove(gs, playerId);

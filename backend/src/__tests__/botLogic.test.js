@@ -579,6 +579,38 @@ describe('bot blocking support', () => {
     expect(move.targetId).toBe('p5');
   });
 
+  it('prefers a safe ask in another suit over asking the blocked opponent in the closeout suit', () => {
+    const hands = new Map([
+      ['p1', new Set(['8_h', '1_c'])],
+      ['p2', new Set(['9_h'])],
+      ['p3', new Set(['8_s'])],
+      ['p4', new Set(['13_h', '1_s'])],
+      ['p5', new Set(['2_c', '2_s'])],
+      ['p6', new Set()],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '10_h', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '11_h', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '12_h', true);
+    updateTeamIntentAfterAsk(gs, 'p2', '12_h', true);
+
+    gs.botKnowledge.set('p5', new Map([
+      ['8_h', false],
+      ['9_h', false],
+      ['10_h', false],
+      ['11_h', false],
+      ['12_h', false],
+      ['13_h', false],
+    ]));
+
+    const move = decideBotMove(gs, 'p1');
+
+    expect(move.action).toBe('ask');
+    expect(move.targetId).toBe('p5');
+    expect(buildCardToHalfSuitMap('remove_7s').get(move.cardId)).toBe('low_c');
+  });
+
   it('prefers passing a post-declaration turn to the blocked teammate', () => {
     const gs = buildBlockingGame();
 
