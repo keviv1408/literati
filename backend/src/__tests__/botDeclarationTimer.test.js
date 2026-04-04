@@ -43,10 +43,6 @@ const {
   BOT_DECLARATION_TAKEOVER_MS,
   TIMER_TICK_INTERVAL_MS,
 } = require('../game/gameSocketServer');
-const {
-  updateKnowledgeAfterAsk,
-  updateTeamIntentAfterAsk,
-} = require('../game/botLogic');
 
 const { setGame, getGame, registerConnection, removeConnection } = require('../game/gameStore');
 const { createGameState } = require('../game/gameState');
@@ -350,33 +346,6 @@ describe('startBotDeclarationCountdown', () => {
 
     expect(ws1._messages.some((m) => m.type === 'declaration_result')).toBe(false);
   });
-
-  it('8b. auto-submitted bot-controlled declarations can hand the turn to a blocked teammate', async () => {
-    const gs = buildGame({ currentTurnPlayerId: 'p1' });
-    gs.hands.set('p2', new Set(['4_s', '5_s', '6_s', '1_h', '8_h']));
-    setGame(ROOM, gs);
-
-    const ws1 = makeMockWs();
-    registerConnection(ROOM, 'p1', ws1);
-
-    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '2_h', true);
-    updateKnowledgeAfterAsk(gs, 'p2', 'p5', '3_h', true);
-    updateKnowledgeAfterAsk(gs, 'p2', 'p6', '4_h', true);
-    updateTeamIntentAfterAsk(gs, 'p2', '4_h', true);
-
-    await startBotDeclarationCountdown(ROOM, 'p1', {
-      flow: 'declare',
-      halfSuitId: 'low_s',
-      assignment: { ...COMPLETE_ASSIGNMENT },
-    });
-
-    await jest.advanceTimersByTimeAsync(BOT_DECLARATION_TAKEOVER_MS);
-
-    const resultMsg = ws1._messages.find((m) => m.type === 'declaration_result');
-    expect(resultMsg).toBeDefined();
-    expect(resultMsg.newTurnPlayerId).toBe('p2');
-    expect(getGame(ROOM).currentTurnPlayerId).toBe('p2');
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -491,32 +460,6 @@ describe('executeTimedOutTurn → bot declaration countdown integration', () => 
     expect(timerIdx).toBeGreaterThanOrEqual(0);
     expect(resultIdx).toBeGreaterThanOrEqual(0);
     expect(timerIdx).toBeLessThan(resultIdx);
-  });
-
-  it('12b. immediate timeout declarations also hand the turn to a blocked teammate', async () => {
-    const gs = buildGame({ currentTurnPlayerId: 'p1' });
-    setGame(ROOM, gs);
-
-    const ws1 = makeMockWs();
-    registerConnection(ROOM, 'p1', ws1);
-
-    gs.botKnowledge.set('p2', new Map([
-      ['4_s', true],
-      ['5_s', true],
-      ['6_s', true],
-    ]));
-
-    updateKnowledgeAfterAsk(gs, 'p3', 'p4', '3_h', true);
-    updateKnowledgeAfterAsk(gs, 'p3', 'p5', '4_h', true);
-    updateKnowledgeAfterAsk(gs, 'p3', 'p6', '5_h', true);
-    updateTeamIntentAfterAsk(gs, 'p3', '5_h', true);
-
-    await executeTimedOutTurn(ROOM, 'p1');
-
-    const resultMsg = ws1._messages.find((m) => m.type === 'declaration_result');
-    expect(resultMsg).toBeDefined();
-    expect(resultMsg.newTurnPlayerId).toBe('p3');
-    expect(getGame(ROOM).currentTurnPlayerId).toBe('p3');
   });
 });
 

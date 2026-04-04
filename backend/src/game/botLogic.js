@@ -481,38 +481,9 @@ function _isBlockedAskTarget(gs, botId, targetId, currentMoveIndex = (gs.moveHis
   return _getBlockedOpponentIds(gs, botId, currentMoveIndex).has(targetId);
 }
 
-function getBotPostDeclarationTurnPassDiagnostics(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
-  const teamId = getPlayerTeam(gs, botId);
-  const botPlayer = gs.players.find((player) => player.playerId === botId);
-  const chases = _getBlockingTeamChases(gs, botId, currentMoveIndex).map((chase) => {
-    const player = gs.players.find((candidate) => candidate.playerId === chase.playerId);
-    return {
-      playerId: chase.playerId,
-      displayName: player?.displayName ?? chase.playerId,
-      halfSuitId: chase.halfSuitId,
-      visibleMinimumCount: chase.visibleMinimumCount,
-      recentActivity: chase.recentActivity,
-      humanBonus: chase.humanBonus,
-      blockedOpponentIds: [...chase.blockedOpponentIds],
-      cardCount: getCardCount(gs, chase.playerId),
-      isDeclarer: chase.playerId === botId,
-    };
-  });
-  const teammateChases = chases.filter((chase) => chase.playerId !== botId);
-
-  return {
-    botId,
-    botName: botPlayer?.displayName ?? botId,
-    teamId,
-    chases,
-    teammateChases,
-    chosenPlayerId: teammateChases[0]?.playerId ?? null,
-  };
-}
-
-function chooseBotPostDeclarationTurnPlayer(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
-  const diagnostics = getBotPostDeclarationTurnPassDiagnostics(gs, botId, currentMoveIndex);
-  return diagnostics.chosenPlayerId;
+function chooseBotPostDeclarationTurnPlayer(gs, botId) {
+  const bestChase = _getBlockingTeamChases(gs, botId)[0];
+  return bestChase?.playerId ?? null;
 }
 
 function updateTeamIntentAfterAsk(gs, askerId, cardId, success) {
@@ -1826,7 +1797,6 @@ module.exports = {
   buildBotTurnReasonSummary,
   completeBotFromPartial,
   chooseBotPostDeclarationTurnPlayer,
-  getBotPostDeclarationTurnPassDiagnostics,
   updateKnowledgeAfterAsk,
   updateKnowledgeAfterDeclaration,
   updateTeamIntentAfterAsk,
