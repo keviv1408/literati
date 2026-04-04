@@ -64,14 +64,12 @@ import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
-import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
 import MuteToggle from '@/components/MuteToggle';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
 import { cardLabel, getCardHalfSuit, getHalfSuitCards, allHalfSuitIds } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
-import type { DeclarationResultPayload } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -80,9 +78,6 @@ const VARIANT_LABELS: Record<string, string> = {
   remove_7s: 'Remove 7s (Classic)',
   remove_8s: 'Remove 8s',
 };
-
-const DECLARATION_RESULT_OVERLAY_MS = 3_000;
-const FAILED_DECLARATION_OVERLAY_EXTRA_MS = 5_000;
 
 interface PageProps {
   params: Promise<{ 'room-id': string }>;
@@ -190,13 +185,6 @@ export default function GamePage({ params }: PageProps) {
   const [syntheticLastMoveMsg, setSyntheticLastMoveMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Declaration result overlay ────────────────────────────────
-  //
-  // Shown after all declarations. Failures stay visible longer so the table
-  // has more time to digest the mistake before play resumes.
-  const [declarationOverlayResult, setDeclarationOverlayResult] =
-    useState<DeclarationResultPayload | null>(null);
-
   // ── Declaration Seat Reveal ──────────────────────────────────
   //
   // Both successful and failed declarations can briefly reveal the declared
@@ -271,7 +259,7 @@ export default function GamePage({ params }: PageProps) {
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
     botTakeover, rematchVote, rematchDeclined, roomDissolved,
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
-    sendPartialSelection, sendDeclareProgress, sendDeclareSelecting, sendGameAdvance,
+    sendPartialSelection, sendDeclareProgress, sendDeclareSelecting,
     declareProgress,
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight, sendChooseNextTurn,
@@ -561,8 +549,6 @@ export default function GamePage({ params }: PageProps) {
         setScoreFlash(lastDeclareResult.winningTeam);
         scoreFlashTimer.current = setTimeout(() => setScoreFlash(null), 2000);
       }
-
-      setDeclarationOverlayResult(lastDeclareResult);
 
       updatePendingAskBatch(null);
       setActionLoading(false);
@@ -1014,21 +1000,6 @@ export default function GamePage({ params }: PageProps) {
     });
     handleAsk(pendingAskBatch.targetPlayerId, nextCardId, pendingAskBatch.requestedCardIds);
   }, [gameState?.currentTurnPlayerId, handleAsk, myHand, myPlayerId, pendingAskBatch, players, updatePendingAskBatch]);
-
-  // ── Declaration result overlay dismiss ───────────────────────
-  //
-  // Called by DeclarationResultOverlay when the player presses "Dismiss" or
-  // when the auto-dismiss countdown expires.
-  // For correct declarations the server waits for this ack; failed declarations
-  // already advance immediately, so no extra message is needed.
-  const handleDeclarationOverlayDismiss = useCallback(() => {
-    setDeclarationOverlayResult((prev) => {
-      if (prev?.correct) {
-        sendGameAdvance();
-      }
-      return null;
-    });
-  }, [sendGameAdvance]);
 
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
@@ -1724,22 +1695,6 @@ export default function GamePage({ params }: PageProps) {
         />
       )}
 
-      {/* ── Declaration result overlay ─────────────────────── */}
-      {/* Shown after all declaration results. Failed declarations remain */}
-      {/* visible slightly longer than successful ones. */}
-      {declarationOverlayResult && (
-        <DeclarationResultOverlay
-          result={declarationOverlayResult}
-          players={players}
-          myTeamId={myTeamId}
-          onDismiss={handleDeclarationOverlayDismiss}
-          autoDismissMs={
-            declarationOverlayResult.correct
-              ? DECLARATION_RESULT_OVERLAY_MS
-              : DECLARATION_RESULT_OVERLAY_MS + FAILED_DECLARATION_OVERLAY_EXTRA_MS
-          }
-        />
-      )}
     </div>
     </VoiceProvider>
     </GameProvider>

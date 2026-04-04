@@ -52,7 +52,6 @@ import {
 } from '@/lib/declarationSeatReveal';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import CardHand from '@/components/CardHand';
-import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
@@ -65,7 +64,6 @@ import type {
   SpectatorHands,
   SpectatorMoveEntry,
   AskResultPayload,
-  DeclarationResultPayload,
   DeclarationFailedPayload,
   DeclareProgressPayload,
 } from '@/types/game';
@@ -74,9 +72,6 @@ import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CountdownTimer from '@/components/CountdownTimer';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
-
-const DECLARATION_RESULT_OVERLAY_MS = 3_000;
-const FAILED_DECLARATION_OVERLAY_EXTRA_MS = 5_000;
 
 // ── Variant display helpers ────────────────────────────────────────────────────
 
@@ -172,8 +167,6 @@ export default function SpectatorView({
   const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
     useState<Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null>(null);
   const declarationSeatRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [declarationOverlayResult, setDeclarationOverlayResult] =
-    useState<DeclarationResultPayload | null>(null);
   const [godModeEnabled, setGodModeEnabled] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
@@ -244,7 +237,6 @@ export default function SpectatorView({
     const msg = result?.lastMove ?? null;
     if (!result || !msg) return;
     observedAskBatchRef.current = null;
-    setDeclarationOverlayResult(result);
     if (result.correct) {
       setDeclarationSeatRevealByPlayerId(
         buildSuccessfulDeclarationSeatRevealMap(result, effectiveVariant),
@@ -728,19 +720,6 @@ export default function SpectatorView({
         />
       )}
 
-      {declarationOverlayResult && (
-        <DeclarationResultOverlay
-          result={declarationOverlayResult}
-          players={players}
-          myTeamId={null}
-          onDismiss={() => setDeclarationOverlayResult(null)}
-          autoDismissMs={
-            declarationOverlayResult.correct
-              ? DECLARATION_RESULT_OVERLAY_MS
-              : DECLARATION_RESULT_OVERLAY_MS + FAILED_DECLARATION_OVERLAY_EXTRA_MS
-          }
-        />
-      )}
     </div>
   );
 }

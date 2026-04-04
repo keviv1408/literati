@@ -1483,6 +1483,8 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
       // The message text is rendered by LastMoveDisplay
       expect(lastMoveEl.textContent).toContain('Team 1 scores');
     });
+
+    expect(screen.queryByTestId('declaration-result-overlay')).toBeNull();
   });
 
   it('5. declaration_result triggers lastMove display (incorrect declaration)', async () => {
@@ -1517,6 +1519,8 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
       const lastMoveEl = screen.queryByTestId('last-move-display') ?? document.body;
       expect(lastMoveEl.textContent).toContain('Team 2 scores');
     });
+
+    expect(screen.queryByTestId('declaration-result-overlay')).toBeNull();
   });
 
   it('6. declare modal is closed after declaration_result is received', async () => {
