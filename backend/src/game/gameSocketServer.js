@@ -163,7 +163,6 @@ const {
 } = require('./gameEngine');
 const {
   decideBotMove,
-  buildBotDecisionThinkingSnapshot,
   chooseBotPostDeclarationTurnPlayer,
   completeBotFromPartial,
   updateKnowledgeAfterAsk,
@@ -664,9 +663,15 @@ function scheduleBotTurnIfNeeded(gs) {
 
   const timer = setTimeout(() => {
     _botTimers.delete(gs.roomCode);
+    console.log(
+      `[game-ws] Bot turn timer fired in room ${gs.roomCode} for ${gs.currentTurnPlayerId}`
+    );
     executeBotTurn(gs.roomCode, gs.currentTurnPlayerId);
   }, BOT_TURN_DELAY_MS);
 
+  console.log(
+    `[game-ws] Scheduled bot turn in room ${gs.roomCode}: player=${gs.currentTurnPlayerId}, delayMs=${BOT_TURN_DELAY_MS}`
+  );
   _botTimers.set(gs.roomCode, timer);
 }
 
@@ -1763,8 +1768,10 @@ async function executeBotTurn(roomCode, botId) {
   if (!currentPlayer || !currentPlayer.isBot) return;
 
   const decision = decideBotMove(gs, botId);
-  const thinkingSnapshot = buildBotDecisionThinkingSnapshot(gs, botId, decision);
-  console.info('[game-ws][bot-think]', JSON.stringify(thinkingSnapshot));
+
+  console.log(
+    `[game-ws] Bot decision in room ${roomCode}: bot=${botId}, action=${decision.action}`
+  );
 
   if (decision.action === 'ask') {
     await handleAskCard(
