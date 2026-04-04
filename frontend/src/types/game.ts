@@ -100,7 +100,6 @@ export type BotAskNarrationReason =
   | 'closeout_push'
   | 'priority_guess'
   | 'signal_probe'
-  | 'opponent_flush_defense'
   | 'emergency_guess';
 
 export interface BotAskNarration {

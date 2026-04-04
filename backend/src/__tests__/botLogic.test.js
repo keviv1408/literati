@@ -753,38 +753,6 @@ describe('decideBotMove — defensive suit priority from opponent ask signals', 
     const cardToHalfSuit = buildCardToHalfSuitMap('remove_7s');
     expect(cardToHalfSuit.get(move.cardId)).toBe('low_s');
   });
-
-  it('flushes a near-complete opponent closeout before spending a turn on teammate signaling', () => {
-    const hands = new Map([
-      ['p1', new Set(['1_s', '8_h'])],
-      ['p2', new Set(['9_h'])],
-      ['p3', new Set(['1_c'])],
-      ['p4', new Set(['2_s', '3_s', '4_s', '5_s'])],
-      ['p5', new Set(['13_h'])],
-      ['p6', new Set(['2_c'])],
-    ]);
-    const gs = buildBotTestGame(hands);
-
-    gs.botKnowledge.set('p4', new Map([
-      ['2_s', true],
-      ['3_s', true],
-      ['4_s', true],
-      ['5_s', true],
-    ]));
-    updateTeamIntentAfterAsk(gs, 'p4', '5_s', true);
-    updateTeamIntentAfterAsk(gs, 'p2', '12_h', false);
-
-    const move = decideBotMove(gs, 'p1');
-    const cardToHalfSuit = buildCardToHalfSuitMap('remove_7s');
-
-    expect(move).toMatchObject({ action: 'ask', targetId: 'p4' });
-    expect(cardToHalfSuit.get(move.cardId)).toBe('low_s');
-    expect(move.botAskNarration).toEqual({
-      reason: 'opponent_flush_defense',
-      sourcePlayerId: 'p4',
-      focusCardId: move.cardId,
-    });
-  });
 });
 
 // ---------------------------------------------------------------------------

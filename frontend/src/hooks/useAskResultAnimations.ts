@@ -94,7 +94,6 @@ const BOT_ASK_BUBBLE_LEAD_INS = {
   closeout_push: ['Closing in', 'Pressing now'],
   priority_guess: ['Highly likely', 'Best guess'],
   signal_probe: ['Testing waters', 'Worth probing'],
-  opponent_flush_defense: ['Cutting them off', 'Defending first'],
   emergency_guess: ['Just guessing', 'Last resort'],
 } as const;
 
