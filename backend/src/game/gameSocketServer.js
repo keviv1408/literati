@@ -1044,10 +1044,6 @@ function _formatBotTurnPassChases(chases) {
   }).join(';');
 }
 
-function _logBotTurnPass(message) {
-  console.log(`[game-ws][bot-turnpass] ${message}`);
-}
-
 /**
  * Handle a `choose_next_turn` message from a human player on the declaring team.
  *
@@ -1169,8 +1165,8 @@ async function startBotDeclarationCountdown(roomCode, playerId, effectivePartial
     console.log(
       '[game-ws] Bot declaration timer expired for ' + playerId + ' in room ' + roomCode + ' — auto-submitting'
     );
-    _logBotTurnPass(
-      `room=${roomCode} phase=declare_submit ` +
+    console.info(
+      `[game-ws][bot-turnpass] room=${roomCode} phase=declare_submit ` +
       `source=bot_declaration_timer declarer=${playerId} halfSuit=${halfSuitId}`
     );
     await handleDeclare(roomCode, playerId, halfSuitId, assignment, null, true);
@@ -1713,8 +1709,8 @@ async function executeTimedOutTurn(roomCode, playerId) {
       decision.botAskNarration ?? null
     );
   } else if (decision.action === 'declare') {
-    _logBotTurnPass(
-      `room=${roomCode} phase=declare_submit ` +
+    console.info(
+      `[game-ws][bot-turnpass] room=${roomCode} phase=declare_submit ` +
       `source=timeout_direct declarer=${playerId} halfSuit=${decision.halfSuitId}`
     );
     await handleDeclare(roomCode, playerId, decision.halfSuitId, decision.assignment, null, true);
@@ -1812,8 +1808,8 @@ async function executeBotTurn(roomCode, botId) {
       decision.botAskNarration ?? null
     );
   } else if (decision.action === 'declare') {
-    _logBotTurnPass(
-      `room=${roomCode} phase=declare_submit ` +
+    console.info(
+      `[game-ws][bot-turnpass] room=${roomCode} phase=declare_submit ` +
       `source=bot_turn declarer=${botId} halfSuit=${decision.halfSuitId}`
     );
     await handleDeclare(roomCode, botId, decision.halfSuitId, decision.assignment, null, true);
@@ -2489,16 +2485,13 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
       .filter((player) => player.teamId === declarerPlayer?.teamId && getCardCount(gs, player.playerId) > 0)
       .map((player) => player.playerId);
     turnPassDiagnostics = getBotPostDeclarationTurnPassDiagnostics(gs, declarerId);
-    const naturalNextPlayer = gs.players.find((player) => player.playerId === newTurnPlayerId);
 
-    _logBotTurnPass(
-      `room=${roomCode} phase=evaluate ` +
+    console.info(
+      `[game-ws][bot-turnpass] room=${roomCode} phase=evaluate ` +
       `declarer=${declarerId} declarerName=${declarerPlayer?.displayName ?? declarerId} ` +
       `seatIsBot=${Boolean(declarerPlayer?.isBot)} controlledByBot=${Boolean(isBot)} ` +
       `halfSuit=${halfSuitId} naturalNext=${newTurnPlayerId} ` +
-      `naturalNextTeam=${naturalNextPlayer?.teamId ?? 'none'} ` +
       `eligible=[${_formatBotTurnPassPlayers(gs, eligibleSameTeamPlayers)}] ` +
-      `chosen=${turnPassDiagnostics?.chosenPlayerId ?? 'none'} ` +
       `chases=[${_formatBotTurnPassChases(turnPassDiagnostics.chases)}]`
     );
   }
@@ -2507,12 +2500,13 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   if (correct && gs.status === 'active' && isBot) {
     const chosenTeammateId = turnPassDiagnostics?.chosenPlayerId
       ?? chooseBotPostDeclarationTurnPlayer(gs, declarerId);
+    const currentTurnPlayer = gs.players.find((player) => player.playerId === gs.currentTurnPlayerId);
     const chosenTeammate = gs.players.find((player) => player.playerId === chosenTeammateId);
 
     if (
-      declarerPlayer &&
+      currentTurnPlayer &&
       chosenTeammate &&
-      declarerPlayer.teamId === chosenTeammate.teamId &&
+      currentTurnPlayer.teamId === chosenTeammate.teamId &&
       getCardCount(gs, chosenTeammateId) > 0
     ) {
       gs.currentTurnPlayerId = chosenTeammateId;
@@ -2522,8 +2516,8 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
         `[game-ws] Bot declaration handoff in room ${roomCode}: ` +
         `declarer=${declarerId}, recipient=${chosenTeammateId}, halfSuit=${halfSuitId}`
       );
-      _logBotTurnPass(
-        `room=${roomCode} phase=resolved decision=handoff ` +
+      console.info(
+        `[game-ws][bot-turnpass] room=${roomCode} phase=resolved decision=handoff ` +
         `declarer=${declarerId} recipient=${chosenTeammateId} ` +
         `recipientName=${chosenTeammate?.displayName ?? chosenTeammateId} ` +
         `halfSuit=${halfSuitId} finalTurn=${gs.currentTurnPlayerId}`
@@ -2536,19 +2530,23 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
         reason = 'chosen_teammate_missing';
       } else if (chosenTeammate && getCardCount(gs, chosenTeammateId) <= 0) {
         reason = 'chosen_teammate_empty_hand';
-      } else if (declarerPlayer && chosenTeammate && declarerPlayer.teamId !== chosenTeammate.teamId) {
+      } else if (
+        currentTurnPlayer &&
+        chosenTeammate &&
+        currentTurnPlayer.teamId !== chosenTeammate.teamId
+      ) {
         reason = 'chosen_teammate_wrong_team';
       }
 
-      _logBotTurnPass(
-        `room=${roomCode} phase=resolved decision=keep_self ` +
+      console.info(
+        `[game-ws][bot-turnpass] room=${roomCode} phase=resolved decision=keep_self ` +
         `declarer=${declarerId} chosen=${chosenTeammateId ?? 'none'} ` +
         `reason=${reason} selfChases=${selfChaseCount} finalTurn=${gs.currentTurnPlayerId}`
       );
     }
   } else if (shouldTraceBotTurnPass) {
-    _logBotTurnPass(
-      `room=${roomCode} phase=resolved decision=keep_self ` +
+    console.info(
+      `[game-ws][bot-turnpass] room=${roomCode} phase=resolved decision=keep_self ` +
       `declarer=${declarerId} chosen=none reason=isBot_flag_false finalTurn=${gs.currentTurnPlayerId}`
     );
   }
@@ -2683,16 +2681,6 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   // Schedule next bot or human turn timer as needed
   scheduleBotTurnIfNeeded(gs);
   scheduleTurnTimerIfNeeded(gs);
-
-  if (shouldTraceBotTurnPass) {
-    const finalTurnPlayer = gs.players.find((player) => player.playerId === gs.currentTurnPlayerId);
-    _logBotTurnPass(
-      `room=${roomCode} phase=scheduled finalTurn=${gs.currentTurnPlayerId} ` +
-      `finalTurnName=${finalTurnPlayer?.displayName ?? gs.currentTurnPlayerId} ` +
-      `finalTurnIsBot=${Boolean(finalTurnPlayer?.isBot)} ` +
-      `botTimerScheduled=${_botTimers.has(roomCode)} humanTimerScheduled=${_turnTimers.has(roomCode)}`
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
