@@ -42,6 +42,8 @@ const TEAM_SIGNAL_DECAY_INTERVAL_MOVES = 3;
 const TEAM_CLOSEOUT_PRIORITY_THRESHOLD = 4;
 const TEAMMATE_ASSIST_PRIORITY_THRESHOLD = 4;
 const TEAMMATE_ASSIST_MEMORY_MOVES = 8;
+const OPPONENT_CLOSEOUT_THREAT_THRESHOLD = 4;
+const OPPONENT_CLOSEOUT_FORCE_THRESHOLD = 5;
 
 /**
  * Attach public-safe narration metadata to a bot ask decision.
@@ -51,7 +53,7 @@ const TEAMMATE_ASSIST_MEMORY_MOVES = 8;
  * render more expressive bot speech bubbles.
  *
  * @param {{ action: string }|null} move
- * @param {'known_holder'|'teammate_signal_followup'|'closeout_push'|'priority_guess'|'signal_probe'|'emergency_guess'} reason
+ * @param {'known_holder'|'teammate_signal_followup'|'closeout_push'|'priority_guess'|'signal_probe'|'opponent_flush_defense'|'emergency_guess'} reason
  * @param {{ sourcePlayerId?: string, focusCardId?: string }} [extras]
  * @returns {typeof move}
  */
@@ -681,6 +683,102 @@ function _getVisibleOpponentHalfSuitCount(gs, observerId, teamPlayers, halfSuitI
 
 function _getSuitCloseoutPriority(teamCount) {
   return teamCount >= TEAM_CLOSEOUT_PRIORITY_THRESHOLD ? teamCount : 0;
+}
+
+function _findOpponentCloseoutDefenseAsk(
+  gs,
+  botId,
+  botHalfSuits,
+  validOpponents,
+  halfSuitsMap,
+  currentMoveIndex = (gs.moveHistory ?? []).length
+) {
+  const botTeam = getPlayerTeam(gs, botId);
+  if (!botTeam) return null;
+
+  const botHand = getHand(gs, botId);
+  const defensiveCandidates = [];
+  const opponentTeam = botTeam === 1 ? 2 : 1;
+
+  for (const halfSuitId of botHalfSuits) {
+    if (isHalfSuitDeclared(gs, halfSuitId)) continue;
+
+    const askableCards = (halfSuitsMap.get(halfSuitId) ?? []).filter((cardId) => !botHand.has(cardId));
+    if (askableCards.length === 0) continue;
+
+    for (const opponent of validOpponents) {
+      const visibleMinimumCount = _getVisibleHalfSuitMinimumCount(
+        gs,
+        botId,
+        opponent.playerId,
+        halfSuitId
+      );
+      if (visibleMinimumCount < OPPONENT_CLOSEOUT_THREAT_THRESHOLD) continue;
+
+      const opponentPressure = Math.max(
+        _getRecentHalfSuitActivityStrength(gs, opponent.playerId, halfSuitId, currentMoveIndex),
+        _getTeamSignalStrength(gs, opponentTeam, halfSuitId, currentMoveIndex)
+      );
+      if (opponentPressure <= 0 && visibleMinimumCount < OPPONENT_CLOSEOUT_FORCE_THRESHOLD) continue;
+
+      const knownCards = askableCards.filter(
+        (cardId) => _getEffectiveKnowledge(gs, botId, opponent.playerId, cardId) === true
+      );
+      if (knownCards.length === 0) continue;
+
+      const orderedKnownCards = _orderCandidateCardsForHalfSuit(
+        gs,
+        botId,
+        halfSuitId,
+        knownCards,
+        [opponent],
+        currentMoveIndex
+      );
+      const ask = _findKnownHolderAsk(gs, botId, [opponent], orderedKnownCards);
+      if (!ask) continue;
+
+      defensiveCandidates.push({
+        ...ask,
+        halfSuitId,
+        opponentId: opponent.playerId,
+        visibleMinimumCount,
+        opponentPressure,
+        knownCardCount: knownCards.length,
+      });
+    }
+  }
+
+  defensiveCandidates.sort((a, b) => {
+    const minimumDiff = b.visibleMinimumCount - a.visibleMinimumCount;
+    if (minimumDiff !== 0) return minimumDiff;
+
+    const pressureDiff = b.opponentPressure - a.opponentPressure;
+    if (pressureDiff !== 0) return pressureDiff;
+
+    const knownCardDiff = b.knownCardCount - a.knownCardCount;
+    if (knownCardDiff !== 0) return knownCardDiff;
+
+    const suitDiff = a.halfSuitId.localeCompare(b.halfSuitId);
+    if (suitDiff !== 0) return suitDiff;
+
+    const targetDiff = a.targetId.localeCompare(b.targetId);
+    if (targetDiff !== 0) return targetDiff;
+
+    return a.cardId.localeCompare(b.cardId);
+  });
+
+  const bestCandidate = defensiveCandidates[0];
+  if (!bestCandidate) return null;
+
+  return _withBotAskNarration(
+    {
+      action: 'ask',
+      targetId: bestCandidate.targetId,
+      cardId: bestCandidate.cardId,
+    },
+    'opponent_flush_defense',
+    { focusCardId: bestCandidate.cardId, sourcePlayerId: bestCandidate.opponentId }
+  );
 }
 
 function _findKnownHolder(gs, observerId, cardId) {
@@ -1378,6 +1476,18 @@ function decideBotMove(gs, botId) {
       if (hs && !isHalfSuitDeclared(gs, hs)) {
         botHalfSuits.add(hs);
       }
+    }
+
+    const opponentCloseoutDefenseAsk = _findOpponentCloseoutDefenseAsk(
+      gs,
+      botId,
+      botHalfSuits,
+      validOpponents,
+      halfSuitsMap,
+      currentMoveIndex
+    );
+    if (opponentCloseoutDefenseAsk) {
+      return opponentCloseoutDefenseAsk;
     }
 
     const opponentTeam = botTeam === 1 ? 2 : 1;
