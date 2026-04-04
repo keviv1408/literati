@@ -1425,10 +1425,6 @@ function decideBotMove(gs, botId) {
 function buildBotCardKnowledgeMatrix(gs, botId) {
   const { cardLabel, buildDeck } = require('./deck');
 
-  // Get the bot's display name
-  const botPlayer = gs.players.find((p) => p.playerId === botId);
-  const botName = botPlayer?.displayName || botId;
-
   // Get all cards in the current variant
   const allCardIds = buildDeck(gs.variant);
 
@@ -1460,7 +1456,7 @@ function buildBotCardKnowledgeMatrix(gs, botId) {
   }
 
   return {
-    botName,
+    botId,
     moveIndex: (gs.moveHistory ?? []).length,
     timestamp: new Date().toISOString(),
     matrix,
