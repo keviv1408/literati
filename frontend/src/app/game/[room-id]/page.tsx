@@ -24,6 +24,7 @@ import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import {
   buildDeclarationSeatRevealMap,
+  buildSuccessfulDeclarationSeatRevealMap,
   FAILED_DECLARATION_SEAT_REVEAL_MS,
 } from '@/lib/declarationSeatReveal';
 import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
@@ -70,6 +71,7 @@ import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
 import { cardLabel, getCardHalfSuit, getHalfSuitCards, allHalfSuitIds } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
+import type { DeclarationResultPayload } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -78,6 +80,9 @@ const VARIANT_LABELS: Record<string, string> = {
   remove_7s: 'Remove 7s (Classic)',
   remove_8s: 'Remove 8s',
 };
+
+const DECLARATION_RESULT_OVERLAY_MS = 3_000;
+const FAILED_DECLARATION_OVERLAY_EXTRA_MS = 5_000;
 
 interface PageProps {
   params: Promise<{ 'room-id': string }>;
@@ -187,18 +192,19 @@ export default function GamePage({ params }: PageProps) {
 
   // ── Declaration result overlay ────────────────────────────────
   //
-  // Shown after correct declarations only. Auto-dismisses after 3 seconds
-  // (with a visible countdown) or earlier if the player presses the explicit
-  // "Dismiss" button. On dismiss, `sendGameAdvance()` is called to notify the
-  // server that the client is ready for the next turn.
-  const [showDeclarationOverlay, setShowDeclarationOverlay] = useState(false);
+  // Shown after all declarations. Failures stay visible longer so the table
+  // has more time to digest the mistake before play resumes.
+  const [declarationOverlayResult, setDeclarationOverlayResult] =
+    useState<DeclarationResultPayload | null>(null);
 
-  // ── Failed Declaration Seat Reveal ───────────────────────────
+  // ── Declaration Seat Reveal ──────────────────────────────────
   //
-  // When declarationFailed arrives from the socket, affected seats briefly
-  // show the declared half-suit cards with compact green/red outlines. The
-  // reveal auto-dismisses after a short delay and resets on the next failure.
-  const [failedRevealDismissed, setFailedRevealDismissed] = useState(false);
+  // Both successful and failed declarations can briefly reveal the declared
+  // half-suit directly on seats. Failed reveals include red wrong markers;
+  // successful reveals are all green.
+  const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
+    useState<Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null>(null);
+  const declarationSeatRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Score flash ───────────────────────────────────────────────
   //
@@ -313,11 +319,6 @@ export default function GamePage({ params }: PageProps) {
   // This flag gates the "🔄 Rematch" button shown only at game-end.
   // Guest-only mode: host detection not applicable (no Supabase user ID).
   const isHostOfPrivateRoom = false;
-
-  // ── Failed Declaration Reveal visibility guard ───────────────
-  // Computed here — after useGameSocket — because it depends on `declarationFailed`
-  // which is destructured from the hook above.
-  const showFailedReveal = Boolean(declarationFailed && !failedRevealDismissed);
 
   const shouldLoadGameSummary = Boolean(
     roomCode &&
@@ -538,6 +539,20 @@ export default function GamePage({ params }: PageProps) {
         playDeclarationFail();
       }
 
+      if (lastDeclareResult.correct) {
+        const revealVariant = (variant ?? room?.card_removal_variant ?? 'remove_7s') as
+          'remove_2s' | 'remove_7s' | 'remove_8s';
+        setDeclarationSeatRevealByPlayerId(
+          buildSuccessfulDeclarationSeatRevealMap(lastDeclareResult, revealVariant),
+        );
+        if (declarationSeatRevealTimerRef.current) {
+          clearTimeout(declarationSeatRevealTimerRef.current);
+        }
+        declarationSeatRevealTimerRef.current = setTimeout(() => {
+          setDeclarationSeatRevealByPlayerId(null);
+        }, FAILED_DECLARATION_SEAT_REVEAL_MS);
+      }
+
       publishMoveMessage(lastDeclareResult.lastMove, null);
 
       // ── Score flash: briefly highlight the team that just scored ─────────
@@ -547,9 +562,7 @@ export default function GamePage({ params }: PageProps) {
         scoreFlashTimer.current = setTimeout(() => setScoreFlash(null), 2000);
       }
 
-      // Correct declarations still use the countdown overlay. Incorrect
-      // declarations now rely on the inline seat reveal instead.
-      setShowDeclarationOverlay(lastDeclareResult.correct);
+      setDeclarationOverlayResult(lastDeclareResult);
 
       updatePendingAskBatch(null);
       setActionLoading(false);
@@ -567,13 +580,31 @@ export default function GamePage({ params }: PageProps) {
   // ── Reset / auto-dismiss failed declaration seat reveal ──────
   useEffect(() => {
     if (!declarationFailed) return;
-    setFailedRevealDismissed(false);
-    const timer = setTimeout(
-      () => setFailedRevealDismissed(true),
-      FAILED_DECLARATION_SEAT_REVEAL_MS,
+    const revealVariant = (variant ?? room?.card_removal_variant ?? 'remove_7s') as
+      'remove_2s' | 'remove_7s' | 'remove_8s';
+    setDeclarationSeatRevealByPlayerId(
+      buildDeclarationSeatRevealMap(declarationFailed, players, revealVariant),
     );
-    return () => clearTimeout(timer);
+    if (declarationSeatRevealTimerRef.current) {
+      clearTimeout(declarationSeatRevealTimerRef.current);
+    }
+    declarationSeatRevealTimerRef.current = setTimeout(() => {
+      setDeclarationSeatRevealByPlayerId(null);
+    }, FAILED_DECLARATION_SEAT_REVEAL_MS);
+    return () => {
+      if (declarationSeatRevealTimerRef.current) {
+        clearTimeout(declarationSeatRevealTimerRef.current);
+      }
+    };
   }, [declarationFailed]);
+
+  useEffect(() => {
+    return () => {
+      if (declarationSeatRevealTimerRef.current) {
+        clearTimeout(declarationSeatRevealTimerRef.current);
+      }
+    };
+  }, []);
 
   // ── Trigger deal animation on first game_init ─────────────────────────────
   //
@@ -656,10 +687,6 @@ export default function GamePage({ params }: PageProps) {
   const currentLastMoveMessage = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove;
   const resolvedVariant = variant ?? room?.card_removal_variant ?? 'remove_7s';
   const declaredSuits = gameState?.declaredSuits ?? [];
-  const declarationSeatRevealByPlayerId =
-    showFailedReveal && declarationFailed
-      ? buildDeclarationSeatRevealMap(declarationFailed, players, resolvedVariant)
-      : null;
   const availableAskHalfSuits = getAvailableAskHalfSuits(myHand, declaredSuits, resolvedVariant);
   const validAskTargetIds = new Set(
     players
@@ -991,13 +1018,15 @@ export default function GamePage({ params }: PageProps) {
   // ── Declaration result overlay dismiss ───────────────────────
   //
   // Called by DeclarationResultOverlay when the player presses "Dismiss" or
-  // when the 3-second auto-dismiss countdown expires.
-  // 1. Hides the overlay.
-  // 2. Dispatches game_advance to the server so the next turn can proceed.
+  // when the auto-dismiss countdown expires.
+  // For correct declarations the server waits for this ack; failed declarations
+  // already advance immediately, so no extra message is needed.
   const handleDeclarationOverlayDismiss = useCallback(() => {
-    setShowDeclarationOverlay(false);
-    sendGameAdvance();
-  }, [sendGameAdvance]);
+    if (declarationOverlayResult?.correct) {
+      sendGameAdvance();
+    }
+    setDeclarationOverlayResult(null);
+  }, [declarationOverlayResult, sendGameAdvance]);
 
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
@@ -1694,15 +1723,19 @@ export default function GamePage({ params }: PageProps) {
       )}
 
       {/* ── Declaration result overlay ─────────────────────── */}
-      {/* Shown to all players after a correct declaration. */}
-      {/* Auto-dismisses after 3 s; explicit Dismiss button cancels early. */}
-      {/* On dismiss, dispatches game_advance to the server. */}
-      {showDeclarationOverlay && lastDeclareResult && (
+      {/* Shown after all declaration results. Failed declarations remain */}
+      {/* visible slightly longer than successful ones. */}
+      {declarationOverlayResult && (
         <DeclarationResultOverlay
-          result={lastDeclareResult}
+          result={declarationOverlayResult}
           players={players}
           myTeamId={myTeamId}
           onDismiss={handleDeclarationOverlayDismiss}
+          autoDismissMs={
+            declarationOverlayResult.correct
+              ? DECLARATION_RESULT_OVERLAY_MS
+              : DECLARATION_RESULT_OVERLAY_MS + FAILED_DECLARATION_OVERLAY_EXTRA_MS
+          }
         />
       )}
     </div>

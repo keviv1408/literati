@@ -4,9 +4,10 @@
 
 import {
   buildDeclarationSeatRevealMap,
+  buildSuccessfulDeclarationSeatRevealMap,
   FAILED_DECLARATION_SEAT_REVEAL_MS,
 } from '@/lib/declarationSeatReveal';
-import type { DeclarationFailedPayload, GamePlayer } from '@/types/game';
+import type { DeclarationFailedPayload, DeclarationResultPayload, GamePlayer } from '@/types/game';
 
 const PLAYERS: GamePlayer[] = [
   {
@@ -66,6 +67,26 @@ function buildPayload(): DeclarationFailedPayload {
   };
 }
 
+function buildSuccessPayload(): DeclarationResultPayload {
+  return {
+    type: 'declaration_result',
+    declarerId: 'p1',
+    halfSuitId: 'low_s',
+    correct: true,
+    winningTeam: 1,
+    newTurnPlayerId: 'p1',
+    assignment: {
+      '1_s': 'p1',
+      '2_s': 'p2',
+      '3_s': 'p1',
+      '4_s': 'p2',
+      '5_s': 'p2',
+      '6_s': 'p2',
+    },
+    lastMove: 'Alice declared Low Spades — correct! Team 1 scores',
+  };
+}
+
 describe('buildDeclarationSeatRevealMap', () => {
   it('groups reveal cards by the actual holder', () => {
     const revealByPlayer = buildDeclarationSeatRevealMap(
@@ -93,8 +114,31 @@ describe('buildDeclarationSeatRevealMap', () => {
   });
 });
 
+describe('buildSuccessfulDeclarationSeatRevealMap', () => {
+  it('groups declaration cards by assigned holder', () => {
+    const revealByPlayer = buildSuccessfulDeclarationSeatRevealMap(
+      buildSuccessPayload(),
+      'remove_7s',
+    );
+
+    expect(revealByPlayer.get('p1')?.map((entry) => entry.cardId)).toEqual(['1_s', '3_s']);
+    expect(revealByPlayer.get('p2')?.map((entry) => entry.cardId)).toEqual(['2_s', '4_s', '5_s', '6_s']);
+  });
+
+  it('marks all reveal cards as correct', () => {
+    const revealByPlayer = buildSuccessfulDeclarationSeatRevealMap(
+      buildSuccessPayload(),
+      'remove_7s',
+    );
+
+    const p1Entries = revealByPlayer.get('p1') ?? [];
+    const p2Entries = revealByPlayer.get('p2') ?? [];
+    expect([...p1Entries, ...p2Entries].every((entry) => !entry.isWrong && entry.claimedByName === null)).toBe(true);
+  });
+});
+
 describe('FAILED_DECLARATION_SEAT_REVEAL_MS', () => {
-  it('keeps the prototype reveal brief', () => {
-    expect(FAILED_DECLARATION_SEAT_REVEAL_MS).toBe(4500);
+  it('keeps the failed reveal visible long enough for players to parse it', () => {
+    expect(FAILED_DECLARATION_SEAT_REVEAL_MS).toBe(9500);
   });
 });

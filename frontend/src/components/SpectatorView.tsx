@@ -47,10 +47,12 @@ import React, { useCallback, useEffect, useEffectEvent, useRef, useState } from 
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import {
   buildDeclarationSeatRevealMap,
+  buildSuccessfulDeclarationSeatRevealMap,
   FAILED_DECLARATION_SEAT_REVEAL_MS,
 } from '@/lib/declarationSeatReveal';
 import GamePlayerSeat from '@/components/GamePlayerSeat';
 import CardHand from '@/components/CardHand';
+import DeclarationResultOverlay from '@/components/DeclarationResultOverlay';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
@@ -72,6 +74,9 @@ import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CountdownTimer from '@/components/CountdownTimer';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
+
+const DECLARATION_RESULT_OVERLAY_MS = 3_000;
+const FAILED_DECLARATION_OVERLAY_EXTRA_MS = 5_000;
 
 // ── Variant display helpers ────────────────────────────────────────────────────
 
@@ -164,11 +169,11 @@ export default function SpectatorView({
   onGoHome,
 }: SpectatorViewProps) {
   // ── Failed Declaration Seat Reveal dismiss state ──────────────
-  const [dismissedDeclarationFailed, setDismissedDeclarationFailed] =
-    React.useState<DeclarationFailedPayload | null>(null);
-  const showFailedReveal = Boolean(
-    declarationFailed && declarationFailed !== dismissedDeclarationFailed
-  );
+  const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
+    useState<Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null>(null);
+  const declarationSeatRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [declarationOverlayResult, setDeclarationOverlayResult] =
+    useState<DeclarationResultPayload | null>(null);
   const [godModeEnabled, setGodModeEnabled] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
@@ -202,6 +207,8 @@ export default function SpectatorView({
     if (lastResultTimer.current) clearTimeout(lastResultTimer.current);
     lastResultTimer.current = setTimeout(() => setLastResultMsg(null), 5_000);
   });
+  const effectiveVariant =
+    variant ?? (cardRemovalVariant as 'remove_2s' | 'remove_7s' | 'remove_8s');
 
   useEffect(() => {
     if (!lastAskResult?.lastMove) return;
@@ -233,23 +240,52 @@ export default function SpectatorView({
   }, [lastAskResult, players]);
 
   useEffect(() => {
-    const msg = lastDeclareResult?.lastMove ?? null;
-    if (!msg) return;
+    const result = lastDeclareResult;
+    const msg = result?.lastMove ?? null;
+    if (!result || !msg) return;
     observedAskBatchRef.current = null;
+    setDeclarationOverlayResult(result);
+    if (result.correct) {
+      setDeclarationSeatRevealByPlayerId(
+        buildSuccessfulDeclarationSeatRevealMap(result, effectiveVariant),
+      );
+      if (declarationSeatRevealTimerRef.current) {
+        clearTimeout(declarationSeatRevealTimerRef.current);
+      }
+      declarationSeatRevealTimerRef.current = setTimeout(() => {
+        setDeclarationSeatRevealByPlayerId(null);
+      }, FAILED_DECLARATION_SEAT_REVEAL_MS);
+    }
     showTransientLastResult(msg, null);
-  }, [lastDeclareResult]);
+  }, [effectiveVariant, lastDeclareResult, showTransientLastResult]);
 
   useEffect(() => {
     if (!declarationFailed) return;
-    const timer = setTimeout(
-      () => setDismissedDeclarationFailed(declarationFailed),
-      FAILED_DECLARATION_SEAT_REVEAL_MS,
+    setDeclarationSeatRevealByPlayerId(
+      buildDeclarationSeatRevealMap(declarationFailed, players, effectiveVariant),
     );
-    return () => clearTimeout(timer);
-  }, [declarationFailed]);
+    if (declarationSeatRevealTimerRef.current) {
+      clearTimeout(declarationSeatRevealTimerRef.current);
+    }
+    declarationSeatRevealTimerRef.current = setTimeout(() => {
+      setDeclarationSeatRevealByPlayerId(null);
+    }, FAILED_DECLARATION_SEAT_REVEAL_MS);
+    return () => {
+      if (declarationSeatRevealTimerRef.current) {
+        clearTimeout(declarationSeatRevealTimerRef.current);
+      }
+    };
+  }, [declarationFailed, effectiveVariant, players]);
+
+  useEffect(() => {
+    return () => {
+      if (declarationSeatRevealTimerRef.current) {
+        clearTimeout(declarationSeatRevealTimerRef.current);
+      }
+    };
+  }, []);
 
   // ── Derived values ─────────────────────────────────────────────────────────
-  const effectiveVariant    = variant ?? (cardRemovalVariant as 'remove_2s' | 'remove_7s' | 'remove_8s');
   const effectivePlayerCount = playerCount ?? gamePlayerCount;
   const seatsPerTeam        = Math.floor(effectivePlayerCount / 2);
 
@@ -259,11 +295,6 @@ export default function SpectatorView({
   const currentTurnPlayer = gameState?.currentTurnPlayerId
     ? players.find((p) => p.playerId === gameState.currentTurnPlayerId)
     : null;
-  const declarationSeatRevealByPlayerId =
-    showFailedReveal && declarationFailed
-      ? buildDeclarationSeatRevealMap(declarationFailed, players, effectiveVariant)
-      : null;
-
   const displayedMove = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove ?? null;
   const selectedPlayer = selectedPlayerId
     && godModeEnabled
@@ -694,6 +725,20 @@ export default function SpectatorView({
           seatWidth={askDeniedCue.seatWidth}
           seatHeight={askDeniedCue.seatHeight}
           onComplete={clearAskDeniedCue}
+        />
+      )}
+
+      {declarationOverlayResult && (
+        <DeclarationResultOverlay
+          result={declarationOverlayResult}
+          players={players}
+          myTeamId={null}
+          onDismiss={() => setDeclarationOverlayResult(null)}
+          autoDismissMs={
+            declarationOverlayResult.correct
+              ? DECLARATION_RESULT_OVERLAY_MS
+              : DECLARATION_RESULT_OVERLAY_MS + FAILED_DECLARATION_OVERLAY_EXTRA_MS
+          }
         />
       )}
     </div>

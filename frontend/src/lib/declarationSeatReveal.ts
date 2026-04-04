@@ -1,5 +1,10 @@
 import { getHalfSuitCards } from '@/types/game';
-import type { CardId, DeclarationFailedPayload, GamePlayer } from '@/types/game';
+import type {
+  CardId,
+  DeclarationFailedPayload,
+  DeclarationResultPayload,
+  GamePlayer,
+} from '@/types/game';
 
 export interface DeclarationSeatRevealCard {
   cardId: CardId;
@@ -7,7 +12,7 @@ export interface DeclarationSeatRevealCard {
   claimedByName: string | null;
 }
 
-export const FAILED_DECLARATION_SEAT_REVEAL_MS = 4_500;
+export const FAILED_DECLARATION_SEAT_REVEAL_MS = 9_500;
 
 /**
  * Group failed-declaration reveal cards by their actual holder so the UI can
@@ -43,6 +48,33 @@ export function buildDeclarationSeatRevealMap(
     });
 
     revealByPlayerId.set(actualPlayerId, revealCards);
+  }
+
+  return revealByPlayerId;
+}
+
+/**
+ * Group declaration cards by assigned holder for successful declarations.
+ * All cards are marked correct because the assignment is the final truth.
+ */
+export function buildSuccessfulDeclarationSeatRevealMap(
+  payload: DeclarationResultPayload,
+  variant: 'remove_2s' | 'remove_7s' | 'remove_8s',
+): Map<string, DeclarationSeatRevealCard[]> {
+  const cards = getHalfSuitCards(payload.halfSuitId, variant);
+  const revealByPlayerId = new Map<string, DeclarationSeatRevealCard[]>();
+
+  for (const cardId of cards) {
+    const assignedPlayerId = payload.assignment[cardId];
+    if (!assignedPlayerId) continue;
+
+    const revealCards = revealByPlayerId.get(assignedPlayerId) ?? [];
+    revealCards.push({
+      cardId,
+      isWrong: false,
+      claimedByName: null,
+    });
+    revealByPlayerId.set(assignedPlayerId, revealCards);
   }
 
   return revealByPlayerId;
