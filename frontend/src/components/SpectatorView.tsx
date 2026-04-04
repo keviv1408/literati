@@ -176,6 +176,7 @@ export default function SpectatorView({
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observedAskBatchRef = useRef<AskMoveBatch | null>(null);
   const processedAskResultKeyRef = useRef<string | null>(null);
+  const processedDeclareResultKeyRef = useRef<string | null>(null);
   const getPlayerDisplayName = useCallback((playerId: string) => {
     return players.find((p) => p.playerId === playerId)?.displayName;
   }, [players]);
@@ -236,6 +237,16 @@ export default function SpectatorView({
     const result = lastDeclareResult;
     const msg = result?.lastMove ?? null;
     if (!result || !msg) return;
+    const declareResultKey = [
+      result.declarerId,
+      result.halfSuitId,
+      result.correct ? '1' : '0',
+      result.winningTeam ?? 'none',
+      result.newTurnPlayerId ?? 'none',
+      msg,
+    ].join('|');
+    if (processedDeclareResultKeyRef.current === declareResultKey) return;
+    processedDeclareResultKeyRef.current = declareResultKey;
     observedAskBatchRef.current = null;
     if (result.correct) {
       setDeclarationSeatRevealByPlayerId(
@@ -249,7 +260,7 @@ export default function SpectatorView({
       }, FAILED_DECLARATION_SEAT_REVEAL_MS);
     }
     showTransientLastResult(msg, null);
-  }, [effectiveVariant, lastDeclareResult, showTransientLastResult]);
+  }, [effectiveVariant, lastDeclareResult]);
 
   useEffect(() => {
     if (!declarationFailed) return;

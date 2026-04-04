@@ -358,6 +358,36 @@ describe('SpectatorView', () => {
         jest.useRealTimers();
       }
     });
+
+    it('does not render a blocking declaration modal for a successful declaration', () => {
+      render(
+        <SpectatorView
+          {...buildProps({
+            lastDeclareResult: {
+              type: 'declaration_result',
+              declarerId: 'p1',
+              halfSuitId: 'high_h',
+              correct: true,
+              winningTeam: 2,
+              newTurnPlayerId: 'p2',
+              assignment: {
+                '8_h': 'p2',
+                '9_h': 'p2',
+                '10_h': 'p4',
+                '11_h': 'p4',
+                '12_h': 'p6',
+                '13_h': 'p6',
+              },
+              lastMove: 'Alice declared High Hearts — correct! Team 2 scores',
+            },
+          })}
+        />,
+      );
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByTestId('declaration-result-overlay')).toBeNull();
+      expect(screen.getByTestId('spectator-last-move').textContent).toContain('Team 2 scores');
+    });
   });
 
   describe('team rows', () => {

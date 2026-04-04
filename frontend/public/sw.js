@@ -7,7 +7,8 @@
  * - Offline fallback page for navigation requests
  */
 
-const CACHE_NAME = 'literati-v1';
+// Bump this whenever we need clients to drop a stale UI bundle immediately.
+const CACHE_NAME = 'literati-v2';
 
 // Assets to pre-cache on install
 const PRECACHE_URLS = [
