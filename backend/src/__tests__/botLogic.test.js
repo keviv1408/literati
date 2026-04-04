@@ -584,6 +584,25 @@ describe('bot blocking support', () => {
 
     expect(chooseBotPostDeclarationTurnPlayer(gs, 'p1')).toBe('p2');
   });
+
+  it('does not keep the turn for the declarer when a blocked teammate chase exists', () => {
+    const hands = new Map([
+      ['p1', new Set(['8_d', '9_d', '10_d', '11_d', '12_d'])],
+      ['p2', new Set(['1_h', '8_h'])],
+      ['p3', new Set(['9_h'])],
+      ['p4', new Set(['8_s'])],
+      ['p5', new Set(['9_s'])],
+      ['p6', new Set()],
+    ]);
+    const gs = buildBotTestGame(hands);
+
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '2_h', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '3_h', true);
+    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '4_h', true);
+    updateTeamIntentAfterAsk(gs, 'p2', '4_h', true);
+
+    expect(chooseBotPostDeclarationTurnPlayer(gs, 'p1')).toBe('p2');
+  });
 });
 
 // ---------------------------------------------------------------------------
