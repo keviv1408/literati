@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
 import CreateRoomModal from '@/components/CreateRoomModal';
+
+const emptySubscribe = () => () => {};
 
 export default function Home() {
   const router = useRouter();
@@ -12,8 +14,7 @@ export default function Home() {
   const { clearGuest } = useGuest();
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   async function handlePlayNow() {
     const session = await ensureGuestName();
@@ -115,7 +116,6 @@ export default function Home() {
         <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-400">
           {[
             '6–8 Players',
-            'Two Teams',
             'Smart Bots',
             'Spectators',
             'No Account Required',
@@ -129,13 +129,23 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Links */}
-        <div className="text-sm text-slate-500">
+        {/* Spectate button */}
+        <div className="flex w-full justify-center">
           <a
             href="/live-games"
-            className="hover:text-emerald-400 transition-colors focus:outline-none focus:underline"
+            className="
+              inline-flex w-full max-w-[240px] items-center justify-center rounded-xl
+              border border-emerald-700/70 bg-slate-900/70 px-4 py-3
+              text-sm font-semibold text-emerald-200 shadow-md shadow-slate-950/40
+              transition-all duration-150 hover:border-emerald-500 hover:bg-emerald-900/40 hover:text-white
+              active:scale-[0.98]
+              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
+            "
           >
-            Live Games
+            <span className="flex items-center gap-2 leading-none">
+              <span aria-hidden="true">👀</span>
+              <span>Spectate Live Games</span>
+            </span>
           </a>
         </div>
       </main>

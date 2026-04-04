@@ -213,7 +213,7 @@ export default function LiveGamesPage() {
 
         {/* Header */}
         <div className="space-y-1 text-center">
-          <h1 className="text-4xl font-black text-white tracking-tight">Live Games</h1>
+          <h1 className="text-4xl font-black text-white tracking-tight">Spectate Live Games</h1>
           <div className="flex items-center justify-center gap-2 text-sm">
             {isConnected ? (
               <span className="flex items-center gap-1.5 text-emerald-400">

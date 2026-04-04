@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Literati — Online Literature Card Game',
   description:
-    'Play Literature (Half-Suit) card game online with friends. 6–8 players, two teams, real-time multiplayer.',
+    'Play Literature (Half-Suit) card game online with friends. 6–8 players, real-time multiplayer.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
