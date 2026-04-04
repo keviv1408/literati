@@ -18,7 +18,6 @@
 
 import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -80,6 +79,7 @@ class MockWebSocket {
   close() { this.readyState = 3; }
   send(data: string) { sentMessages.push(data); }
   constructor(public url: string) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastMockWsInstance = this;
   }
 }
@@ -239,8 +239,8 @@ describe('TurnPassInteraction — normal turn state', () => {
     await setupActiveGame();
 
     await waitFor(() => {
-      expect(screen.getByTestId('ask-button')).toBeTruthy();
-      expect(screen.getByTestId('declare-button')).toBeTruthy();
+      expect(screen.getByTestId('toggle-ask')).toBeTruthy();
+      expect(screen.getByTestId('toggle-declare')).toBeTruthy();
     });
   });
 
@@ -256,7 +256,7 @@ describe('TurnPassInteraction — normal turn state', () => {
   it('does NOT show turn-pass prompt in normal turn state', async () => {
     await setupActiveGame();
 
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
     expect(screen.queryByTestId('turn-pass-action-prompt')).toBeNull();
   });
 });
@@ -268,19 +268,19 @@ describe('TurnPassInteraction — normal turn state', () => {
 describe('TurnPassInteraction — turn-pass mode after correct declaration', () => {
   it('hides Ask and Declare buttons during turn-pass selection', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
     await waitFor(() => {
-      expect(screen.queryByTestId('ask-button')).toBeNull();
-      expect(screen.queryByTestId('declare-button')).toBeNull();
+      expect(screen.queryByTestId('toggle-ask')).toBeNull();
+      expect(screen.queryByTestId('toggle-declare')).toBeNull();
     });
   });
 
   it('shows the turn-pass action prompt during seat selection', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -302,7 +302,7 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
 
   it('action prompt text says to tap a highlighted teammate seat', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -326,7 +326,7 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
 
   it('does NOT activate turn-pass mode for incorrect declarations', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     // Incorrect declaration — eligibleNextTurnPlayerIds is [] and correct=false
     act(() => sendWsMessage(makeDeclarationResult({ correct: false })));
@@ -338,13 +338,13 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
 
   it('does NOT activate turn-pass mode when only one same-team player is eligible', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeSingleEligibleDeclarationResult()));
 
     await waitFor(() => {
-      expect(screen.getByTestId('ask-button')).toBeTruthy();
-      expect(screen.getByTestId('declare-button')).toBeTruthy();
+      expect(screen.getByTestId('toggle-ask')).toBeTruthy();
+      expect(screen.getByTestId('toggle-declare')).toBeTruthy();
     });
     expect(screen.queryByTestId('turn-pass-action-prompt')).toBeNull();
   });
@@ -357,7 +357,7 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
 describe('TurnPassInteraction — seat click dispatches choose_next_turn', () => {
   it('sends choose_next_turn with the tapped player ID', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -384,7 +384,7 @@ describe('TurnPassInteraction — seat click dispatches choose_next_turn', () =>
 
   it('choose_next_turn message carries a chosenPlayerId', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -410,7 +410,7 @@ describe('TurnPassInteraction — seat click dispatches choose_next_turn', () =>
 
   it('choose_next_turn chosenPlayerId is one of the eligible same-team player IDs', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -442,7 +442,7 @@ describe('TurnPassInteraction — seat click dispatches choose_next_turn', () =>
 describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)', () => {
   it('shows "Choosing…" turn indicator after clicking a highlighted seat', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -461,7 +461,7 @@ describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)
 
   it('Ask and Declare buttons remain hidden while waiting for server ack', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -475,14 +475,14 @@ describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)
 
     // Interaction is still blocked — no Ask/Declare yet
     await waitFor(() => {
-      expect(screen.queryByTestId('ask-button')).toBeNull();
-      expect(screen.queryByTestId('declare-button')).toBeNull();
+      expect(screen.queryByTestId('toggle-ask')).toBeNull();
+      expect(screen.queryByTestId('toggle-declare')).toBeNull();
     });
   });
 
   it('turn-pass action prompt shows "Choosing…" text after click', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -502,7 +502,7 @@ describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)
 
   it('highlighted rings disappear after clicking a seat (optimistic clear)', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -529,11 +529,11 @@ describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)
 describe('TurnPassInteraction — server ack restores normal state', () => {
   it('clears turn-pass mode when post_declaration_turn_selected arrives', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     // Trigger turn-pass mode
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
-    await waitFor(() => expect(screen.queryByTestId('ask-button')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('toggle-ask')).toBeNull());
 
     // Click a seat to enter pending-ack state
     await waitFor(() => {
@@ -575,11 +575,11 @@ describe('TurnPassInteraction — server ack restores normal state', () => {
 
   it('turn-pass mode is also cleared when ask_result arrives (safety reset)', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     // Enter turn-pass mode
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
-    await waitFor(() => expect(screen.queryByTestId('ask-button')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('toggle-ask')).toBeNull());
 
     // Click a seat
     await waitFor(() => {
@@ -628,7 +628,7 @@ describe('TurnPassInteraction — server ack restores normal state', () => {
 describe('TurnPassInteraction — keyboard accessibility', () => {
   it('highlighted seat responds to Enter keypress', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
@@ -657,7 +657,7 @@ describe('TurnPassInteraction — keyboard accessibility', () => {
 
   it('highlighted seat has tabIndex=0 for keyboard navigation', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('ask-button')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 

@@ -5,12 +5,12 @@
 import type { CreateRoomPayload } from '@/types/room';
 
 const mockGetCachedToken = jest.fn<string | null, [string]>();
-const mockSaveToken = jest.fn<void, [string, number, string]>();
+const mockSaveToken = jest.fn<void, [string, number, string, string | undefined]>();
 const mockClearToken = jest.fn<void, []>();
 
 jest.mock('@/lib/backendSession', () => ({
   getCachedToken: (...args: [string]) => mockGetCachedToken(...args),
-  saveToken: (...args: [string, number, string]) => mockSaveToken(...args),
+  saveToken: (...args: [string, number, string, string | undefined]) => mockSaveToken(...args),
   clearToken: () => mockClearToken(),
 }));
 
@@ -89,7 +89,8 @@ describe('createRoom', () => {
     expect(mockSaveToken).toHaveBeenCalledWith(
       'fresh-guest-token',
       1_900_000_000_000,
-      'Viv'
+      'Viv',
+      undefined,
     );
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenNthCalledWith(

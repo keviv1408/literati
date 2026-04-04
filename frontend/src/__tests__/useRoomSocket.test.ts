@@ -30,8 +30,18 @@
  */
 
 import { renderHook, act } from '@testing-library/react';
-import { useRoomSocket } from '@/hooks/useRoomSocket';
+import {
+  useRoomSocket as useRoomSocketImpl,
+  type UseRoomSocketOptions,
+} from '@/hooks/useRoomSocket';
 import * as kickedRoomsModule from '@/lib/kickedRooms';
+
+function useRoomSocket(options: UseRoomSocketOptions) {
+  return useRoomSocketImpl({
+    bearerToken: 'test-token',
+    ...options,
+  });
+}
 
 // ── Mock WebSocket ────────────────────────────────────────────────────────────
 
@@ -132,7 +142,6 @@ describe('useRoomSocket', () => {
 
   describe('WebSocket URL construction', () => {
     it('uses the ws:// scheme for http API URLs', () => {
-      // NEXT_PUBLIC_API_URL is undefined in tests, so it falls back to localhost:3001
       renderHook(() =>
         useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
       );
@@ -140,13 +149,11 @@ describe('useRoomSocket', () => {
       expect(wsInstances[0].url).toMatch(/^ws:\/\//);
     });
 
-    it('connects to the /ws endpoint', () => {
-      // The new protocol sends join-room as a message after connection;
-      // the room code is NOT embedded in the path.
+    it('connects to the room-specific /ws/room/<ROOMCODE> endpoint', () => {
       renderHook(() =>
         useRoomSocket({ roomCode: 'abc123', sessionId: 'sess-1' })
       );
-      expect(wsInstances[0].url).toContain('/ws');
+      expect(wsInstances[0].url).toContain('/ws/room/ABC123');
     });
 
     it('appends the bearer token as a query param when provided', () => {
@@ -160,15 +167,23 @@ describe('useRoomSocket', () => {
       expect(wsInstances[0].url).toContain('token=my-token');
     });
 
-    it('omits the token query param when bearerToken is null', () => {
-      renderHook(() =>
+    it('stays idle when bearerToken is null', () => {
+      const { result } = renderHook(() =>
         useRoomSocket({
           roomCode: 'ABC123',
           sessionId: 'sess-1',
           bearerToken: null,
         })
       );
-      expect(wsInstances[0].url).not.toContain('token=');
+      expect(wsInstances).toHaveLength(0);
+      expect(result.current.wsStatus).toBe('idle');
+    });
+
+    it('includes the default test token when no explicit bearerToken override is provided', () => {
+      renderHook(() =>
+        useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
+      );
+      expect(wsInstances[0].url).toContain('token=test-token');
     });
   });
 

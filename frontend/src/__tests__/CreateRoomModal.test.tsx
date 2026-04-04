@@ -41,6 +41,15 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
+jest.mock('@/contexts/GuestContext', () => ({
+  useGuest: () => ({
+    guestSession: {
+      displayName: 'TestPlayer',
+      sessionId: 'guest-session-123',
+    },
+  }),
+}));
+
 // Mock clipboard
 const mockWriteText = jest.fn().mockResolvedValue(undefined);
 Object.defineProperty(navigator, 'clipboard', {

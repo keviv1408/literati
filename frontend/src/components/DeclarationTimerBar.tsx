@@ -81,8 +81,10 @@ export default function DeclarationTimerBar({
     return () => cancelAnimationFrame(rafId);
   }, [expiresAt]);
 
-  const secs      = Math.ceil(remaining / 1000);
-  const pct       = durationMs > 0 ? Math.min(100, (remaining / durationMs) * 100) : 0;
+  const secs = Math.ceil(remaining / 1000);
+  const pct = durationMs > 0
+    ? Math.min(100, Math.max(0, Math.round((remaining / durationMs) * 1000) / 10))
+    : 0;
   // Warning (red) state activates at ≤ WARNING_THRESHOLD_S (10 s) — aligns with
   // CountdownTimer's WARNING_THRESHOLD_S so all timer components are consistent.
   const isWarning = secs <= WARNING_THRESHOLD_S;

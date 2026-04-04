@@ -29,6 +29,7 @@ const mockPush    = jest.fn();
 const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useSearchParams: () => ({ get: () => null }),
 }));
 
 const mockGetRoomByCode = jest.fn();
@@ -76,6 +77,7 @@ class MockWebSocket {
   close() { this.readyState = 3; }
   send() {}
   constructor(public url: string) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastMockWs = this;
   }
 }

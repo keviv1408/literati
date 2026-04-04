@@ -55,7 +55,8 @@ class MockWebSocket {
   send = jest.fn();
   static readonly OPEN = 1;
   static readonly CLOSED = 3;
-  constructor(_url: string) {
+  constructor(url: string) {
+    void url;
     wsInstances.push(this as unknown as MockWsInstance);
   }
 }
@@ -121,9 +122,9 @@ afterEach(() => {
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('LiveGamesPage', () => {
-  it('renders the "Live Games" heading', () => {
+  it('renders the "Spectate Live Games" heading', () => {
     render(<LiveGamesPage />);
-    expect(screen.getByText('Live Games')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Spectate Live Games' })).toBeDefined();
   });
 
   it('shows "Connecting…" before the socket opens', () => {

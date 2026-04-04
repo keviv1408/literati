@@ -508,7 +508,7 @@ describe('SpectatorView', () => {
   describe('read-only enforcement (no action controls)', () => {
     it('does not render a declare button', () => {
       render(<SpectatorView {...buildProps()} />);
-      expect(screen.queryByTestId('declare-button')).toBeNull();
+      expect(screen.queryByTestId('toggle-declare')).toBeNull();
       expect(screen.queryByText(/Declare/)).toBeNull();
     });
 

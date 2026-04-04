@@ -13,6 +13,8 @@
 
 import React, { Suspense, act } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import ProfilePage from '@/app/profile/[username]/page';
+import { ApiError } from '@/lib/api';
 
 // ── Mock next/navigation ──────────────────────────────────────────────────────
 const mockPush = jest.fn();
@@ -51,11 +53,8 @@ function buildProfile(overrides = {}) {
   };
 }
 
-// Wrap params in a Promise as the page expects.
-// The page uses React.use(params) which suspends until the promise resolves,
-// so we wrap in a Suspense boundary.
+// Wrap params in a Promise to match the page contract.
 async function renderProfile(username = 'Alice') {
-  const ProfilePage = require('@/app/profile/[username]/page').default;
   const params = Promise.resolve({ username });
   await act(async () => {
     render(
@@ -90,7 +89,6 @@ describe('ProfilePage — /profile/[username]', () => {
   // ── 404 / not-found state ─────────────────────────────────────────────────
 
   it('2. shows "Profile Not Found" when API returns 404', async () => {
-    const { ApiError } = require('@/lib/api');
     mockGetProfileByUsername.mockRejectedValue(new ApiError(404, 'Profile not found'));
     await renderProfile('nobody');
 
@@ -104,7 +102,6 @@ describe('ProfilePage — /profile/[username]', () => {
   // ── Error state ────────────────────────────────────────────────────────────
 
   it('3. shows error message for non-404 API errors', async () => {
-    const { ApiError } = require('@/lib/api');
     mockGetProfileByUsername.mockRejectedValue(
       new ApiError(500, 'Internal Server Error')
     );
@@ -145,8 +142,7 @@ describe('ProfilePage — /profile/[username]', () => {
     await renderProfile('Alice');
 
     await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
-    // Initials: first 2 chars uppercased
-    expect(screen.getByText('AL')).toBeTruthy();
+    expect(screen.getByText('A')).toBeTruthy();
   });
 
   it('7. renders Games Completed stat', async () => {
