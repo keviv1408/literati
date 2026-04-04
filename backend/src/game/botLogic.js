@@ -401,83 +401,6 @@ function _getRecentTeammateSignalEntry(gs, botId, teamId, halfSuitId, currentMov
   return entry;
 }
 
-function _getBlockingTeammateChases(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
-  const teamId = getPlayerTeam(gs, botId);
-  if (!teamId) return [];
-
-  const liveOpponents = gs.players.filter(
-    (player) => player.teamId !== teamId && getCardCount(gs, player.playerId) > 0
-  );
-  if (liveOpponents.length === 0) return [];
-
-  const chases = [];
-  for (const halfSuitId of allHalfSuitIds()) {
-    if (isHalfSuitDeclared(gs, halfSuitId)) continue;
-
-    const entry = _getRecentTeammateSignalEntry(gs, botId, teamId, halfSuitId, currentMoveIndex);
-    if (!entry?.sourcePlayerId) continue;
-    if (getCardCount(gs, entry.sourcePlayerId) === 0) continue;
-
-    const teammateMinimum = _getVisibleHalfSuitMinimumCount(
-      gs,
-      botId,
-      entry.sourcePlayerId,
-      halfSuitId
-    );
-    if (teammateMinimum < TEAM_CLOSEOUT_PRIORITY_THRESHOLD) continue;
-
-    const blockedOpponentIds = liveOpponents
-      .filter((player) => !_isKnownEmptyInHalfSuit(gs, botId, player.playerId, halfSuitId))
-      .map((player) => player.playerId);
-    if (blockedOpponentIds.length === 0) continue;
-
-    chases.push({
-      halfSuitId,
-      teammateId: entry.sourcePlayerId,
-      teammateMinimum,
-      signalStrength: _effectiveSignalStrength(entry, currentMoveIndex),
-      blockedOpponentIds,
-    });
-  }
-
-  return chases.sort((a, b) => {
-    const minimumDiff = b.teammateMinimum - a.teammateMinimum;
-    if (minimumDiff !== 0) return minimumDiff;
-
-    const signalDiff = b.signalStrength - a.signalStrength;
-    if (signalDiff !== 0) return signalDiff;
-
-    const blockedDiff = b.blockedOpponentIds.length - a.blockedOpponentIds.length;
-    if (blockedDiff !== 0) return blockedDiff;
-
-    const suitDiff = a.halfSuitId.localeCompare(b.halfSuitId);
-    if (suitDiff !== 0) return suitDiff;
-
-    return a.teammateId.localeCompare(b.teammateId);
-  });
-}
-
-function _getBlockedOpponentIds(gs, botId, currentMoveIndex = (gs.moveHistory ?? []).length) {
-  const blockedOpponentIds = new Set();
-
-  for (const chase of _getBlockingTeammateChases(gs, botId, currentMoveIndex)) {
-    for (const opponentId of chase.blockedOpponentIds) {
-      blockedOpponentIds.add(opponentId);
-    }
-  }
-
-  return blockedOpponentIds;
-}
-
-function _isBlockedAskTarget(gs, botId, targetId, currentMoveIndex = (gs.moveHistory ?? []).length) {
-  return _getBlockedOpponentIds(gs, botId, currentMoveIndex).has(targetId);
-}
-
-function chooseBotPostDeclarationTurnPlayer(gs, botId) {
-  const bestChase = _getBlockingTeammateChases(gs, botId)[0];
-  return bestChase?.teammateId ?? null;
-}
-
 function updateTeamIntentAfterAsk(gs, askerId, cardId, success) {
   const teamId = getPlayerTeam(gs, askerId);
   const halfSuitId = cardHalfSuit(gs, cardId);
@@ -809,9 +732,10 @@ function _buildBestGuessAssignment(
 }
 
 function _findKnownHolderAsk(gs, askerId, validOpponents, candidateCards) {
+  const shuffledOpps  = _shuffle([...validOpponents]);
+
   for (const card of candidateCards) {
-    const orderedOpponents = _orderOpponentsForCard(gs, askerId, validOpponents, card);
-    for (const opp of orderedOpponents) {
+    for (const opp of shuffledOpps) {
       if (_getEffectiveKnowledge(gs, askerId, opp.playerId, card) !== true) continue;
       const askVal = validateAsk(gs, askerId, opp.playerId, card);
       if (askVal.valid) {
@@ -888,7 +812,6 @@ function _orderOpponentsForCard(gs, askerId, validOpponents, cardId) {
   if (!halfSuitId) return shuffledOpponents;
 
   const currentMoveIndex = (gs.moveHistory ?? []).length;
-  const blockedOpponentIds = _getBlockedOpponentIds(gs, askerId, currentMoveIndex);
   const baseOrder = new Map(
     shuffledOpponents.map((opponent, index) => [opponent.playerId, index])
   );
@@ -900,10 +823,6 @@ function _orderOpponentsForCard(gs, askerId, validOpponents, cardId) {
   );
 
   return shuffledOpponents.sort((a, b) => {
-    const blockingDiff =
-      Number(blockedOpponentIds.has(a.playerId)) - Number(blockedOpponentIds.has(b.playerId));
-    if (blockingDiff !== 0) return blockingDiff;
-
     const priorityDiff = _compareOpponentAskPriority(
       priorities.get(a.playerId),
       priorities.get(b.playerId)
@@ -985,17 +904,11 @@ function _scoreCardForAsk(gs, askerId, cardId, teamPlayers, validOpponents, pref
   const halfSuitId = cardHalfSuit(gs, cardId);
   const currentMoveIndex = (gs.moveHistory ?? []).length;
   let bestTargetPriority = null;
-  let bestTargetBlockingRisk = 1;
 
   if (halfSuitId) {
     for (const opp of validOpponents) {
       if (_isKnownMissing(gs, askerId, opp.playerId, cardId)) continue;
       if (_isKnownEmptyInHalfSuit(gs, askerId, opp.playerId, halfSuitId)) continue;
-
-      bestTargetBlockingRisk = Math.min(
-        bestTargetBlockingRisk,
-        _isBlockedAskTarget(gs, askerId, opp.playerId, currentMoveIndex) ? 1 : 0
-      );
 
       const priority = _getOpponentAskPriority(
         gs,
@@ -1012,7 +925,6 @@ function _scoreCardForAsk(gs, askerId, cardId, teamPlayers, validOpponents, pref
 
   return {
     preferredSignal: cardId === preferredSignalCardId ? 1 : 0,
-    bestTargetBlockingRisk,
     bestTargetKnownSuitCards: bestTargetPriority?.knownSuitCards ?? 0,
     bestTargetRecentActivity: bestTargetPriority?.recentActivity ?? 0,
     bestTargetPresence: bestTargetPriority?.presence ?? 0,
@@ -1040,9 +952,6 @@ function _orderCandidateCardsForHalfSuit(gs, askerId, halfSuitId, candidateCards
 
     const preferredDiff = bScore.preferredSignal - aScore.preferredSignal;
     if (preferredDiff !== 0) return preferredDiff;
-
-    const blockingDiff = aScore.bestTargetBlockingRisk - bScore.bestTargetBlockingRisk;
-    if (blockingDiff !== 0) return blockingDiff;
 
     const targetKnownDiff = bScore.bestTargetKnownSuitCards - aScore.bestTargetKnownSuitCards;
     if (targetKnownDiff !== 0) return targetKnownDiff;
@@ -1381,7 +1290,7 @@ function decideBotMove(gs, botId) {
       if (!hsCards.some((c) => getHand(gs, botId).has(c))) continue;
       for (const card of hsCards) {
         if (getHand(gs, botId).has(card)) continue;
-        for (const opp of _orderOpponentsForCard(gs, botId, validOpponents, card)) {
+        for (const opp of validOpponents) {
           const askVal = validateAsk(gs, botId, opp.playerId, card);
           if (askVal.valid) {
             console.warn(
@@ -1653,7 +1562,6 @@ function _shuffle(arr) {
 module.exports = {
   decideBotMove,
   completeBotFromPartial,
-  chooseBotPostDeclarationTurnPlayer,
   updateKnowledgeAfterAsk,
   updateKnowledgeAfterDeclaration,
   updateTeamIntentAfterAsk,

@@ -25,7 +25,6 @@
 
 const {
   decideBotMove,
-  chooseBotPostDeclarationTurnPlayer,
   updateKnowledgeAfterAsk,
   updateKnowledgeAfterDeclaration,
   updateTeamIntentAfterAsk,
@@ -511,57 +510,6 @@ describe('decideBotMove — asks for a known card', () => {
       }
       expect(botHasInSameSuit).toBe(true);
     }
-  });
-});
-
-describe('bot blocking support', () => {
-  function buildBlockingGame() {
-    const hands = new Map([
-      ['p1', new Set(['1_s'])],
-      ['p2', new Set(['1_h', '8_h'])],
-      ['p3', new Set(['9_h'])],
-      ['p4', new Set(['8_s'])],
-      ['p5', new Set(['9_s'])],
-      ['p6', new Set()],
-    ]);
-    const gs = buildBotTestGame(hands);
-
-    // Teammate p2 has publicly built a 4-card lower-heart chase.
-    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '2_h', true);
-    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '3_h', true);
-    updateKnowledgeAfterAsk(gs, 'p2', 'p4', '4_h', true);
-    updateTeamIntentAfterAsk(gs, 'p2', '4_h', true);
-
-    // Opponent p5 is publicly cleared of lower hearts, so passing the turn to
-    // them is safer than passing it to p4.
-    gs.botKnowledge.set('p5', new Map([
-      ['1_h', false],
-      ['2_h', false],
-      ['3_h', false],
-      ['4_h', false],
-      ['5_h', false],
-      ['6_h', false],
-    ]));
-
-    // Without blocking, p4 would look like the stronger lower-spade ask target.
-    updateTeamIntentAfterAsk(gs, 'p4', '2_s', false);
-
-    return gs;
-  }
-
-  it('avoids asking a dangerous opponent when a teammate is close to closing a suit', () => {
-    const gs = buildBlockingGame();
-
-    const move = decideBotMove(gs, 'p1');
-
-    expect(move.action).toBe('ask');
-    expect(move.targetId).toBe('p5');
-  });
-
-  it('prefers passing a post-declaration turn to the blocked teammate', () => {
-    const gs = buildBlockingGame();
-
-    expect(chooseBotPostDeclarationTurnPlayer(gs, 'p1')).toBe('p2');
   });
 });
 
