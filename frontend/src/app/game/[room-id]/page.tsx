@@ -1022,11 +1022,13 @@ export default function GamePage({ params }: PageProps) {
   // For correct declarations the server waits for this ack; failed declarations
   // already advance immediately, so no extra message is needed.
   const handleDeclarationOverlayDismiss = useCallback(() => {
-    if (declarationOverlayResult?.correct) {
-      sendGameAdvance();
-    }
-    setDeclarationOverlayResult(null);
-  }, [declarationOverlayResult, sendGameAdvance]);
+    setDeclarationOverlayResult((prev) => {
+      if (prev?.correct) {
+        sendGameAdvance();
+      }
+      return null;
+    });
+  }, [sendGameAdvance]);
 
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
