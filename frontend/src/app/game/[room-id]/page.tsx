@@ -681,6 +681,9 @@ export default function GamePage({ params }: PageProps) {
   const currentTurnPlayer = gameState?.currentTurnPlayerId
     ? players.find((p) => p.playerId === gameState.currentTurnPlayerId)
     : null;
+  const postDeclarationChooser = postDeclarationHighlight
+    ? players.find((p) => p.playerId === postDeclarationHighlight.declarerId) ?? null
+    : null;
   const team1Players = players.filter((p) => p.teamId === 1);
   const team2Players = players.filter((p) => p.teamId === 2);
   const currentLastMoveMessage = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove;
@@ -902,13 +905,17 @@ export default function GamePage({ params }: PageProps) {
   //
   // After a correct declaration, `postDeclarationHighlight` carries the set of
   // same-team player IDs eligible to receive the turn. All clients see the
-  // cyan seat rings (informational); only the current turn player gets a click
-  // handler to redirect the turn via `choose_next_turn`.
+  // cyan seat rings (informational); only the declarer gets a click handler
+  // to redirect the turn via `choose_next_turn`.
   const highlightedPlayerIds = postDeclarationHighlight
     ? new Set(postDeclarationHighlight.eligibleSameTeamIds)
     : undefined;
 
-  // Only the current turn player (typically the declarant) can click a seat.
+  const isPostDeclarationChooser = Boolean(
+    postDeclarationHighlight && myPlayerId && postDeclarationHighlight.declarerId === myPlayerId,
+  );
+
+  // Only the declarer can click a seat during this selection window.
   // Other clients see the highlight as read-only visual feedback.
   const handleChooseNextTurnSeat = useCallback(
     (chosenPlayerId: string) => {
@@ -918,17 +925,16 @@ export default function GamePage({ params }: PageProps) {
   );
 
   // Pass the click handler only when: highlights are active AND the local
-  // player is the one with the current turn (i.e., the declarant).
+  // player is the declarer for this post-declaration window.
   const seatClickHandler =
     highlightedPlayerIds &&
-    isMyTurn &&
-    gameState?.currentTurnPlayerId === myPlayerId
+    isPostDeclarationChooser
       ? handleChooseNextTurnSeat
       : undefined;
 
   // ── Turn-pass mode ────────────────────────────────────────────
   //
-  // `isTurnPassMode` is true when the local player is the current turn player
+  // `isTurnPassMode` is true when the local player is the declarer
   // AND is in the post-declaration seat-selection window. This covers two
   // sub-states:
   // 1. `postDeclarationHighlight !== null` — seats are highlighted, waiting
@@ -941,7 +947,7 @@ export default function GamePage({ params }: PageProps) {
   // • Ask and Declare buttons are hidden (replaced by a selection prompt).
   // • The ask-prompt hint is suppressed.
   // • The turn-indicator banner shows seat-selection guidance.
-  const isTurnPassMode = isMyTurn && (postDeclarationHighlight !== null || pendingTurnPassAck);
+  const isTurnPassMode = isPostDeclarationChooser && (postDeclarationHighlight !== null || pendingTurnPassAck);
 
   const handleAsk = useCallback((targetId: string, cardId: CardId, batchCardIds?: CardId[]) => {
     setActionLoading(true);
@@ -1266,15 +1272,13 @@ export default function GamePage({ params }: PageProps) {
 
       {gameState && (
         <div className={['relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium', isMyTurn ? 'bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40' : 'bg-slate-800/50 text-slate-400 border-b border-slate-700/40'].join(' ')} role="status" aria-live="polite" data-testid="turn-indicator">
-          {isMyTurn ? (
-            isTurnPassMode ? (
-              // turn-pass selection window — guide the declarant
-              pendingTurnPassAck
-                ? (<><span aria-hidden="true">⏳</span><span data-testid="turn-pass-pending-label">Choosing next turn…</span></>)
-                : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)
-            ) : (
-              <><span aria-hidden="true">🎯</span><span>Your turn — ask for a card or declare</span></>
-            )
+          {isTurnPassMode ? (
+            // turn-pass selection window — guide the declarant
+            pendingTurnPassAck
+              ? (<><span aria-hidden="true">⏳</span><span data-testid="turn-pass-pending-label">Choosing next turn…</span></>)
+              : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)
+          ) : isMyTurn ? (
+            <><span aria-hidden="true">🎯</span><span>Your turn — ask for a card or declare</span></>
           ) : currentTurnPlayer ? (<><span aria-hidden="true">⏳</span><span>Waiting for <strong>{currentTurnPlayer.displayName}</strong>{currentTurnPlayer.isBot && ' 🤖'}…</span></>) : (<span>Waiting for game to start…</span>)}
         </div>
       )}
@@ -1330,8 +1334,8 @@ export default function GamePage({ params }: PageProps) {
        */}
       {postDeclarationHighlight && gameState && (
         <DeclarationTurnPassPrompt
-          isMyTurn={isMyTurn && gameState.currentTurnPlayerId === myPlayerId}
-          chooserName={currentTurnPlayer?.displayName ?? null}
+          isMyTurn={isPostDeclarationChooser}
+          chooserName={postDeclarationChooser?.displayName ?? currentTurnPlayer?.displayName ?? null}
         />
       )}
 
