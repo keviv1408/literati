@@ -1428,6 +1428,12 @@ export default function GamePage({ params }: PageProps) {
         const mainContent = (
           <>
           <main className="relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2 sm:px-3 sm:py-3 lg:px-5 xl:px-6">
+            {isDealAnimating && (
+              <DealAnimation
+                playerCount={(effectivePlayerCount === 8 ? 8 : 6) as 6 | 8}
+                onComplete={() => setIsDealAnimating(false)}
+              />
+            )}
             <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem]">
               <CircularGameTable
                 players={players}
@@ -1660,14 +1666,6 @@ export default function GamePage({ params }: PageProps) {
             <p className="text-lg font-semibold">Game starting…</p>
           </div>
         </div>
-      )}
-
-      {/* ── Deal animation overlay ─────────────────────────── */}
-      {isDealAnimating && (
-        <DealAnimation
-          playerCount={(effectivePlayerCount === 8 ? 8 : 6) as 6 | 8}
-          onComplete={() => setIsDealAnimating(false)}
-        />
       )}
 
       {/* ── Card flight animation overlay (AC 33) ─────────────── */}

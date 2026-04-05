@@ -161,7 +161,7 @@ export default function DealAnimation({ playerCount, onComplete }: DealAnimation
 
   return (
     <div
-      className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center"
+      className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center"
       aria-hidden="true"
       data-testid="deal-animation"
     >
