@@ -1082,7 +1082,7 @@ export default function GamePage({ params }: PageProps) {
     if (rematchStarted) {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-4" data-testid="rematch-starting-view">
-          <span className="text-4xl animate-bounce">🔄</span>
+          <span className="text-4xl animate-spin" style={{ animationDuration: '1s' }}>🔄</span>
           <p className="text-xl font-bold text-white">Rematch starting…</p>
           <p className="text-sm text-slate-400">Starting the new game…</p>
         </div>
@@ -1240,16 +1240,16 @@ export default function GamePage({ params }: PageProps) {
       <header className="relative z-20 flex items-center justify-between px-3 py-2 border-b border-slate-700/50 bg-slate-900/70 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <button onClick={handleGoHome} aria-label="Home" className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">←</button>
-          <span className="font-mono font-bold text-white text-sm" data-testid="game-room-code">{room.code}</span>
+          <span className="font-mono font-bold text-white text-sm max-w-[7ch] truncate" data-testid="game-room-code">{room.code}</span>
           <span className="text-xs text-slate-500 hidden sm:inline">{VARIANT_LABELS[room.card_removal_variant]} · {effectivePlayerCount === 6 ? '3v3' : '4v4'}</span>
         </div>
         <div className="flex items-center gap-2 text-sm font-semibold" aria-label="Score" data-testid="game-score">
-          {/* Team 1 score — flashes yellow briefly after a declaration */}
+          {/* Team 1 score — flashes emerald briefly after a declaration */}
           <span
             className={[
               'transition-colors duration-300',
               scoreFlash === 1
-                ? 'text-yellow-300 scale-110'
+                ? 'text-emerald-300 scale-110'
                 : myTeamId === 1 ? 'text-emerald-300' : 'text-slate-400',
             ].join(' ')}
             data-testid="score-team1"
@@ -1257,12 +1257,12 @@ export default function GamePage({ params }: PageProps) {
             T1 <span className="text-white text-base">{gameState?.scores.team1 ?? 0}</span>
           </span>
           <span className="text-slate-600">—</span>
-          {/* Team 2 score — flashes yellow briefly after a declaration */}
+          {/* Team 2 score — flashes blue briefly after a declaration */}
           <span
             className={[
               'transition-colors duration-300',
               scoreFlash === 2
-                ? 'text-yellow-300 scale-110'
+                ? 'text-blue-300 scale-110'
                 : myTeamId === 2 ? 'text-emerald-300' : 'text-slate-400',
             ].join(' ')}
             data-testid="score-team2"
@@ -1542,7 +1542,7 @@ export default function GamePage({ params }: PageProps) {
                 </div>
                 {showAskInline && isMyTurn && !isTurnPassMode && (
                   selectedAskHalfSuit && (
-                    <div ref={askTrayRef}>
+                    <div ref={askTrayRef} role="dialog" aria-modal="true" aria-label="Ask for a card">
                       <InlineAskTray
                         myHand={myHand}
                         variant={effectiveVariant}
@@ -1555,7 +1555,7 @@ export default function GamePage({ params }: PageProps) {
                   )
                 )}
                 {showDeclareTray && (
-                  <div ref={declareTrayRef}>
+                  <div ref={declareTrayRef} role="dialog" aria-modal="true" aria-label="Declare a half-suit">
                     <InlineDeclareTray
                       halfSuitId={declareSelectedSuit!}
                       unassignedCards={declareUnassignedCards}
