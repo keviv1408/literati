@@ -41,6 +41,7 @@ const TEAM_SIGNAL_FAILED_ASK_BOOST = 2;
 const TEAM_SIGNAL_DECAY_INTERVAL_MOVES = 3;
 const TEAM_CLOSEOUT_PRIORITY_THRESHOLD = 4;
 const OPPONENT_CLOSEOUT_THREAT_THRESHOLD = 4;
+const HALF_SUIT_SIZE = 6;
 const TEAMMATE_ASSIST_PRIORITY_THRESHOLD = 4;
 const TEAMMATE_ASSIST_MEMORY_MOVES = 8;
 
@@ -469,6 +470,17 @@ function _getVisibleOpponentHalfSuitCount(gs, observerId, teamPlayers, halfSuitI
   }
 
   return count;
+}
+
+function _getVisibleOpponentHalfSuitMinimumCount(gs, observerId, teamPlayers, halfSuitId) {
+  const teamPlayerIds = new Set(teamPlayers.map((p) => p.playerId));
+  const opponents = gs.players.filter((p) => !teamPlayerIds.has(p.playerId));
+  const exactCount = _getVisibleOpponentHalfSuitCount(gs, observerId, teamPlayers, halfSuitId);
+  const presenceCount = opponents.reduce(
+    (sum, p) => sum + _getVisibleHalfSuitMinimumCount(gs, observerId, p.playerId, halfSuitId),
+    0
+  );
+  return Math.max(exactCount, presenceCount);
 }
 
 function _getSuitCloseoutPriority(teamCount) {
@@ -1126,7 +1138,7 @@ function decideBotMove(gs, botId) {
             _getVisibleTeamHalfSuitCount(gs, botId, teamPlayers, halfSuitId),
             _getVisibleTeamHalfSuitMinimumCount(gs, botId, teamPlayers, halfSuitId)
           );
-          const opponentCount = _getVisibleOpponentHalfSuitCount(gs, botId, teamPlayers, halfSuitId);
+          const opponentCount = _getVisibleOpponentHalfSuitMinimumCount(gs, botId, teamPlayers, halfSuitId);
           return {
             teammateAssistPriority: _getTeammateAssistPriority(
               gs,
@@ -1137,6 +1149,14 @@ function decideBotMove(gs, botId) {
               currentMoveIndex
             ),
             closeoutPriority: _getSuitCloseoutPriority(teamCount),
+            // When all cards in a half-suit are accounted for between both
+            // teams and opponents hold many of them, every ask is a guaranteed
+            // hit — top priority to steal before they declare.
+            criticalOpponentThreat:
+              opponentCount >= OPPONENT_CLOSEOUT_THREAT_THRESHOLD &&
+              teamCount + opponentCount >= HALF_SUIT_SIZE
+                ? opponentCount
+                : 0,
             // When opponents have concentrated many cards (≥ threshold) in a
             // half-suit, treat it as an urgent defensive closeout — the
             // opponent team could declare this suit soon.
@@ -1157,6 +1177,9 @@ function decideBotMove(gs, botId) {
     const prioritizedBotHalfSuits = [...botHalfSuits].sort((a, b) => {
       const aPriority = suitPriority.get(a);
       const bPriority = suitPriority.get(b);
+      // All cards accounted for and opponents hold many — sure shot, top priority.
+      const criticalDiff = (bPriority?.criticalOpponentThreat ?? 0) - (aPriority?.criticalOpponentThreat ?? 0);
+      if (criticalDiff !== 0) return criticalDiff;
       const assistDiff = (bPriority?.teammateAssistPriority ?? 0) - (aPriority?.teammateAssistPriority ?? 0);
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
@@ -1216,6 +1239,7 @@ function decideBotMove(gs, botId) {
       if (isHalfSuitDeclared(gs, halfSuitId)) continue;
       const cards = halfSuitsMap.get(halfSuitId) ?? [];
       const priority = suitPriority.get(halfSuitId) ?? {
+        criticalOpponentThreat: 0,
         teammateAssistPriority: 0,
         closeoutPriority: 0,
         opponentCloseoutThreat: 0,
@@ -1231,6 +1255,7 @@ function decideBotMove(gs, botId) {
       if (askableCards.length > 0) {
         halfSuitScores.push({
           halfSuitId,
+          criticalOpponentThreat: priority.criticalOpponentThreat,
           teammateAssistPriority: priority.teammateAssistPriority,
           closeoutPriority: priority.closeoutPriority,
           opponentCloseoutThreat: priority.opponentCloseoutThreat,
@@ -1244,6 +1269,8 @@ function decideBotMove(gs, botId) {
     }
 
     halfSuitScores.sort((a, b) => {
+      const criticalDiff = b.criticalOpponentThreat - a.criticalOpponentThreat;
+      if (criticalDiff !== 0) return criticalDiff;
       const assistDiff = b.teammateAssistPriority - a.teammateAssistPriority;
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
