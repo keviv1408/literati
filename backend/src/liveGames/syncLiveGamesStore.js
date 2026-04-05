@@ -65,8 +65,12 @@ async function syncInProgressRoomsToLiveGamesStore(supabase) {
       startedAt,
     };
 
-    if (liveGamesStore.get(room.code)) {
-      liveGamesStore.updateGame(room.code, payload);
+    const existing = liveGamesStore.get(room.code);
+    if (existing) {
+      // Preserve the in-memory startedAt so the elapsed timer doesn't reset on
+      // each client reconnect. updated_at changes with every game action, so
+      // using it here would make the timer restart on every page refresh.
+      liveGamesStore.updateGame(room.code, { ...payload, startedAt: existing.startedAt });
     } else {
       liveGamesStore.addGame(payload);
     }
