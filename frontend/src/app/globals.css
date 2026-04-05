@@ -77,7 +77,7 @@ body:has([role="dialog"]) {
   }
   50% {
     box-shadow:
-      0 0 0 3px rgba(251, 191, 36, 0.85),
+      0 0 0 3px rgba(251, 191, 36, 0.60),
       0 0 18px 7px rgba(251, 191, 36, 0.38);
   }
 }
