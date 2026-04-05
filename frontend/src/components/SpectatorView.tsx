@@ -50,7 +50,7 @@ import {
   buildSuccessfulDeclarationSeatRevealMap,
   FAILED_DECLARATION_SEAT_REVEAL_MS,
 } from '@/lib/declarationSeatReveal';
-import GamePlayerSeat from '@/components/GamePlayerSeat';
+import CircularGameTable from '@/components/CircularGameTable';
 import CardHand from '@/components/CardHand';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
@@ -298,10 +298,6 @@ export default function SpectatorView({
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const effectivePlayerCount = playerCount ?? gamePlayerCount;
-  const seatsPerTeam        = Math.floor(effectivePlayerCount / 2);
-
-  const team1Players = players.filter((p) => p.teamId === 1);
-  const team2Players = players.filter((p) => p.teamId === 2);
 
   const currentTurnPlayer = gameState?.currentTurnPlayerId
     ? players.find((p) => p.playerId === gameState.currentTurnPlayerId)
@@ -519,59 +515,29 @@ export default function SpectatorView({
 
       {/* ── Main content area ─────────────────────────────────────────────── */}
       <main
-        className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 py-3 gap-3 min-h-0 overflow-hidden lg:justify-center lg:gap-8 xl:gap-10"
+        className="relative z-10 flex-1 flex flex-col items-center justify-center px-3 py-3 min-h-0 overflow-hidden"
         aria-label="Spectator game table"
       >
-        {/* Team 2 row */}
-        <div
-          className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl"
-          aria-label="Team 2 players"
-          data-testid="spectator-team2-row"
-        >
-          <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">
-            Team 2
-          </p>
-          <SpectatorPlayerRow
-            players={team2Players}
+        <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem]">
+          <CircularGameTable
+            players={players}
+            myPlayerId={null}
+            playerCount={(effectivePlayerCount === 8 ? 8 : 6) as 6 | 8}
             currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-            seatsPerTeam={seatsPerTeam}
-            godModeEnabled={godModeEnabled}
-            selectedPlayerId={selectedPlayerId}
-            onSelectPlayer={setSelectedPlayerId}
+            indicatorActive={true}
+            highlightedPlayerIds={
+              godModeEnabled && selectedPlayerId
+                ? new Set([selectedPlayerId])
+                : undefined
+            }
+            onSeatClick={godModeEnabled ? setSelectedPlayerId : undefined}
             declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
-          />
-        </div>
-
-        {/* Centre table */}
-        <div
-          className="relative flex items-center justify-center w-full max-w-xs lg:max-w-md xl:max-w-lg"
-          aria-hidden="true"
-          data-testid="spectator-table-center"
-        >
-          <DeclaredBooksTable
-            declaredSuits={gameState?.declaredSuits ?? []}
-            playerCount={effectivePlayerCount === 8 ? 8 : 6}
-          />
-        </div>
-
-        {/* Team 1 row */}
-        <div
-          className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl"
-          aria-label="Team 1 players"
-          data-testid="spectator-team1-row"
-        >
-          <SpectatorPlayerRow
-            players={team1Players}
-            currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-            seatsPerTeam={seatsPerTeam}
-            godModeEnabled={godModeEnabled}
-            selectedPlayerId={selectedPlayerId}
-            onSelectPlayer={setSelectedPlayerId}
-            declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
-          />
-          <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">
-            Team 1
-          </p>
+          >
+            <DeclaredBooksTable
+              declaredSuits={gameState?.declaredSuits ?? []}
+              playerCount={effectivePlayerCount === 8 ? 8 : 6}
+            />
+          </CircularGameTable>
         </div>
       </main>
 
@@ -827,87 +793,5 @@ function SpectatorHeader({
         />
       </div>
     </header>
-  );
-}
-
-
-/**
- * SpectatorPlayerRow — one team's player seats rendered as a horizontal row.
- *
- * Spectators are always `myPlayerId=null` so the "You" pill is never shown.
- * Active-turn glow still animates based on `currentTurnPlayerId` matching.
- */
-function SpectatorPlayerRow({
-  players,
-  currentTurnPlayerId,
-  seatsPerTeam,
-  godModeEnabled,
-  selectedPlayerId,
-  onSelectPlayer,
-  declarationSeatRevealByPlayerId,
-}: {
-  players: GamePlayer[];
-  currentTurnPlayerId: string | null;
-  seatsPerTeam: number;
-  godModeEnabled: boolean;
-  selectedPlayerId: string | null;
-  onSelectPlayer: (playerId: string) => void;
-  declarationSeatRevealByPlayerId?: Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null;
-}) {
-  const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
-
-  return (
-    <div className="flex items-center justify-center gap-2 sm:gap-3 lg:gap-5 xl:gap-6 flex-wrap">
-      {seats.map((player, i) => {
-        if (!player) {
-          return (
-            <GamePlayerSeat
-              key={`empty-${i}`}
-              seatIndex={i}
-              player={null}
-              myPlayerId={null}
-              currentTurnPlayerId={currentTurnPlayerId}
-            />
-          );
-        }
-
-        const isSelected = selectedPlayerId === player.playerId;
-
-        return (
-          <button
-            key={player.playerId}
-            type="button"
-            onClick={() => {
-              if (!godModeEnabled) return;
-              onSelectPlayer(player.playerId);
-            }}
-            disabled={!godModeEnabled}
-            className={[
-              'rounded-2xl transition-transform focus:outline-none focus:ring-2 focus:ring-amber-300/80 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:cursor-default disabled:opacity-85',
-              godModeEnabled
-                ? (isSelected ? 'scale-105 ring-2 ring-amber-300/70 ring-offset-2 ring-offset-slate-950' : 'hover:scale-[1.02]')
-                : '',
-            ].join(' ')}
-            aria-pressed={godModeEnabled ? isSelected : undefined}
-            aria-label={
-              godModeEnabled
-                ? `${isSelected ? 'Selected' : 'Inspect'} ${player.displayName}'s hand`
-                : `${player.displayName} seat`
-            }
-            data-testid={`spectator-player-button-${player.playerId}`}
-          >
-            <GamePlayerSeat
-              seatIndex={player.seatIndex}
-              player={player}
-              myPlayerId={null}
-              currentTurnPlayerId={currentTurnPlayerId}
-              declarationRevealCards={
-                declarationSeatRevealByPlayerId?.get(player.playerId) ?? null
-              }
-            />
-          </button>
-        );
-      })}
-    </div>
   );
 }

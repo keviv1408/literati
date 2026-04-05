@@ -21,25 +21,46 @@ import React from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
-// Lightweight mock for GamePlayerSeat — the real component renders SVG icons
-// and complex styles that aren't relevant to spectator-view tests.
+// Mock CircularGameTable — avoids VoiceProvider dependency and keeps
+// spectator-view tests focused on SpectatorView behaviour.
+// Exposes spectator-player-button-{id} for god-mode click tests,
+// mock-player-seat for seat-count assertions, and mock-declaration-reveal-{id}
+// for declaration reveal tests.
 // ---------------------------------------------------------------------------
-jest.mock('@/components/GamePlayerSeat', () => ({
+jest.mock('@/components/CircularGameTable', () => ({
   __esModule: true,
   default: ({
-    player,
-    declarationRevealCards,
+    players,
+    onSeatClick,
+    declarationSeatRevealByPlayerId,
+    children,
   }: {
-    player: { playerId: string, displayName: string } | null;
-    declarationRevealCards?: { cardId: string }[] | null;
+    players: { playerId: string; displayName: string }[];
+    onSeatClick?: (playerId: string) => void;
+    declarationSeatRevealByPlayerId?: Map<string, { cardId: string }[]> | null;
+    children?: React.ReactNode;
   }) => (
-    <div data-testid="mock-player-seat" data-player-id={player?.playerId}>
-      {player ? player.displayName : 'Empty'}
-      {player && declarationRevealCards && declarationRevealCards.length > 0 ? (
-        <div data-testid={`mock-declaration-reveal-${player.playerId}`}>
-          {declarationRevealCards.map(({ cardId }) => cardId).join(',')}
-        </div>
-      ) : null}
+    <div data-testid="mock-circular-game-table">
+      {players.map((p) => {
+        const revealCards = declarationSeatRevealByPlayerId?.get(p.playerId) ?? null;
+        return (
+          <button
+            key={p.playerId}
+            data-testid={`spectator-player-button-${p.playerId}`}
+            onClick={() => onSeatClick?.(p.playerId)}
+          >
+            <div data-testid="mock-player-seat" data-player-id={p.playerId}>
+              {p.displayName}
+              {revealCards && revealCards.length > 0 && (
+                <div data-testid={`mock-declaration-reveal-${p.playerId}`}>
+                  {revealCards.map(({ cardId }: { cardId: string }) => cardId).join(',')}
+                </div>
+              )}
+            </div>
+          </button>
+        );
+      })}
+      <div data-testid="game-table-center">{children}</div>
     </div>
   ),
 }));
@@ -273,8 +294,8 @@ describe('SpectatorView', () => {
         />,
       );
       // The score display shows T1 and T2 with their scores
-      expect(screen.getByText(/T1/)).toBeTruthy();
-      expect(screen.getByText(/T2/)).toBeTruthy();
+      expect(screen.getAllByText(/T1/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/T2/).length).toBeGreaterThan(0);
     });
   });
 
@@ -452,11 +473,10 @@ describe('SpectatorView', () => {
     });
   });
 
-  describe('team rows', () => {
-    it('renders both team rows', () => {
+  describe('circular game table', () => {
+    it('renders the circular game table', () => {
       render(<SpectatorView {...buildProps()} />);
-      expect(screen.getByTestId('spectator-team1-row')).toBeTruthy();
-      expect(screen.getByTestId('spectator-team2-row')).toBeTruthy();
+      expect(screen.getByTestId('mock-circular-game-table')).toBeTruthy();
     });
 
     it('renders player seat chips for each player', () => {
@@ -464,12 +484,6 @@ describe('SpectatorView', () => {
       // 6 players should produce 6 mock seat elements
       const seats = screen.getAllByTestId('mock-player-seat');
       expect(seats.length).toBe(6);
-    });
-
-    it('renders team label text for Team 1 and Team 2', () => {
-      render(<SpectatorView {...buildProps()} />);
-      expect(screen.getAllByText('Team 2').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('Team 1').length).toBeGreaterThan(0);
     });
   });
 
@@ -527,7 +541,7 @@ describe('SpectatorView', () => {
   describe('center table', () => {
     it('renders the table center element', () => {
       render(<SpectatorView {...buildProps()} />);
-      expect(screen.getByTestId('spectator-table-center')).toBeTruthy();
+      expect(screen.getByTestId('game-table-center')).toBeTruthy();
     });
   });
 });
