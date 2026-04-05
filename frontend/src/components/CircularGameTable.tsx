@@ -92,6 +92,8 @@ export interface CircularGameTableProps {
   indicatorActive: boolean;
   highlightedPlayerIds?: Set<string>;
   onSeatClick?: (playerId: string) => void;
+  /** When provided, ALL player seats become directly tappable regardless of highlight state. Used by god-mode spectators. */
+  onDirectSeatClick?: (playerId: string) => void;
   askTargetPlayerIds?: Set<string>;
   onAskTargetClick?: (playerId: string) => void;
   declarationSeatRevealByPlayerId?: Map<
@@ -117,6 +119,7 @@ export default function CircularGameTable({
   indicatorActive,
   highlightedPlayerIds,
   onSeatClick,
+  onDirectSeatClick,
   askTargetPlayerIds,
   onAskTargetClick,
   declarationSeatRevealByPlayerId,
@@ -186,6 +189,11 @@ export default function CircularGameTable({
             onHighlightClick={
               isHl && onSeatClick && playerId
                 ? () => onSeatClick(playerId)
+                : undefined
+            }
+            onDirectClick={
+              onDirectSeatClick && playerId
+                ? () => onDirectSeatClick(playerId)
                 : undefined
             }
             isAskTargetable={isAskTgt}

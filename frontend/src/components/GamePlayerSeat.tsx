@@ -118,6 +118,13 @@ export interface GamePlayerSeatProps {
   onHighlightClick?: () => void;
 
   /**
+   * Click handler that fires regardless of highlight state.
+   * Used for god-mode seat inspection in the spectator view, where all seats
+   * should be tappable without requiring them to be highlighted first.
+   */
+  onDirectClick?: () => void;
+
+  /**
    * When true, this seat is an eligible ask target for the currently selected
    * ask-card flow and should render an emerald highlight ring.
    */
@@ -179,6 +186,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   isActiveTurn,
   isHighlighted = false,
   onHighlightClick,
+  onDirectClick,
   isAskTargetable = false,
   onAskTargetClick,
   declarationRevealCards = null,
@@ -243,11 +251,12 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         .join(', ')
     : null;
 
-  // Clickable when the seat is either a post-declaration target or an ask target.
+  // Clickable when the seat is either a post-declaration target, an ask target, or a direct-click target (god mode).
   const isHighlightClickable = isHighlighted && Boolean(onHighlightClick) && !isEliminated;
   const isAskClickable = isAskTargetable && Boolean(onAskTargetClick) && !isEliminated;
-  const isClickable = isHighlightClickable || isAskClickable;
-  const handleClick = isAskClickable ? onAskTargetClick : onHighlightClick;
+  const isDirectClickable = Boolean(onDirectClick) && !isEliminated;
+  const isClickable = isHighlightClickable || isAskClickable || isDirectClickable;
+  const handleClick = isAskClickable ? onAskTargetClick : isHighlightClickable ? onHighlightClick : onDirectClick;
 
   // AC 55: on mobile, avatar upgrades to 'md' (40 px) so the seat card itself
   // comfortably clears the 44 px minimum tap-target height. On desktop the

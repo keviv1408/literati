@@ -530,7 +530,7 @@ export default function SpectatorView({
                 ? new Set([selectedPlayerId])
                 : undefined
             }
-            onSeatClick={godModeEnabled ? setSelectedPlayerId : undefined}
+            onDirectSeatClick={godModeEnabled ? setSelectedPlayerId : undefined}
             declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
           >
             <DeclaredBooksTable
