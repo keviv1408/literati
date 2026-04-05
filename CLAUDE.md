@@ -1,55 +1,89 @@
-<!-- ooo:START -->
-<!-- ooo:VERSION:0.14.0 -->
-# Ouroboros — Specification-First AI Development
-
-> Before telling AI what to build, define what should be built.
-> As Socrates asked 2,500 years ago — "What do you truly know?"
-> Ouroboros turns that question into an evolutionary AI workflow engine.
-
-Most AI coding fails at the input, not the output. Ouroboros fixes this by
-**exposing hidden assumptions before any code is written**.
-
-1. **Socratic Clarity** — Question until ambiguity ≤ 0.2
-2. **Ontological Precision** — Solve the root problem, not symptoms
-3. **Evolutionary Loops** — Each evaluation cycle feeds back into better specs
-
-```
-Interview → Seed → Execute → Evaluate
-    ↑                           ↓
-    └─── Evolutionary Loop ─────┘
-```
-
-## ooo Commands
-
-Each command loads its agent/MCP on-demand. Details in each skill file.
-
-| Command | Loads |
-|---------|-------|
-| `ooo` | — |
-| `ooo interview` | `ouroboros:socratic-interviewer` |
-| `ooo seed` | `ouroboros:seed-architect` |
-| `ooo run` | MCP required |
-| `ooo evolve` | MCP: `evolve_step` |
-| `ooo evaluate` | `ouroboros:evaluator` |
-| `ooo unstuck` | `ouroboros:{persona}` |
-| `ooo status` | MCP: `session_status` |
-| `ooo setup` | — |
-| `ooo help` | — |
-
-## Agents
-
-Loaded on-demand — not preloaded.
-
-**Core**: socratic-interviewer, ontologist, seed-architect, evaluator,
-wonder, reflect, advocate, contrarian, judge
-**Support**: hacker, simplifier, researcher, architect
-<!-- ooo:END -->
-
----
-
 # Literati — Codebase Architecture Reference
 
 > Read this before exploring files. It will save you tokens.
+
+## Quick Start
+
+### Setup
+```bash
+# Install dependencies (run from root)
+cd frontend && npm install
+cd ../backend && npm install
+```
+
+### Development
+```bash
+# Terminal 1: Backend (port 3012)
+cd backend && npm run dev
+
+# Terminal 2: Frontend (port 3011)
+cd frontend && npm run dev
+```
+
+Then open [http://localhost:3011](http://localhost:3011).
+
+### Environment Variables
+
+**Backend** (`.env`):
+```
+PORT=3012
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_ANON_KEY=...
+FRONTEND_URL=http://localhost:3011
+DAILY_API_KEY=...           # Optional: voice chat
+DAILY_DOMAIN=...            # Optional: voice chat
+```
+
+**Frontend** (`.env.local`):
+```
+NEXT_PUBLIC_API_URL=http://localhost:3012
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+## Testing
+
+```bash
+# Frontend: Run tests with pattern
+cd frontend && npm test -- --testPathPattern=GamePage --no-coverage
+
+# Frontend: Watch mode
+cd frontend && npm test:watch
+
+# Backend: Run tests
+cd backend && npm test
+
+# Backend: Watch mode
+cd backend && npm test:watch
+
+# Backend: Single file
+cd backend && npm test -- roomSocket
+```
+
+**Key note**: Always use `--testPathPattern` or `--no-coverage` to avoid slowness. Never run `npm test` alone without flags.
+
+## Gotchas
+
+### Bot Logic Fragility
+Recent history has many bot-related reverts. Bot logic (`backend/src/game/botLogic.js`) is complex:
+- Avoid touching bot decision-making without deep game knowledge
+- Test changes thoroughly with 2-3 games before committing
+- Check for "Simplify bot" patterns in commits before refactoring
+
+### Disconnect/Reconnect Handling
+Game state has multiple layers:
+- `disconnectStore.js` — Tracks who's offline; gates reconnect
+- `gameState.js` — In-memory ephemeral state (lost on restart)
+- `gameStore.js` — Persistence layer (Supabase)
+
+Mismatch between these causes desync. Always update all three if modifying disconnect behavior.
+
+### Partial Declaration State
+`partialSelectionStore.js` holds incomplete half-suit selections. If a player navigates away mid-declare, state persists. When modifying the declare flow, check if this store needs updates.
+
+### Voice Chat (Daily)
+Voice routes are **unavailable** unless both `DAILY_API_KEY` and `DAILY_DOMAIN` env vars are set. Routes under `/api/voice/*` silently fail without these. Test voice flows with full env config.
 
 ## Repo Structure
 
