@@ -48,6 +48,13 @@ import {
 import type { CardId, HalfSuitId, GamePlayer, DeclaredSuit } from '@/types/game';
 import type { TurnTimerPayload, DeclarationTimerPayload } from '@/hooks/useGameSocket';
 
+const SUIT_COLOR: Record<string, string> = {
+  h: 'text-red-400',
+  d: 'text-red-400',
+  s: 'text-slate-300',
+  c: 'text-slate-300',
+};
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 /** Draggable card — used in both the unassigned pool and teammate zones. */
@@ -215,7 +222,7 @@ function UnassignedPool({ children }: { children: React.ReactNode }) {
           : 'border-slate-700/50 bg-slate-800/20',
       ].join(' ')}
       role="region"
-      aria-label="Unassigned cards"
+      aria-label="Unassigned cards — drag cards here to remove assignments"
       data-testid="unassigned-pool"
     >
       {children}
@@ -468,7 +475,7 @@ export default function DeclareModal({
                     >
                       <span className={[
                         'text-2xl',
-                        suit === 'h' || suit === 'd' ? 'text-red-400' : 'text-slate-300',
+                        SUIT_COLOR[suit] ?? 'text-slate-300',
                       ].join(' ')}>
                         {suitSymbol}
                       </span>
