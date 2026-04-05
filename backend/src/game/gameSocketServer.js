@@ -664,15 +664,9 @@ function scheduleBotTurnIfNeeded(gs) {
 
   const timer = setTimeout(() => {
     _botTimers.delete(gs.roomCode);
-    console.log(
-      `[game-ws] Bot turn timer fired in room ${gs.roomCode} for ${gs.currentTurnPlayerId}`
-    );
     executeBotTurn(gs.roomCode, gs.currentTurnPlayerId);
   }, BOT_TURN_DELAY_MS);
 
-  console.log(
-    `[game-ws] Scheduled bot turn in room ${gs.roomCode}: player=${gs.currentTurnPlayerId}, delayMs=${BOT_TURN_DELAY_MS}`
-  );
   _botTimers.set(gs.roomCode, timer);
 }
 
@@ -1771,10 +1765,6 @@ async function executeBotTurn(roomCode, botId) {
 
   const decision = decideBotMove(gs, botId);
 
-  console.log(
-    `[game-ws] Bot decision in room ${roomCode}: bot=${botId}, action=${decision.action}`
-  );
-
   if (decision.action === 'ask') {
     await handleAskCard(
       roomCode,
@@ -2364,6 +2354,10 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
 
   // Handle game over
   if (gs.status === 'completed') {
+    console.log(
+      `[game-ws] Game over: room=${roomCode}, winner=team${gs.winner || 'none'}, ` +
+      `score=${gs.scores[1]}-${gs.scores[2]}, moves=${gs.moveHistory.length}`
+    );
     broadcastToGame(roomCode, {
       type:             'game_over',
       winner:           gs.winner,
@@ -2492,6 +2486,10 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
 
   // Handle game over
   if (gs.status === 'completed') {
+    console.log(
+      `[game-ws] Game over: room=${roomCode}, winner=team${gs.winner || 'none'}, ` +
+      `score=${gs.scores[1]}-${gs.scores[2]}, moves=${gs.moveHistory.length}`
+    );
     broadcastToGame(roomCode, {
       type:             'game_over',
       winner:           gs.winner,
@@ -2574,12 +2572,6 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
         }
       }
 
-      console.log(
-        `[game-ws] Post-declaration turn candidates in room ${roomCode}: ` +
-        `declarer=${declarerId}, chooser=${chooserId}, currentTurn=${gs.currentTurnPlayerId}, ` +
-        `eligible=[${eligiblePlayers.join(', ')}], newlyEliminated=[${(newlyEliminated ?? []).join(', ')}]`
-      );
-
       if (chooserId && eligiblePlayers.length > 1) {
         // Hand the turn to the human chooser so they can click a seat.
         gs.currentTurnPlayerId = chooserId;
@@ -2589,10 +2581,6 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
         return;
       }
 
-      console.log(
-        `[game-ws] Skipping post-declaration timer in room ${roomCode}: ` +
-        `chooser=${chooserId}, eligible=${eligiblePlayers.length} player(s)`
-      );
     }
   }
 
@@ -3162,6 +3150,13 @@ function createGame(options) {
   const gs = createGameState(options);
   setGame(options.roomCode, gs);
 
+  const humanCount = Array.isArray(options.seats)
+    ? options.seats.filter((s) => !s.isBot).length : 0;
+  const botCount = (options.playerCount || 0) - humanCount;
+  console.log(
+    `[game-ws] Game created: room=${options.roomCode}, players=${humanCount} humans + ${botCount} bots, variant=${options.variant}`
+  );
+
   // ── Register in live games store ──────────────────────────────────────────
   // Computes currentPlayers from the seat list (human + bot seats).
   try {
@@ -3319,6 +3314,7 @@ function attachGameSocketServer(httpServer) {
         guestRecoveryKey,
       };
     } else if (!user) {
+      console.warn(`[game-ws] Auth failed for room ${roomCode}: no valid token or recovery key`);
       sendJson(ws, { type: 'error', code: 'UNAUTHORIZED', message: 'Authentication required' });
       ws.close(4001, 'Unauthorized');
       return;
@@ -3500,6 +3496,17 @@ function attachGameSocketServer(httpServer) {
 
     // Register the connection
     registerConnection(roomCode, playerId, ws);
+
+    if (isSpectator) {
+      console.log(`[game-ws] Spectator connected to room ${roomCode}`);
+    } else {
+      const isReconnect = Boolean(reconnectEntry) || Boolean(playerInGame?.botReplacedAt);
+      console.log(
+        `[game-ws] Player ${displayName} (${playerId}) connected to room ${roomCode}` +
+        (isReconnect ? ' (reconnect)' : '') +
+        (user.isGuest ? ' [guest]' : '')
+      );
+    }
 
     // Send game init to this player
     if (isSpectator) {
