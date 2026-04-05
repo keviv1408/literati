@@ -1192,26 +1192,28 @@ export default function GamePage({ params }: PageProps) {
 
   if (isSpectatorMode && room) {
     return (
-      <SpectatorView
-        wsStatus={wsStatus}
-        players={players}
-        spectatorHands={spectatorHands}
-        spectatorMoveHistory={spectatorMoveHistory}
-        gameState={gameState}
-        variant={variant}
-        playerCount={playerCount}
-        turnTimer={turnTimer}
-        declarationTimer={declarationTimer}
-        lastAskResult={lastAskResult}
-        lastDeclareResult={lastDeclareResult}
-        declareProgress={declareProgress ?? null}
-        declarationFailed={declarationFailed}
-        postDeclarationTimer={postDeclarationTimer}
-        roomCode={room.code}
-        cardRemovalVariant={room.card_removal_variant}
-        gamePlayerCount={room.player_count}
-        onGoHome={handleGoHome}
-      />
+      <VoiceProvider roomCode={room.code} bearerToken={gameBearerToken} canJoin={false}>
+        <SpectatorView
+          wsStatus={wsStatus}
+          players={players}
+          spectatorHands={spectatorHands}
+          spectatorMoveHistory={spectatorMoveHistory}
+          gameState={gameState}
+          variant={variant}
+          playerCount={playerCount}
+          turnTimer={turnTimer}
+          declarationTimer={declarationTimer}
+          lastAskResult={lastAskResult}
+          lastDeclareResult={lastDeclareResult}
+          declareProgress={declareProgress ?? null}
+          declarationFailed={declarationFailed}
+          postDeclarationTimer={postDeclarationTimer}
+          roomCode={room.code}
+          cardRemovalVariant={room.card_removal_variant}
+          gamePlayerCount={room.player_count}
+          onGoHome={handleGoHome}
+        />
+      </VoiceProvider>
     );
   }
 
