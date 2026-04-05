@@ -138,7 +138,7 @@ export default function AskCardModal({
                     <div
                       className={[
                         'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                        player.teamId === 2 ? 'bg-violet-700 text-violet-100' : 'bg-blue-700 text-blue-100',
+                        player.teamId === 1 ? 'bg-emerald-700 text-emerald-100' : 'bg-blue-700 text-blue-100',
                       ].join(' ')}
                     >
                       {player.isBot ? '🤖' : player.displayName.slice(0, 2).toUpperCase()}
