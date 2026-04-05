@@ -133,7 +133,7 @@ export default function CircularGameTable({
 
   return (
     <div
-      className="relative w-full aspect-[5/4] sm:aspect-[5/3]"
+      className="relative w-full aspect-[5/4] sm:aspect-[5/3] max-h-full mx-auto"
       aria-label="Game table — players seated in a circle, alternating teams"
       data-testid="circular-game-table"
     >
