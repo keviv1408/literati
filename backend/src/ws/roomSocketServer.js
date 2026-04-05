@@ -56,6 +56,7 @@
 const { WebSocketServer } = require('ws');
 const url = require('url');
 const { getGuestSession } = require('../sessions/guestSessionStore');
+const rateLimiter = require('./rateLimiter');
 const { buildGameSeats } = require('../game/gameInitService');
 const { guestHostMap } = require('../routes/rooms');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
@@ -1938,6 +1939,18 @@ function attachRoomSocketServer(httpServer) {
 
     // ── Message handler ─────────────────────────────────────────────────────
     ws.on('message', (data) => {
+      // ── Per-connection rate limiting ──────────────────────────────────────
+      const rlResult = rateLimiter.check(ws);
+      if (rlResult === 'disconnect') {
+        console.warn(`[RoomWS] Rate limit disconnect: user=${userId} room=${roomCode}`);
+        ws.close(rateLimiter.RATE_LIMIT_CLOSE_CODE, 'Rate limit exceeded');
+        return;
+      }
+      if (rlResult === 'limited') {
+        ws.send(rateLimiter.RATE_LIMITED_PAYLOAD);
+        return;
+      }
+
       let message;
       try {
         message = JSON.parse(data.toString());
@@ -1982,6 +1995,8 @@ function attachRoomSocketServer(httpServer) {
 
     // ── Disconnect handler ──────────────────────────────────────────────────
     ws.on('close', () => {
+      rateLimiter.cleanup(ws);
+
       // Capture host status from in-memory entry before deleting it so that the
       // host-transfer timer can be started even if liveIsHost is false at this
       // moment due to a prior transfer.
