@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 export interface AskSpeechBubbleState {
   text: string;
@@ -20,11 +20,16 @@ export default function AskSpeechBubbleOverlay({
 }: AskSpeechBubbleOverlayProps) {
   const isAbove = bubble.placement === 'above';
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const [nudge, setNudge] = useState(0);
 
-  useEffect(() => {
+  // Apply horizontal nudge synchronously before paint to avoid a visible flash.
+  // Direct DOM mutation instead of setState so there is no extra render cycle.
+  useLayoutEffect(() => {
     const el = bubbleRef.current;
     if (!el) return;
+
+    // Reset any previous nudge so getBoundingClientRect reflects the natural position.
+    el.style.transform = '';
+
     const rect = el.getBoundingClientRect();
     const vw = window.innerWidth;
 
@@ -34,8 +39,11 @@ export default function AskSpeechBubbleOverlay({
     } else if (rect.right > vw - EDGE_PAD) {
       shift = vw - EDGE_PAD - rect.right;
     }
-    setNudge(shift);
-  }, [bubble.anchorX, bubble.text]);
+
+    if (shift !== 0) {
+      el.style.transform = `translateX(${shift}px)`;
+    }
+  });
 
   return (
     <div
@@ -54,7 +62,6 @@ export default function AskSpeechBubbleOverlay({
         <div
           ref={bubbleRef}
           className="relative max-w-[18rem] rounded-2xl border border-amber-300/70 bg-slate-950/95 px-3 py-2 text-center text-sm leading-snug font-medium text-amber-50 shadow-[0_10px_30px_rgba(15,23,42,0.45)] sm:max-w-[22rem]"
-          style={nudge !== 0 ? { transform: `translateX(${nudge}px)` } : undefined}
           data-testid="ask-speech-bubble"
         >
           <span data-testid="ask-speech-bubble-text">{bubble.text}</span>
