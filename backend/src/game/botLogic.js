@@ -40,6 +40,7 @@ const TEAM_SIGNAL_SUCCESS_BOOST = 3;
 const TEAM_SIGNAL_FAILED_ASK_BOOST = 2;
 const TEAM_SIGNAL_DECAY_INTERVAL_MOVES = 3;
 const TEAM_CLOSEOUT_PRIORITY_THRESHOLD = 4;
+const OPPONENT_CLOSEOUT_THREAT_THRESHOLD = 4;
 const TEAMMATE_ASSIST_PRIORITY_THRESHOLD = 4;
 const TEAMMATE_ASSIST_MEMORY_MOVES = 8;
 
@@ -1136,6 +1137,10 @@ function decideBotMove(gs, botId) {
               currentMoveIndex
             ),
             closeoutPriority: _getSuitCloseoutPriority(teamCount),
+            // When opponents have concentrated many cards (≥ threshold) in a
+            // half-suit, treat it as an urgent defensive closeout — the
+            // opponent team could declare this suit soon.
+            opponentCloseoutThreat: opponentCount >= OPPONENT_CLOSEOUT_THREAT_THRESHOLD ? opponentCount : 0,
             // Opponents known to hold cards in a half-suit where the bot's
             // team also has cards — reclaiming these is urgent because the
             // opponent could declare first.
@@ -1156,6 +1161,10 @@ function decideBotMove(gs, botId) {
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
       if (closeoutDiff !== 0) return closeoutDiff;
+      // Urgently strip cards from opponents who've amassed ≥4 in a half-suit
+      // — their team could declare it on the next turn.
+      const oppCloseoutDiff = (bPriority?.opponentCloseoutThreat ?? 0) - (aPriority?.opponentCloseoutThreat ?? 0);
+      if (oppCloseoutDiff !== 0) return oppCloseoutDiff;
       // Defend suits opponents are actively asking about before they steal them.
       const askThreatDiff = (bPriority?.opponentAskThreat ?? 0) - (aPriority?.opponentAskThreat ?? 0);
       if (askThreatDiff !== 0) return askThreatDiff;
@@ -1170,7 +1179,10 @@ function decideBotMove(gs, botId) {
       return a.localeCompare(b);
     });
     const focusHalfSuits = prioritizedBotHalfSuits.filter(
-      (halfSuitId) => (suitPriority.get(halfSuitId)?.closeoutPriority ?? 0) > 0
+      (halfSuitId) => {
+        const p = suitPriority.get(halfSuitId);
+        return (p?.closeoutPriority ?? 0) > 0 || (p?.opponentCloseoutThreat ?? 0) > 0;
+      }
     );
 
     // When the team is close to completing a suit, finish that chase before moving on.
@@ -1206,6 +1218,7 @@ function decideBotMove(gs, botId) {
       const priority = suitPriority.get(halfSuitId) ?? {
         teammateAssistPriority: 0,
         closeoutPriority: 0,
+        opponentCloseoutThreat: 0,
         opponentThreat: 0,
         opponentAskThreat: 0,
         signalStrength: 0,
@@ -1220,6 +1233,7 @@ function decideBotMove(gs, botId) {
           halfSuitId,
           teammateAssistPriority: priority.teammateAssistPriority,
           closeoutPriority: priority.closeoutPriority,
+          opponentCloseoutThreat: priority.opponentCloseoutThreat,
           opponentThreat: priority.opponentThreat,
           opponentAskThreat: priority.opponentAskThreat,
           signalStrength: priority.signalStrength,
@@ -1234,6 +1248,8 @@ function decideBotMove(gs, botId) {
       if (assistDiff !== 0) return assistDiff;
       const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
       if (closeoutDiff !== 0) return closeoutDiff;
+      const oppCloseoutDiff = b.opponentCloseoutThreat - a.opponentCloseoutThreat;
+      if (oppCloseoutDiff !== 0) return oppCloseoutDiff;
       const askThreatDiff = b.opponentAskThreat - a.opponentAskThreat;
       if (askThreatDiff !== 0) return askThreatDiff;
       const threatDiff = b.opponentThreat - a.opponentThreat;
