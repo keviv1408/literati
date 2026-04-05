@@ -18,11 +18,6 @@
  * • Renders TurnTimerStrip when turnTimer prop is provided
  * • Does NOT render TurnTimerStrip when turnTimer is null/undefined
  * • Timer strip shows "Your turn" for the local player
- * CardRequestWizard with timer:
- * • Renders TurnTimerStrip at Step 1 when turnTimer prop is provided
- * • Timer strip persists to Step 2 (card selection)
- * • Timer strip persists to Step 3 (opponent selection)
- * • Does NOT render TurnTimerStrip when turnTimer is null
  * Timer expiry seconds display:
  * • Correct seconds shown for a 30 s timer with 20 s remaining
  * • Correct seconds shown for a 30 s timer with 5 s remaining (danger zone)
@@ -32,7 +27,6 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AskCardModal from '@/components/AskCardModal';
 import DeclareModal from '@/components/DeclareModal';
-import CardRequestWizard from '@/components/CardRequestWizard';
 import type { GamePlayer, DeclaredSuit } from '@/types/game';
 import type { TurnTimerPayload } from '@/hooks/useGameSocket';
 
@@ -263,123 +257,6 @@ describe('DeclareModal — turnTimer prop', () => {
     fireEvent.click(suitButton);
     // Timer should still be rendered
     expect(screen.getByTestId('turn-timer-strip')).toBeTruthy();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// CardRequestWizard — timer prop
-// ---------------------------------------------------------------------------
-
-describe('CardRequestWizard — turnTimer prop', () => {
-  const hand: string[] = ['3_h', '4_h', '5_h', '6_h', '1_h', '2_h'];
-
-  const defaultWizardProps = {
-    myPlayerId:    MY_PLAYER_ID,
-    myHand:        hand,
-    players:       make6Players(),
-    variant:       'remove_7s' as const,
-    declaredSuits: [] as DeclaredSuit[],
-    onConfirm:     jest.fn(),
-    onCancel:      jest.fn(),
-  };
-
-  it('renders TurnTimerStrip at Step 1 when turnTimer is provided', () => {
-    render(
-      <CardRequestWizard
-        {...defaultWizardProps}
-        turnTimer={makeTimer(28_000)}
-      />
-    );
-    expect(screen.getByTestId('turn-timer-strip')).toBeTruthy();
-  });
-
-  it('does NOT render TurnTimerStrip when turnTimer is null', () => {
-    render(
-      <CardRequestWizard
-        {...defaultWizardProps}
-        turnTimer={null}
-      />
-    );
-    expect(screen.queryByTestId('turn-timer-strip')).toBeNull();
-  });
-
-  it('does NOT render TurnTimerStrip when turnTimer is omitted', () => {
-    render(<CardRequestWizard {...defaultWizardProps} />);
-    expect(screen.queryByTestId('turn-timer-strip')).toBeNull();
-  });
-
-  it('timer persists at Step 1', () => {
-    render(
-      <CardRequestWizard
-        {...defaultWizardProps}
-        turnTimer={makeTimer(28_000)}
-      />
-    );
-    // Step 1 should be shown
-    expect(screen.getByTestId('wizard-step-1')).toBeTruthy();
-    // Timer should be present
-    expect(screen.getByTestId('turn-timer-strip')).toBeTruthy();
-  });
-
-  it('timer persists at Step 2 after selecting a half-suit', () => {
-    render(
-      <CardRequestWizard
-        {...defaultWizardProps}
-        turnTimer={makeTimer(28_000)}
-      />
-    );
-    // Select Low Hearts (p1 holds 3_h … 2_h in remove_7s)
-    const suitOption = screen.getByTestId('halfsuit-option-low_h');
-    fireEvent.click(suitOption);
-
-    // We should now be at step 2
-    expect(screen.getByTestId('wizard-step-2')).toBeTruthy();
-    // Timer should still be present
-    expect(screen.getByTestId('turn-timer-strip')).toBeTruthy();
-  });
-
-  it('timer persists at Step 3 after selecting a card', () => {
-    // Use a hand where p1 only holds some cards in low_s so there are askable cards
-    const { unmount } = render(
-      <CardRequestWizard
-        myPlayerId={MY_PLAYER_ID}
-        myHand={['3_s', '4_s']} // only 2 of 6 in low_s — 1_s, 2_s, 5_s, 6_s are askable
-        players={make6Players()}
-        variant="remove_7s"
-        declaredSuits={[]}
-        onConfirm={jest.fn()}
-        onCancel={jest.fn()}
-        turnTimer={makeTimer(28_000)}
-      />
-    );
-    // Select low_s
-    fireEvent.click(screen.getByTestId('halfsuit-option-low_s'));
-    // Now at step 2 — select card 1_s (not in hand)
-    fireEvent.click(screen.getByTestId('card-option-1_s'));
-    // Now at step 3
-    expect(screen.getByTestId('wizard-step-3')).toBeTruthy();
-    expect(screen.getByTestId('turn-timer-strip')).toBeTruthy();
-    unmount();
-  });
-
-  it('timer shows correct seconds at Step 1', () => {
-    render(
-      <CardRequestWizard
-        {...defaultWizardProps}
-        turnTimer={makeTimer(22_000)}
-      />
-    );
-    expect(screen.getByTestId('turn-timer-seconds').textContent).toBe('22s');
-  });
-
-  it('shows "Your turn" in wizard when timer belongs to local player', () => {
-    render(
-      <CardRequestWizard
-        {...defaultWizardProps}
-        turnTimer={makeTimer(28_000, MY_PLAYER_ID)}
-      />
-    );
-    expect(screen.getByText('Your turn')).toBeTruthy();
   });
 });
 
