@@ -11,9 +11,9 @@
  */
 
 // ── Configurable constants ──────────────────────────────────────────────────
-const MAX_MESSAGES_PER_SECOND = 10;   // messages allowed per window
-const WINDOW_MS               = 1000; // sliding window size (1 second)
-const VIOLATION_THRESHOLD      = 3;   // violations before forced disconnect
+const MAX_MESSAGES_PER_SECOND = 30;    // messages allowed per window (game sends bursts during bot turns)
+const WINDOW_MS               = 1000;  // sliding window size (1 second)
+const VIOLATION_THRESHOLD      = 10;   // violations before forced disconnect (generous — real abuse is sustained)
 const VIOLATION_WINDOW_MS      = 10_000; // violations are counted in this span
 
 // ── Internal state ──────────────────────────────────────────────────────────
