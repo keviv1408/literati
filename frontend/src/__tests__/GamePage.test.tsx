@@ -915,6 +915,31 @@ describe('GamePage — game controls always available', () => {
       );
     });
 
+    it('dismisses the ask tray when the player clicks outside it', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
+      });
+
+      const heartCardWrapper = document.querySelector('[data-testid="card-wrapper-3_h"]') as HTMLElement;
+      expect(heartCardWrapper).toBeTruthy();
+      const heartCard = heartCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(heartCard).toBeTruthy();
+      fireEvent.click(heartCard);
+
+      expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+
+      fireEvent.click(document.body);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+      });
+    });
+
     it('queues multiple asks for the same opponent and continues only after a successful result', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());

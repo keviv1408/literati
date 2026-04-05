@@ -68,7 +68,7 @@ import MuteToggle from '@/components/MuteToggle';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
-import { cardLabel, getCardHalfSuit, getHalfSuitCards, allHalfSuitIds } from '@/types/game';
+import { cardLabel, getCardHalfSuit, getHalfSuitCards } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
@@ -170,6 +170,7 @@ export default function GamePage({ params }: PageProps) {
   const [declareActiveDragId, setDeclareActiveDragId] = useState<string | null>(null);
   const [declareSelectedCard, setDeclareSelectedCard] = useState<CardId | null>(null);
   const [showAskInline, setShowAskInline] = useState(false);
+  const askTrayRef = useRef<HTMLDivElement | null>(null);
   const [selectedAskHalfSuit, setSelectedAskHalfSuit] = useState<HalfSuitId | null>(null);
   const [selectedAskCardIds, setSelectedAskCardIds] = useState<CardId[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
@@ -709,16 +710,16 @@ export default function GamePage({ params }: PageProps) {
     setDeclareAssignment({});
     setDeclareActiveDragId(null);
     setDeclareSelectedCard(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [declareSelectedSuit, sendDeclareSelecting, sendDeclareProgress]);
 
   const handleAskHalfSuitSelect = useCallback((halfSuitId: HalfSuitId) => {
+    if (!availableAskHalfSuits.includes(halfSuitId)) return;
     setShowAskInline(true);
     setSelectedAskHalfSuit(halfSuitId);
     setSelectedAskCardIds([]);
     resetDeclareMode();
     sendPartialSelection({ flow: 'ask', halfSuitId });
-  }, [sendPartialSelection, resetDeclareMode]);
+  }, [availableAskHalfSuits, sendPartialSelection, resetDeclareMode]);
 
   const handleAskHandCardSelect = useCallback((cardId: CardId) => {
     const halfSuitId = getCardHalfSuit(cardId, resolvedVariant);
@@ -880,6 +881,23 @@ export default function GamePage({ params }: PageProps) {
       sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit });
     }
   }, [selectedAskCardIds, selectedAskHalfSuit, sendPartialSelection]);
+
+  useEffect(() => {
+    if (!showAskInline || !selectedAskHalfSuit) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (askTrayRef.current?.contains(target)) return;
+      if (selectedAskCardIds.length > 0 && target.closest('[data-ask-targetable="true"]')) return;
+      resetAskMode();
+    };
+
+    document.addEventListener('click', handleOutsideClick, true);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick, true);
+    };
+  }, [resetAskMode, selectedAskCardIds.length, selectedAskHalfSuit, showAskInline]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1547,21 +1565,18 @@ export default function GamePage({ params }: PageProps) {
                   )}
                 </div>
                 {showAskInline && isMyTurn && !isTurnPassMode && (
-                  <InlineAskTray
-                    myHand={myHand}
-                    variant={effectiveVariant}
-                    declaredSuits={declaredSuits}
-                    selectedHalfSuit={selectedAskHalfSuit}
-                    selectedCardIds={selectedAskCardIds}
-                    onSelectHalfSuit={handleAskHalfSuitSelect}
-                    onToggleCard={handleAskCardToggle}
-                    onBack={() => {
-                      setSelectedAskHalfSuit(null);
-                      setSelectedAskCardIds([]);
-                    }}
-                    onCancel={resetAskMode}
-                    isLoading={actionLoading}
-                  />
+                  selectedAskHalfSuit && (
+                    <div ref={askTrayRef}>
+                      <InlineAskTray
+                        myHand={myHand}
+                        variant={effectiveVariant}
+                        halfSuitId={selectedAskHalfSuit}
+                        selectedCardIds={selectedAskCardIds}
+                        onToggleCard={handleAskCardToggle}
+                        isLoading={actionLoading}
+                      />
+                    </div>
+                  )
                 )}
                 {showDeclareTray && (
                   <InlineDeclareTray
@@ -1594,7 +1609,7 @@ export default function GamePage({ params }: PageProps) {
                         : undefined
                     }
                     isMyTurn={isMyTurn}
-                    disabled={actionLoading || !isMyTurn || isTurnPassMode || (declareMode && !!declareSelectedSuit)}
+                    disabled={actionLoading || !isMyTurn || isTurnPassMode || showAskInline || (declareMode && !!declareSelectedSuit)}
                     variant={effectiveVariant}
                     newlyArrivedCardId={newlyArrivedCardId}
                   />
