@@ -182,11 +182,6 @@ export default function SpectatorView({
   const getPlayerDisplayName = useCallback((playerId: string) => {
     return players.find((p) => p.playerId === playerId)?.displayName;
   }, [players]);
-  const getPlayerBubblePlacement = useCallback((playerId: string): 'above' | 'below' | undefined => {
-    const player = players.find((p) => p.playerId === playerId);
-    if (!player) return undefined;
-    return player.teamId === 2 ? 'below' : 'above';
-  }, [players]);
   const {
     cardFlight,
     askDeniedCue,
@@ -195,7 +190,6 @@ export default function SpectatorView({
     clearAskDeniedCue,
   } = useAskResultAnimations(lastAskResult, {
     getPlayerDisplayName,
-    getPlayerBubblePlacement,
   });
   const showTransientLastResult = useEffectEvent((msg: string, persistentMessage: string | null = null) => {
     setLastResultMsg(msg);

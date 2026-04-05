@@ -20,9 +20,10 @@ export default function AskSpeechBubbleOverlay({
 }: AskSpeechBubbleOverlayProps) {
   const isAbove = bubble.placement === 'above';
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const caretRef = useRef<HTMLSpanElement>(null);
 
   // Apply horizontal nudge synchronously before paint to avoid a visible flash.
-  // Direct DOM mutation instead of setState so there is no extra render cycle.
+  // Also update the caret position so it always points at the player's seat.
   useLayoutEffect(() => {
     const el = bubbleRef.current;
     if (!el) return;
@@ -42,6 +43,14 @@ export default function AskSpeechBubbleOverlay({
 
     if (shift !== 0) {
       el.style.transform = `translateX(${shift}px)`;
+    }
+
+    // Keep the caret pointing at the original anchorX regardless of nudge.
+    const caret = caretRef.current;
+    if (caret && rect.width > 0) {
+      const bubbleLeft = rect.left + shift;
+      const caretPct = ((bubble.anchorX - bubbleLeft) / rect.width) * 100;
+      caret.style.left = `${Math.min(Math.max(caretPct, 8), 92)}%`;
     }
   });
 
@@ -66,10 +75,12 @@ export default function AskSpeechBubbleOverlay({
         >
           <span data-testid="ask-speech-bubble-text">{bubble.text}</span>
           <span
+            ref={caretRef}
             className={[
-              'absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border border-amber-300/70 bg-slate-950/95',
+              'absolute h-3 w-3 -translate-x-1/2 rotate-45 border border-amber-300/70 bg-slate-950/95',
               isAbove ? '-bottom-1.5 border-l-0 border-t-0' : '-top-1.5 border-b-0 border-r-0',
             ].join(' ')}
+            style={{ left: '50%' }}
             aria-hidden="true"
           />
         </div>

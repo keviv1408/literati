@@ -37,7 +37,6 @@ const ASKER_BUBBLE_MS = 3500;
 interface UseAskResultAnimationsOptions {
   getAskBubbleCardIds?: (lastAskResult: AskResultPayload) => CardId[] | undefined;
   getPlayerDisplayName?: (playerId: string) => string | undefined;
-  getPlayerBubblePlacement?: (playerId: string) => 'above' | 'below' | undefined;
 }
 
 function getPlayerSeatElement(playerId: string): HTMLElement | null {
@@ -133,9 +132,13 @@ function buildNarratedBotAskBubbleText(
 function buildAskSpeechBubble(
   playerRect: DOMRect,
   text: string,
-  placementOverride?: 'above' | 'below',
 ): AskSpeechBubbleState {
-  const placement = placementOverride ?? (playerRect.top > 120 ? 'above' : 'below');
+  // Place below if the seat centre is in the top half of the viewport (so the
+  // bubble appears between the seat and the bottom of the screen), and above
+  // if it is in the bottom half. This is correct for every seat position in
+  // the circular table layout regardless of team assignment.
+  const seatCenterY = playerRect.top + playerRect.height / 2;
+  const placement = seatCenterY < window.innerHeight / 2 ? 'below' : 'above';
   return {
     text,
     anchorX: playerRect.left + playerRect.width / 2,
@@ -156,7 +159,6 @@ export function useAskResultAnimations(
 ) {
   const getAskBubbleCardIds = options.getAskBubbleCardIds;
   const getPlayerDisplayName = options.getPlayerDisplayName;
-  const getPlayerBubblePlacement = options.getPlayerBubblePlacement;
   const [cardFlight, setCardFlight] = useState<CardFlightState | null>(null);
   const [askDeniedCue, setAskDeniedCue] = useState<AskDeniedCueState | null>(null);
   const [askSpeechBubble, setAskSpeechBubble] = useState<AskSpeechBubbleState | null>(null);
@@ -166,7 +168,6 @@ export function useAskResultAnimations(
 
     const overrideBubbleCardIds = getAskBubbleCardIds?.(lastAskResult);
     const targetName = getPlayerDisplayName?.(lastAskResult.targetId);
-    const placementOverride = getPlayerBubblePlacement?.(lastAskResult.askerId);
     let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
     const frameId = requestAnimationFrame(() => {
       const askerEl = getPlayerSeatElement(lastAskResult.askerId);
@@ -182,7 +183,7 @@ export function useAskResultAnimations(
             ? buildNarratedBotAskBubbleText(lastAskResult, targetName)
             : askBubbleTextForCards(bubbleCardIds, targetName);
         setAskSpeechBubble(
-          buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleText, placementOverride),
+          buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleText),
         );
         bubbleTimer = setTimeout(() => {
           setAskSpeechBubble(null);
@@ -235,7 +236,7 @@ export function useAskResultAnimations(
       cancelAnimationFrame(frameId);
       if (bubbleTimer) clearTimeout(bubbleTimer);
     };
-  }, [getAskBubbleCardIds, getPlayerBubblePlacement, getPlayerDisplayName, lastAskResult]);
+  }, [getAskBubbleCardIds, getPlayerDisplayName, lastAskResult]);
 
   const clearCardFlight = useCallback(() => setCardFlight(null), []);
   const clearAskDeniedCue = useCallback(() => setAskDeniedCue(null), []);
