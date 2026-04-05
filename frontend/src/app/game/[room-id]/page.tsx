@@ -1233,7 +1233,7 @@ export default function GamePage({ params }: PageProps) {
       bearerToken={gameBearerToken}
       canJoin={Boolean(myPlayerId)}
     >
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden" data-testid="game-view">
+    <div className="flex h-[100dvh] flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden" data-testid="game-view">
       <div className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none" aria-hidden="true">
         <span className="absolute text-[20rem] -top-16 -right-16 text-white">♦</span>
         <span className="absolute text-[14rem] bottom-0 -left-8 text-white">♣</span>
