@@ -124,6 +124,7 @@ const url = require('url');
 const crypto = require('crypto');
 
 const { getGuestSession } = require('../sessions/guestSessionStore');
+const rateLimiter = require('../ws/rateLimiter');
 const { getSupabaseClient } = require('../db/supabase');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
@@ -3521,6 +3522,18 @@ function attachGameSocketServer(httpServer) {
         return;
       }
 
+      // ── Per-connection rate limiting ────────────────────────────────────────
+      const rlResult = rateLimiter.check(ws);
+      if (rlResult === 'disconnect') {
+        console.warn(`[game-ws] Rate limit disconnect: player=${playerId} room=${roomCode}`);
+        ws.close(rateLimiter.RATE_LIMIT_CLOSE_CODE, 'Rate limit exceeded');
+        return;
+      }
+      if (rlResult === 'limited') {
+        ws.send(rateLimiter.RATE_LIMITED_PAYLOAD);
+        return;
+      }
+
       let msg;
       try {
         msg = JSON.parse(data.toString());
@@ -3698,6 +3711,7 @@ function attachGameSocketServer(httpServer) {
 
     // ── Disconnect handler ───────────────────────────────────────────────────
     ws.on('close', () => {
+      rateLimiter.cleanup(ws);
       removeConnection(roomCode, playerId);
 
       // Only human players in active games get the reconnect window treatment.
