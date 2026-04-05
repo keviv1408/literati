@@ -3383,10 +3383,7 @@ function attachGameSocketServer(httpServer) {
       guestRecoveryKey
     ) {
       const recoveredGuestPlayer = gs.players.find(
-        (player) =>
-          player.isGuest &&
-          !player.isBot &&
-          player.guestRecoveryKey === guestRecoveryKey,
+        (player) => player.guestRecoveryKey === guestRecoveryKey,
       );
       if (recoveredGuestPlayer) {
         playerId = recoveredGuestPlayer.playerId;
