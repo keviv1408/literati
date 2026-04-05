@@ -541,12 +541,11 @@ describe('GamePage — in_progress game view', () => {
     });
   });
 
-  it('renders team 1 and team 2 rows', async () => {
+  it('renders the circular game table with all players', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('team1-row')).toBeTruthy();
-      expect(screen.getByTestId('team2-row')).toBeTruthy();
+      expect(screen.getByTestId('circular-game-table')).toBeTruthy();
     });
   });
 

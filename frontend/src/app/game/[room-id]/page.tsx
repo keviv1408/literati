@@ -34,7 +34,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
 import { GameProvider } from '@/contexts/GameContext';
-import { VoiceProvider, useVoice } from '@/contexts/VoiceContext';
+import { VoiceProvider } from '@/contexts/VoiceContext';
 import CardHand from '@/components/CardHand';
 import PlayingCard from '@/components/PlayingCard';
 import InlineAskTray, { getAvailableAskHalfSuits } from '@/components/InlineAskTray';
@@ -53,7 +53,7 @@ import { DeclareDropSeat } from '@/components/InlineDeclare';
 import InlineDeclareTray from '@/components/InlineDeclareTray';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
-import GamePlayerSeat from '@/components/GamePlayerSeat';
+import CircularGameTable from '@/components/CircularGameTable';
 import RematchVotePanel from '@/components/RematchVotePanel';
 import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
@@ -683,8 +683,6 @@ export default function GamePage({ params }: PageProps) {
   const currentTurnPlayer = gameState?.currentTurnPlayerId
     ? players.find((p) => p.playerId === gameState.currentTurnPlayerId)
     : null;
-  const team1Players = players.filter((p) => p.teamId === 1);
-  const team2Players = players.filter((p) => p.teamId === 2);
   const currentLastMoveMessage = lastResultMsg ?? syntheticLastMoveMsg ?? gameState?.lastMove;
   const resolvedVariant = variant ?? room?.card_removal_variant ?? 'remove_7s';
   const declaredSuits = gameState?.declaredSuits ?? [];
@@ -1429,48 +1427,26 @@ export default function GamePage({ params }: PageProps) {
 
         const mainContent = (
           <>
-          <main className="relative z-10 flex min-h-0 flex-1 items-stretch overflow-hidden px-3 py-3 lg:px-5 xl:px-6">
-            <div className="mx-auto flex min-h-0 w-full max-w-[82rem] flex-1 flex-col items-center justify-center gap-4 overflow-hidden lg:gap-5 xl:max-w-[90rem] xl:gap-6 2xl:max-w-[98rem]">
-              <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 2 players" data-testid="team2-row">
-                <p className="text-center text-xs text-slate-500 uppercase tracking-widest mb-1">Team 2{myTeamId === 2 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
-                <PlayerRow
-                  players={team2Players}
-                  myPlayerId={myPlayerId}
-                  currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-                  playerCount={effectivePlayerCount}
-                  indicatorActive={indicatorActive}
-                  highlightedPlayerIds={highlightedPlayerIds}
-                  onSeatClick={seatClickHandler}
-                  askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
-                  onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
-                  declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
-                  renderSeatWrapper={declareSeatWrapper}
-                />
-              </div>
-
-              <div className="relative flex w-full max-w-sm items-center justify-center lg:max-w-xl xl:max-w-2xl 2xl:max-w-[44rem]" data-testid="game-table-center">
+          <main className="relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2 sm:px-3 sm:py-3 lg:px-5 xl:px-6">
+            <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem]">
+              <CircularGameTable
+                players={players}
+                myPlayerId={myPlayerId}
+                playerCount={effectivePlayerCount as 6 | 8}
+                currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
+                indicatorActive={indicatorActive}
+                highlightedPlayerIds={highlightedPlayerIds}
+                onSeatClick={seatClickHandler}
+                askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
+                onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
+                declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
+                renderSeatWrapper={declareSeatWrapper}
+              >
                 <DeclaredBooksTable
                   declaredSuits={declaredSuits}
                   playerCount={effectivePlayerCount === 8 ? 8 : 6}
                 />
-              </div>
-
-              <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl" aria-label="Team 1 players" data-testid="team1-row">
-                <PlayerRow
-                  players={team1Players}
-                  myPlayerId={myPlayerId}
-                  currentTurnPlayerId={gameState?.currentTurnPlayerId ?? null}
-                  playerCount={effectivePlayerCount}
-                  indicatorActive={indicatorActive}
-                  highlightedPlayerIds={highlightedPlayerIds}
-                  onSeatClick={seatClickHandler}
-                  askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
-                  onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
-                  declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
-                  renderSeatWrapper={declareSeatWrapper}
-                />
-                <p className="text-center text-xs text-slate-500 uppercase tracking-widest mt-1">Team 1{myTeamId === 1 && <span className="ml-1 text-emerald-400">(You)</span>}</p>
-              </div>
+              </CircularGameTable>
             </div>
           </main>
           </>
@@ -1726,92 +1702,6 @@ export default function GamePage({ params }: PageProps) {
     </div>
     </VoiceProvider>
     </GameProvider>
-  );
-}
-
-/**
- * PlayerRow — renders one team's players as a row of GamePlayerSeat chips.
- *
- * Uses `GamePlayerSeat` for each slot so the richer avatar, BotBadge, turn
- * ring, and card-count badge are consistently applied in the game view.
- * Empty slots are represented by `null` entries.
- *
- * `indicatorActive` is forwarded as `isActiveTurn` exclusively for the
- * local player's own seat so the amber glow clears the moment they submit
- * an ask or declaration (before the server responds). All other seats
- * derive their active-turn state from `currentTurnPlayerId` as normal.
- */
-function PlayerRow({
-  players,
-  myPlayerId,
-  currentTurnPlayerId,
-  playerCount,
-  indicatorActive,
-  highlightedPlayerIds,
-  onSeatClick,
-  askTargetPlayerIds,
-  onAskTargetClick,
-  declarationSeatRevealByPlayerId,
-  renderSeatWrapper,
-}: {
-  players: import('@/types/game').GamePlayer[];
-  myPlayerId: string | null;
-  currentTurnPlayerId: string | null;
-  playerCount: number;
-  indicatorActive: boolean;
-  highlightedPlayerIds?: Set<string>;
-  onSeatClick?: (playerId: string) => void;
-  askTargetPlayerIds?: Set<string>;
-  onAskTargetClick?: (playerId: string) => void;
-  declarationSeatRevealByPlayerId?: Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null;
-  /** Optional wrapper for individual seats — used by inline declare to make teammate seats droppable. */
-  renderSeatWrapper?: (player: import('@/types/game').GamePlayer, seatElement: React.ReactNode) => React.ReactNode;
-}) {
-  const { getSeatState } = useVoice();
-  const seatsPerTeam = Math.floor(playerCount / 2);
-  const seats = Array.from({ length: seatsPerTeam }, (_, i) => players[i] ?? null);
-  return (
-    <div className="flex flex-wrap items-start justify-center gap-2 sm:gap-3 lg:gap-6 xl:gap-8 2xl:gap-10">
-      {seats.map((player, i) => {
-        const isHl = Boolean(player && highlightedPlayerIds?.has(player.playerId));
-        const isAskTarget = Boolean(player && askTargetPlayerIds?.has(player.playerId));
-
-        const seatElement = (
-          <GamePlayerSeat
-            key={player ? player.playerId : `empty-${i}`}
-            seatIndex={player ? player.seatIndex : i}
-            player={player}
-            myPlayerId={myPlayerId}
-            currentTurnPlayerId={currentTurnPlayerId}
-            isActiveTurn={player?.playerId === myPlayerId ? indicatorActive : undefined}
-            voiceState={player ? getSeatState(player.playerId) : null}
-            isHighlighted={isHl}
-            onHighlightClick={
-              isHl && onSeatClick && player
-                ? () => onSeatClick(player.playerId)
-                : undefined
-            }
-            isAskTargetable={isAskTarget}
-            onAskTargetClick={
-              isAskTarget && onAskTargetClick && player
-                ? () => onAskTargetClick(player.playerId)
-                : undefined
-            }
-            declarationRevealCards={
-              player
-                ? declarationSeatRevealByPlayerId?.get(player.playerId) ?? null
-                : null
-            }
-          />
-        );
-
-        if (player && renderSeatWrapper) {
-          return <React.Fragment key={player.playerId}>{renderSeatWrapper(player, seatElement)}</React.Fragment>;
-        }
-
-        return seatElement;
-      })}
-    </div>
   );
 }
 
