@@ -53,7 +53,7 @@ export default function InlineDeclareTray({
       className={[
         'rounded-2xl border border-violet-500/20 bg-slate-900/85 px-3 py-3 shadow-[0_12px_30px_rgba(2,6,23,0.38)] backdrop-blur-sm',
         isDesktopCentered
-          ? 'mb-3 sm:fixed sm:left-1/2 sm:top-1/2 sm:z-40 sm:mb-0 sm:w-auto sm:min-w-[26rem] sm:max-w-[40rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[80vh] sm:overflow-y-auto'
+          ? 'mb-3 max-h-[42dvh] overflow-y-auto sm:fixed sm:left-1/2 sm:top-1/2 sm:z-40 sm:mb-0 sm:w-auto sm:min-w-[26rem] sm:max-w-[40rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[80vh]'
           : 'mb-3',
       ].join(' ')}
       role="region"
