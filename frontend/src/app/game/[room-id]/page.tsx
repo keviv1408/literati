@@ -1343,6 +1343,7 @@ export default function GamePage({ params }: PageProps) {
         <DeclarationTurnPassPrompt
           isMyTurn={isMyTurn && gameState.currentTurnPlayerId === myPlayerId}
           chooserName={currentTurnPlayer?.displayName ?? null}
+          declarerIsBot={postDeclarationHighlight.declarerIsBot}
         />
       )}
 

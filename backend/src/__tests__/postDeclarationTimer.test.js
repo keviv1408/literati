@@ -3,15 +3,17 @@
 /**
  * Tests for AC 28: Post-declaration turn-selection timer.
  *
- * After a HUMAN player makes a CORRECT declaration, the server broadcasts a
- * `post_declaration_timer` (30-second countdown) to ALL clients. The
- * declaring team can send `choose_next_turn` to select who goes next. On
- * expiry the server auto-selects a random eligible player.
+ * After a CORRECT declaration, the server broadcasts a `post_declaration_timer`
+ * (30-second countdown) to ALL clients. A human on the declaring team can send
+ * `choose_next_turn` to select who goes next. When a bot declares, a random
+ * human teammate becomes the chooser. On expiry the server auto-selects a
+ * random eligible player.
  *
  * Coverage:
  * 1. `post_declaration_timer` is broadcast to ALL connections after a human correct declaration
  * 2. `post_declaration_timer` is NOT sent for a failed (incorrect) declaration
- * 3. `post_declaration_timer` is NOT sent when the declarant is a bot
+ * 3. `post_declaration_timer` IS sent when a bot declares and human teammates exist
+ * 3b. `post_declaration_timer` is NOT sent when a bot declares and all teammates are bots
  * 4. Timer entry is stored in `_postDeclarationTimers` map with correct fields
  * 5. `cancelPostDeclarationTimer` clears the map entry and prevents expiry callback
  * 6. On timer expiry, `post_declaration_turn_selected` is broadcast with reason:'timeout'
@@ -233,10 +235,45 @@ describe('post_declaration_timer — broadcast', () => {
     }
   });
 
-  test('3. post_declaration_timer NOT sent when the declarant is a bot', async () => {
+  test('3. post_declaration_timer IS sent when a bot declares and human teammates exist', async () => {
     jest.useFakeTimers();
 
-    // Use a bot declarant by passing isBot=true
+    // p1 is a bot declarant but p3 and p5 are human teammates on team 1
+    await handleDeclare(ROOM, 'p1', 'low_s', CORRECT_ASSIGNMENT, null, true);
+
+    const allWs = [wsP1, wsP2, wsP3, wsP4, wsP5, wsP6, wsSpectator];
+    for (const ws of allWs) {
+      const timerMsg = ws._sent.find((m) => m.type === 'post_declaration_timer');
+      expect(timerMsg).toBeDefined();
+      expect(timerMsg.eligiblePlayers).toEqual(['p1', 'p3', 'p5']);
+    }
+
+    // The chooser should be a human teammate (p3 or p5), not the bot declarant
+    const updatedGs = getGame(ROOM);
+    expect(['p3', 'p5']).toContain(updatedGs.currentTurnPlayerId);
+  });
+
+  test('3b. post_declaration_timer NOT sent when a bot declares and all teammates are bots', async () => {
+    jest.useFakeTimers();
+
+    // Make all team 1 players bots
+    _clearAll();
+    cancelPostDeclarationTimer(ROOM);
+    const allBotGs = makeGame(ROOM, { p1Bot: true });
+    // Mark p3 and p5 as bots too
+    allBotGs.players.find((p) => p.playerId === 'p3').isBot = true;
+    allBotGs.players.find((p) => p.playerId === 'p5').isBot = true;
+    setGame(ROOM, allBotGs);
+
+    // Re-register connections
+    registerConnection(ROOM, 'p1', wsP1);
+    registerConnection(ROOM, 'p2', wsP2);
+    registerConnection(ROOM, 'p3', wsP3);
+    registerConnection(ROOM, 'p4', wsP4);
+    registerConnection(ROOM, 'p5', wsP5);
+    registerConnection(ROOM, 'p6', wsP6);
+    registerConnection(ROOM, '__spectator__', wsSpectator);
+
     await handleDeclare(ROOM, 'p1', 'low_s', CORRECT_ASSIGNMENT, null, true);
 
     const allWs = [wsP1, wsP2, wsP3, wsP4, wsP5, wsP6, wsSpectator];

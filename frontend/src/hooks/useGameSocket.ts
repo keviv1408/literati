@@ -335,6 +335,8 @@ export interface PostDeclarationHighlight {
    * the declarant's team only.
    */
   eligibleSameTeamIds: string[];
+  /** True when a bot declared and a human teammate is choosing the next turn. */
+  declarerIsBot?: boolean;
 }
 
 function sortSpectatorHands(
@@ -606,6 +608,7 @@ export function useGameSocket({
                     declarerId:          payload.declarerId,
                     declarerTeamId:      declarant.teamId,
                     eligibleSameTeamIds: eligibleSameTeam,
+                    declarerIsBot:       !!declarant.isBot,
                   });
                 } else {
                   setPostDeclarationHighlight(null);

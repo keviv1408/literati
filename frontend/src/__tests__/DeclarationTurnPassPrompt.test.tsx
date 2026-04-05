@@ -54,9 +54,9 @@ describe('DeclarationTurnPassPrompt — "for-me" variant (isMyTurn=true)', () =>
     expect(screen.getByTestId('turn-pass-prompt-for-me').textContent).toContain('highlighted teammate');
   });
 
-  it('instruction text includes "pass your turn"', () => {
+  it('instruction text includes "pass the turn"', () => {
     renderPrompt(true);
-    expect(screen.getByTestId('turn-pass-prompt-for-me').textContent).toContain('pass your turn');
+    expect(screen.getByTestId('turn-pass-prompt-for-me').textContent).toContain('pass the turn');
   });
 
   it('renders the bounce icon', () => {
@@ -87,6 +87,22 @@ describe('DeclarationTurnPassPrompt — "for-me" variant (isMyTurn=true)', () =>
   it('applies className to the outermost element', () => {
     renderPrompt(true, 'Alice', 'extra-class');
     expect(screen.getByTestId('declaration-turn-pass-prompt').className).toContain('extra-class');
+  });
+
+  it('shows "Your teammate declared!" when declarerIsBot is true', () => {
+    render(
+      <DeclarationTurnPassPrompt
+        isMyTurn={true}
+        chooserName="Alice"
+        declarerIsBot={true}
+      />,
+    );
+    expect(screen.getByTestId('turn-pass-prompt-for-me').textContent).toContain('Your teammate declared!');
+  });
+
+  it('shows "You declared!" when declarerIsBot is false (default)', () => {
+    renderPrompt(true);
+    expect(screen.getByTestId('turn-pass-prompt-for-me').textContent).toContain('You declared!');
   });
 });
 

@@ -48,8 +48,8 @@ import React from 'react';
 
 export interface DeclarationTurnPassPromptProps {
   /**
-   * `true` when the local player is the current turn player (the declarant who
-   * must choose a teammate to pass the turn to). Drives the two visual variants.
+   * `true` when the local player is the current turn player (the chooser who
+   * must pick a teammate to pass the turn to). Drives the two visual variants.
    */
   isMyTurn: boolean;
 
@@ -65,6 +65,13 @@ export interface DeclarationTurnPassPromptProps {
    */
   chooserName: string | null;
 
+  /**
+   * `true` when the declaration was made by a bot and a human teammate is
+   * choosing the next turn. Changes the prompt text from "You declared!" to
+   * "Your teammate declared!".
+   */
+  declarerIsBot?: boolean;
+
   /** Extra Tailwind classes forwarded to the outermost element. */
   className?: string;
 }
@@ -78,6 +85,7 @@ export interface DeclarationTurnPassPromptProps {
 const DeclarationTurnPassPrompt: React.FC<DeclarationTurnPassPromptProps> = ({
   isMyTurn,
   chooserName,
+  declarerIsBot = false,
   className = '',
 }) => {
   // ── My-turn variant (declarant's actionable prompt) ──────────────────────
@@ -110,7 +118,7 @@ const DeclarationTurnPassPrompt: React.FC<DeclarationTurnPassPromptProps> = ({
 
         {/* Instruction text */}
         <span data-testid="turn-pass-prompt-for-me">
-          <strong>You declared!</strong> Click a highlighted teammate to pass your turn.
+          <strong>{declarerIsBot ? 'Your teammate declared!' : 'You declared!'}</strong> Click a highlighted teammate to pass the turn.
         </span>
 
         {/* Cyan indicator dot — matches the seat highlight colour */}

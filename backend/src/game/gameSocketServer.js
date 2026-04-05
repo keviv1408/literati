@@ -2531,38 +2531,62 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   await persistGameState(gs, supabase);
 
   // ── AC 28: Post-declaration turn-selection timer ──────────────
-  // After a CORRECT declaration by a HUMAN, give the declaring team 30 seconds
+  // After a CORRECT declaration, give a human on the declaring team 30 seconds
   // to choose which eligible teammate takes the next turn.
   // If no one chooses within the window, the server picks a random eligible player.
+  //
+  // When a human declares: the declarer is the chooser (existing behaviour).
+  // When a bot declares: a random human teammate becomes the chooser so human
+  // players always retain control of turn selection. If no human teammates
+  // exist (all-bot team), skip the timer and let bots proceed normally.
   //
   // Conditions for starting the timer:
   // 1. The declaration was correct (declaring team keeps the turn).
   // 2. The game is still active (not just ended by this declaration).
-  // 3. The declarer is human (bots auto-choose immediately).
+  // 3. There is at least one human on the declaring team (with cards).
   // 4. There are at least TWO eligible players on the declaring team.
   //    With only one survivor, there is no choice to make, so play should
   //    continue immediately instead of stalling behind a no-op timer.
-  if (correct && gs.status === 'active' && !isBot) {
+  if (correct && gs.status === 'active') {
     const declaringPlayer = gs.players.find((p) => p.playerId === declarerId);
     if (declaringPlayer) {
       const eligiblePlayers = gs.players
         .filter((p) => p.teamId === declaringPlayer.teamId && getCardCount(gs, p.playerId) > 0)
         .map((p) => p.playerId);
 
+      // Determine who gets the chooser role.
+      // Human declarer → they choose. Bot declarer → a random human teammate.
+      let chooserId = declarerId;
+      if (isBot) {
+        const humanTeammates = gs.players.filter(
+          (p) => p.teamId === declaringPlayer.teamId && !p.isBot && getCardCount(gs, p.playerId) > 0
+        );
+        if (humanTeammates.length > 0) {
+          chooserId = humanTeammates[Math.floor(Math.random() * humanTeammates.length)].playerId;
+        } else {
+          // All-bot team — no human to choose; skip the timer.
+          chooserId = null;
+        }
+      }
+
       console.log(
         `[game-ws] Post-declaration turn candidates in room ${roomCode}: ` +
-        `declarer=${declarerId}, currentTurn=${gs.currentTurnPlayerId}, ` +
+        `declarer=${declarerId}, chooser=${chooserId}, currentTurn=${gs.currentTurnPlayerId}, ` +
         `eligible=[${eligiblePlayers.join(', ')}], newlyEliminated=[${(newlyEliminated ?? []).join(', ')}]`
       );
 
-      if (eligiblePlayers.length > 1) {
-        startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers);
+      if (chooserId && eligiblePlayers.length > 1) {
+        // Hand the turn to the human chooser so they can click a seat.
+        gs.currentTurnPlayerId = chooserId;
+        broadcastStateUpdate(gs, new Set());
+        startPostDeclarationTimer(roomCode, chooserId, eligiblePlayers);
         // Timer will schedule the next turn after selection (or on expiry).
         return;
       }
 
       console.log(
-        `[game-ws] Skipping post-declaration timer in room ${roomCode}: only ${eligiblePlayers.length} eligible player(s)`
+        `[game-ws] Skipping post-declaration timer in room ${roomCode}: ` +
+        `chooser=${chooserId}, eligible=${eligiblePlayers.length} player(s)`
       );
     }
   }
