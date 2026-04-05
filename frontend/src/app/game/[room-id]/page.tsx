@@ -1257,13 +1257,13 @@ export default function GamePage({ params }: PageProps) {
             T1 <span className="text-white text-base">{gameState?.scores.team1 ?? 0}</span>
           </span>
           <span className="text-slate-600">—</span>
-          {/* Team 2 score — flashes blue briefly after a declaration */}
+          {/* Team 2 score — flashes violet briefly after a declaration */}
           <span
             className={[
               'transition-colors duration-300',
               scoreFlash === 2
-                ? 'text-blue-300 scale-110'
-                : myTeamId === 2 ? 'text-emerald-300' : 'text-slate-400',
+                ? 'text-violet-300 scale-110'
+                : myTeamId === 2 ? 'text-violet-300' : 'text-slate-400',
             ].join(' ')}
             data-testid="score-team2"
           >
