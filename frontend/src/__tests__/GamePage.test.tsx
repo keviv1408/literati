@@ -812,16 +812,16 @@ describe('GamePage — game controls always available', () => {
       });
     });
 
-    it('shows the turn indicator for the current player', async () => {
+    it('does not show the turn indicator banner on a normal turn (seat highlight conveys this)', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
       act(() => openWs());
       act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
 
       await waitFor(() => {
-        const turnIndicator = screen.getByTestId('turn-indicator');
-        expect(turnIndicator.textContent).toContain('Your turn');
+        expect(screen.getByTestId('ask-prompt')).toBeTruthy();
       });
+      expect(screen.queryByTestId('turn-indicator')).toBeNull();
     });
 
     it('shows the ask-prompt hint when it is the player\'s turn with cards', async () => {

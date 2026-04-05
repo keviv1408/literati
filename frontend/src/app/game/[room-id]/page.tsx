@@ -1291,18 +1291,11 @@ export default function GamePage({ params }: PageProps) {
         </div>
       </header>
 
-      {gameState && (
-        <div className={['relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium', isMyTurn ? 'bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40' : 'bg-slate-800/50 text-slate-400 border-b border-slate-700/40'].join(' ')} role="status" aria-live="polite" data-testid="turn-indicator">
-          {isMyTurn ? (
-            isTurnPassMode ? (
-              // turn-pass selection window — guide the declarant
-              pendingTurnPassAck
-                ? (<><span aria-hidden="true">⏳</span><span data-testid="turn-pass-pending-label">Choosing next turn…</span></>)
-                : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)
-            ) : (
-              <><span aria-hidden="true">🎯</span><span>Your turn — ask for a card or declare</span></>
-            )
-          ) : currentTurnPlayer ? (<><span aria-hidden="true">⏳</span><span>Waiting for <strong>{currentTurnPlayer.displayName}</strong>{currentTurnPlayer.isBot && ' 🤖'}…</span></>) : (<span>Waiting for game to start…</span>)}
+      {gameState && isMyTurn && isTurnPassMode && (
+        <div className="relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40" role="status" aria-live="polite" data-testid="turn-indicator">
+          {pendingTurnPassAck
+            ? (<><span aria-hidden="true">⏳</span><span data-testid="turn-pass-pending-label">Choosing next turn…</span></>)
+            : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)}
         </div>
       )}
       {turnTimer && gameState && (
