@@ -2670,6 +2670,7 @@ function _handleRematchTimeout(roomCode) {
   deleteGame(roomCode);
   clearRoomPartialSelections(roomCode);
   clearDisconnectRoom(roomCode);
+  clearPendingRematchSettings(roomCode);
 
   // Step 3: after a short grace period, emit the final room_dissolved event so
   // clients display the dissolution notice and can navigate away.
@@ -3106,6 +3107,7 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
 
   if (summary.majorityDeclined) {
     clearRematch(roomCode);
+    clearPendingRematchSettings(roomCode);
     broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
     // Broadcast room_dissolved after a short delay so clients can read the decline
     // reason before seeing the final dissolution notice.
