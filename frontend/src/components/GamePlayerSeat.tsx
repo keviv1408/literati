@@ -272,7 +272,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         // Active-turn glow animation (box-shadow keyframe from globals.css)
         !isEliminated && isTurn ? 'animate-seat-glow' : '',
         // eligible-for-turn highlight (cyan ring, raised z-index)
-        isHighlighted && !isEliminated ? 'ring-2 ring-cyan-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
+        isHighlighted && !isEliminated ? 'ring-2 ring-teal-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
         // Ask flow target highlight uses emerald to match the ask action.
         isAskTargetable && !isEliminated ? 'ring-2 ring-emerald-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
         // + AC 55: clickable seats get pointer cursor, hover scale,
@@ -296,6 +296,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         .join(' ')}
       aria-label={`${displayName}${isMe ? ', you' : ''}${isBot ? ' (bot)' : ''}${isTurn ? ', current turn' : ''}${isEliminated ? ', eliminated' : ''}${isHighlighted && !isEliminated ? ', eligible for next turn' : ''}${isAskTargetable && !isEliminated ? ', ask target' : ''}${voiceAria ? `, ${voiceAria}` : ''}`}
       role={isClickable ? 'button' : 'listitem'}
+      aria-pressed={isClickable ? (isHighlighted ? true : undefined) : undefined}
       tabIndex={isClickable ? 0 : undefined}
       onClick={isClickable ? handleClick : undefined}
       onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick?.(); } } : undefined}
@@ -340,8 +341,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
 
       {declarationRevealCards && declarationRevealCards.length > 0 && (
         <div
-          className="pointer-events-none absolute inset-0 rounded-xl z-20 flex flex-col items-center justify-center gap-1 animate-fade-in"
-          style={{ background: 'rgba(2, 6, 23, 0.80)' }}
+          className="pointer-events-none absolute inset-0 rounded-xl z-20 flex flex-col items-center justify-center gap-1 animate-fade-in bg-slate-950/80"
           aria-hidden="true"
           data-testid="declaration-seat-reveal"
         >
@@ -437,7 +437,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         <span
           className={[
             'text-[0.65rem] lg:text-[0.92rem] xl:text-[1rem] font-semibold truncate w-full text-center leading-tight',
-            isMe ? 'text-emerald-300' : 'text-slate-300',
+            isMe ? 'text-emerald-300' : 'text-slate-200',
           ].join(' ')}
           title={displayName}
           data-testid="player-display-name"
