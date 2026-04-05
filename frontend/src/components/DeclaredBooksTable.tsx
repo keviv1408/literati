@@ -36,8 +36,8 @@ function BookZone({
   const teamBooks = declaredSuits.filter((declaredSuit) => declaredSuit.teamId === teamId);
   const zoneTestId = teamId === 2 ? 'table-books-team2' : 'table-books-team1';
   const zonePositionClass = teamId === 2
-    ? 'top-2 items-end content-end'
-    : 'bottom-2 items-start content-start';
+    ? 'top-1 sm:top-3 items-center content-center sm:items-end sm:content-end'
+    : 'bottom-1 sm:bottom-3 items-center content-center sm:items-start sm:content-start';
 
   return (
     <div
