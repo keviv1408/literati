@@ -243,7 +243,6 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   // comfortably clears the 44 px minimum tap-target height. On desktop the
   // 'sm' size remains — layout is denser and pointer precision is higher.
   const avatarSize = isClickable ? 'md' : 'sm';
-  const revealPlacement = teamId === 2 ? 'below' : 'above';
 
   // ── Occupied seat ───────────────────────────────────────────────────────────
   return (
@@ -329,38 +328,45 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
 
       {declarationRevealCards && declarationRevealCards.length > 0 && (
         <div
-          className={[
-            'pointer-events-none absolute left-1/2 z-20 flex max-w-[7.75rem] -translate-x-1/2 flex-wrap justify-center gap-1 animate-fade-in',
-            revealPlacement === 'below' ? 'top-full mt-1.5' : 'bottom-full mb-1.5',
-          ].join(' ')}
+          className="pointer-events-none absolute inset-0 rounded-xl z-20 flex flex-col items-center justify-center gap-1 animate-fade-in"
+          style={{ background: 'rgba(2, 6, 23, 0.80)' }}
           aria-hidden="true"
           data-testid="declaration-seat-reveal"
-          data-placement={revealPlacement}
         >
-          {declarationRevealCards.map(({ cardId, isWrong, claimedByName }) => (
-            <div
-              key={cardId}
-              className="relative"
-              data-testid={`declaration-seat-reveal-card-${cardId}`}
-              data-status={isWrong ? 'wrong' : 'correct'}
-              title={
-                isWrong
-                  ? `${cardLabel(cardId)} — guessed for ${claimedByName ?? 'another player'}`
-                  : `${cardLabel(cardId)} — correctly assigned`
-              }
-            >
-              <PlayingCard
-                cardId={cardId}
-                size="sm"
-                className={[
-                  'w-7 h-10 rounded-[8px] shadow-[0_8px_16px_rgba(2,6,23,0.42)]',
+          <div className="flex flex-wrap justify-center gap-1 px-1.5 max-w-full">
+            {declarationRevealCards.map(({ cardId, isWrong, claimedByName }) => (
+              <div
+                key={cardId}
+                className="relative"
+                data-testid={`declaration-seat-reveal-card-${cardId}`}
+                data-status={isWrong ? 'wrong' : 'correct'}
+                title={
                   isWrong
-                    ? 'border-red-300/95 ring-1 ring-red-400/90'
-                    : 'border-emerald-300/95 ring-1 ring-emerald-400/90',
-                ].join(' ')}
-              />
-            </div>
-          ))}
+                    ? `${cardLabel(cardId)} — guessed for ${claimedByName ?? 'another player'}`
+                    : `${cardLabel(cardId)} — correctly assigned`
+                }
+              >
+                <PlayingCard
+                  cardId={cardId}
+                  size="sm"
+                  className={[
+                    'w-6 h-9 rounded-[6px] shadow-[0_4px_12px_rgba(2,6,23,0.55)]',
+                    isWrong
+                      ? 'border-red-300/90 ring-1 ring-red-400/80'
+                      : 'border-emerald-300/90 ring-1 ring-emerald-400/80',
+                  ].join(' ')}
+                />
+                {/* Tinted bg overlay */}
+                <div
+                  className={[
+                    'absolute inset-0 rounded-[6px] opacity-25',
+                    isWrong ? 'bg-red-500' : 'bg-emerald-500',
+                  ].join(' ')}
+                  aria-hidden="true"
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

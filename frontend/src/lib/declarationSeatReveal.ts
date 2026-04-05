@@ -12,7 +12,7 @@ export interface DeclarationSeatRevealCard {
   claimedByName: string | null;
 }
 
-export const FAILED_DECLARATION_SEAT_REVEAL_MS = 9_500;
+export const FAILED_DECLARATION_SEAT_REVEAL_MS = 7_000;
 
 /**
  * Group failed-declaration reveal cards by their actual holder so the UI can

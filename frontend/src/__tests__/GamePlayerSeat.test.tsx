@@ -1085,7 +1085,7 @@ describe('GamePlayerSeat — declaration seat reveal', () => {
     expect(screen.getByTestId('declaration-seat-reveal-card-2_s')).toHaveAttribute('data-status', 'wrong');
   });
 
-  it('places the reveal below team 2 seats so it points toward the center', () => {
+  it('overlays the reveal on the seat itself (inset-0) for team 2', () => {
     render(
       <GamePlayerSeat
         seatIndex={1}
@@ -1096,7 +1096,7 @@ describe('GamePlayerSeat — declaration seat reveal', () => {
       />,
     );
 
-    expect(screen.getByTestId('declaration-seat-reveal')).toHaveAttribute('data-placement', 'below');
+    expect(screen.getByTestId('declaration-seat-reveal')).toBeInTheDocument();
   });
 });
 

@@ -139,6 +139,6 @@ describe('buildSuccessfulDeclarationSeatRevealMap', () => {
 
 describe('FAILED_DECLARATION_SEAT_REVEAL_MS', () => {
   it('keeps the failed reveal visible long enough for players to parse it', () => {
-    expect(FAILED_DECLARATION_SEAT_REVEAL_MS).toBe(9500);
+    expect(FAILED_DECLARATION_SEAT_REVEAL_MS).toBe(7000);
   });
 });

@@ -32,7 +32,7 @@ function BookZone({
   return (
     <div
       className={[
-        'absolute inset-x-5 flex h-[36%] flex-wrap justify-center gap-1.5 overflow-hidden',
+        'absolute inset-x-2 sm:inset-x-5 flex h-[40%] flex-wrap justify-center gap-0.5 sm:gap-1.5 overflow-hidden',
         zonePositionClass,
       ].join(' ')}
       data-testid={zoneTestId}
@@ -50,7 +50,7 @@ function BookZone({
             <PlayingCard
               cardId={representativeCard}
               size="sm"
-              className="h-10 w-7 rounded-[6px] shadow-[0_4px_10px_rgba(15,23,42,0.32)]"
+              className="h-6 w-4 sm:h-10 sm:w-7 rounded-[4px] sm:rounded-[6px] shadow-[0_4px_10px_rgba(15,23,42,0.32)]"
             />
           </div>
         );
@@ -65,7 +65,7 @@ export default function DeclaredBooksTable({
 }: DeclaredBooksTableProps) {
   return (
     <div
-      className="relative w-full aspect-[2/1] rounded-full border-2 border-emerald-800/50 bg-emerald-900/20 shadow-inner shadow-black/40 overflow-hidden"
+      className="relative w-full aspect-[2/1] rounded-full border border-emerald-800/40 bg-emerald-900/15 shadow-inner shadow-black/40 overflow-hidden"
       data-testid="declared-books-table"
       aria-label={`Declared books table for a ${playerCount === 6 ? '3v3' : '4v4'} game`}
     >
@@ -74,16 +74,16 @@ export default function DeclaredBooksTable({
         aria-hidden="true"
       />
       <div
-        className="absolute inset-x-0 top-[18%] text-center text-[9px] font-semibold uppercase tracking-[0.28em] text-violet-200/45"
+        className="absolute inset-x-0 top-[18%] text-center text-[6px] sm:text-[9px] font-semibold uppercase tracking-[0.18em] sm:tracking-[0.28em] text-violet-200/40"
         aria-hidden="true"
       >
-        Team 2
+        T2
       </div>
       <div
-        className="absolute inset-x-0 bottom-[18%] text-center text-[9px] font-semibold uppercase tracking-[0.28em] text-emerald-200/45"
+        className="absolute inset-x-0 bottom-[18%] text-center text-[6px] sm:text-[9px] font-semibold uppercase tracking-[0.18em] sm:tracking-[0.28em] text-emerald-200/40"
         aria-hidden="true"
       >
-        Team 1
+        T1
       </div>
 
       <BookZone
