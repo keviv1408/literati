@@ -141,6 +141,12 @@ export interface GamePlayerSeatProps {
 
   /** Lightweight Daily voice status for the player's seat, if connected. */
   voiceState?: VoiceSeatState | null;
+
+  /**
+   * When true, uses a narrower seat width to prevent overlap in dense layouts
+   * (e.g. 8-player games on mobile).
+   */
+  compact?: boolean;
 }
 
 // ── Team style map ────────────────────────────────────────────────────────────
@@ -178,14 +184,18 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   declarationRevealCards = null,
   className = '',
   voiceState = null,
+  compact = false,
 }) => {
   // ── Empty seat ──────────────────────────────────────────────────────────────
   if (!player) {
     return (
       <div
         className={[
-          'w-[6.5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5',
-          'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl',
+          compact
+            ? 'w-[5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem]'
+            : 'w-[6.5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem]',
+          'flex flex-col items-center gap-1 lg:gap-1.5',
+          'py-2 px-1.5 lg:py-2.5 lg:px-3 rounded-xl',
           'border border-dashed',
           'border-slate-700/60 bg-slate-900/60',
           className,
@@ -248,8 +258,10 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
   return (
     <div
       className={[
-        'relative w-[6.5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5',
-        'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl border',
+        compact
+          ? 'relative w-[5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5'
+          : 'relative w-[6.5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5',
+        compact ? 'py-2 px-1.5 lg:py-2.5 lg:px-3 rounded-xl border' : 'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl border',
         'transition-transform duration-100',
         // Eliminated players are visually dimmed and cannot act
         isEliminated ? 'opacity-50 grayscale pointer-events-none' : '',

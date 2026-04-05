@@ -199,6 +199,7 @@ export default function CircularGameTable({
                 ? (declarationSeatRevealByPlayerId?.get(playerId) ?? null)
                 : null
             }
+            compact={playerCount === 8}
           />
         );
 
