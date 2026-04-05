@@ -523,32 +523,27 @@ export default function RoomLobbyPage({ params }: PageProps) {
   ) {
     return (
       <div
-        className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
+        className="animate-delayed-reveal flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
         data-testid="reconnecting-screen"
+        role="status"
+        aria-label="Reconnecting…"
       >
-        <div className="flex flex-col items-center gap-4 text-slate-400">
-          <svg
-            className="animate-spin h-8 w-8 text-emerald-500"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-label="Reconnecting…"
-            role="status"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
+        <div className="flex flex-col items-center gap-5 text-slate-400">
+          <div className="flex gap-2" aria-hidden="true">
+            <span
+              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
+              style={{ animationDelay: '0ms' }}
             />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8z"
+            <span
+              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
+              style={{ animationDelay: '180ms' }}
             />
-          </svg>
-          <span className="text-sm">Reconnecting…</span>
+            <span
+              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
+              style={{ animationDelay: '360ms' }}
+            />
+          </div>
+          <span className="text-sm tracking-wide">Reconnecting…</span>
         </div>
       </div>
     );
