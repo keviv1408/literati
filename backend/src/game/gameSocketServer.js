@@ -3498,7 +3498,7 @@ function attachGameSocketServer(httpServer) {
     registerConnection(roomCode, playerId, ws);
 
     if (isSpectator) {
-      console.log(`[game-ws] Spectator connected to room ${roomCode}`);
+      console.log(`[game-ws] Spectator ${playerId} connected to room ${roomCode}`);
     } else {
       const isReconnect = Boolean(reconnectEntry) || Boolean(playerInGame?.botReplacedAt);
       console.log(
@@ -3770,11 +3770,15 @@ function attachGameSocketServer(httpServer) {
         }
       }
 
-      console.log(`[game-ws] Player ${playerId} disconnected from game ${roomCode}`);
+      if (isSpectator) {
+        console.log(`[game-ws] Spectator ${playerId} disconnected from room ${roomCode}`);
+      } else {
+        console.log(`[game-ws] Player ${displayName} (${playerId}) disconnected from game ${roomCode}`);
+      }
     });
 
     ws.on('error', (err) => {
-      console.error(`[game-ws] Error for player ${playerId} in room ${roomCode}:`, err.message);
+      console.error(`[game-ws] Error for ${isSpectator ? 'spectator' : 'player'} ${playerId} in room ${roomCode}:`, err.message);
     });
   });
 
