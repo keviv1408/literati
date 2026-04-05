@@ -2356,7 +2356,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
   if (gs.status === 'completed') {
     console.log(
       `[game-ws] Game over: room=${roomCode}, winner=team${gs.winner || 'none'}, ` +
-      `score=${gs.scores[1]}-${gs.scores[2]}, moves=${gs.moveHistory.length}`
+      `score=${gs.scores.team1}-${gs.scores.team2}, moves=${gs.moveHistory.length}`
     );
     broadcastToGame(roomCode, {
       type:             'game_over',
@@ -2488,7 +2488,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   if (gs.status === 'completed') {
     console.log(
       `[game-ws] Game over: room=${roomCode}, winner=team${gs.winner || 'none'}, ` +
-      `score=${gs.scores[1]}-${gs.scores[2]}, moves=${gs.moveHistory.length}`
+      `score=${gs.scores.team1}-${gs.scores.team2}, moves=${gs.moveHistory.length}`
     );
     broadcastToGame(roomCode, {
       type:             'game_over',
@@ -3529,7 +3529,8 @@ function attachGameSocketServer(httpServer) {
     registerConnection(roomCode, playerId, ws);
 
     if (isSpectator) {
-      console.log(`[game-ws] Spectator ${playerId} connected to room ${roomCode}`);
+      const label = playerId.startsWith('spectator_') ? 'anonymous' : playerId;
+      console.log(`[game-ws] Spectator (${label}) connected to room ${roomCode}`);
     } else {
       const isReconnect = Boolean(reconnectEntry) || Boolean(playerInGame?.botReplacedAt);
       console.log(
@@ -3802,7 +3803,8 @@ function attachGameSocketServer(httpServer) {
       }
 
       if (isSpectator) {
-        console.log(`[game-ws] Spectator ${playerId} disconnected from room ${roomCode}`);
+        const discLabel = playerId.startsWith('spectator_') ? 'anonymous' : playerId;
+        console.log(`[game-ws] Spectator (${discLabel}) disconnected from room ${roomCode}`);
       } else {
         console.log(`[game-ws] Player ${displayName} (${playerId}) disconnected from game ${roomCode}`);
       }
