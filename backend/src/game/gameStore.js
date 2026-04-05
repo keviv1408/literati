@@ -107,6 +107,20 @@ function getRoomConnections(roomCode) {
 }
 
 // ---------------------------------------------------------------------------
+// Metrics
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the number of active games currently held in memory.
+ * Useful for health-check / metrics logging.
+ *
+ * @returns {number}
+ */
+function getGameCount() {
+  return _games.size;
+}
+
+// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
@@ -120,6 +134,7 @@ module.exports = {
   getGame,
   deleteGame,
   hasGame,
+  getGameCount,
   registerConnection,
   removeConnection,
   getConnection,
