@@ -163,5 +163,5 @@ cd backend && npm test -- roomSocket
 
 ## Notes
 
-- The project currently uses separate `frontend/` and `backend/` apps rather than a workspace root script
 - The root README is intended as the quick-start; framework-specific details can live closer to each app over time
+- Always commit and push to main after implementing any feature/bug fix/ enhancements.
