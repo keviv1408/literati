@@ -20,7 +20,7 @@
  *   • Automatically stops the RAF loop once remaining reaches 0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { TurnTimerPayload } from '@/hooks/useGameSocket';
 import { WARNING_THRESHOLD_S } from './CountdownTimer';
 
@@ -42,12 +42,20 @@ export default function TurnTimerStrip({
     Math.max(0, turnTimer.expiresAt - Date.now()),
   );
 
+  const prevSec = useRef<number>(-1);
+
   // Smooth countdown via requestAnimationFrame.
   // Re-runs only when expiresAt changes (i.e. a new timer arrives).
+  // setState is gated to integer-second boundaries to avoid 60fps re-renders.
   useEffect(() => {
+    prevSec.current = -1;
     const tick = () => {
       const r = Math.max(0, turnTimer.expiresAt - Date.now());
-      setRemaining(r);
+      const nowSec = Math.ceil(r / 1000);
+      if (nowSec !== prevSec.current) {
+        prevSec.current = nowSec;
+        setRemaining(r);
+      }
       if (r > 0) {
         rafId = requestAnimationFrame(tick);
       }

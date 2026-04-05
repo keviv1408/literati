@@ -172,7 +172,7 @@ const OvalTable: React.FC<OvalTableProps> = ({
          */}
         <div
           className={[
-            "relative w-full max-w-3xl mx-auto",
+            "relative w-full max-w-3xl xl:max-w-5xl 2xl:max-w-6xl mx-auto",
             "rounded-2xl overflow-visible",
             "bg-slate-950/60",
           ].join(" ")}
