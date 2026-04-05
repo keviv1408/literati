@@ -887,6 +887,67 @@ describe('GamePage — game controls always available', () => {
       expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
     });
 
+    it('keeps the declare tray open when assigning a card to a teammate seat', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('toggle-declare'));
+
+      const spadeCardWrapper = document.querySelector('[data-testid="card-wrapper-1_s"]') as HTMLElement;
+      expect(spadeCardWrapper).toBeTruthy();
+      const spadeCard = spadeCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(spadeCard).toBeTruthy();
+      fireEvent.click(spadeCard);
+
+      const tray = await screen.findByTestId('inline-declare-tray');
+      const cards = within(tray).getAllByTestId('declare-draggable-card');
+      fireEvent.click(cards[0]);
+
+      const teammateSeat = screen.getAllByTestId('declare-drop-seat')
+        .find((seat) => seat.getAttribute('data-player-id') === 'p2');
+      expect(teammateSeat).toBeTruthy();
+      fireEvent.click(teammateSeat!);
+
+      expect(screen.getByTestId('inline-declare-tray')).toBeTruthy();
+      expect(screen.getByText(/2\/6 assigned/)).toBeTruthy();
+    });
+
+    it('dismisses the declare tray when the player clicks outside it', async () => {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+      act(() => openWs());
+      act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID, players6)));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('ask-declare-toggle')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('toggle-declare'));
+
+      const spadeCardWrapper = document.querySelector('[data-testid="card-wrapper-1_s"]') as HTMLElement;
+      expect(spadeCardWrapper).toBeTruthy();
+      const spadeCard = spadeCardWrapper.querySelector('[role="button"]') as HTMLElement;
+      expect(spadeCard).toBeTruthy();
+      fireEvent.click(spadeCard);
+
+      expect(await screen.findByTestId('inline-declare-tray')).toBeTruthy();
+
+      fireEvent.click(document.body);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('inline-declare-tray')).toBeNull();
+      });
+
+      const askBtn = screen.getByTestId('toggle-ask') as HTMLButtonElement;
+      expect(askBtn.getAttribute('aria-checked')).toBe('true');
+    });
+
     it('submits an ask when the player picks an inline ask card and taps an opponent seat', async () => {
       render(<GamePage params={makeParams('ABC123')} />);
       await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());

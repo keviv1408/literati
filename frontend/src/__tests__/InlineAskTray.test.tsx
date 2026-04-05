@@ -43,6 +43,11 @@ describe('InlineAskTray', () => {
     expect(screen.getByTestId('inline-ask-selected-count').textContent).toContain('2 selected');
   });
 
+  it('shows the outside-click cancel hint while choosing ask cards', () => {
+    renderTray();
+    expect(screen.getByTestId('inline-ask-step-card').textContent).toContain('Click anywhere outside to cancel');
+  });
+
   it('does not render the old back/cancel tray controls', () => {
     renderTray();
     expect(screen.queryByTestId('inline-ask-back')).toBeNull();

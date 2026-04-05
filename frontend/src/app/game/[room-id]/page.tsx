@@ -169,6 +169,7 @@ export default function GamePage({ params }: PageProps) {
   const [declareAssignment, setDeclareAssignment] = useState<Record<CardId, string>>({});
   const [declareActiveDragId, setDeclareActiveDragId] = useState<string | null>(null);
   const [declareSelectedCard, setDeclareSelectedCard] = useState<CardId | null>(null);
+  const declareTrayRef = useRef<HTMLDivElement | null>(null);
   const [showAskInline, setShowAskInline] = useState(false);
   const askTrayRef = useRef<HTMLDivElement | null>(null);
   const [selectedAskHalfSuit, setSelectedAskHalfSuit] = useState<HalfSuitId | null>(null);
@@ -818,16 +819,6 @@ export default function GamePage({ params }: PageProps) {
     });
   }, [myHand, declareSelectedSuit, sendDeclareProgress]);
 
-  // ── Inline declare: back to suit selection (clear suit, keep mode) ──────
-  const handleDeclareBack = useCallback(() => {
-    sendDeclareSelecting(undefined);
-    sendDeclareProgress(null, {});
-    setDeclareSelectedSuit(null);
-    setDeclareAssignment({});
-    setDeclareSelectedCard(null);
-    setDeclareActiveDragId(null);
-  }, [sendDeclareSelecting, sendDeclareProgress]);
-
   // ── Inline declare: confirm ──────────────────────────────────
   const handleDeclareConfirm = useCallback(() => {
     if (!declareSelectedSuit || actionLoading) return;
@@ -960,6 +951,24 @@ export default function GamePage({ params }: PageProps) {
   // • The ask-prompt hint is suppressed.
   // • The turn-indicator banner shows seat-selection guidance.
   const isTurnPassMode = isMyTurn && (postDeclarationHighlight !== null || pendingTurnPassAck);
+  const showDeclareTray = declareMode && !!declareSelectedSuit && isMyTurn && !isTurnPassMode;
+
+  useEffect(() => {
+    if (!showDeclareTray) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (declareTrayRef.current?.contains(target)) return;
+      if (target.closest('[data-testid="declare-drop-seat"]')) return;
+      resetDeclareMode();
+    };
+
+    document.addEventListener('click', handleOutsideClick, true);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick, true);
+    };
+  }, [resetDeclareMode, showDeclareTray]);
 
   const handleAsk = useCallback((targetId: string, cardId: CardId, batchCardIds?: CardId[]) => {
     setActionLoading(true);
@@ -1474,8 +1483,6 @@ export default function GamePage({ params }: PageProps) {
           </>
         );
 
-        const showDeclareTray = declareMode && !!declareSelectedSuit && isMyTurn && !isTurnPassMode;
-
         const footerContent = (
           <>
           {/*
@@ -1579,21 +1586,21 @@ export default function GamePage({ params }: PageProps) {
                   )
                 )}
                 {showDeclareTray && (
-                  <InlineDeclareTray
-                    halfSuitId={declareSelectedSuit!}
-                    unassignedCards={declareUnassignedCards}
-                    selectedCard={declareSelectedCard}
-                    onTapCard={handleDeclareTapCard}
-                    totalCards={declareSuitCards.length}
-                    assignedCount={declareAssignedCount}
-                    declarationTimer={declarationTimer}
-                    onTimerExpiry={handleDeclareTimerExpiry}
-                    isComplete={declareIsComplete}
-                    isLoading={actionLoading}
-                    onBack={handleDeclareBack}
-                    onCancel={resetDeclareMode}
-                    onConfirm={handleDeclareConfirm}
-                  />
+                  <div ref={declareTrayRef}>
+                    <InlineDeclareTray
+                      halfSuitId={declareSelectedSuit!}
+                      unassignedCards={declareUnassignedCards}
+                      selectedCard={declareSelectedCard}
+                      onTapCard={handleDeclareTapCard}
+                      totalCards={declareSuitCards.length}
+                      assignedCount={declareAssignedCount}
+                      declarationTimer={declarationTimer}
+                      onTimerExpiry={handleDeclareTimerExpiry}
+                      isComplete={declareIsComplete}
+                      isLoading={actionLoading}
+                      onConfirm={handleDeclareConfirm}
+                    />
+                  </div>
                 )}
                 <div className={[
                   'transition-opacity',

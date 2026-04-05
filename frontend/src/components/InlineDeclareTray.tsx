@@ -29,8 +29,6 @@ interface InlineDeclareTrayProps {
   onTimerExpiry: () => void;
   isComplete: boolean;
   isLoading: boolean;
-  onBack: () => void;
-  onCancel: () => void;
   onConfirm: () => void;
 }
 
@@ -45,8 +43,6 @@ export default function InlineDeclareTray({
   onTimerExpiry,
   isComplete,
   isLoading,
-  onBack,
-  onCancel,
   onConfirm,
 }: InlineDeclareTrayProps) {
   const hasCards = unassignedCards.length > 0;
@@ -78,8 +74,8 @@ export default function InlineDeclareTray({
           {hasCards && (
             <p className="mt-0.5 text-xs text-slate-400">
               {selectedCard
-                ? 'Tap a teammate seat to assign the selected card'
-                : 'Drag cards to teammate seats above, or tap a card then tap a seat'}
+                ? 'Tap a teammate seat to assign the selected card. Click anywhere outside to cancel.'
+                : 'Drag cards to teammate seats above, or tap a card then tap a seat. Click anywhere outside to cancel.'}
             </p>
           )}
           {isComplete && (
@@ -89,24 +85,8 @@ export default function InlineDeclareTray({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={onBack}
-            disabled={isLoading}
-            className="rounded-xl border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700/80 disabled:opacity-50"
-            data-testid="inline-declare-back"
-          >
-            Back
-          </button>
-          <button
-            onClick={onCancel}
-            disabled={isLoading}
-            className="rounded-xl border border-slate-700 bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700/80 disabled:opacity-50"
-            data-testid="inline-declare-cancel"
-          >
-            Cancel
-          </button>
-          {isComplete && (
+        {isComplete && (
+          <div className="flex-shrink-0">
             <button
               onClick={onConfirm}
               disabled={isLoading}
@@ -115,8 +95,8 @@ export default function InlineDeclareTray({
             >
               {isLoading ? 'Declaring...' : 'Confirm'}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Declaration timer bar */}

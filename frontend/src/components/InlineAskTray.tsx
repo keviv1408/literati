@@ -84,7 +84,7 @@ export default function InlineAskTray({
         </p>
         {selectedCardIds.length === 0 && (
           <p className="mt-1 text-sm text-slate-200" data-testid="inline-ask-step-card">
-            Pick one or more missing cards from <span className="font-semibold text-white">{halfSuitLabel(halfSuitId)}</span>.
+            Pick one or more missing cards from <span className="font-semibold text-white">{halfSuitLabel(halfSuitId)}</span>. Click anywhere outside to cancel.
           </p>
         )}
         {selectedCardIds.length > 0 && (
