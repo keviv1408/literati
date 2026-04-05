@@ -1247,27 +1247,27 @@ export default function GamePage({ params }: PageProps) {
           {/* Team 1 score — flashes emerald briefly after a declaration */}
           <span
             className={[
-              'transition-colors duration-300',
+              'transition-colors duration-300 inline-block',
               scoreFlash === 1
                 ? 'text-emerald-300 scale-110'
                 : myTeamId === 1 ? 'text-emerald-300' : 'text-slate-400',
             ].join(' ')}
             data-testid="score-team1"
           >
-            T1 <span className="text-white text-base">{gameState?.scores.team1 ?? 0}</span>
+            T1 <span className="text-white text-base tabular-nums">{gameState?.scores.team1 ?? 0}</span>
           </span>
           <span className="text-slate-600">—</span>
           {/* Team 2 score — flashes violet briefly after a declaration */}
           <span
             className={[
-              'transition-colors duration-300',
+              'transition-colors duration-300 inline-block',
               scoreFlash === 2
                 ? 'text-violet-300 scale-110'
                 : myTeamId === 2 ? 'text-violet-300' : 'text-slate-400',
             ].join(' ')}
             data-testid="score-team2"
           >
-            <span className="text-white text-base">{gameState?.scores.team2 ?? 0}</span> T2
+            <span className="text-white text-base tabular-nums">{gameState?.scores.team2 ?? 0}</span> T2
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">

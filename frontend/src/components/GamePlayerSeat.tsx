@@ -262,7 +262,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           ? 'relative w-[5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5'
           : 'relative w-[6.5rem] lg:w-[9rem] xl:w-[10rem] 2xl:w-[11rem] flex flex-col items-center gap-1 lg:gap-1.5',
         compact ? 'py-2 px-1.5 lg:py-2.5 lg:px-3 rounded-xl border' : 'py-2 px-2 lg:py-2.5 lg:px-3 rounded-xl border',
-        'transition-transform duration-100',
+        'transition-transform duration-100 transition-colors duration-200',
         // Eliminated players are visually dimmed and cannot act
         isEliminated ? 'opacity-50 grayscale pointer-events-none' : '',
         // Scale up slightly and elevate when it's this player's turn
