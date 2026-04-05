@@ -126,6 +126,7 @@ const crypto = require('crypto');
 const { getGuestSession } = require('../sessions/guestSessionStore');
 const { getSupabaseClient } = require('../db/supabase');
 const liveGamesStore = require('../liveGames/liveGamesStore');
+const { clearRoom: clearBlocklistRoom } = require('../rooms/roomBlocklist');
 const {
   setGame,
   deleteGame,
@@ -895,6 +896,7 @@ function _clearRoomRuntimeState(roomCode) {
   _cancelReconnectWindowsForRoom(roomCode);
   clearRoomPartialSelections(roomCode);
   clearDisconnectRoom(roomCode);
+  clearBlocklistRoom(roomCode);
   _botControlledDeclarations.delete(roomCode);
 
   const prefix = `${roomCode.toUpperCase()}:`;
@@ -2369,6 +2371,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
     });
     liveGamesStore.removeGame(roomCode);
     clearDisconnectRoom(roomCode);
+    clearRoomPartialSelections(roomCode);
     const supabase = getSupabaseClient();
     await persistGameState(gs, supabase);
     await updateStats(gs);
@@ -2502,6 +2505,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     // Cancel any outstanding reconnect windows (avoids dangling setTimeout
     // references after the game completes).
     clearDisconnectRoom(roomCode);
+    clearRoomPartialSelections(roomCode);
 
     // Persist final state
     const supabase = getSupabaseClient();
@@ -2671,6 +2675,7 @@ function _handleRematchTimeout(roomCode) {
   clearRoomPartialSelections(roomCode);
   clearDisconnectRoom(roomCode);
   clearPendingRematchSettings(roomCode);
+  clearBlocklistRoom(roomCode);
 
   // Step 3: after a short grace period, emit the final room_dissolved event so
   // clients display the dissolution notice and can navigate away.
@@ -2753,6 +2758,12 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
       `[game-ws] Pending rematch settings stored (host-initiated) for room ${roomCode}`
     );
   }
+
+  // Clean up stale runtime state from the finished game. The old game state
+  // is no longer needed (settings have been cloned into pendingRematchStore).
+  deleteGame(roomCode);
+  clearRoomPartialSelections(roomCode);
+  clearDisconnectRoom(roomCode);
 
   // Reset room to 'waiting' in Supabase so a new game can start
   try {
@@ -3012,6 +3023,12 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
     // Clear rematch vote state (stops the timeout timer).
     clearRematch(roomCode);
 
+    // Clear stale runtime state from the finished game before spinning up a
+    // new one. Partial selections and disconnect timers from the old game must
+    // not leak into the rematch.
+    clearRoomPartialSelections(roomCode);
+    clearDisconnectRoom(roomCode);
+
     // Build the seat list. Prefer the config from the rematch store (captured
     // at game-over time) and fall back to the live game state if needed.
     const finishedGs = getGame(roomCode);
@@ -3108,6 +3125,11 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
   if (summary.majorityDeclined) {
     clearRematch(roomCode);
     clearPendingRematchSettings(roomCode);
+    // Clean up all in-memory state for this room — game is not continuing.
+    deleteGame(roomCode);
+    clearRoomPartialSelections(roomCode);
+    clearDisconnectRoom(roomCode);
+    clearBlocklistRoom(roomCode);
     broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
     // Broadcast room_dissolved after a short delay so clients can read the decline
     // reason before seeing the final dissolution notice.

@@ -25,6 +25,9 @@ const { initSocket } = require('./socket/server');
 const { markStaleGamesAbandoned } = require('./game/gameState');
 const { syncInProgressRoomsToLiveGamesStore } = require('./liveGames/syncLiveGamesStore');
 const { getSupabaseClient } = require('./db/supabase');
+const { getGameCount } = require('./game/gameStore');
+const { getBlockedRoomCount } = require('./rooms/roomBlocklist');
+const liveGamesStore = require('./liveGames/liveGamesStore');
 
 const app = express();
 const PORT = process.env.PORT || 3012;
@@ -158,11 +161,33 @@ if (require.main === module) {
       });
   });
 
+  // ── Periodic sweep: mark stale games abandoned and log store sizes ────────
+  // Runs every 30 minutes to catch any games that were missed by normal
+  // end-of-game cleanup (e.g. server crash recovery, edge-case code paths).
+  const SWEEP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+  const sweepTimer = setInterval(() => {
+    const supabase = getSupabaseClient();
+    markStaleGamesAbandoned(supabase).catch((err) => {
+      console.error('[sweep] markStaleGamesAbandoned failed:', err.message);
+    });
+
+    // Log in-memory store sizes for observability / leak detection.
+    console.log(
+      `[sweep] In-memory store sizes — ` +
+      `games: ${getGameCount()}, ` +
+      `blocklist rooms: ${getBlockedRoomCount()}, ` +
+      `live games: ${liveGamesStore.size}`
+    );
+  }, SWEEP_INTERVAL_MS);
+  // Prevent the sweep timer from keeping Node alive during shutdown.
+  sweepTimer.unref();
+
   // Graceful shutdown: stop the cleanup timer and close the HTTP server.
   const shutdown = () => {
     console.log('Shutting down...');
     stopCleanupTimer();
     stopQueueCleanupTimer();
+    clearInterval(sweepTimer);
     httpServer.close(() => {
       console.log('Server closed.');
       process.exit(0);
