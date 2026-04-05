@@ -28,6 +28,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { createRoom, ApiError } from '@/lib/api';
 import { useGuest } from '@/contexts/GuestContext';
@@ -230,10 +231,10 @@ export default function CreateRoomModal({
     ? `${origin}/room/${createdRoom.code}?spectate=1`
     : '';
 
-  return (
+  return createPortal(
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-room-title"
@@ -250,6 +251,7 @@ export default function CreateRoomModal({
       <div
         className="
           relative z-10 w-full max-w-sm
+          overflow-y-auto max-h-[calc(100dvh-2rem)]
           bg-gradient-to-b from-emerald-950 to-slate-900
           border border-emerald-700/50
           rounded-2xl shadow-2xl shadow-black/60
@@ -599,6 +601,7 @@ export default function CreateRoomModal({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
