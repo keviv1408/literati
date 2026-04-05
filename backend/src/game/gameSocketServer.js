@@ -3307,6 +3307,17 @@ function attachGameSocketServer(httpServer) {
         avatarId:    null,
         isGuest:     false,
       };
+    } else if (!user && guestRecoveryKey) {
+      // Token expired (e.g. server restarted, in-memory guest session lost)
+      // but the client still has a recovery key. Create a temporary identity
+      // so the recovery-key matching logic below can rebind the player.
+      user = {
+        playerId:    `pending_recovery_${crypto.randomBytes(8).toString('hex')}`,
+        displayName: 'Recovering…',
+        avatarId:    null,
+        isGuest:     true,
+        guestRecoveryKey,
+      };
     } else if (!user) {
       sendJson(ws, { type: 'error', code: 'UNAUTHORIZED', message: 'Authentication required' });
       ws.close(4001, 'Unauthorized');
