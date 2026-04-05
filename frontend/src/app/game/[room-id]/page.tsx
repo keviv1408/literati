@@ -1604,7 +1604,7 @@ export default function GamePage({ params }: PageProps) {
                 )}
                 <div className={[
                   'transition-opacity',
-                  showAskInline || showDeclareTray ? 'opacity-45' : 'opacity-100',
+                  showAskInline || showDeclareTray ? 'hidden sm:block opacity-45' : 'opacity-100',
                   declareMode && !declareSelectedSuit ? 'ring-2 ring-violet-500/70 rounded-xl shadow-lg shadow-violet-500/20' : '',
                 ].join(' ')}>
                   <CardHand
