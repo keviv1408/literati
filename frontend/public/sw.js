@@ -87,10 +87,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(request).then((cached) => {
-        const fetchPromise = fetch(request).then((res) => {
-          if (res.ok) cache.put(request, res.clone());
-          return res;
-        });
+        const fetchPromise = fetch(request)
+          .then((res) => {
+            if (res.ok) cache.put(request, res.clone());
+            return res;
+          })
+          .catch(() => cached || caches.match('/offline.html'));
         return cached || fetchPromise;
       })
     )
