@@ -41,6 +41,7 @@ const TEAM_SIGNAL_FAILED_ASK_BOOST = 2;
 const TEAM_SIGNAL_DECAY_INTERVAL_MOVES = 3;
 const TEAM_CLOSEOUT_PRIORITY_THRESHOLD = 4;
 const OPPONENT_CLOSEOUT_THREAT_THRESHOLD = 4;
+const OPPONENT_ASK_THREAT_FOCUS_THRESHOLD = 4;
 const HALF_SUIT_SIZE = 6;
 const TEAMMATE_ASSIST_PRIORITY_THRESHOLD = 4;
 const TEAMMATE_ASSIST_MEMORY_MOVES = 8;
@@ -1182,15 +1183,16 @@ function decideBotMove(gs, botId) {
       if (criticalDiff !== 0) return criticalDiff;
       const assistDiff = (bPriority?.teammateAssistPriority ?? 0) - (aPriority?.teammateAssistPriority ?? 0);
       if (assistDiff !== 0) return assistDiff;
-      const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
-      if (closeoutDiff !== 0) return closeoutDiff;
       // Urgently strip cards from opponents who've amassed ≥4 in a half-suit
-      // — their team could declare it on the next turn.
+      // — their team could declare it on the next turn. Defense before offense:
+      // opponents can declare immediately, but our own closeout persists.
       const oppCloseoutDiff = (bPriority?.opponentCloseoutThreat ?? 0) - (aPriority?.opponentCloseoutThreat ?? 0);
       if (oppCloseoutDiff !== 0) return oppCloseoutDiff;
       // Defend suits opponents are actively asking about before they steal them.
       const askThreatDiff = (bPriority?.opponentAskThreat ?? 0) - (aPriority?.opponentAskThreat ?? 0);
       if (askThreatDiff !== 0) return askThreatDiff;
+      const closeoutDiff = (bPriority?.closeoutPriority ?? 0) - (aPriority?.closeoutPriority ?? 0);
+      if (closeoutDiff !== 0) return closeoutDiff;
       // Prefer half-suits where opponents hold known cards — reclaim before
       // they can declare.
       const threatDiff = (bPriority?.opponentThreat ?? 0) - (aPriority?.opponentThreat ?? 0);
@@ -1204,7 +1206,9 @@ function decideBotMove(gs, botId) {
     const focusHalfSuits = prioritizedBotHalfSuits.filter(
       (halfSuitId) => {
         const p = suitPriority.get(halfSuitId);
-        return (p?.closeoutPriority ?? 0) > 0 || (p?.opponentCloseoutThreat ?? 0) > 0;
+        return (p?.closeoutPriority ?? 0) > 0
+          || (p?.opponentCloseoutThreat ?? 0) > 0
+          || (p?.opponentAskThreat ?? 0) >= OPPONENT_ASK_THREAT_FOCUS_THRESHOLD;
       }
     );
 
@@ -1273,12 +1277,12 @@ function decideBotMove(gs, botId) {
       if (criticalDiff !== 0) return criticalDiff;
       const assistDiff = b.teammateAssistPriority - a.teammateAssistPriority;
       if (assistDiff !== 0) return assistDiff;
-      const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
-      if (closeoutDiff !== 0) return closeoutDiff;
       const oppCloseoutDiff = b.opponentCloseoutThreat - a.opponentCloseoutThreat;
       if (oppCloseoutDiff !== 0) return oppCloseoutDiff;
       const askThreatDiff = b.opponentAskThreat - a.opponentAskThreat;
       if (askThreatDiff !== 0) return askThreatDiff;
+      const closeoutDiff = b.closeoutPriority - a.closeoutPriority;
+      if (closeoutDiff !== 0) return closeoutDiff;
       const threatDiff = b.opponentThreat - a.opponentThreat;
       if (threatDiff !== 0) return threatDiff;
       const signalDiff = b.signalStrength - a.signalStrength;
