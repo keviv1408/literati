@@ -1233,13 +1233,13 @@ export default function GamePage({ params }: PageProps) {
       bearerToken={gameBearerToken}
       canJoin={Boolean(myPlayerId)}
     >
-    <div className="flex min-h-[100dvh] flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950" data-testid="game-view">
+    <div className="flex h-[100dvh] flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden" data-testid="game-view">
       <div className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none" aria-hidden="true">
         <span className="absolute text-[20rem] -top-16 -right-16 text-white">♦</span>
         <span className="absolute text-[14rem] bottom-0 -left-8 text-white">♣</span>
       </div>
 
-      <header className="sticky top-0 z-20 flex items-center justify-between px-3 py-2 border-b border-slate-700/50 bg-slate-900/90 backdrop-blur-sm">
+      <header className="relative z-20 flex items-center justify-between px-3 py-2 border-b border-slate-700/50 bg-slate-900/70 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <button onClick={handleGoHome} aria-label="Home" className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">←</button>
           <span className="font-mono font-bold text-white text-sm max-w-[7ch] truncate" data-testid="game-room-code">{room.code}</span>
@@ -1423,14 +1423,14 @@ export default function GamePage({ params }: PageProps) {
 
         const mainContent = (
           <>
-          <main className="relative z-10 flex items-center justify-center px-2 py-4 sm:px-3 sm:py-6 lg:px-5 xl:px-6">
+          <main className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center overflow-hidden px-2 py-2 sm:px-3 sm:py-3 lg:px-5 xl:px-6">
             {isDealAnimating && (
               <DealAnimation
                 playerCount={(effectivePlayerCount === 8 ? 8 : 6) as 6 | 8}
                 onComplete={() => setIsDealAnimating(false)}
               />
             )}
-            <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem]">
+            <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem] flex flex-col justify-center">
               <CircularGameTable
                 players={players}
                 myPlayerId={myPlayerId}
@@ -1467,67 +1467,72 @@ export default function GamePage({ params }: PageProps) {
            * once game_init is received, regardless of player count (6 or 8) or
            * whether any seat is occupied by a bot.
            */}
-          <footer className="sticky bottom-0 z-20 border-t border-slate-700/50 bg-slate-900/95 px-3 py-1.5 backdrop-blur-sm lg:px-4 lg:py-2" data-testid="player-hand-area">
+          <footer className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 px-3 py-2.5 backdrop-blur-sm lg:px-5 lg:py-3" data-testid="player-hand-area">
             {myPlayer ? (
-              <div className="mx-auto flex w-full max-w-[82rem] flex-col gap-1 xl:max-w-[90rem] 2xl:max-w-[98rem]" data-testid="game-controls">
-                {/* Ask / Declare toggle — shown only on active turn */}
-                {isMyTurn && !isTurnPassMode && (
-                  <div className="flex items-center justify-end">
-                    <div
-                      className="relative flex items-center rounded-full bg-slate-700/70 p-0.5"
-                      role="radiogroup"
-                      aria-label="Action mode"
-                      data-testid="ask-declare-toggle"
-                    >
-                      <button
-                        role="radio"
-                        aria-checked={!declareMode}
-                        onClick={() => {
-                          if (declareMode) {
-                            resetDeclareMode();
-                          } else if (showAskInline) {
-                            resetAskMode();
-                          }
-                        }}
-                        disabled={actionLoading}
-                        className={[
-                          'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
-                          !declareMode
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white',
-                          actionLoading ? 'opacity-50' : '',
-                        ].join(' ')}
-                        data-testid="toggle-ask"
+              <div className="mx-auto flex w-full max-w-[82rem] flex-col gap-2 xl:max-w-[90rem] 2xl:max-w-[98rem]" data-testid="game-controls">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">Your hand — <strong className="text-white">{myHand.length}</strong> card{myHand.length !== 1 ? 's' : ''}</span>
+                  {/* during turn-pass mode the declarant must choose a
+                   * teammate seat -- Ask/Declare are hidden until the turn advances. */}
+                  {isMyTurn && !isTurnPassMode && (
+                    <div className="flex items-center gap-2">
+                      {/* Ask / Declare toggle */}
+                      <div
+                        className="relative flex items-center rounded-full bg-slate-700/70 p-0.5"
+                        role="radiogroup"
+                        aria-label="Action mode"
+                        data-testid="ask-declare-toggle"
                       >
-                        Ask
-                      </button>
-                      <button
-                        role="radio"
-                        aria-checked={declareMode}
-                        onClick={() => {
-                          if (!declareMode) {
-                            resetAskMode();
-                            setDeclareMode(true);
-                          }
-                        }}
-                        disabled={actionLoading}
-                        className={[
-                          'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
-                          declareMode
-                            ? 'bg-violet-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white',
-                          actionLoading ? 'opacity-50' : '',
-                        ].join(' ')}
-                        data-testid="toggle-declare"
-                      >
-                        Declare
-                      </button>
+                        <button
+                          role="radio"
+                          aria-checked={!declareMode}
+                          onClick={() => {
+                            if (declareMode) {
+                              resetDeclareMode();
+                            } else if (showAskInline) {
+                              // Tapping Ask while ask tray is open cancels the current ask
+                              resetAskMode();
+                            }
+                          }}
+                          disabled={actionLoading}
+                          className={[
+                            'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
+                            !declareMode
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white',
+                            actionLoading ? 'opacity-50' : '',
+                          ].join(' ')}
+                          data-testid="toggle-ask"
+                        >
+                          Ask
+                        </button>
+                        <button
+                          role="radio"
+                          aria-checked={declareMode}
+                          onClick={() => {
+                            if (!declareMode) {
+                              resetAskMode();
+                              setDeclareMode(true);
+                            }
+                          }}
+                          disabled={actionLoading}
+                          className={[
+                            'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
+                            declareMode
+                              ? 'bg-violet-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white',
+                            actionLoading ? 'opacity-50' : '',
+                          ].join(' ')}
+                          data-testid="toggle-declare"
+                        >
+                          Declare
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {/* seat-selection prompt during turn-pass mode */}
-                {isTurnPassMode && (
-                  <div className="flex items-center justify-center">
+                  )}
+                  {/* seat-selection prompt -- replaces Ask/Declare row
+                   * while the declarant is choosing who gets the next turn. */}
+                  {isTurnPassMode && (
                     <span
                       className="text-xs text-cyan-300 font-medium animate-pulse"
                       data-testid="turn-pass-action-prompt"
@@ -1535,8 +1540,8 @@ export default function GamePage({ params }: PageProps) {
                     >
                       {pendingTurnPassAck ? '⏳ Choosing…' : '👆 Tap a highlighted teammate seat above'}
                     </span>
-                  </div>
-                )}
+                  )}
+                </div>
                 {showAskInline && isMyTurn && !isTurnPassMode && (
                   selectedAskHalfSuit && (
                     <div ref={askTrayRef} role="dialog" aria-modal="true" aria-label="Ask for a card">
