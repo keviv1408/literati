@@ -160,14 +160,14 @@ export interface GamePlayerSeatProps {
 
 const TEAM_STYLES = {
   1: {
-    border: 'border-emerald-600/50',
-    bg: 'bg-emerald-900/30',
-    ring: 'ring-emerald-500/30',
+    border: 'border-emerald-500/70',
+    bg: 'bg-emerald-800/55',
+    ring: 'ring-emerald-500/50',
   },
   2: {
-    border: 'border-violet-600/50',
-    bg: 'bg-violet-900/30',
-    ring: 'ring-violet-500/30',
+    border: 'border-violet-500/70',
+    bg: 'bg-violet-800/55',
+    ring: 'ring-violet-500/50',
   },
 } as const;
 
@@ -277,7 +277,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         // Scale up slightly and elevate when it's this player's turn
         !isEliminated && isTurn ? 'scale-110 z-10' : '',
         // Active-turn ring (layout layer — amber offset ring on the container)
-        !isEliminated && isTurn ? 'ring-2 ring-amber-400/80 ring-offset-1 ring-offset-slate-950' : '',
+        !isEliminated && isTurn ? 'ring-[3px] ring-amber-400 ring-offset-2 ring-offset-slate-950' : '',
         // Active-turn glow animation (box-shadow keyframe from globals.css)
         !isEliminated && isTurn ? 'animate-seat-glow' : '',
         // eligible-for-turn highlight (cyan ring, raised z-index)
@@ -297,7 +297,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         ].join(' ') : '',
         // Current user always gets an emerald highlight
         isMe
-          ? 'border-emerald-500/70 bg-emerald-900/40'
+          ? 'border-emerald-400/75 bg-emerald-700/50'
           : [style.border, style.bg].join(' '),
         className,
       ]
@@ -322,7 +322,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       {/* ── Current-turn pulsing ring ─────────────────────────────── */}
       {isTurn && !isEliminated && (
         <span
-          className="absolute inset-0 rounded-xl border-2 border-amber-400/80 animate-pulse pointer-events-none"
+          className="absolute inset-0 rounded-xl border-2 border-amber-300 animate-pulse pointer-events-none"
           aria-hidden="true"
           data-testid="turn-ring"
         />
