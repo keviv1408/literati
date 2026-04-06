@@ -133,12 +133,11 @@ function buildAskSpeechBubble(
   playerRect: DOMRect,
   text: string,
 ): AskSpeechBubbleState {
-  // Place below if the seat centre is in the top half of the viewport (so the
-  // bubble appears between the seat and the bottom of the screen), and above
-  // if it is in the bottom half. This is correct for every seat position in
-  // the circular table layout regardless of team assignment.
+  // Place above for seats in the top half of the viewport and below for seats
+  // in the bottom half. This pushes bubbles outward away from the table centre,
+  // preventing overlap with card-flight animations that travel between seats.
   const seatCenterY = playerRect.top + playerRect.height / 2;
-  const placement = seatCenterY < window.innerHeight / 2 ? 'below' : 'above';
+  const placement = seatCenterY < window.innerHeight / 2 ? 'above' : 'below';
   return {
     text,
     anchorX: playerRect.left + playerRect.width / 2,
