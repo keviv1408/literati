@@ -2738,6 +2738,7 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
         seatIndex:   p.seatIndex,
         isBot:       p.isBot,
         isGuest:     p.isGuest,
+        ...(p.guestRecoveryKey ? { guestRecoveryKey: p.guestRecoveryKey } : {}),
       })),
       variant:     gs.variant,
       playerCount: gs.playerCount,
@@ -3030,6 +3031,7 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
       teamId:      p.teamId,
       isBot:       p.isBot,
       isGuest:     p.isGuest,
+      ...(p.guestRecoveryKey ? { guestRecoveryKey: p.guestRecoveryKey } : {}),
     }));
 
     const rematchRoomId      = config?.roomId      ?? finishedGs?.roomId;
