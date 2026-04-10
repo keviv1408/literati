@@ -396,6 +396,7 @@ export function useGameSocket({
 
   const wsRef      = useRef<WebSocket | null>(null);
   const statusRef  = useRef<GameWsStatus>('idle');
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const declarationFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Persist the variant across message handlers so hand_update (which only
   // carries the new hand array) can still apply the half-suit sort.
@@ -434,6 +435,16 @@ export function useGameSocket({
       else if (e.code === 4003) setError('You are no longer recognized as a player in this game. Please rejoin from the room page.');
       else if (e.code === 4004) setError('Room not found');
       else if (e.code === 4005) setError('Game has not started yet');
+
+      // Auto-reload on unexpected disconnect (e.g. backend redeploy).
+      // Code 1000 = intentional close (unmount), 4xxx = known errors.
+      const isIntentional = e.code === 1000;
+      const isKnownError = e.code >= 4001 && e.code <= 4005;
+      if (!isIntentional && !isKnownError) {
+        reloadTimerRef.current = setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      }
     };
 
     ws.onerror = () => {
@@ -819,6 +830,10 @@ export function useGameSocket({
     };
 
     return () => {
+      if (reloadTimerRef.current) {
+        clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = null;
+      }
       ws.close(1000, 'unmount');
       wsRef.current = null;
     };
