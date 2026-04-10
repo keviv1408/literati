@@ -52,6 +52,7 @@ import {
 import { consumeCreatedRoom } from '@/components/CreateRoomModal';
 import { useRoomSocket } from '@/hooks/useRoomSocket';
 import { useReconnect } from '@/hooks/useReconnect';
+import { useGuestSession } from '@/hooks/useGuestSession';
 import { connectSocket, disconnectSocket } from '@/lib/socket';
 import type { RoomCreatedPayload } from '@/lib/socket';
 import type { Room, Team } from '@/types/room';
@@ -87,6 +88,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
     errorMessage: reconnectError,
     retry: retryReconnect,
   } = useReconnect();
+
+  const { ensureGuestName } = useGuestSession();
 
   const [room, setRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
@@ -641,24 +644,40 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
   // ── No session — guest without a display name / not logged in ────────────
   if (!kickedOnEntry && !isKicked && reconnectStatus === 'no_session') {
-    // Redirect to home so the user can enter a display name or sign in.
-    // Use a brief effect-based redirect to avoid render loops.
+    // Prompt the guest to enter a display name, then retry session validation.
+    const handleSetName = async () => {
+      const session = await ensureGuestName();
+      if (session) {
+        retryReconnect();
+      }
+    };
+
     return (
       <div
         className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
         data-testid="no-session-screen"
       >
         <div className="flex flex-col items-center gap-4">
-          <p className="text-slate-300 text-sm">Redirecting to home…</p>
+          <p className="text-slate-300 text-sm">Enter a display name to join this room</p>
+          <button
+            onClick={handleSetName}
+            className="
+              py-2 px-4 rounded-xl text-sm font-medium
+              bg-emerald-700 hover:bg-emerald-600 text-white
+              transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
+            "
+          >
+            Set Display Name
+          </button>
           <button
             onClick={() => router.push('/')}
             className="
-              py-2 px-4 rounded-xl text-xs font-medium
-              bg-emerald-700 hover:bg-emerald-600 text-white
+              py-1.5 px-3 rounded-xl text-xs font-medium
+              text-slate-400 hover:text-slate-200
               transition-colors focus:outline-none
             "
           >
-            Go Home
+            Back to Home
           </button>
         </div>
       </div>
