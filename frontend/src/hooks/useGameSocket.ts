@@ -443,7 +443,7 @@ export function useGameSocket({
       if (!isIntentional && !isKnownError) {
         reloadTimerRef.current = setTimeout(() => {
           window.location.reload();
-        }, 3000);
+        }, 500);
       }
     };
 
