@@ -53,6 +53,9 @@
 const { buildDeck, shuffleDeck, dealCards, cardLabel } = require('./deck');
 const { buildCardToHalfSuitMap, halfSuitLabel } = require('./halfSuits');
 
+/** Default delay before a bot takes its turn (ms). Adjustable per game via `set_bot_speed`. */
+const BOT_TURN_DELAY_MS = 5_000;
+
 /**
  * Create a brand-new game state from a lobby seat snapshot.
  *
@@ -99,6 +102,7 @@ function createGameState({ roomCode, roomId, variant, playerCount, seats }) {
     playerCount,
     status: 'active',
     currentTurnPlayerId: firstTurnPlayerId,
+    botDelayMs: BOT_TURN_DELAY_MS,
 
     // Immutable player list (ordered by seatIndex).
     players: sortedSeats.map((s) => ({
@@ -242,6 +246,7 @@ function serializePublicState(gs) {
     winner:              gs.winner,
     tiebreakerWinner:    gs.tiebreakerWinner,
     declaredSuits:       declaredSuitsArr,
+    botDelayMs:          gs.botDelayMs,
   };
 }
 
@@ -384,6 +389,7 @@ function buildPersistedSnapshot(gs) {
     lastMove:       gs.lastMove,
     winner:         gs.winner,
     tiebreakerWinner: gs.tiebreakerWinner,
+    botDelayMs:     gs.botDelayMs,
     moveHistory:    gs.moveHistory,
     teamIntentMemory: Object.fromEntries(
       Array.from(gs.teamIntentMemory ?? new Map()).map(([teamId, suitMap]) => [
@@ -535,6 +541,7 @@ function restoreGameState(snapshot, roomCode, roomId) {
     lastMove:      snapshot.lastMove,
     winner:        snapshot.winner,
     tiebreakerWinner: snapshot.tiebreakerWinner,
+    botDelayMs:    snapshot.botDelayMs ?? BOT_TURN_DELAY_MS,
     botKnowledge:  new Map(),
     teamIntentMemory: new Map(
       Object.entries(snapshot.teamIntentMemory ?? {}).map(([teamId, suitMap]) => [
@@ -551,6 +558,7 @@ function restoreGameState(snapshot, roomCode, roomId) {
 }
 
 module.exports = {
+  BOT_TURN_DELAY_MS,
   createGameState,
   getTeamPlayers,
   getPlayerTeam,

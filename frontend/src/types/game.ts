@@ -58,6 +58,8 @@ export interface PublicGameState {
   winner: 1 | 2 | null;
   tiebreakerWinner: 1 | 2 | null;
   declaredSuits: DeclaredSuit[];
+  /** Delay before each bot move (ms); shared by everyone in the game. */
+  botDelayMs?: number;
 }
 
 /** Full game init payload sent to each player on connection. */
