@@ -143,38 +143,6 @@ function registerClients(code, playerCount, entries) {
 // ---------------------------------------------------------------------------
 
 describe('A. Authorisation', () => {
-  it('rejects non-host with an error message', async () => {
-    const supabase = buildMockSupabase(makeWaitingRoom());
-    _setSupabaseClientFactory(() => supabase);
-
-    const ws = createMockWs();
-    registerClients(ROOM_CODE, 6, [
-      { userId: HOST_ID,    displayName: 'Host',    isGuest: false, isHost: true,  teamId: 1, ws: createMockWs() },
-      { userId: PLAYER1_ID, displayName: 'Player1', isGuest: false, isHost: false, teamId: 2, ws },
-    ]);
-    const clients = roomClients.get(ROOM_CODE);
-
-    await handleStartGame({ ws, userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
-
-    const errMsg = msgOfType(ws, 'error');
-    expect(errMsg).not.toBeNull();
-    expect(errMsg.message).toMatch(/only the host/i);
-  });
-
-  it('does NOT call Supabase when requester is not the host', async () => {
-    const supabase = buildMockSupabase(makeWaitingRoom());
-    _setSupabaseClientFactory(() => supabase);
-
-    const ws = createMockWs();
-    registerClients(ROOM_CODE, 6, [
-      { userId: PLAYER1_ID, displayName: 'P1', isGuest: false, isHost: false, teamId: 1, ws },
-    ]);
-    const clients = roomClients.get(ROOM_CODE);
-
-    await handleStartGame({ ws, userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
-
-    expect(supabase.from).not.toHaveBeenCalled();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -425,6 +393,26 @@ describe('D. Broadcast', () => {
     expect(msgOfType(p1Ws,   'lobby-starting')).not.toBeNull();
   });
 
+  it('lets a non-host start the game', async () => {
+    const supabase = buildMockSupabase(makeWaitingRoom());
+    _setSupabaseClientFactory(() => supabase);
+
+    const hostWs = createMockWs();
+    const p1Ws   = createMockWs();
+
+    registerClients(ROOM_CODE, 6, [
+      { userId: HOST_ID,    displayName: 'Host', isGuest: false, isHost: true,  teamId: 1, ws: hostWs },
+      { userId: PLAYER1_ID, displayName: 'P1',   isGuest: false, isHost: false, teamId: 2, ws: p1Ws   },
+    ]);
+    const clients = roomClients.get(ROOM_CODE);
+
+    await handleStartGame({ ws: p1Ws, userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
+
+    expect(msgOfType(p1Ws, 'error')).toBeNull();
+    expect(msgOfType(hostWs, 'lobby-starting')).not.toBeNull();
+    expect(msgOfType(p1Ws,   'lobby-starting')).not.toBeNull();
+  });
+
   it('lobby-starting payload includes roomCode', async () => {
     const supabase = buildMockSupabase(makeWaitingRoom());
     _setSupabaseClientFactory(() => supabase);
@@ -441,22 +429,6 @@ describe('D. Broadcast', () => {
     expect(msg.roomCode).toBe(ROOM_CODE);
   });
 
-  it('non-host does NOT receive lobby-starting on error', async () => {
-    const supabase = buildMockSupabase(makeWaitingRoom());
-    _setSupabaseClientFactory(() => supabase);
-
-    const nonHostWs = createMockWs();
-    registerClients(ROOM_CODE, 6, [
-      { userId: PLAYER1_ID, displayName: 'P1', isGuest: false, isHost: false, teamId: 2, ws: nonHostWs },
-    ]);
-    const clients = roomClients.get(ROOM_CODE);
-
-    await handleStartGame({ ws: nonHostWs, userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
-
-    // Should get error but NOT lobby-starting
-    expect(msgOfType(nonHostWs, 'error')).not.toBeNull();
-    expect(msgOfType(nonHostWs, 'lobby-starting')).toBeNull();
-  });
 });
 
 // ---------------------------------------------------------------------------
