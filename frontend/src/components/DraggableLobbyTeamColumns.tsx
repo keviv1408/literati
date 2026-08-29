@@ -57,6 +57,8 @@ import type { LobbyPlayer } from "@/types/lobby";
 import type { Team } from "@/types/room";
 import { TEAM_STYLES } from "@/lib/teamTheme";
 
+const EMPTY_OVERRIDES: Map<number, Team> = new Map();
+
 // ── Prop types ────────────────────────────────────────────────────────────────
 
 export interface DraggableLobbyTeamColumnsProps {
@@ -390,9 +392,17 @@ const DraggableLobbyTeamColumns: React.FC<DraggableLobbyTeamColumnsProps> = ({
   // ── Team override state ──────────────────────────────────────────────────
   // Key = seatIndex, value = override team (1 or 2).
   // Default team is derived from seatIndex % 2 (getTeamForSeat).
-  const [teamOverrides, setTeamOverrides] = useState<Map<number, Team>>(
-    new Map(),
-  );
+  // Optimistic placement for the one drag in flight. Seat indices are repacked
+  // on every server snapshot, so an override is only valid for the `seats`
+  // reference it was made against.
+  const [pendingOverride, setPendingOverride] = useState<{
+    forSeats: typeof seats;
+    map: Map<number, Team>;
+  } | null>(null);
+  const teamOverrides: Map<number, Team> =
+    pendingOverride && pendingOverride.forSeats === seats
+      ? pendingOverride.map
+      : EMPTY_OVERRIDES;
 
   // The currently dragged seat (for DragOverlay rendering).
   const [activeSeatIndex, setActiveSeatIndex] = useState<number | null>(null);
@@ -440,17 +450,12 @@ const DraggableLobbyTeamColumns: React.FC<DraggableLobbyTeamColumnsProps> = ({
         teamOverrides.get(seatIndex) ?? getTeamForSeat(seatIndex);
       if (currentTeam === toTeam) return;
 
-      // Update local override state.
-      setTeamOverrides((prev) => {
-        const next = new Map(prev);
-        next.set(seatIndex, toTeam);
-        return next;
-      });
+      setPendingOverride({ forSeats: seats, map: new Map([[seatIndex, toTeam]]) });
 
       // Notify parent to emit the socket event.
       onReassign?.(seatIndex, toTeam);
     },
-    [teamOverrides, onReassign],
+    [teamOverrides, onReassign, seats],
   );
 
   // ── Build team entry arrays ────────────────────────────────────────────────

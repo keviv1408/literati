@@ -284,4 +284,29 @@ describe('Majority thresholds', () => {
     castVote('ROOM1', 'h2', true); // 4 yes = majority!
     expect(getVoteSummary('ROOM1').majorityReached).toBe(true);
   });
+
+  test('22. bot auto-yes votes alone never reach majority; all-human no declines', () => {
+    // 2 humans + 4 bots: majority = 4, bots alone supply 4 yes votes
+    const players = [makeHumanPlayer('h1'), makeHumanPlayer('h2'),
+      makeBotPlayer('b1'), makeBotPlayer('b2'), makeBotPlayer('b3'), makeBotPlayer('b4')];
+    const s = initRematch('ROOM1', players, jest.fn());
+    expect(s.yesCount).toBe(4);
+    expect(s.majorityReached).toBe(false);
+    expect(s.majorityDeclined).toBe(false);
+
+    castVote('ROOM1', 'h1', false);
+    expect(getVoteSummary('ROOM1').majorityDeclined).toBe(false); // h2 undecided
+    castVote('ROOM1', 'h2', false);
+    expect(getVoteSummary('ROOM1').majorityDeclined).toBe(true);
+    expect(getVoteSummary('ROOM1').majorityReached).toBe(false);
+  });
+
+  test('23. one human yes on top of a bot majority starts the rematch', () => {
+    const players = [makeHumanPlayer('h1'), makeHumanPlayer('h2'),
+      makeBotPlayer('b1'), makeBotPlayer('b2'), makeBotPlayer('b3'), makeBotPlayer('b4')];
+    initRematch('ROOM1', players, jest.fn());
+    castVote('ROOM1', 'h1', false);
+    castVote('ROOM1', 'h2', true);
+    expect(getVoteSummary('ROOM1').majorityReached).toBe(true);
+  });
 });

@@ -584,7 +584,7 @@ describe('useRoomSocket', () => {
   // ── kickPlayer ────────────────────────────────────────────────────────────
 
   describe('kickPlayer', () => {
-    it('sends a kick-player message with the correct targetPlayerId when OPEN', () => {
+    it('sends the kick_player message the room server expects when OPEN', () => {
       const { result } = renderHook(() =>
         useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
       );
@@ -593,25 +593,8 @@ describe('useRoomSocket', () => {
         result.current.kickPlayer('target-player-id');
       });
       expect(wsInstances[0].send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'kick-player',
-          roomCode: 'ABC123',
-          targetPlayerId: 'target-player-id',
-        })
+        JSON.stringify({ type: 'kick_player', targetId: 'target-player-id' })
       );
-    });
-
-    it('uppercases the roomCode in the kick-player message', () => {
-      const { result } = renderHook(() =>
-        useRoomSocket({ roomCode: 'abc123', sessionId: 'sess-1' })
-      );
-      openSocket(wsInstances[0]);
-      act(() => {
-        result.current.kickPlayer('target-id');
-      });
-      const lastCall = wsInstances[0].send.mock.calls.at(-1)?.[0] as string;
-      const parsed = JSON.parse(lastCall);
-      expect(parsed.roomCode).toBe('ABC123');
     });
 
     it('does nothing when the socket is not OPEN', () => {

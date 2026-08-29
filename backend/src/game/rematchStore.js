@@ -168,13 +168,16 @@ function getVoteSummary(roomCode) {
     };
   });
 
-  // Majority is yes-votes >= threshold
-  const majorityReached = yesCount >= state.majority;
+  const anyHumanYes     = state.players.some((p) => !p.isBot && state.votes.get(p.playerId) === true);
+  const humansUndecided = state.players.filter((p) => !p.isBot && !state.votes.has(p.playerId)).length;
+  // Bot auto-yes votes alone never start a rematch; once every human has voted without a yes it is over.
+  const majorityReached = yesCount >= state.majority && (anyHumanYes || state.humanCount === 0);
 
   // Early decline: remaining unvoted players can never push yes to majority
   const votedCount     = yesCount + noCount;
   const remainingVotes = state.totalCount - votedCount;
-  const majorityDeclined = !majorityReached && (yesCount + remainingVotes < state.majority);
+  const majorityDeclined = !majorityReached
+    && (yesCount + remainingVotes < state.majority || humansUndecided === 0);
 
   return {
     yesCount,

@@ -204,6 +204,8 @@ export interface UseRoomSocketResult {
    * Cleared when a new WebSocket connection is opened.
    */
   lastError: string | null;
+  /** Increments on every server error frame, including repeats of the same message. */
+  errorSeq: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -235,6 +237,7 @@ export function useRoomSocket({
   const [lobbyTimer, setLobbyTimer] = useState<LobbyTimerState | null>(null);
   const [lobbyStarting, setLobbyStarting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [errorSeq, setErrorSeq] = useState(0);
   const [hostChangedEvent, setHostChangedEvent] = useState<HostChangedEvent | null>(null);
 
   // Stable ref to the live WebSocket so emit/kickPlayer don't need re-creation.
@@ -370,6 +373,7 @@ export function useRoomSocket({
         }
 
         // ── You personally were kicked ───────────────────────────────────────
+        case 'kicked':
         case 'you-were-kicked': {
           const reason =
             'You have been removed from this room by the host.';
@@ -464,6 +468,7 @@ export function useRoomSocket({
           const errMessage = msg.message as string | undefined;
           if (typeof errMessage === 'string') {
             setLastError(errMessage);
+            setErrorSeq((n) => n + 1);
           }
           break;
         }
@@ -510,11 +515,7 @@ export function useRoomSocket({
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN && roomCode) {
         ws.send(
-          JSON.stringify({
-            type: 'kick-player',
-            roomCode: roomCode.toUpperCase(),
-            targetPlayerId,
-          })
+          JSON.stringify({ type: 'kick_player', targetId: targetPlayerId })
         );
       }
     },
@@ -574,6 +575,7 @@ export function useRoomSocket({
     lobbyTimer,
     lobbyStarting,
     lastError,
+    errorSeq,
     hostChangedEvent,
   };
 }

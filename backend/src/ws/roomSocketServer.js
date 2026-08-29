@@ -1534,7 +1534,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
         playerId:    uid,
         displayName: clientEntry.displayName,
         avatarId:    null,
-        teamId:      prev.teamId,    // Preserve original team assignment
+        teamId:      clientEntry.teamId ?? prev.teamId,
         isBot:       false,
         isGuest:     clientEntry.isGuest,
       });
@@ -1823,6 +1823,8 @@ function attachRoomSocketServer(httpServer) {
     }
 
     // ── Register client ─────────────────────────────────────────────────────
+    // Second tab / fast reconnect: the stale socket must not remove this one on close.
+    if (existingEntry && existingEntry.ws !== ws) existingEntry.ws.close?.(4006, 'Superseded by a newer connection');
     clients.set(userId, {
       ws,
       userId,
@@ -2010,7 +2012,9 @@ function attachRoomSocketServer(httpServer) {
       // Capture host status from in-memory entry before deleting it so that the
       // host-transfer timer can be started even if liveIsHost is false at this
       // moment due to a prior transfer.
-      const wasHost = clients.get(userId)?.isHost ?? false;
+      const entry = clients.get(userId);
+      if (entry && entry.ws !== ws) return; // superseded by a newer socket
+      const wasHost = entry?.isHost ?? false;
 
       clients.delete(userId);
 

@@ -165,6 +165,8 @@ export interface UseGameSocketReturn {
    * Components can use this to animate a takeover indicator.
    */
   botTakeover: BotTakeoverPayload | null;
+  /** True while the server holds our seat as a bot until the next turn boundary. */
+  reclaimQueued: boolean;
   /**
    * Map of currently-active reconnect windows keyed by playerId.
    * Non-empty while one or more human players have disconnected and the server
@@ -382,6 +384,8 @@ export function useGameSocket({
   const [rematchDeclined, setRematchDeclined] = useState<RematchDeclinedPayload | null>(null);
   const [roomDissolved, setRoomDissolved]   = useState<RoomDissolvedPayload | null>(null);
   const [botTakeover, setBotTakeover]       = useState<BotTakeoverPayload | null>(null);
+  const [reclaimQueued, setReclaimQueued]   = useState(false);
+  const myPlayerIdRef = useRef<string | null>(null);
   const [declareProgress, setDeclareProgress] = useState<DeclareProgressPayload | null>(null);
   const [reconnectWindows, setReconnectWindows] = useState<
     Record<string, { expiresAt: number; reconnectWindowMs: number }>
@@ -432,16 +436,21 @@ export function useGameSocket({
 
     ws.onclose = (e) => {
       wsRef.current = null;
-      setStatus(statusRef.current === 'error' ? 'error' : 'disconnected');
-      if (e.code === 4001) setError('Authentication failed');
+      // Code 1000 = intentional close (unmount). Any 4xxx is a deliberate server
+      // close that a reload would only repeat, so surface it instead.
+      const isIntentional = e.code === 1000;
+      const isKnownError = e.code >= 4000 && e.code < 5000;
+      setStatus(isKnownError || statusRef.current === 'error' ? 'error' : 'disconnected');
+      if (e.code === 4000) setError('Invalid room code');
+      else if (e.code === 4001) setError('Authentication failed');
       else if (e.code === 4003) setError('You are no longer recognized as a player in this game. Please rejoin from the room page.');
       else if (e.code === 4004) setError('Room not found');
       else if (e.code === 4005) setError('Game has not started yet');
+      else if (e.code === 4006) setError('This game was opened in another tab or window.');
+      else if (e.code === 4008) setError('Disconnected for sending too many messages. Refresh to rejoin.');
+      else if (e.code === 4500) setError('Server error. Refresh to rejoin.');
 
       // Auto-reload on unexpected disconnect (e.g. backend redeploy).
-      // Code 1000 = intentional close (unmount), 4xxx = known errors.
-      const isIntentional = e.code === 1000;
-      const isKnownError = e.code >= 4001 && e.code <= 4005;
       if (!isIntentional && !isKnownError) {
         reloadTimerRef.current = setTimeout(() => {
           window.location.reload();
@@ -476,6 +485,8 @@ export function useGameSocket({
           variantRef.current = initVariant;
 
           setMyPlayerId(payload.myPlayerId);
+          myPlayerIdRef.current = payload.myPlayerId;
+          setReclaimQueued(false);
           // Auto-sort hand by half-suit on initial deal
           const initHand = payload.myHand ?? [];
           setMyHand(initVariant ? sortHandByHalfSuit(initHand, initVariant) : initHand);
@@ -743,6 +754,17 @@ export function useGameSocket({
         }
 
         // ── Reconnect window events ──────────────────────
+        case 'reclaim_queued': {
+          setReclaimQueued(true);
+          break;
+        }
+
+        case 'seat_reclaimed': {
+          const { playerId: reclaimedId } = msg as { playerId: string };
+          if (reclaimedId === myPlayerIdRef.current) setReclaimQueued(false);
+          break;
+        }
+
         case 'player_disconnected': {
           const payload = msg as unknown as PlayerDisconnectedPayload;
           setReconnectWindows((prev) => ({
@@ -1012,6 +1034,7 @@ export function useGameSocket({
     rematchDeclined,
     roomDissolved,
     botTakeover,
+    reclaimQueued,
     reconnectWindows,
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight,

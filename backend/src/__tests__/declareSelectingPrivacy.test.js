@@ -278,7 +278,8 @@ describe('declare_selecting — private suit selection ', () => {
 
       // Sender should receive NO response (not even an ack or error)
       const responseMessages = received.filter(
-        (m) => m.type !== 'turn_timer' && m.type !== 'game_state' && m.type !== 'game_players'
+        // A live turn timer also ticks every second (timer_start / timer_tick / timer_threshold).
+        (m) => !/^timer_/.test(m.type) && m.type !== 'turn_timer' && m.type !== 'game_state' && m.type !== 'game_players'
       );
       expect(responseMessages).toHaveLength(0);
     } finally {
