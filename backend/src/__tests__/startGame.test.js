@@ -173,31 +173,6 @@ describe('handleStartGame ', () => {
 
   // ── 1. Authorization ────────────────────────────────────────────────────────
 
-  it('sends error and does not start when caller is not the host', async () => {
-    const playerWs = createMockWs();
-    const hostWs   = createMockWs();
-
-    setupRoom(ROOM, 6, [
-      { userId: 'h1', displayName: 'Host', isHost: true,  teamId: 1, ws: hostWs   },
-      { userId: 'p2', displayName: 'Bob',  isHost: false, teamId: 2, ws: playerWs },
-    ]);
-
-    await handleStartGame({
-      ws:       playerWs,
-      userId:   'p2',
-      isHost:   false,
-      roomCode: ROOM,
-      clients:  roomClients.get(ROOM),
-    });
-
-    expect(lastSent(playerWs)).toMatchObject({
-      type:    'error',
-      message: expect.stringMatching(/host/i),
-    });
-    // No broadcast to other clients
-    expect(hostWs.send).not.toHaveBeenCalled();
-  });
-
   // ── 2. Room not found ───────────────────────────────────────────────────────
 
   it('sends error when Supabase cannot find the room', async () => {

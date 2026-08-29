@@ -58,6 +58,8 @@ const url = require('url');
 const { getGuestSession } = require('../sessions/guestSessionStore');
 const rateLimiter = require('./rateLimiter');
 const { buildGameSeats } = require('../game/gameInitService');
+const { persistGameState } = require('../game/gameState');
+const { getSupabaseClient } = require('../db/supabase');
 const { guestHostMap } = require('../routes/rooms');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
@@ -119,7 +121,7 @@ function _setSupabaseClientFactory(factory) {
 
 function getSupabase() {
   if (_supabaseClientFactory) return _supabaseClientFactory();
-  return require('../db/supabase').getSupabaseClient();
+  return getSupabaseClient();
 }
 
 // ---------------------------------------------------------------------------
@@ -1083,6 +1085,17 @@ async function handleStartGame(ctx) {
       return;
     }
 
+    if (dbRoom.is_matchmaking) {
+      ws.send(
+        JSON.stringify({
+          type:    'error',
+          code:    'MATCHMAKING_ROOM',
+          message: 'Matchmaking games start automatically',
+        }),
+      );
+      return;
+    }
+
     const playerCount = dbRoom.player_count || 6;
     const variant     = dbRoom.card_removal_variant || 'remove_7s';
     const roomId      = dbRoom.id;
@@ -1190,7 +1203,6 @@ async function handleStartGame(ctx) {
     if (gameState) {
       process.nextTick(async () => {
         try {
-          const { persistGameState } = require('../game/gameState');
           const supabase = getSupabase();
           await persistGameState(gameState, supabase);
           console.log(`[RoomWS] Game state persisted for room ${roomCode}`);
@@ -1324,7 +1336,6 @@ async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
   if (gameState) {
     process.nextTick(async () => {
       try {
-        const { persistGameState } = require('../game/gameState');
         const supabase = getSupabase();
         await persistGameState(gameState, supabase);
         console.log(`[RoomWS] Matchmaking game state persisted for room ${roomCode}`);
@@ -1588,7 +1599,6 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
     if (gameState) {
       process.nextTick(async () => {
         try {
-          const { persistGameState } = require('../game/gameState');
           const supabase = getSupabase();
           await persistGameState(gameState, supabase);
           console.log(`[RoomWS] Rematch game state persisted for room ${code}`);

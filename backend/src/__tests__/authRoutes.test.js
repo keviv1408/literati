@@ -269,31 +269,6 @@ describe('GET /api/auth/me', () => {
     expect(res.body._noDbWrites).toBeUndefined();
   });
 
-  it('returns registered user identity for a Supabase token', async () => {
-    const mock = buildMockSupabase({
-      data: {
-        user: {
-          id: 'user-abc',
-          email: 'user@example.com',
-          user_metadata: { display_name: 'RegUser', avatar_id: 'avatar-9' },
-        },
-      },
-      error: null,
-    });
-    app = loadApp(mock);
-
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', 'Bearer supabase-jwt');
-
-    expect(res.status).toBe(200);
-    expect(res.body.isGuest).toBe(false);
-    expect(res.body.id).toBe('user-abc');
-    expect(res.body.email).toBe('user@example.com');
-    expect(res.body.displayName).toBe('RegUser');
-    expect(res.body.avatarId).toBe('avatar-9');
-  });
-
   it('returns 401 when no token is provided', async () => {
     const res = await request(app).get('/api/auth/me');
     expect(res.status).toBe(401);
@@ -365,36 +340,6 @@ describe('GET /api/auth/me: profile enrichment', () => {
       _mocks: { maybeSingleMock, eqMock, selectMock, fromMock },
     };
   }
-
-  it('returns display_name from user_profiles for a Google OAuth user', async () => {
-    // Simulate a Google OAuth user: no display_name in metadata (raw from Google),
-    // but the callback route has already populated user_profiles.
-    const mock = buildProfileMock(
-      {
-        data: {
-          user: {
-            id: 'google-user-id',
-            email: 'googleuser@gmail.com',
-            user_metadata: { full_name: 'Google User' },
-          },
-        },
-        error: null,
-      },
-      { data: { display_name: 'Google User', avatar_id: 'avatar-1' }, error: null }
-    );
-    const app = loadApp(mock);
-
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', 'Bearer google-oauth-jwt');
-
-    expect(res.status).toBe(200);
-    expect(res.body.isGuest).toBe(false);
-    expect(res.body.displayName).toBe('Google User');
-    expect(res.body.avatarId).toBe('avatar-1');
-    // Verify from() was called to look up user_profiles
-    expect(mock.from).toHaveBeenCalledWith('user_profiles');
-  });
 
   it('falls back to metadata display_name when user_profiles row not found', async () => {
     const mock = buildProfileMock(

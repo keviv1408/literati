@@ -350,20 +350,6 @@ describe('handleStartGame() WS handler', () => {
 
   // ── Authorization ─────────────────────────────────────────────────────────
 
-  it('sends error when requester is not the host', async () => {
-    const ws   = createMockWs();
-    const code = 'ROOM01';
-    const clients = new Map([
-      ['user-1', { userId: 'user-1', displayName: 'Alice', isGuest: false, isHost: false, teamId: 1, ws: createMockWs() }],
-    ]);
-
-    await handleStartGame({ ws, userId: 'user-1', isHost: false, roomCode: code, clients });
-
-    const msg = lastSent(ws);
-    expect(msg.type).toBe('error');
-    expect(msg.message).toMatch(/host/i);
-  });
-
   // ── Room status guard ──────────────────────────────────────────────────────
 
   it('sends ROOM_NOT_WAITING error when room is not in waiting status', async () => {

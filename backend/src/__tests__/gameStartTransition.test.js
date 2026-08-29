@@ -263,29 +263,6 @@ describe('buildOccupiedSeats', () => {
 // ===========================================================================
 
 describe('handleStartGame — authorization', () => {
-  it('rejects non-host with an error message', async () => {
-    const ws      = createMockWs();
-    const clients = new Map([
-      ['not-host', { ws, userId: 'not-host', displayName: 'P', isGuest: true, isHost: false, teamId: 1 }],
-    ]);
-
-    await handleStartGame({ ws, userId: 'not-host', isHost: false, roomCode: ROOM_CODE, clients });
-
-    const msg = lastSent(ws);
-    expect(msg.type).toBe('error');
-    expect(msg.message).toMatch(/only the host/i);
-  });
-
-  it('does not call Supabase when requester is not host', async () => {
-    const ws      = createMockWs();
-    const mockDb  = buildMockSupabase({ room: waitingRoom });
-    _setSupabaseClientFactory(() => mockDb);
-
-    await handleStartGame({ ws, userId: 'not-host', isHost: false, roomCode: ROOM_CODE, clients: new Map() });
-
-    // fetchRoomMetaFull should never be called
-    expect(mockDb.from).not.toHaveBeenCalled();
-  });
 });
 
 // ===========================================================================

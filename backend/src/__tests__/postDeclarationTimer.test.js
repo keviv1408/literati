@@ -239,6 +239,7 @@ describe('post_declaration_timer — broadcast', () => {
     jest.useFakeTimers();
 
     // p1 is a bot declarant but p3 and p5 are human teammates on team 1
+    gs.players.find((p) => p.playerId === 'p1').isBot = true;
     await handleDeclare(ROOM, 'p1', 'low_s', CORRECT_ASSIGNMENT, null, true);
 
     const allWs = [wsP1, wsP2, wsP3, wsP4, wsP5, wsP6, wsSpectator];
