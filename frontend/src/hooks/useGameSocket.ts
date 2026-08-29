@@ -247,6 +247,8 @@ export interface UseGameSocketReturn {
    * cleanly transition away from the overlay and render the new turn state.
    */
   sendGameAdvance: () => void;
+  /** Set the bot move delay (ms) for everyone in this game. */
+  sendBotSpeed: (delayMs: number) => void;
   /**
    * IDs of all non-eliminated players with at least one card
    * remaining, as of the most recent declaration.
@@ -966,6 +968,12 @@ export function useGameSocket({
     ws.send(JSON.stringify({ type: 'game_advance' }));
   }, []);
 
+  const sendBotSpeed = useCallback((delayMs: number) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'set_bot_speed', delayMs }));
+  }, []);
+
   /**
    * 56c: Redirect the current turn to a same-team teammate after
    * a correct declaration. Sends `choose_next_turn` to the server,
@@ -1017,6 +1025,7 @@ export function useGameSocket({
     sendPartialSelection,
     sendDeclareSelecting,
     sendGameAdvance,
+    sendBotSpeed,
     sendChooseNextTurn,
     error,
   };

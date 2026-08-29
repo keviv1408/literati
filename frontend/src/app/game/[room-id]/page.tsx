@@ -265,7 +265,7 @@ export default function GamePage({ params }: PageProps) {
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting,
     declareProgress,
     eligibleNextTurnPlayerIds,
-    postDeclarationHighlight, sendChooseNextTurn,
+    postDeclarationHighlight, sendChooseNextTurn, sendBotSpeed,
     postDeclarationTimer, pendingTurnPassAck,
     error: wsError,
   } = useGameSocket({
@@ -1278,6 +1278,22 @@ export default function GamePage({ params }: PageProps) {
           {/* <VoiceControls /> */}
           {/* Mute toggle — persists across page refreshes via localStorage */}
           <MuteToggle muted={muted} onToggle={toggleMute} />
+          {/* Bot speed - shared by everyone in the game, applies from the next bot turn */}
+          <label className="flex items-center gap-1.5 text-xs text-slate-400" title="Bot move delay (applies to everyone in this game)">
+            <span aria-hidden="true">🤖</span>
+            <input
+              type="range"
+              min={3000}
+              max={12000}
+              step={1000}
+              value={gameState?.botDelayMs ?? 5000}
+              onChange={(e) => sendBotSpeed(Number(e.target.value))}
+              aria-label="Bot speed"
+              className="w-20 accent-emerald-400"
+              data-testid="bot-speed-slider"
+            />
+            <span className="tabular-nums w-7" data-testid="bot-speed-value">{(gameState?.botDelayMs ?? 5000) / 1000}s</span>
+          </label>
           <div className="flex items-center gap-1.5" title={`Connection: ${wsStatus}`} data-testid="ws-status-indicator">
             <span className={['w-2 h-2 rounded-full', wsStatus === 'connected' ? 'bg-emerald-400' : wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : wsStatus === 'error' ? 'bg-red-500' : 'bg-slate-600'].join(' ')} />
           </div>

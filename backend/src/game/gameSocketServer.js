@@ -139,6 +139,7 @@ const {
   getConnection,
 } = require('./gameStore');
 const {
+  BOT_TURN_DELAY_MS,
   createGameState,
   serializePublicState,
   serializePlayers,
@@ -226,8 +227,9 @@ function _getRoomSocketServer() {
 // Turn timer configuration
 // ---------------------------------------------------------------------------
 
-/** Delay before a bot takes its turn (ms) — gives human UI time to track the previous move */
-const BOT_TURN_DELAY_MS = 5_000;
+/** Bounds for the per-game bot delay set by players via `set_bot_speed` (ms) */
+const MIN_BOT_DELAY_MS = 3_000;
+const MAX_BOT_DELAY_MS = 12_000;
 
 /** Time a human player has to act before the server auto-moves for them (ms) */
 const HUMAN_TURN_TIMEOUT_MS = 60_000;
@@ -665,7 +667,7 @@ function scheduleBotTurnIfNeeded(gs) {
   const timer = setTimeout(() => {
     _botTimers.delete(gs.roomCode);
     executeBotTurn(gs.roomCode, gs.currentTurnPlayerId);
-  }, BOT_TURN_DELAY_MS);
+  }, gs.botDelayMs ?? BOT_TURN_DELAY_MS);
 
   _botTimers.set(gs.roomCode, timer);
 }
@@ -3775,6 +3777,19 @@ function attachGameSocketServer(httpServer) {
           } else {
             sendJson(ws, { type: 'error', message: 'targetSeatIndex must be a number', code: 'MISSING_FIELDS' });
           }
+          break;
+        }
+
+        case 'set_bot_speed': {
+          // Any seated human can change it; it applies to the whole game from the next bot turn.
+          const { delayMs } = msg;
+          const gs = getGame(roomCode);
+          if (!gs || !Number.isFinite(delayMs) || delayMs < MIN_BOT_DELAY_MS || delayMs > MAX_BOT_DELAY_MS) {
+            sendJson(ws, { type: 'error', message: `delayMs must be a number between ${MIN_BOT_DELAY_MS} and ${MAX_BOT_DELAY_MS}`, code: 'INVALID_BOT_SPEED' });
+            break;
+          }
+          gs.botDelayMs = delayMs;
+          broadcastToGame(roomCode, { type: 'game_state', state: serializePublicState(gs) });
           break;
         }
 
