@@ -70,6 +70,9 @@ function registerConnection(roomCode, playerId, ws) {
   if (!_connections.has(code)) {
     _connections.set(code, new Map());
   }
+  const prev = _connections.get(code).get(playerId);
+  // Second tab / fast reconnect: the stale socket must not keep the seat or bot-flag it on close.
+  if (prev && prev !== ws) prev.close?.(4006, 'Superseded by a newer connection');
   _connections.get(code).set(playerId, ws);
 }
 

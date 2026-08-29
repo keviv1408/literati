@@ -725,7 +725,7 @@ function scheduleTurnTimerIfNeeded(gs) {
 
   // Track in _turnTimers so concurrent-timer infrastructure (reconnect window)
   // can detect an active turn timer via _turnTimers.has(roomCode).
-  _turnTimers.set(roomCode, { expiresAt });
+  _turnTimers.set(roomCode, { playerId, expiresAt });
 }
 
 /**
@@ -734,6 +734,17 @@ function scheduleTurnTimerIfNeeded(gs) {
  * Also clears the declaration-phase-started flag.
  * @param {string} roomCode
  */
+/** Fire-and-forget persist. getSupabaseClient throws synchronously when unconfigured. */
+function _persistTurnChange(gs) {
+  try {
+    persistGameState(gs, getSupabaseClient()).catch((err) => {
+      console.error('[game-ws] Failed to persist turn change:', err.message);
+    });
+  } catch (err) {
+    console.error('[game-ws] Failed to persist turn change:', err.message);
+  }
+}
+
 function cancelTurnTimer(roomCode) {
   // Delegate actual timer cancellation to timerService (handles tickId + timerId).
   timerService.cancelCountdownTimer(roomCode);
@@ -788,7 +799,7 @@ function startDeclarationPhaseTimer(roomCode, playerId) {
 
   // Track in _turnTimers with isDeclarationPhase flag so executeTimedOutTurn
   // can detect that a declaration was in progress when the timer fired.
-  _turnTimers.set(roomCode, { expiresAt, isDeclarationPhase: true });
+  _turnTimers.set(roomCode, { playerId, expiresAt, isDeclarationPhase: true });
 
   // Broadcast the legacy `declaration_timer` event to ALL connections
   // (players + spectators) so everyone on the table can show the 60-second
@@ -990,6 +1001,7 @@ function startPostDeclarationTimer(roomCode, declarerId, eligiblePlayers) {
     // Auto-select a random eligible player.
     const selected = stillEligible[Math.floor(Math.random() * stillEligible.length)];
     gs.currentTurnPlayerId = selected;
+    _persistTurnChange(gs);
 
     console.log(
       `[game-ws] Post-declaration timer expired for room ${roomCode} — ` +
@@ -1273,8 +1285,9 @@ function _startReconnectWindow(gs, player) {
   // Start the turn timer BEFORE marking the player as bot so that
   // scheduleTurnTimerIfNeeded sees isBot === false and sets the 30-second
   // timer (rather than skipping it). This timer runs concurrently with
-  // the reconnect window below.
-  if (gs.currentTurnPlayerId === playerId) {
+  // the reconnect window below. A live timer keeps its deadline: a refresh
+  // mid-turn must not hand out a fresh 60 s.
+  if (gs.currentTurnPlayerId === playerId && !_turnTimers.has(roomCode)) {
     scheduleTurnTimerIfNeeded(gs);
   }
 
@@ -1916,6 +1929,7 @@ async function handleAskCard(
   _botControlledDeclarations.delete(roomCode);
   // Cancel any active bot-declaration countdown — ask supersedes the pending declaration
   cancelBotDeclarationTimer(roomCode);
+  cancelPostDeclarationTimer(roomCode);
 
   // Track which hands changed
   const changedHands = new Set([askerId, targetId]);
@@ -2167,6 +2181,7 @@ function handleChooseNextTurn(roomCode, requesterId, chosenPlayerId, ws) {
 
   // Redirect the turn.
   gs.currentTurnPlayerId = chosenPlayerId;
+  _persistTurnChange(gs);
 
   // Broadcast updated game state so all clients immediately see the new turn.
   broadcastStateUpdate(gs, new Set());
@@ -2277,6 +2292,7 @@ function handlePassTurn(roomCode, requesterId, targetSeatIndex, ws) {
   if (_postDeclarationTimers.has(roomCode)) {
     cancelPostDeclarationTimer(roomCode);
   }
+  _persistTurnChange(gs);
 
   // Cancel the old turn timer (started for requesterId) and schedule a fresh
   // timer for the new active player.
@@ -2310,6 +2326,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
   _botControlledDeclarations.delete(roomCode);
   // Cancel any active bot-declaration countdown (forced failure supersedes it)
   cancelBotDeclarationTimer(roomCode);
+  cancelPostDeclarationTimer(roomCode);
 
   // All hands may change (6 cards removed)
   const changedHands = new Set(gs.players.map((p) => p.playerId));
@@ -2428,6 +2445,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
   _botControlledDeclarations.delete(roomCode);
   // Cancel any active bot-declaration countdown (declaration is now executing)
   cancelBotDeclarationTimer(roomCode);
+  cancelPostDeclarationTimer(roomCode);
 
   // All hands may change (cards get removed from everyone)
   const changedHands = new Set(gs.players.map((p) => p.playerId));
@@ -3526,6 +3544,8 @@ function attachGameSocketServer(httpServer) {
           `in room ${roomCode} — will regain control at next turn boundary`
         );
       }
+      // An eliminated seat never gets a turn, so the boundary reclaim would never fire.
+      if (getCardCount(gs, playerId) === 0) _executeReclaim(gs, playerId);
     }
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -3573,11 +3593,6 @@ function attachGameSocketServer(httpServer) {
         sendJson(ws, { type: 'reclaim_queued', playerId });
       }
 
-      // On reconnect: resume the turn timer / bot timer for whoever's turn it is.
-      // NOTE: scheduleBotTurnIfNeeded will execute the reclaim immediately if it
-      // is currently this player's turn (since they are in the reclaim queue).
-      scheduleBotTurnIfNeeded(gs);
-      scheduleTurnTimerIfNeeded(gs);
     }
 
     // If a human player reconnects and game is active, reschedule timers so
@@ -3586,8 +3601,19 @@ function attachGameSocketServer(httpServer) {
     // and broadcasting turn_timer on spectator connect would race with the
     // spectator SPECTATOR-error response when they try to send a message.
     if (gs.status === 'active' && !isSpectator) {
-      scheduleBotTurnIfNeeded(gs);
-      scheduleTurnTimerIfNeeded(gs);
+      // Resume, don't restart: a live timer keeps its deadline and this socket just learns it.
+      const liveTimer = _turnTimers.get(gs.roomCode);
+      if (liveTimer) {
+        sendJson(ws, liveTimer.isDeclarationPhase
+          ? { type: 'declaration_timer', playerId: liveTimer.playerId, durationMs: DECLARATION_PHASE_TIMEOUT_MS, expiresAt: liveTimer.expiresAt }
+          : { type: 'turn_timer', playerId: liveTimer.playerId, durationMs: HUMAN_TURN_TIMEOUT_MS, expiresAt: liveTimer.expiresAt });
+      } else {
+        scheduleTurnTimerIfNeeded(gs);
+      }
+      // scheduleBotTurnIfNeeded also executes a queued reclaim when it is this player's turn.
+      if (!_botTimers.has(gs.roomCode) || isInReclaimQueue(roomCode, playerId)) {
+        scheduleBotTurnIfNeeded(gs);
+      }
     }
 
     // ── Message handler ──────────────────────────────────────────────────────
@@ -3801,6 +3827,8 @@ function attachGameSocketServer(httpServer) {
     // ── Disconnect handler ───────────────────────────────────────────────────
     ws.on('close', () => {
       rateLimiter.cleanup(ws);
+      const registered = getConnection(roomCode, playerId);
+      if (registered && registered !== ws) return; // superseded by a newer socket
       removeConnection(roomCode, playerId);
 
       // Only human players in active games get the reconnect window treatment.

@@ -194,6 +194,9 @@ if (require.main === module) {
     });
   };
 
+  process.on('unhandledRejection', (reason) => {
+    console.error('[server] Unhandled promise rejection:', reason);
+  });
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 }

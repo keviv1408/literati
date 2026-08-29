@@ -260,7 +260,7 @@ export default function GamePage({ params }: PageProps) {
   const {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, players, gameState, variant, playerCount,
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
-    botTakeover, rematchVote, rematchDeclined, roomDissolved,
+    botTakeover, reclaimQueued, rematchVote, rematchDeclined, roomDissolved,
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting,
     declareProgress,
@@ -1377,6 +1377,29 @@ export default function GamePage({ params }: PageProps) {
        * Cleared automatically when the following `ask_result` or
        * `declaration_result` arrives (handled in useGameSocket).
        */}
+      {wsStatus === 'error' && wsError && myPlayerId && (
+        <div
+          className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-rose-900/60 border-b border-rose-700/40 text-xs text-rose-200"
+          role="alert"
+          data-testid="ws-error-banner"
+        >
+          <span aria-hidden="true">⚠️</span>
+          <span>{wsError}</span>
+        </div>
+      )}
+
+      {reclaimQueued && (
+        <div
+          className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-sky-900/60 border-b border-sky-700/40 text-xs text-sky-200"
+          role="status"
+          aria-live="polite"
+          data-testid="reclaim-queued-banner"
+        >
+          <span aria-hidden="true">⏳</span>
+          <span>You&apos;re back. A bot holds your seat until your next turn, then you take over.</span>
+        </div>
+      )}
+
       {botTakeover && (
         <div
           className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-orange-900/60 border-b border-orange-700/40 text-xs text-orange-200 animate-pulse"

@@ -117,7 +117,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
    * True when the current browser session created this room. Used to decide whether to render draggable
    * team columns so only the host can reassign players between teams.
    */
-  const [isHostUser, setIsHostUser] = useState(false);
 
   // Resolve async params (Next.js 15+ params are Promises)
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -263,6 +262,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     startGame,
     lobbyStarting,
     lastError: wsError,
+    errorSeq,
     hostChangedEvent,
   } = useRoomSocket({
     // Pass null when already kicked so no socket is opened unnecessarily.
@@ -303,15 +303,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
    */
   const [isStarting, setIsStarting] = useState(false);
 
-  // Reset isStarting if the server reports an error (e.g. start_game rejected).
-  // wsError changes whenever a new { type: 'error' } message arrives.
-  const prevWsError = useRef<string | null>(null);
+  // Reset isStarting on every server error frame (e.g. start_game rejected),
+  // including a repeat of the same message.
   useEffect(() => {
-    if (wsError && wsError !== prevWsError.current) {
-      prevWsError.current = wsError;
-      setIsStarting(false);
-    }
-  }, [wsError]);
+    if (errorSeq > 0) setIsStarting(false);
+  }, [errorSeq]);
 
   // ── Navigate to game board when the server triggers lobby-starting ──────────
   // Fires for ALL connected clients (host + players + spectators) when the
@@ -425,7 +421,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
     if (cached) {
       setRoom(cached);
       setSeats(buildEmptySeats(cached.player_count));
-      setIsHostUser(true);
       setLoading(false);
       return;
     }
@@ -1031,7 +1026,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
               <DraggableLobbyTeamColumns
                 playerCount={room.player_count}
                 seats={seats}
-                isHost={isHostUser && !isSpectator}
+                isHost={amIHostLive && !isSpectator}
                 onReassign={handleReassign}
               />
 
@@ -1132,12 +1127,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* ── Host: Start Game controls ───────────────────────
-            Visible ONLY when the current user is the room host AND is not a
-            spectator.  Empty seats will be filled with bots server-side when
-            the host starts the game.
+        {/* ── Start Game controls ───────────────────────
+            Any seated player may start a private room; empty seats are filled
+            with bots server-side. Matchmaking rooms start automatically.
             ─────────────────────────────────────────────────────────────── */}
-        {!isSpectator && !isCancelled && (
+        {!isSpectator && !isCancelled && !room.is_matchmaking && (
           <div
             className="
               bg-slate-800/50 border border-slate-700/50
