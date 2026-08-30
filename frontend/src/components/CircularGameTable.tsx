@@ -220,12 +220,11 @@ export default function CircularGameTable({
         return (
           <div
             key={playerId ?? `slot-${displayIdx}`}
-            className="absolute"
-            style={{
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
-              transform: 'translate(-50%, -50%)',
-            }}
+            // Zero-size flex box centres the (overflowing) seat on the point without a
+            // transform, which would make each slot its own stacking context and defeat
+            // z-index ordering between seats and their neighbours' overlays.
+            className="absolute flex h-0 w-0 items-center justify-center [&>*]:shrink-0"
+            style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
           >
             {content}
           </div>
