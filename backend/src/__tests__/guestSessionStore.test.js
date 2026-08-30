@@ -16,6 +16,7 @@
 const {
   createGuestSession,
   getGuestSession,
+  updateGuestAvatar,
   deleteGuestSession,
   cleanupExpiredSessions,
   getActiveSessionCount,
@@ -284,6 +285,21 @@ describe('startCleanupTimer / stopCleanupTimer', () => {
   it('calling stopCleanupTimer when not started is safe', () => {
     stopCleanupTimer(); // already stopped in beforeEach
     expect(() => stopCleanupTimer()).not.toThrow();
+  });
+});
+
+describe('updateGuestAvatar', () => {
+  it('changes the avatar of the matching live session', () => {
+    const { token, session } = createGuestSession('Alice');
+    expect(updateGuestAvatar(session.sessionId, 'avatar-7')).toBe(true);
+    expect(getGuestSession(token).avatarId).toBe('avatar-7');
+  });
+
+  it('rejects unknown avatars and unknown sessions', () => {
+    const { token, session } = createGuestSession('Alice');
+    expect(updateGuestAvatar(session.sessionId, 'avatar-99')).toBe(false);
+    expect(updateGuestAvatar('no-such-session', 'avatar-2')).toBe(false);
+    expect(getGuestSession(token).avatarId).toBe(DEFAULT_AVATAR_ID);
   });
 });
 

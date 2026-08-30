@@ -135,14 +135,14 @@ describe('ProfilePage — /profile/[username]', () => {
     expect(screen.getByRole('heading', { name: 'Alice' })).toBeTruthy();
   });
 
-  it('6. renders initials avatar when avatarId is null', async () => {
+  it('6. renders the chosen avatar glyph', async () => {
     mockGetProfileByUsername.mockResolvedValue({
-      profile: buildProfile({ avatarId: null, displayName: 'Alice' }),
+      profile: buildProfile({ avatarId: 'avatar-2', displayName: 'Alice' }),
     });
     await renderProfile('Alice');
 
     await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
-    expect(screen.getByText('A')).toBeTruthy();
+    expect(screen.getByText('🐼')).toBeTruthy();
   });
 
   it('7. renders Games Completed stat', async () => {

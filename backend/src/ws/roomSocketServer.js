@@ -33,6 +33,9 @@
  * { type: 'kick_player', targetId: string }
  * Only accepted from the room host. Kicks the player with the given userId.
  *
+ * { type: 'set_avatar', avatarId: string }
+ * Changes the sender's avatar (one of the guest store's VALID_AVATAR_IDS).
+ *
  * { type: 'change_team', teamId: 1|2 }
  * Any player may switch their own team, subject to capacity constraints.
  * On success the server broadcasts room_players to everyone.
@@ -55,7 +58,7 @@
 
 const { WebSocketServer } = require('ws');
 const url = require('url');
-const { getGuestSession } = require('../sessions/guestSessionStore');
+const { getGuestSession, updateGuestAvatar, VALID_AVATAR_IDS } = require('../sessions/guestSessionStore');
 const rateLimiter = require('./rateLimiter');
 const { closeWithNotice } = require('./closeWs');
 const { buildGameSeats } = require('../game/gameInitService');
@@ -275,9 +278,10 @@ function getRoomPlayers(roomCode) {
   const clients = roomClients.get(roomCode);
   if (!clients) return [];
   return Array.from(clients.values()).map(
-    ({ userId, displayName, isGuest, isHost, teamId }) => ({
+    ({ userId, displayName, avatarId, isGuest, isHost, teamId }) => ({
       userId,
       displayName,
+      avatarId: avatarId ?? null,
       isGuest,
       isHost,
       teamId,
@@ -511,6 +515,7 @@ async function resolveUserFromToken(token) {
     return {
       userId: guestSession.sessionId,
       displayName: guestSession.displayName,
+      avatarId: guestSession.avatarId ?? null,
       isGuest: true,
       guestRecoveryKey: guestSession.recoveryKey ?? null,
     };
@@ -528,6 +533,7 @@ async function resolveUserFromToken(token) {
     return {
       userId: user.id,
       displayName,
+      avatarId: user.user_metadata?.avatar_id || null,
       isGuest: false,
     };
   } catch {
@@ -768,6 +774,50 @@ function handleChangeTeam(ctx, message) {
 }
 
 // ---------------------------------------------------------------------------
+// Set-avatar handler
+// ---------------------------------------------------------------------------
+
+/**
+ * Process a set_avatar message from a player.
+ * Expected shape: { type: 'set_avatar', avatarId: string }
+ *
+ * Updates the in-memory entry (so the game seats inherit it), persists it on
+ * the guest session (so a refresh keeps it), and broadcasts room_players.
+ */
+function handleSetAvatar(ctx, message) {
+  const { ws, userId, roomCode, clients } = ctx;
+  const { avatarId } = message;
+
+  if (!VALID_AVATAR_IDS.includes(avatarId)) {
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: `avatarId must be one of: ${VALID_AVATAR_IDS.join(', ')}`,
+      }),
+    );
+    return;
+  }
+
+  const entry = clients.get(userId);
+  if (!entry) {
+    ws.send(
+      JSON.stringify({ type: 'error', message: 'Player not found in room' }),
+    );
+    return;
+  }
+
+  if (entry.avatarId === avatarId) return;
+
+  entry.avatarId = avatarId;
+  if (entry.isGuest) updateGuestAvatar(userId, avatarId);
+
+  broadcast(roomCode, {
+    type: 'room_players',
+    players: getRoomPlayers(roomCode),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Reassign-team handler (host-driven, )
 // ---------------------------------------------------------------------------
 
@@ -994,7 +1044,7 @@ function buildOccupiedSeats(clients, playerCount) {
       seatIndex,
       playerId:    p.userId,
       displayName: p.displayName,
-      avatarId:    null,
+      avatarId:    p.avatarId ?? null,
       teamId:      /** @type {1} */ (1),
       isBot:       false,
       isGuest:     p.isGuest,
@@ -1009,7 +1059,7 @@ function buildOccupiedSeats(clients, playerCount) {
       seatIndex,
       playerId:    p.userId,
       displayName: p.displayName,
-      avatarId:    null,
+      avatarId:    p.avatarId ?? null,
       teamId:      /** @type {2} */ (2),
       isBot:       false,
       isGuest:     p.isGuest,
@@ -1534,7 +1584,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
         seatIndex:   prev.seatIndex,
         playerId:    uid,
         displayName: clientEntry.displayName,
-        avatarId:    null,
+        avatarId:    clientEntry.avatarId ?? null,
         teamId:      clientEntry.teamId ?? prev.teamId,
         isBot:       false,
         isGuest:     clientEntry.isGuest,
@@ -1702,6 +1752,7 @@ function attachRoomSocketServer(httpServer) {
     const {
       userId,
       displayName,
+      avatarId = null,
       isGuest,
       guestRecoveryKey = null,
     } = userInfo;
@@ -1830,6 +1881,7 @@ function attachRoomSocketServer(httpServer) {
       ws,
       userId,
       displayName,
+      avatarId,
       isGuest,
       isHost,
       teamId,
@@ -1989,6 +2041,8 @@ function attachRoomSocketServer(httpServer) {
         );
       } else if (message.type === 'change_team') {
         handleChangeTeam({ ws, userId, roomCode, clients }, message);
+      } else if (message.type === 'set_avatar') {
+        handleSetAvatar({ ws, userId, roomCode, clients }, message);
       } else if (message.type === 'reassign_team') {
         // Host-driven reassignment only allowed in private rooms.
         if (isMatchmakingRoom) {
@@ -2104,6 +2158,7 @@ module.exports = {
   broadcastToSpectators,
   handleKickPlayer,
   handleChangeTeam,
+  handleSetAvatar,
   handleReassignTeam,
   handleStartGame,
   handleAutoStartMatchmaking,

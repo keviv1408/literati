@@ -132,7 +132,7 @@ const PlayerSeat: React.FC<PlayerSeatProps> = ({
   }
 
   // ── Occupied seat ────────────────────────────────────────────────────────
-  const { displayName, isBot, isHost, isCurrentUser, avatarUrl } = player;
+  const { displayName, isBot, isHost, isCurrentUser, avatarId } = player;
 
   return (
     <div
@@ -171,7 +171,7 @@ const PlayerSeat: React.FC<PlayerSeatProps> = ({
       <div className="relative">
         <Avatar
           displayName={displayName}
-          imageUrl={avatarUrl}
+          avatarId={avatarId}
           size="sm"
           aria-label={undefined}
         />

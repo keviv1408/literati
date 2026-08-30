@@ -5,7 +5,7 @@
  *
  * Covers:
  * • Empty seat rendering (null player)
- * • Occupied seat: avatar initials fallback, display name, team colour
+ * • Occupied seat: avatar glyph, display name, team colour
  * • Bot player: BotBadge rendered instead of plain name
  * • "You" pill: shown only for myPlayerId match
  * • Current-turn ring: shown when currentTurnPlayerId matches
@@ -208,29 +208,28 @@ describe('GamePlayerSeat — avatar rendering', () => {
     expect(avatars.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders initials inside the avatar when avatarId is null', () => {
+  it('renders a bot glyph derived from the name when avatarId is null', () => {
     render(
       <GamePlayerSeat
         seatIndex={0}
-        player={makePlayer({ displayName: 'Alice Nguyen', avatarId: null })}
+        player={makePlayer({ displayName: 'Mochi', avatarId: null, isBot: true })}
         myPlayerId={null}
         currentTurnPlayerId={null}
       />,
     );
-    // Avatar with initials: text "AN" should appear in the DOM
-    expect(screen.getByText('AN')).toBeDefined();
+    expect(screen.getByText('🍡')).toBeDefined();
   });
 
-  it('renders an <img> tag when avatarId is a URL', () => {
-    const { container } = render(
+  it('renders the chosen avatar glyph when avatarId is set', () => {
+    render(
       <GamePlayerSeat
         seatIndex={0}
-        player={makePlayer({ avatarId: 'https://example.com/avatar.png', displayName: 'Carol' })}
+        player={makePlayer({ avatarId: 'avatar-4', displayName: 'Carol' })}
         myPlayerId={null}
         currentTurnPlayerId={null}
       />,
     );
-    expect(container.querySelector('img')).not.toBeNull();
+    expect(screen.getByText('🐙')).toBeDefined();
   });
 });
 

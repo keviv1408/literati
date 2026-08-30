@@ -1,41 +1,51 @@
 /**
- * Avatar utility — initials-based avatar generator
+ * Avatar utility
  *
- * Derives 1–2 initials from a display name and maps them to a
- * deterministic background color computed from the name's hash.
+ * Maps the backend's `avatar-1..12` ids to emoji glyphs and derives a
+ * deterministic background colour from the display name's hash. Players
+ * without a valid id (bots, legacy accounts) get a glyph from their name.
  */
 
-// ---------------------------------------------------------------------------
-// Initials derivation
-// ---------------------------------------------------------------------------
+export const AVATAR_IDS = Array.from({ length: 12 }, (_, i) => `avatar-${i + 1}`);
+
+const AVATAR_EMOJI: Record<string, string> = {
+  "avatar-1": "🦊",
+  "avatar-2": "🐼",
+  "avatar-3": "🐸",
+  "avatar-4": "🐙",
+  "avatar-5": "🦉",
+  "avatar-6": "🐯",
+  "avatar-7": "🦄",
+  "avatar-8": "🐧",
+  "avatar-9": "🦁",
+  "avatar-10": "🐨",
+  "avatar-11": "🐝",
+  "avatar-12": "🦋",
+};
+
+// Bot name pool lives in backend/src/matchmaking/botFiller.js.
+const BOT_EMOJI: Record<string, string> = {
+  ziggy: "⚡",
+  mochi: "🍡",
+  nova: "🌟",
+  tango: "💃",
+  pebble: "🪨",
+  echo: "🔊",
+  jinx: "🃏",
+  vega: "🔭",
+};
 
 /**
- * Extract 1–2 uppercase initials from a display name.
- *
- * Rules:
- * - Split on whitespace; take the first letter of the first word and the
- *   first letter of the last word (if different).
- * - Fall back to a single character when the name is one word or empty.
- * - Non-alphabetic names (e.g. "42") return "?" as a safe fallback.
+ * Glyph for a player: their chosen avatar when valid, otherwise one derived
+ * from the display name (fixed for bot names, hashed for anything else).
  */
-export function getInitials(displayName: string): string {
-  const trimmed = (displayName ?? "").trim();
-  if (!trimmed) return "?";
-
-  const words = trimmed.split(/\s+/).filter(Boolean);
-
-  if (words.length === 0) return "?";
-
-  const first = words[0].charAt(0).toUpperCase();
-  const last =
-    words.length > 1
-      ? words[words.length - 1].charAt(0).toUpperCase()
-      : null;
-
-  const initials = last && last !== first ? first + last : first;
-
-  // Replace any character that isn't a letter or digit with "?"
-  return /^[A-Z0-9]{1,2}$/.test(initials) ? initials : initials.replace(/[^A-Z0-9]/g, "") || "?";
+export function getAvatarEmoji(
+  avatarId: string | null | undefined,
+  displayName: string,
+): string {
+  if (avatarId && AVATAR_EMOJI[avatarId]) return AVATAR_EMOJI[avatarId];
+  const key = (displayName ?? "").trim().toLowerCase().split(/\s+/)[0];
+  return BOT_EMOJI[key] ?? AVATAR_EMOJI[AVATAR_IDS[hashString(key) % AVATAR_IDS.length]];
 }
 
 // ---------------------------------------------------------------------------
@@ -106,22 +116,4 @@ export function getAvatarColor(displayName: string): AvatarColor {
   const key = (displayName ?? "").trim().toLowerCase();
   const index = hashString(key) % AVATAR_PALETTE.length;
   return AVATAR_PALETTE[index];
-}
-
-/**
- * Convenience function that returns both initials *and* colour together.
- *
- * @example
- * const { initials, color } = getAvatarProps("Alice Johnson");
- * // initials === "AJ"
- * // color === { bg: "#…", fg: "#…" }
- */
-export function getAvatarProps(displayName: string): {
-  initials: string;
-  color: AvatarColor;
-} {
-  return {
-    initials: getInitials(displayName),
-    color: getAvatarColor(displayName),
-  };
 }

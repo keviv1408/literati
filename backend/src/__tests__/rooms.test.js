@@ -477,7 +477,7 @@ describe('GET /api/rooms/:code', () => {
     });
     const { roomClients } = require('../ws/roomSocketServer');
     roomClients.set('ABCDEF', new Map([
-      ['u1', { ws: {}, userId: 'u1', displayName: 'HostA', isGuest: true, isHost: true, teamId: 1 }],
+      ['u1', { ws: {}, userId: 'u1', displayName: 'HostA', avatarId: 'avatar-3', isGuest: true, isHost: true, teamId: 1 }],
       ['u2', { ws: {}, userId: 'u2', displayName: 'Bea', isGuest: true, isHost: false, teamId: 2 }],
     ]));
 
@@ -485,8 +485,8 @@ describe('GET /api/rooms/:code', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.room.players).toEqual([
-      { userId: 'u1', displayName: 'HostA', isGuest: true, isHost: true, teamId: 1 },
-      { userId: 'u2', displayName: 'Bea', isGuest: true, isHost: false, teamId: 2 },
+      { userId: 'u1', displayName: 'HostA', avatarId: 'avatar-3', isGuest: true, isHost: true, teamId: 1 },
+      { userId: 'u2', displayName: 'Bea', avatarId: null, isGuest: true, isHost: false, teamId: 2 },
     ]);
     roomClients.delete('ABCDEF');
   });

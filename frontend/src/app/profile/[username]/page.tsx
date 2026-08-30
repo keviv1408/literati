@@ -143,7 +143,7 @@ function ProfileContent({ username }: { username: string }) {
         <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
           <Avatar
             displayName={profile.displayName}
-            imageUrl={profile.avatarId ?? undefined}
+            avatarId={profile.avatarId}
             size="xl"
           />
           <div className="space-y-1">
