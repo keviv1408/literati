@@ -65,6 +65,7 @@ import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import MuteToggle from '@/components/MuteToggle';
+import KnowledgePanel from '@/components/KnowledgePanel';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import type { Room } from '@/types/room';
@@ -145,6 +146,7 @@ export default function GamePage({ params }: PageProps) {
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
   const [gameBearerToken, setGameBearerToken] = useState<string | null>(null);
+  const [showKnowledge, setShowKnowledge] = useState(false);
   const spectatorToken                    = searchParams.get('spectatorToken');
 
   // Prefer the room-specific token that originally joined this game.
@@ -258,7 +260,7 @@ export default function GamePage({ params }: PageProps) {
   const isGameActive = room?.status === 'in_progress' || room?.status === 'starting' || room?.status === 'completed';
 
   const {
-    wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, players, gameState, variant, playerCount,
+    wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, askHistory, players, gameState, variant, playerCount,
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
     botTakeover, reclaimQueued, rematchVote, rematchDeclined, roomDissolved,
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
@@ -1276,6 +1278,19 @@ export default function GamePage({ params }: PageProps) {
           {/* VoiceControls intentionally hidden to avoid production voice API costs.
               Uncomment the line below when you want to re-enable voice chat. */}
           {/* <VoiceControls /> */}
+          <button
+            onClick={() => setShowKnowledge((v) => !v)}
+            aria-pressed={showKnowledge}
+            aria-label="What I know"
+            title="What I know: cards other players are known to hold or lack"
+            className={[
+              'p-1.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400',
+              showKnowledge ? 'bg-emerald-700/60 text-white' : 'text-slate-400 hover:text-white',
+            ].join(' ')}
+            data-testid="knowledge-toggle"
+          >
+            🧠
+          </button>
           {/* Mute toggle — persists across page refreshes via localStorage */}
           <MuteToggle muted={muted} onToggle={toggleMute} />
           {/* Bot speed - shared by everyone in the game, applies from the next bot turn */}
@@ -1299,6 +1314,17 @@ export default function GamePage({ params }: PageProps) {
           </div>
         </div>
       </header>
+
+      {showKnowledge && effectiveVariant && (
+        <KnowledgePanel
+          players={players}
+          myPlayerId={myPlayerId}
+          askHistory={askHistory}
+          declaredSuits={(gameState?.declaredSuits ?? []).map((d) => d.halfSuitId)}
+          variant={effectiveVariant}
+          onClose={() => setShowKnowledge(false)}
+        />
+      )}
 
       {gameState && isMyTurn && isTurnPassMode && (
         <div className="relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40" role="status" aria-live="polite" data-testid="turn-indicator">

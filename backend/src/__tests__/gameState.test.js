@@ -218,6 +218,16 @@ describe('serializeForPlayer', () => {
     expect(result.myPlayerId).toBe('p3');
   });
 
+  it('includes the public ask history but not declarations', () => {
+    gs.moveHistory.push(
+      { type: 'ask', askerId: 'p1', targetId: 'p2', cardId: '9_s', success: true, ts: 1 },
+      { type: 'declaration', declarerId: 'p1', halfSuitId: 'high_s', correct: true, winningTeam: 1, ts: 2 },
+    );
+    expect(serializeForPlayer(gs, 'p1').askHistory).toEqual([
+      { askerId: 'p1', targetId: 'p2', cardId: '9_s', success: true },
+    ]);
+  });
+
   it('includes gameState (public state)', () => {
     const result = serializeForPlayer(gs, 'p1');
     expect(result).toHaveProperty('gameState');

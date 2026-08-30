@@ -62,6 +62,14 @@ export interface PublicGameState {
   botDelayMs?: number;
 }
 
+/** One ask as the whole table saw it. */
+export interface AskRecord {
+  askerId: string;
+  targetId: string;
+  cardId: CardId;
+  success: boolean;
+}
+
 /** Full game init payload sent to each player on connection. */
 export interface GameInitPayload {
   type: 'game_init';
@@ -72,6 +80,7 @@ export interface GameInitPayload {
   myHand: CardId[];
   players: GamePlayer[];
   gameState: PublicGameState;
+  askHistory?: AskRecord[];
 }
 
 /** Full hand map sent only to God-mode spectators. */
