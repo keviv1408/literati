@@ -8,7 +8,7 @@
  */
 
 // Bump this whenever we need clients to drop a stale UI bundle immediately.
-const CACHE_NAME = 'literati-v2';
+const CACHE_NAME = 'literati-v3';
 
 // Assets to pre-cache on install
 const PRECACHE_URLS = [
@@ -62,8 +62,11 @@ self.addEventListener('fetch', (event) => {
         (cached) =>
           cached ||
           fetch(request).then((res) => {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            // A 404 during a deploy switch must not be cached, or the asset stays broken forever.
+            if (res.ok) {
+              const clone = res.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            }
             return res;
           })
       )
