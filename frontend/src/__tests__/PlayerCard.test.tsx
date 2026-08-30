@@ -148,9 +148,11 @@ describe("PlayerCard — bot player", () => {
   it("does not render a robot SVG for a human player", () => {
     const player = makePlayer({ displayName: "Grace", isBot: false });
     const { container } = render(<PlayerCard seatIndex={0} player={player} />);
-    const svg = container.querySelector("svg");
-    // Avatar renders a div, not an SVG — only BotBadge has an SVG
-    expect(svg).toBeNull();
+    // The avatar glyph is an SVG too, so only count SVGs outside it
+    const badgeSvgs = Array.from(container.querySelectorAll("svg")).filter(
+      (svg) => !svg.closest('[role="img"]'),
+    );
+    expect(badgeSvgs).toHaveLength(0);
   });
 
   it("renders the bot's display name via BotBadge", () => {

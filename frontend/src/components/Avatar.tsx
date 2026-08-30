@@ -6,11 +6,11 @@ import { getAvatarColor, getAvatarEmoji } from "@/utils/avatar";
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 const SIZE_STYLES: Record<AvatarSize, string> = {
-  xs: "w-6 h-6 text-xs",
-  sm: "w-8 h-8 text-base",
-  md: "w-10 h-10 text-lg",
-  lg: "w-14 h-14 text-2xl",
-  xl: "w-20 h-20 text-4xl",
+  xs: "w-6 h-6",
+  sm: "w-8 h-8",
+  md: "w-10 h-10",
+  lg: "w-14 h-14",
+  xl: "w-20 h-20",
 };
 
 export interface AvatarProps {
@@ -49,7 +49,7 @@ const Avatar: React.FC<AvatarProps> = ({
   return (
     <div
       className={[
-        "inline-flex items-center justify-center select-none flex-shrink-0 rounded-full overflow-hidden leading-none",
+        "inline-flex items-center justify-center select-none flex-shrink-0 rounded-full overflow-hidden",
         SIZE_STYLES[size],
         className,
       ]
@@ -64,7 +64,12 @@ const Avatar: React.FC<AvatarProps> = ({
         boxShadow: "inset 0 0 0 1.5px rgba(255,255,255,0.15)",
       }}
     >
-      {getAvatarEmoji(avatarId, displayName)}
+      {/* SVG text scales with the circle, so callers can resize via className */}
+      <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+        <text x="50" y="54" fontSize="80" textAnchor="middle" dominantBaseline="central">
+          {getAvatarEmoji(avatarId, displayName)}
+        </text>
+      </svg>
     </div>
   );
 };
