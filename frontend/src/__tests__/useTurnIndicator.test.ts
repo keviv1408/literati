@@ -13,6 +13,8 @@
  * • `playTurnChime` is called exactly once when the turn starts
  * • `playTurnChime` does NOT fire repeatedly while `isMyTurn` remains true
  * • Cleanup: no extra chimes fire after unmount
+ * • `navigator.vibrate` fires once when the turn starts
+ * • Tab title flashes only while the tab is hidden, restored on clear
  */
 
 import { renderHook, act } from '@testing-library/react';
@@ -365,5 +367,115 @@ describe('useTurnIndicator — unmount cleanup', () => {
     });
 
     expect(mockPlayTurnChime).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Turn nudges: vibration + tab title flash
+// ---------------------------------------------------------------------------
+
+describe('useTurnIndicator — vibration', () => {
+  const vibrate = jest.fn();
+
+  beforeEach(() => {
+    vibrate.mockClear();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true });
+  });
+
+  afterEach(() => {
+    delete (navigator as { vibrate?: unknown }).vibrate;
+  });
+
+  it('vibrates once when the turn starts and not on later re-renders', () => {
+    const { rerender } = renderHook(
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
+      { initialProps: { isMyTurn: false } },
+    );
+
+    act(() => { rerender({ isMyTurn: true }); });
+    act(() => { rerender({ isMyTurn: true }); });
+
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    expect(vibrate).toHaveBeenCalledWith([200, 100, 200]);
+  });
+
+  it('does nothing when navigator.vibrate is unavailable', () => {
+    delete (navigator as { vibrate?: unknown }).vibrate;
+    const { rerender } = renderHook(
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
+      { initialProps: { isMyTurn: false } },
+    );
+
+    expect(() => act(() => { rerender({ isMyTurn: true }); })).not.toThrow();
+  });
+});
+
+describe('useTurnIndicator — tab title flash', () => {
+  const setHidden = (hidden: boolean) =>
+    Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+
+  beforeEach(() => {
+    document.title = 'Literati';
+    setHidden(true);
+  });
+
+  afterEach(() => {
+    setHidden(false);
+  });
+
+  it('alternates the title while the tab is hidden and the turn is pending', () => {
+    const { rerender } = renderHook(
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
+      { initialProps: { isMyTurn: false } },
+    );
+
+    act(() => { rerender({ isMyTurn: true }); });
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(document.title).toBe('🔔 Your turn!');
+
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(document.title).toBe('Literati');
+  });
+
+  it('keeps the original title while the tab is visible', () => {
+    setHidden(false);
+    const { rerender } = renderHook(
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
+      { initialProps: { isMyTurn: false } },
+    );
+
+    act(() => { rerender({ isMyTurn: true }); });
+    act(() => { jest.advanceTimersByTime(3000); });
+    expect(document.title).toBe('Literati');
+  });
+
+  it('restores the title as soon as the player acts', () => {
+    const { result, rerender } = renderHook(
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
+      { initialProps: { isMyTurn: false } },
+    );
+
+    act(() => { rerender({ isMyTurn: true }); });
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(document.title).toBe('🔔 Your turn!');
+
+    act(() => { result.current.clearIndicator(); });
+    expect(document.title).toBe('Literati');
+
+    act(() => { jest.advanceTimersByTime(5000); });
+    expect(document.title).toBe('Literati');
+  });
+
+  it('restores the title when the turn passes to someone else', () => {
+    const { rerender } = renderHook(
+      ({ isMyTurn }: { isMyTurn: boolean }) => useTurnIndicator(isMyTurn),
+      { initialProps: { isMyTurn: false } },
+    );
+
+    act(() => { rerender({ isMyTurn: true }); });
+    act(() => { jest.advanceTimersByTime(1000); });
+    act(() => { rerender({ isMyTurn: false }); });
+
+    expect(document.title).toBe('Literati');
   });
 });
