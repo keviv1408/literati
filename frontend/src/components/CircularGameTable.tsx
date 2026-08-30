@@ -53,9 +53,10 @@ function getCircularPositions(count: 6 | 8): SeatXY[] {
     // Clockwise visually: subtract step each seat from the starting angle.
     const angleDeg = ((180 - i * step) + 360) % 360;
     const rad = (angleDeg * Math.PI) / 180;
+    // Rounded so server and client render identical style strings when SSR'd.
     return {
-      x: 50 + r * Math.sin(rad),
-      y: 50 - r * Math.cos(rad),
+      x: Math.round((50 + r * Math.sin(rad)) * 1000) / 1000,
+      y: Math.round((50 - r * Math.cos(rad)) * 1000) / 1000,
     };
   });
 }

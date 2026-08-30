@@ -206,6 +206,23 @@ export default function Home() {
               allowFullScreen
             />
           </div>
+          <a
+            href="/tutorial"
+            className="
+              mt-3 flex w-full items-center justify-center rounded-xl
+              bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
+              px-4 py-3 text-white shadow-lg shadow-emerald-900/50
+              transition-all duration-150 active:scale-[0.98]
+              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
+            "
+          >
+            <span className="flex flex-col items-center leading-tight">
+              <span className="font-bold">🎓 Begin Interactive Tutorial</span>
+              <span className="text-xs font-medium text-emerald-100/90 mt-1">
+                Walk through a 6-player hand with every card face up
+              </span>
+            </span>
+          </a>
         </div>
 
         {/* The Basics */}
