@@ -236,8 +236,17 @@ export default function TutorialPage() {
         </div>
 
         <main className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center overflow-y-auto px-2 py-2 sm:px-3 sm:py-3 lg:px-5">
-          {/* Width follows the free height (header + turn strip + footer ~26rem) so the 5:3 table never squashes. */}
-          <div className="w-full max-w-[82rem] sm:max-w-[calc((100dvh-26rem)*5/3)] flex flex-col justify-center">
+          {/* Width follows the free height (chrome ~13rem, ~26rem while the footer hand shows) so the 5:3
+              table keeps its shape; my-auto keeps the wrapper content-sized so the table's max-h-full
+              never squashes it, and main scrolls below the width floor. */}
+          <div
+            className={[
+              'w-full my-auto max-w-[82rem] sm:min-w-[34rem] lg:min-w-[43rem]',
+              inspectedId
+                ? 'sm:max-w-[calc((100dvh-26rem)*5/3)]'
+                : 'sm:max-w-[calc((100dvh-13rem)*5/3)] sm:[@media(min-height:900px)]:max-w-[calc((100dvh-26rem)*5/3)]',
+            ].join(' ')}
+          >
             <CircularGameTable
               players={players}
               myPlayerId={ME}
@@ -341,7 +350,11 @@ export default function TutorialPage() {
               </div>
             </section>
 
-            <div className={inspectedId ? 'block' : 'hidden sm:block'} data-testid="footer-hand">
+            {/* Your own hand only fits on tall screens; the seat strips cover it elsewhere. */}
+            <div
+              className={inspectedId ? 'block' : 'hidden sm:[@media(min-height:900px)]:block'}
+              data-testid="footer-hand"
+            >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs text-slate-400">
                   {inspectedId ? `${getPlayerDisplayName(inspectedId)}'s hand` : 'Your hand'} —{' '}
@@ -354,7 +367,7 @@ export default function TutorialPage() {
                     onClick={() => setInspectedId(null)}
                     className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
                   >
-                    Show my hand
+                    Close
                   </button>
                 ) : (
                   <span className="text-xs text-slate-500">Tap a seat to see that player’s hand here</span>
