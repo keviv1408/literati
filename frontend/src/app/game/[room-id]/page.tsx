@@ -203,8 +203,6 @@ export default function GamePage({ params }: PageProps) {
   //
   // When a declaration_result arrives, briefly highlight the scoring team's
   // score in the header (1 | 2 | null). Cleared after 2 s.
-  const [scoreFlash, setScoreFlash]         = useState<1 | 2 | null>(null);
-  const scoreFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Deal animation ────────────────────────────────────────────
   //
@@ -540,13 +538,6 @@ export default function GamePage({ params }: PageProps) {
       }
 
       publishMoveMessage(lastDeclareResult.lastMove, null);
-
-      // ── Score flash: briefly highlight the team that just scored ─────────
-      if (lastDeclareResult.winningTeam) {
-        if (scoreFlashTimer.current) clearTimeout(scoreFlashTimer.current);
-        setScoreFlash(lastDeclareResult.winningTeam);
-        scoreFlashTimer.current = setTimeout(() => setScoreFlash(null), 2000);
-      }
 
       updatePendingAskBatch(null);
       setActionLoading(false);
@@ -1246,33 +1237,6 @@ export default function GamePage({ params }: PageProps) {
           <button onClick={handleGoHome} aria-label="Home" className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">←</button>
           <span className="font-mono font-bold text-white text-sm max-w-[7ch] truncate" data-testid="game-room-code">{room.code}</span>
           <span className="text-xs text-slate-500 hidden sm:inline">{VARIANT_LABELS[room.card_removal_variant]} · {effectivePlayerCount === 6 ? '3v3' : '4v4'}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm font-semibold" aria-label="Score" data-testid="game-score">
-          {/* Team 1 score — flashes emerald briefly after a declaration */}
-          <span
-            className={[
-              'transition-colors duration-300 inline-block',
-              scoreFlash === 1
-                ? 'text-emerald-300 scale-110'
-                : myTeamId === 1 ? 'text-emerald-300' : 'text-slate-400',
-            ].join(' ')}
-            data-testid="score-team1"
-          >
-            T1 <span className="text-white text-base tabular-nums">{gameState?.scores.team1 ?? 0}</span>
-          </span>
-          <span className="text-slate-600">—</span>
-          {/* Team 2 score — flashes violet briefly after a declaration */}
-          <span
-            className={[
-              'transition-colors duration-300 inline-block',
-              scoreFlash === 2
-                ? 'text-violet-300 scale-110'
-                : myTeamId === 2 ? 'text-violet-300' : 'text-slate-400',
-            ].join(' ')}
-            data-testid="score-team2"
-          >
-            <span className="text-white text-base tabular-nums">{gameState?.scores.team2 ?? 0}</span> T2
-          </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* VoiceControls intentionally hidden to avoid production voice API costs.
