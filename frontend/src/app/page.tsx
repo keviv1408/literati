@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
+import { API_URL } from '@/lib/api';
 import CreateRoomModal from '@/components/CreateRoomModal';
 
 const emptySubscribe = () => () => {};
+
+// A healthy backend answers well under this; a Render cold start takes 30s+.
+const WAKE_NOTICE_DELAY_MS = 2000;
 
 export default function Home() {
   const router = useRouter();
@@ -14,7 +18,29 @@ export default function Home() {
   const { clearGuest } = useGuest();
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
+  const [isWakingServer, setIsWakingServer] = useState(false);
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
+
+  // Ping the backend on landing so a spun-down Render instance starts waking
+  // before the first real request, and tell the player if it is slow.
+  useEffect(() => {
+    let cancelled = false;
+    const slowTimer = setTimeout(() => {
+      if (!cancelled) setIsWakingServer(true);
+    }, WAKE_NOTICE_DELAY_MS);
+
+    fetch(`${API_URL}/health`)
+      .catch(() => {})
+      .finally(() => {
+        clearTimeout(slowTimer);
+        if (!cancelled) setIsWakingServer(false);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(slowTimer);
+    };
+  }, []);
 
   async function handlePlayNow() {
     const session = await ensureGuestName();
@@ -111,6 +137,16 @@ export default function Home() {
             </span>
           </button>
         </div>
+
+        {isWakingServer && (
+          <p
+            role="status"
+            className="flex items-center gap-2 rounded-full border border-amber-700/50 bg-amber-900/30 px-4 py-2 text-sm text-amber-200 animate-pulse"
+          >
+            <span aria-hidden="true">☕</span>
+            Waking up the table… this can take up to a minute.
+          </p>
+        )}
 
         {/* Feature pills */}
         <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-400">
