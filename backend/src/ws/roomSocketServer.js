@@ -57,6 +57,7 @@ const { WebSocketServer } = require('ws');
 const url = require('url');
 const { getGuestSession } = require('../sessions/guestSessionStore');
 const rateLimiter = require('./rateLimiter');
+const { closeWithNotice } = require('./closeWs');
 const { buildGameSeats } = require('../game/gameInitService');
 const { persistGameState } = require('../game/gameState');
 const { getSupabaseClient } = require('../db/supabase');
@@ -675,7 +676,7 @@ function handleKickPlayer(ctx, message) {
     targetEntry.ws.send(
       JSON.stringify({ type: 'kicked', by: displayName }),
     );
-    targetEntry.ws.close(4010, 'Kicked by host');
+    closeWithNotice(targetEntry.ws, 4010, 'Kicked by host');
   }
 
   // Remove from room immediately (before the close event fires)
@@ -1687,14 +1688,14 @@ function attachRoomSocketServer(httpServer) {
 
     // ── Validate room code ──────────────────────────────────────────────────
     if (!roomCode || !/^[A-Z0-9]{6}$/.test(roomCode)) {
-      ws.close(4000, 'Invalid room code');
+      closeWithNotice(ws, 4000, 'Invalid room code');
       return;
     }
 
     // ── Resolve identity from bearer token ─────────────────────────────────
     const userInfo = await resolveUserFromToken(token);
     if (!userInfo) {
-      ws.close(4001, 'Unauthorized');
+      closeWithNotice(ws, 4001, 'Unauthorized');
       return;
     }
 
@@ -1713,11 +1714,11 @@ function attachRoomSocketServer(httpServer) {
       : await fetchRoomMeta(roomCode);
 
     if (!dbRoom) {
-      ws.close(4004, 'Room not found');
+      closeWithNotice(ws, 4004, 'Room not found');
       return;
     }
     if (!JOINABLE_STATUSES.includes(dbRoom.status)) {
-      ws.close(4005, 'Room not accepting connections');
+      closeWithNotice(ws, 4005, 'Room not accepting connections');
       return;
     }
 
@@ -1745,7 +1746,7 @@ function attachRoomSocketServer(httpServer) {
         const storedToken = dbRoom.spectator_token || '';
         const providedToken = (spectatorToken || '').toUpperCase();
         if (!providedToken || providedToken !== storedToken.toUpperCase()) {
-          ws.close(4003, 'Invalid spectator token');
+          closeWithNotice(ws, 4003, 'Invalid spectator token');
           return;
         }
       }
@@ -1824,7 +1825,7 @@ function attachRoomSocketServer(httpServer) {
 
     // ── Register client ─────────────────────────────────────────────────────
     // Second tab / fast reconnect: the stale socket must not remove this one on close.
-    if (existingEntry && existingEntry.ws !== ws) existingEntry.ws.close?.(4006, 'Superseded by a newer connection');
+    if (existingEntry && existingEntry.ws !== ws) closeWithNotice(existingEntry.ws, 4006, 'This room was opened in another tab or window');
     clients.set(userId, {
       ws,
       userId,
@@ -1955,7 +1956,7 @@ function attachRoomSocketServer(httpServer) {
       const rlResult = rateLimiter.check(ws);
       if (rlResult === 'disconnect') {
         console.warn(`[RoomWS] Rate limit disconnect: user=${userId} room=${roomCode}`);
-        ws.close(rateLimiter.RATE_LIMIT_CLOSE_CODE, 'Rate limit exceeded');
+        closeWithNotice(ws, rateLimiter.RATE_LIMIT_CLOSE_CODE, 'Rate limit exceeded');
         return;
       }
       if (rlResult === 'limited') {

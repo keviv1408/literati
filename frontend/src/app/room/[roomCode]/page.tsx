@@ -252,6 +252,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   }, [roomCode]);
 
   const {
+    wsStatus,
     isKicked,
     kickReason,
     emit: socketEmit,
@@ -430,16 +431,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
     getRoomByCode(roomCode)
       .then(({ room: fetched }) => {
         if (!cancelled) {
-          // ── Spectator redirect: if the game is already in progress, send
-          // the spectator directly to the game view so they don't have to sit
-          // in an empty lobby watching for the lobby-starting event.
-          // Read from window.location.search directly to avoid a state
-          // timing race with the isSpectator effect.
-          const spectateParam =
-            typeof window !== 'undefined'
-              ? new URLSearchParams(window.location.search).get('spectate')
-              : null;
-          if (spectateParam === '1' && fetched.status === 'in_progress') {
+          // The game page handles seated players (reconnect) and everyone
+          // else; the lobby would only show an empty roster for a started game.
+          if (fetched.status === 'in_progress') {
             router.replace(`/game/${fetched.code}`);
             return;
           }
@@ -592,8 +586,15 @@ export default function RoomLobbyPage({ params }: PageProps) {
     );
   }
 
-  // ── Connection error (backend unreachable) ───────────────────────────────
-  if (!kickedOnEntry && !isKicked && reconnectStatus === 'error') {
+  // ── Connection error (backend unreachable, or the room WS was rejected) ──
+  if (!kickedOnEntry && !isKicked && (reconnectStatus === 'error' || wsStatus === 'error')) {
+    const retry = reconnectStatus === 'error'
+      ? retryReconnect
+      : () => {
+          // A stored room token may be the reason for the rejection.
+          if (roomCode) clearRoomMembership(roomCode);
+          window.location.reload();
+        };
     return (
       <div
         className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6"
@@ -604,12 +605,14 @@ export default function RoomLobbyPage({ params }: PageProps) {
           <div className="text-5xl mb-4" aria-hidden="true">📡</div>
           <h1 className="text-2xl font-bold text-white mb-3">Connection Error</h1>
           <p className="text-slate-300 text-sm mb-4">
-            {reconnectError ?? 'Could not reach the server. Please check your connection.'}
+            {reconnectStatus === 'error'
+              ? (reconnectError ?? 'Could not reach the server. Please check your connection.')
+              : (wsError ?? 'Lost connection to the room.')}
           </p>
         </div>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <button
-            onClick={retryReconnect}
+            onClick={retry}
             className="
               py-3 px-6 rounded-xl font-semibold
               bg-emerald-600 hover:bg-emerald-500 text-white
@@ -1235,7 +1238,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                 const sent = startGame();
                 if (sent) setIsStarting(true);
               }}
-              disabled={isStarting || lobbyStarting}
+              disabled={isStarting || lobbyStarting || !myPlayerId}
               aria-label="Start Game"
               aria-busy={isStarting || lobbyStarting}
               data-testid="start-game-btn"

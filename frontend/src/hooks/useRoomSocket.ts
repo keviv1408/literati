@@ -296,14 +296,23 @@ export function useRoomSocket({
     setLastError(null);
     setHostChangedEvent(null);
 
+    // Render's proxy drops server-initiated close frames, so the server also
+    // announces the close as a 'closing' message; both paths land here.
+    const failWith = (code: number, reason: string) => {
+      setLastError(reason || `Connection closed (${code})`);
+      setErrorSeq((n) => n + 1);
+      setWsStatus('error');
+    };
+
     ws.onopen = () => {
       setWsStatus('connected');
       // Server sends 'connected' first; we send 'join-room' in response (see onmessage).
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e: CloseEvent) => {
       wsRef.current = null;
-      setWsStatus((prev) => (prev === 'error' ? 'error' : 'disconnected'));
+      if (e.code >= 4000) failWith(e.code, e.reason);
+      else setWsStatus((prev) => (prev === 'error' ? 'error' : 'disconnected'));
     };
 
     ws.onerror = () => {
@@ -459,6 +468,12 @@ export function useRoomSocket({
               }))
             );
           }
+          break;
+        }
+
+        case 'closing': {
+          failWith(msg.code as number, (msg.reason as string) ?? '');
+          ws.close(1000, 'server closing');
           break;
         }
 
