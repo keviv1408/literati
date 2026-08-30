@@ -25,6 +25,7 @@ import type {
   SpectatorHands,
   SpectatorMoveEntry,
   AskResultPayload,
+  AskRecord,
   DeclarationResultPayload,
   DeclarationFailedPayload,
   DeclareProgressPayload,
@@ -128,6 +129,8 @@ export interface UseGameSocketReturn {
   myHand: CardId[];
   spectatorHands: SpectatorHands;
   spectatorMoveHistory: SpectatorMoveEntry[];
+  /** Every ask this game, oldest first. Seeded from game_init, appended on ask_result. */
+  askHistory: AskRecord[];
   players: GamePlayer[];
   gameState: PublicGameState | null;
   variant: 'remove_2s' | 'remove_7s' | 'remove_8s' | null;
@@ -385,6 +388,7 @@ export function useGameSocket({
   const [myHand, setMyHand]              = useState<CardId[]>([]);
   const [spectatorHands, setSpectatorHands] = useState<SpectatorHands>({});
   const [spectatorMoveHistory, setSpectatorMoveHistory] = useState<SpectatorMoveEntry[]>([]);
+  const [askHistory, setAskHistory] = useState<AskRecord[]>([]);
   const [players, setPlayers]            = useState<GamePlayer[]>([]);
   const [gameState, setGameState]        = useState<PublicGameState | null>(null);
   const [variant, setVariant]            = useState<'remove_2s' | 'remove_7s' | 'remove_8s' | null>(null);
@@ -487,7 +491,9 @@ export function useGameSocket({
             gameState: PublicGameState;
             variant: 'remove_2s' | 'remove_7s' | 'remove_8s';
             playerCount: 6 | 8;
+            askHistory?: AskRecord[];
           };
+          setAskHistory(payload.askHistory ?? []);
           // Cache the variant so subsequent hand_update messages can sort too
           const initVariant = payload.variant ?? null;
           variantRef.current = initVariant;
@@ -571,6 +577,8 @@ export function useGameSocket({
         case 'ask_result': {
           const payload = msg as unknown as AskResultPayload;
           setLastAskResult(payload);
+          const { askerId, targetId, cardId, success } = payload;
+          setAskHistory((prev) => [...prev, { askerId, targetId, cardId, success }]);
           // The active turn action completed; old turn timer is no longer valid.
           // A fresh timer (if needed) will arrive via a new `turn_timer` event.
           setTurnTimer(null);
@@ -1038,6 +1046,7 @@ export function useGameSocket({
     myHand,
     spectatorHands,
     spectatorMoveHistory,
+    askHistory,
     players,
     gameState,
     variant,

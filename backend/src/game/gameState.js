@@ -299,7 +299,18 @@ function serializeForPlayer(gs, playerId) {
     myHand:      hand,
     players:     serializePlayers(gs),
     gameState:   serializePublicState(gs),
+    askHistory:  serializeAskHistory(gs),
   };
+}
+
+/**
+ * Every ask so far, as the whole table saw it. Feeds the client's
+ * "what I know" panel so a refreshed player doesn't lose the history.
+ */
+function serializeAskHistory(gs) {
+  return (gs.moveHistory ?? [])
+    .filter((move) => move.type === 'ask')
+    .map(({ askerId, targetId, cardId, success }) => ({ askerId, targetId, cardId, success }));
 }
 
 /**
