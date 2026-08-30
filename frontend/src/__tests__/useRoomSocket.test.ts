@@ -215,14 +215,108 @@ describe('useRoomSocket', () => {
       expect(result.current.wsStatus).toBe('disconnected');
     });
 
-    it('transitions to "error" when the socket errors', () => {
+    it('transitions to "disconnected" when the socket errors (onclose decides what happens next)', () => {
       const { result } = renderHook(() =>
         useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
       );
       act(() => {
         wsInstances[0].onerror?.();
       });
+      expect(result.current.wsStatus).toBe('disconnected');
+    });
+  });
+
+  describe('reconnect', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    const PLAYER = { playerId: 'p1', displayName: 'A', avatarId: null, isGuest: true, isHost: true };
+
+    function dropSocket(instance: MockWsInstance, code = 1006) {
+      act(() => {
+        instance.readyState = MockWebSocket.CLOSED;
+        instance.onclose?.({ code, reason: '' });
+      });
+    }
+
+    it('reopens the socket with backoff after an abnormal close and keeps the roster', () => {
+      const { result } = renderHook(() =>
+        useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
+      );
+      openSocket(wsInstances[0]);
+      sendMessage(wsInstances[0], { type: 'connected', userId: 'p1' });
+      sendMessage(wsInstances[0], { type: 'room_players', players: [{ ...PLAYER, userId: 'p1' }] });
+
+      dropSocket(wsInstances[0]);
+      expect(result.current.wsStatus).toBe('disconnected');
+      expect(result.current.players).toHaveLength(1);
+      expect(wsInstances).toHaveLength(1);
+
+      act(() => { jest.advanceTimersByTime(1000); });
+      expect(wsInstances).toHaveLength(2);
+      expect(result.current.wsStatus).toBe('connecting');
+      expect(result.current.players).toHaveLength(1);
+
+      // Second failure backs off to 2s.
+      dropSocket(wsInstances[1]);
+      act(() => { jest.advanceTimersByTime(1999); });
+      expect(wsInstances).toHaveLength(2);
+      act(() => { jest.advanceTimersByTime(1); });
+      expect(wsInstances).toHaveLength(3);
+
+      openSocket(wsInstances[2]);
+      expect(result.current.wsStatus).toBe('connected');
+    });
+
+    it('gives up with an error after repeated failures', () => {
+      const { result } = renderHook(() =>
+        useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
+      );
+      for (let i = 0; i < 5; i++) {
+        dropSocket(wsInstances[i]);
+        act(() => { jest.advanceTimersByTime(10_000); });
+      }
+      expect(wsInstances).toHaveLength(6);
+      dropSocket(wsInstances[5]);
       expect(result.current.wsStatus).toBe('error');
+      expect(result.current.lastError).toBe('Lost connection to the room.');
+      act(() => { jest.advanceTimersByTime(60_000); });
+      expect(wsInstances).toHaveLength(6);
+    });
+
+    it('does not reconnect after a deliberate server close (4xxx) or a clean close (1000)', () => {
+      renderHook(() => useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' }));
+      dropSocket(wsInstances[0], 4001);
+      act(() => { jest.advanceTimersByTime(60_000); });
+      expect(wsInstances).toHaveLength(1);
+
+      const { unmount } = renderHook(() => useRoomSocket({ roomCode: 'DEF456', sessionId: 'sess-1' }));
+      dropSocket(wsInstances[1], 1000);
+      act(() => { jest.advanceTimersByTime(60_000); });
+      expect(wsInstances).toHaveLength(2);
+      unmount();
+    });
+
+    it('reconnects immediately when the tab becomes visible while a retry is pending', () => {
+      renderHook(() => useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' }));
+      dropSocket(wsInstances[0]);
+      dropSocket(wsInstances[0]); // duplicate close is ignored
+      expect(wsInstances).toHaveLength(1);
+      act(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(wsInstances).toHaveLength(2);
+    });
+
+    it('does not reconnect after unmount', () => {
+      const { unmount } = renderHook(() =>
+        useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
+      );
+      dropSocket(wsInstances[0]);
+      unmount();
+      act(() => { jest.advanceTimersByTime(60_000); });
+      expect(wsInstances).toHaveLength(1);
     });
   });
 

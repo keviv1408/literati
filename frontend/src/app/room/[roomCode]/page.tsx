@@ -837,6 +837,23 @@ export default function RoomLobbyPage({ params }: PageProps) {
           </div>
         )}
 
+        {/* ── Reconnecting banner (roster is kept while the socket is re-established) ── */}
+        {wsPlayers.length > 0 && (wsStatus === 'connecting' || wsStatus === 'disconnected') && (
+          <div
+            className="
+              flex items-center gap-2 px-4 py-2.5 rounded-xl
+              bg-amber-900/30 border border-amber-700/50
+              text-amber-300 text-sm font-medium
+            "
+            role="status"
+            aria-live="polite"
+            data-testid="reconnecting-banner"
+          >
+            <span aria-hidden="true">📡</span>
+            Reconnecting to the room…
+          </div>
+        )}
+
         {/* ── Host-change notification banner ──────────────────────────────── */}
         {hostChangedBanner && (
           <div
