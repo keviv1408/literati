@@ -35,8 +35,8 @@ export interface LobbyPlayer {
   isHost: boolean;
   /** Whether this player is the currently logged-in / guest user. */
   isCurrentUser: boolean;
-  /** Optional avatar image URL (registered users with Google OAuth). */
-  avatarUrl?: string | null;
+  /** One of the backend's `avatar-1..12` ids; null for bots. */
+  avatarId?: string | null;
 }
 
 // ── Team assignment helpers ──────────────────────────────────────────────────

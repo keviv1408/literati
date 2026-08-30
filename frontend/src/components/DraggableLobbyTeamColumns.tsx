@@ -190,7 +190,7 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
           <div className="relative">
             <Avatar
               displayName={player.displayName}
-              imageUrl={player.avatarUrl ?? undefined}
+              avatarId={player.avatarId}
               size="sm"
             />
             {player.isHost && (

@@ -174,6 +174,11 @@ export interface UseRoomSocketResult {
    */
   changeTeam: (teamId: 1 | 2) => void;
   /**
+   * Change the current player's avatar. Sends `{ type: 'set_avatar', avatarId }`;
+   * the server validates the id and broadcasts `room_players`.
+   */
+  setAvatar: (avatarId: string) => void;
+  /**
    * Generic escape-hatch: send any JSON event to the server.
    * No-ops silently when the socket is not OPEN.
    */
@@ -606,6 +611,13 @@ export function useRoomSocket({
     }
   }, []);
 
+  const setAvatar = useCallback((avatarId: string): void => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'set_avatar', avatarId }));
+    }
+  }, []);
+
   /**
    * Ask the server to start the game immediately.
    * The server validates host authority, fills empty seats with bots,
@@ -630,6 +642,7 @@ export function useRoomSocket({
     kickReason,
     kickPlayer,
     changeTeam,
+    setAvatar,
     emit,
     startGame,
     lobbyTimer,

@@ -158,7 +158,7 @@ function TeammateDropZone({
       data-testid="teammate-drop-zone"
       data-player-id={playerId}
     >
-      <Avatar displayName={player.displayName} imageUrl={player.avatarId ?? undefined} size="sm" />
+      <Avatar displayName={player.displayName} avatarId={player.avatarId} size="sm" />
       <span className="text-[0.65rem] font-medium text-slate-200 truncate max-w-full text-center leading-tight">
         {player.displayName}
       </span>

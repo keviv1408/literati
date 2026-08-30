@@ -59,6 +59,7 @@ import { connectSocket, disconnectSocket } from '@/lib/socket';
 import type { RoomCreatedPayload } from '@/lib/socket';
 import type { Room, Team } from '@/types/room';
 import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
+import AvatarPicker from '@/components/AvatarPicker';
 import { buildEmptySeats } from '@/types/lobby';
 import type { LobbyPlayer } from '@/types/lobby';
 
@@ -264,6 +265,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     myPlayerId,
     kickPlayer,
     changeTeam,
+    setAvatar,
     startGame,
     lobbyStarting,
     lastError: wsError,
@@ -378,7 +380,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           isBot: p.isBot ?? false,
           isHost: p.isHost,
           isCurrentUser: p.playerId === myPlayerId,
-          avatarUrl: p.avatarId ?? null,
+          avatarId: p.avatarId ?? null,
         };
       }
     });
@@ -396,7 +398,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           isBot: p.isBot ?? false,
           isHost: p.isHost,
           isCurrentUser: p.playerId === myPlayerId,
-          avatarUrl: p.avatarId ?? null,
+          avatarId: p.avatarId ?? null,
         };
       }
     });
@@ -1149,6 +1151,15 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   >
                     Switch to Team {myTeamId === 1 ? 2 : 1}
                   </button>
+                </div>
+              )}
+
+              {myWsPlayer && !isSpectator && (
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <span className="text-[0.65rem] font-semibold uppercase tracking-widest text-slate-400">
+                    Your avatar
+                  </span>
+                  <AvatarPicker value={myWsPlayer.avatarId ?? null} onChange={setAvatar} />
                 </div>
               )}
 

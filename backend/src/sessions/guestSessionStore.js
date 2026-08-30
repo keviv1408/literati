@@ -153,6 +153,25 @@ function getGuestSession(token) {
 }
 
 /**
+ * Change the avatar of the live session with `sessionId`.
+ *
+ * @param {string} sessionId
+ * @param {string} avatarId - One of VALID_AVATAR_IDS.
+ * @returns {boolean} true when a session was updated.
+ */
+function updateGuestAvatar(sessionId, avatarId) {
+  if (!VALID_AVATAR_IDS.includes(avatarId)) return false;
+  // ponytail: linear scan over live sessions; add a sessionId index if this shows up in profiles
+  for (const session of _store.values()) {
+    if (session.sessionId === sessionId) {
+      session.avatarId = avatarId;
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Explicitly delete a guest session (e.g. when the guest leaves a game or
  * the WebSocket connection is permanently closed).
  *
@@ -238,6 +257,7 @@ module.exports = {
   // Core CRUD
   createGuestSession,
   getGuestSession,
+  updateGuestAvatar,
   deleteGuestSession,
   cleanupExpiredSessions,
 

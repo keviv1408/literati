@@ -15,7 +15,7 @@
  * | Empty | `player` is null | Pulsing hourglass + "Waiting…" |
  *
  * ### What is displayed (occupied)
- * - **Avatar**: image from `player.avatarId` (treated as a URL); falls back to
+ * - **Avatar**: glyph from `player.avatarId`; falls back to
  * an initials circle deterministically coloured by display name.
  * - **Name**: plain text for humans; `<BotBadge>` widget for bots.
  * - **"You" pill**: appears when `player.playerId === myPlayerId`.
@@ -412,7 +412,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       <div className="relative">
         <Avatar
           displayName={displayName}
-          imageUrl={avatarId ?? undefined}
+          avatarId={avatarId}
           size={avatarSize}
           className="lg:w-11 lg:h-11 xl:w-12 xl:h-12"
           aria-label={undefined}

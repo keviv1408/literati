@@ -1,8 +1,8 @@
 import {
-  getInitials,
   getAvatarColor,
-  getAvatarProps,
+  getAvatarEmoji,
   hashString,
+  AVATAR_IDS,
   AVATAR_PALETTE,
 } from "@/utils/avatar";
 
@@ -27,55 +27,6 @@ describe("hashString", () => {
 
   it("handles empty string without error", () => {
     expect(() => hashString("")).not.toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getInitials
-// ---------------------------------------------------------------------------
-describe("getInitials", () => {
-  it("returns first and last initials for a two-word name", () => {
-    expect(getInitials("Alice Johnson")).toBe("AJ");
-  });
-
-  it("returns a single initial for a single-word name", () => {
-    expect(getInitials("Alice")).toBe("A");
-  });
-
-  it("uses first and last word for names with three or more words", () => {
-    expect(getInitials("Mary Jane Watson")).toBe("MW");
-  });
-
-  it("returns a single initial when first and last words share the same starting letter", () => {
-    // "Anna Atkinson" → first="A", last="A" — same letter, collapse to one
-    expect(getInitials("Anna Atkinson")).toBe("A");
-  });
-
-  it("is case-insensitive — always returns uppercase", () => {
-    expect(getInitials("alice johnson")).toBe("AJ");
-    expect(getInitials("ALICE JOHNSON")).toBe("AJ");
-  });
-
-  it("trims leading and trailing whitespace", () => {
-    expect(getInitials("  Alice Johnson  ")).toBe("AJ");
-  });
-
-  it("returns '?' for an empty string", () => {
-    expect(getInitials("")).toBe("?");
-  });
-
-  it("returns '?' for whitespace-only string", () => {
-    expect(getInitials("   ")).toBe("?");
-  });
-
-  it("handles a numeric-only name gracefully", () => {
-    const result = getInitials("42");
-    // Should not throw; may return the digit or '?'
-    expect(result.length).toBeGreaterThan(0);
-  });
-
-  it("handles a single-character name", () => {
-    expect(getInitials("Z")).toBe("Z");
   });
 });
 
@@ -123,21 +74,27 @@ describe("getAvatarColor", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getAvatarProps
+// getAvatarEmoji
 // ---------------------------------------------------------------------------
-describe("getAvatarProps", () => {
-  it("returns both initials and color", () => {
-    const props = getAvatarProps("Alice Johnson");
-    expect(props.initials).toBe("AJ");
-    expect(props.color).toBeDefined();
-    expect(props.color.bg).toBeTruthy();
-    expect(props.color.fg).toBeTruthy();
+describe("getAvatarEmoji", () => {
+  it("maps every avatar id to a distinct glyph", () => {
+    const glyphs = AVATAR_IDS.map((id) => getAvatarEmoji(id, "whoever"));
+    expect(new Set(glyphs).size).toBe(12);
   });
 
-  it("is consistent with individual helpers", () => {
-    const name = "Bob Smith";
-    const props = getAvatarProps(name);
-    expect(props.initials).toBe(getInitials(name));
-    expect(props.color.bg).toBe(getAvatarColor(name).bg);
+  it("prefers a valid avatarId over the name", () => {
+    expect(getAvatarEmoji("avatar-1", "Mochi")).toBe(getAvatarEmoji("avatar-1", "Nova"));
+  });
+
+  it("gives known bot names a fixed glyph regardless of casing", () => {
+    expect(getAvatarEmoji(null, "Mochi")).toBe("🍡");
+    expect(getAvatarEmoji(undefined, "  mochi ")).toBe("🍡");
+    expect(getAvatarEmoji("not-an-avatar", "Nova")).toBe("🌟");
+  });
+
+  it("falls back to a deterministic glyph from the avatar set for other names", () => {
+    const glyph = getAvatarEmoji(null, "Kalven");
+    expect(glyph).toBe(getAvatarEmoji(null, "kalven"));
+    expect(AVATAR_IDS.map((id) => getAvatarEmoji(id, ""))).toContain(glyph);
   });
 });
