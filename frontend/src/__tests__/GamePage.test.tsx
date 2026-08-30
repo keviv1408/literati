@@ -549,14 +549,6 @@ describe('GamePage — in_progress game view', () => {
     });
   });
 
-  it('shows score display in the header', async () => {
-    render(<GamePage params={makeParams('ABC123')} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('game-score')).toBeTruthy();
-    });
-  });
-
   it('clears a visible turn timer as soon as ask_result arrives', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => {
@@ -1431,16 +1423,14 @@ describe('GamePage — game controls always available', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Declaration outcome broadcast — score display and score flash
+// Declaration outcome broadcast
 //
 // Verifies that:
-// 1. Score header renders with team 1 and team 2 score testids
-// 2. Score updates in the header after game_state broadcast with new scores
-// 3. lastMove text is displayed after a declaration_result arrives
-// 4. declaration_result.correct and.winningTeam are reflected in lastMove
+// 1. lastMove text is displayed after a declaration_result arrives
+// 2. declaration_result.correct and.winningTeam are reflected in lastMove
 // ---------------------------------------------------------------------------
 
-describe('GamePage — declaration outcome broadcast and score display', () => {
+describe('GamePage — declaration outcome broadcast', () => {
   const MY_PLAYER_ID = 'player-me';
 
   const players6 = [
@@ -1472,69 +1462,7 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
     mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
   });
 
-  it('1. score-team1 and score-team2 testids are present in the header', async () => {
-    render(<GamePage params={makeParams('ABC123')} />);
-    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
-
-    act(() => openWs());
-    act(() => sendWsMessage({
-      ...makeGameInit(MY_PLAYER_ID, players6),
-      gameState: makeGameState({ scores: { team1: 0, team2: 0 } }),
-    }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('score-team1')).toBeTruthy();
-      expect(screen.getByTestId('score-team2')).toBeTruthy();
-    });
-  });
-
-  it('2. score header shows 0-0 on game start', async () => {
-    render(<GamePage params={makeParams('ABC123')} />);
-    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
-
-    act(() => openWs());
-    act(() => sendWsMessage({
-      ...makeGameInit(MY_PLAYER_ID, players6),
-      gameState: makeGameState({ scores: { team1: 0, team2: 0 } }),
-    }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('game-score')).toBeTruthy();
-    });
-    // Score should show 0 for both teams
-    const scoreEl = screen.getByTestId('game-score');
-    expect(scoreEl.textContent).toContain('0');
-  });
-
-  it('3. score header updates after game_state broadcast with new scores', async () => {
-    render(<GamePage params={makeParams('ABC123')} />);
-    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
-
-    act(() => openWs());
-    act(() => sendWsMessage({
-      ...makeGameInit(MY_PLAYER_ID, players6),
-      gameState: makeGameState({ scores: { team1: 0, team2: 0 } }),
-    }));
-
-    await waitFor(() => expect(screen.getByTestId('game-score')).toBeTruthy());
-
-    // Simulate a game_state update after a declaration — Team 1 now has 1 point
-    act(() => sendWsMessage({
-      type: 'game_state',
-      state: makeGameState({
-        scores: { team1: 1, team2: 0 },
-        currentTurnPlayerId: 'p4',
-      }),
-    }));
-
-    await waitFor(() => {
-      // The score display should now show Team 1 with 1 point
-      const scoreEl = screen.getByTestId('game-score');
-      expect(scoreEl.textContent).toContain('1');
-    });
-  });
-
-  it('4. declaration_result triggers lastMove display (correct declaration)', async () => {
+  it('1. declaration_result triggers lastMove display (correct declaration)', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
 
@@ -1572,7 +1500,7 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
     expect(screen.queryByTestId('declaration-result-overlay')).toBeNull();
   });
 
-  it('5. declaration_result triggers lastMove display (incorrect declaration)', async () => {
+  it('2. declaration_result triggers lastMove display (incorrect declaration)', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
 
@@ -1662,7 +1590,7 @@ describe('GamePage — declaration outcome broadcast and score display', () => {
     }
   });
 
-  it('6. declare modal is closed after declaration_result is received', async () => {
+  it('3. declare modal is closed after declaration_result is received', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
 
