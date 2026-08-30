@@ -210,6 +210,9 @@ export interface UseRoomSocketResult {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_DELAY_MS = 10_000;
+
 /**
  * Convert an HTTP(S) base URL to a WS(S) base URL.
  * "http://localhost:3001" → "ws://localhost:3001"
@@ -274,19 +277,8 @@ export function useRoomSocket({
     const tokenParam = bearerToken ? `?token=${encodeURIComponent(bearerToken)}` : '';
     const wsUrl = `${wsBase}/ws/room/${roomCode.toUpperCase()}${tokenParam}`;
 
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(wsUrl);
-    } catch {
-      // WebSocket constructor can throw synchronously in some environments.
-      setWsStatus('error');
-      return;
-    }
-
-    wsRef.current = ws;
-    setWsStatus('connecting');
-
-    // Reset lobby state on new connection attempt.
+    // Reset lobby state once per room/session, not per reconnect attempt, so
+    // the roster doesn't flash empty while the socket is re-established.
     setPlayers([]);
     setMyPlayerId(null);
     setIsKicked(false);
@@ -304,216 +296,269 @@ export function useRoomSocket({
       setWsStatus('error');
     };
 
-    ws.onopen = () => {
-      setWsStatus('connected');
-      // Server sends 'connected' first; we send 'join-room' in response (see onmessage).
+    let disposed = false;
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleReconnect = () => {
+      if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+        failWith(0, 'Lost connection to the room.');
+        return;
+      }
+      retryTimer = setTimeout(connect, Math.min(1000 * 2 ** attempt, MAX_RECONNECT_DELAY_MS));
+      attempt += 1;
     };
 
-    ws.onclose = (e: CloseEvent) => {
-      wsRef.current = null;
-      if (e.code >= 4000) failWith(e.code, e.reason);
-      else setWsStatus((prev) => (prev === 'error' ? 'error' : 'disconnected'));
-    };
-
-    ws.onerror = () => {
-      setWsStatus('error');
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
-      let msg: Record<string, unknown>;
+    function connect() {
+      retryTimer = null;
+      let ws: WebSocket;
       try {
-        msg = JSON.parse(event.data as string) as Record<string, unknown>;
+        ws = new WebSocket(wsUrl);
       } catch {
-        return; // Non-JSON frame — ignore.
+        // WebSocket constructor can throw synchronously in some environments.
+        setWsStatus('error');
+        return;
       }
 
-      switch (msg.type) {
-        // ── Auth confirmed — record our server identity ──────────────────────
-        // The room WS server (/ws/room/<CODE>) sends `{ type: 'connected', userId }`
-        // while the legacy lobby server sends `{ type: 'connected', playerId }`.
-        // Accept either field so the hook works with both servers.
-        case 'connected': {
-          const serverPlayerId =
-            (msg.userId as string | undefined) ??
-            (msg.playerId as string | undefined);
-          if (serverPlayerId) {
-            setMyPlayerId(serverPlayerId);
+      wsRef.current = ws;
+      setWsStatus('connecting');
+
+      ws.onopen = () => {
+        setWsStatus('connected');
+        // Server sends 'connected' first; we send 'join-room' in response (see onmessage).
+      };
+
+      ws.onclose = (e: CloseEvent) => {
+        if (wsRef.current === ws) wsRef.current = null;
+        if (disposed) return;
+        if (e.code >= 4000) {
+          failWith(e.code, e.reason);
+        } else if (e.code === 1000) {
+          setWsStatus((prev) => (prev === 'error' ? 'error' : 'disconnected'));
+        } else {
+          // Phones drop the socket when backgrounded; the server treats a fresh
+          // connection from the same user as a reconnect and resends the roster.
+          setWsStatus('disconnected');
+          scheduleReconnect();
+        }
+      };
+
+      ws.onerror = () => {
+        // The browser always follows this with onclose, which drives reconnect.
+        setWsStatus('disconnected');
+      };
+
+      ws.onmessage = (event: MessageEvent) => {
+        let msg: Record<string, unknown>;
+        try {
+          msg = JSON.parse(event.data as string) as Record<string, unknown>;
+        } catch {
+          return; // Non-JSON frame — ignore.
+        }
+
+        switch (msg.type) {
+          // ── Auth confirmed — record our server identity ──────────────────────
+          // The room WS server (/ws/room/<CODE>) sends `{ type: 'connected', userId }`
+          // while the legacy lobby server sends `{ type: 'connected', playerId }`.
+          // Accept either field so the hook works with both servers.
+          case 'connected': {
+            const serverPlayerId =
+              (msg.userId as string | undefined) ??
+              (msg.playerId as string | undefined);
+            if (serverPlayerId) {
+              setMyPlayerId(serverPlayerId);
+            }
+            attempt = 0;
+            // The room WS server joins the player automatically on connection;
+            // still send join-room so the legacy /ws server path also works.
+            const code = roomCodeRef.current;
+            if (code && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'join-room', roomCode: code.toUpperCase() }));
+            }
+            break;
           }
-          // The room WS server joins the player automatically on connection;
-          // still send join-room so the legacy /ws server path also works.
-          const code = roomCodeRef.current;
-          if (code && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'join-room', roomCode: code.toUpperCase() }));
+
+          // ── Full lobby snapshot on successful join ───────────────────────────
+          case 'room-joined': {
+            const rawPlayers = msg.players;
+            if (Array.isArray(rawPlayers)) {
+              setPlayers(rawPlayers as LobbyPlayer[]);
+            }
+            break;
           }
-          break;
-        }
 
-        // ── Full lobby snapshot on successful join ───────────────────────────
-        case 'room-joined': {
-          const rawPlayers = msg.players;
-          if (Array.isArray(rawPlayers)) {
-            setPlayers(rawPlayers as LobbyPlayer[]);
+          // ── Incremental: new player arrived ─────────────────────────────────
+          case 'player-joined': {
+            const newPlayer = msg.player as LobbyPlayer | undefined;
+            if (newPlayer) {
+              setPlayers((prev) => {
+                // Guard against duplicate entries (e.g. reconnect race).
+                if (prev.some((p) => p.playerId === newPlayer.playerId)) {
+                  return prev;
+                }
+                return [...prev, newPlayer];
+              });
+            }
+            break;
           }
-          break;
-        }
 
-        // ── Incremental: new player arrived ─────────────────────────────────
-        case 'player-joined': {
-          const newPlayer = msg.player as LobbyPlayer | undefined;
-          if (newPlayer) {
-            setPlayers((prev) => {
-              // Guard against duplicate entries (e.g. reconnect race).
-              if (prev.some((p) => p.playerId === newPlayer.playerId)) {
-                return prev;
-              }
-              return [...prev, newPlayer];
-            });
+          // ── Incremental: player was kicked (broadcast to observers) ──────────
+          case 'player-kicked': {
+            const kickedId = msg.playerId as string | undefined;
+            if (kickedId) {
+              setPlayers((prev) => prev.filter((p) => p.playerId !== kickedId));
+            }
+            break;
           }
-          break;
-        }
 
-        // ── Incremental: player was kicked (broadcast to observers) ──────────
-        case 'player-kicked': {
-          const kickedId = msg.playerId as string | undefined;
-          if (kickedId) {
-            setPlayers((prev) => prev.filter((p) => p.playerId !== kickedId));
+          // ── You personally were kicked ───────────────────────────────────────
+          case 'kicked':
+          case 'you-were-kicked': {
+            const reason =
+              'You have been removed from this room by the host.';
+            if (roomCode) addKickedRoom(roomCode);
+            setIsKicked(true);
+            setKickReason(reason);
+            ws.close(1000, 'kicked');
+            onKickedRef.current?.(reason);
+            break;
           }
-          break;
-        }
 
-        // ── You personally were kicked ───────────────────────────────────────
-        case 'kicked':
-        case 'you-were-kicked': {
-          const reason =
-            'You have been removed from this room by the host.';
-          if (roomCode) addKickedRoom(roomCode);
-          setIsKicked(true);
-          setKickReason(reason);
-          ws.close(1000, 'kicked');
-          onKickedRef.current?.(reason);
-          break;
-        }
-
-        // ── Incremental: player disconnected voluntarily ─────────────────────
-        case 'player-left': {
-          const leftId = msg.playerId as string | undefined;
-          if (leftId) {
-            setPlayers((prev) => prev.filter((p) => p.playerId !== leftId));
+          // ── Incremental: player disconnected voluntarily ─────────────────────
+          case 'player-left': {
+            const leftId = msg.playerId as string | undefined;
+            if (leftId) {
+              setPlayers((prev) => prev.filter((p) => p.playerId !== leftId));
+            }
+            break;
           }
-          break;
-        }
 
-        // ── Full roster snapshot (room WS server, /ws/room/<CODE>) ──────────
-        // Sent by the server after every state change: join, leave, kick, or
-        // team reassignment. Replaces the entire player list atomically so
-        // all clients converge to the same state without incremental merging.
-        case 'room_players': {
-          const rawPlayers = msg.players;
-          if (Array.isArray(rawPlayers)) {
-            setPlayers(
-              // Backend sends `userId`; LobbyPlayer uses `playerId`.
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (rawPlayers as any[]).map((p) => ({
-                ...p,
-                playerId: p.playerId ?? p.userId,
-              })) as LobbyPlayer[],
-            );
+          // ── Full roster snapshot (room WS server, /ws/room/<CODE>) ──────────
+          // Sent by the server after every state change: join, leave, kick, or
+          // team reassignment. Replaces the entire player list atomically so
+          // all clients converge to the same state without incremental merging.
+          case 'room_players': {
+            const rawPlayers = msg.players;
+            if (Array.isArray(rawPlayers)) {
+              setPlayers(
+                // Backend sends `userId`; LobbyPlayer uses `playerId`.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (rawPlayers as any[]).map((p) => ({
+                  ...p,
+                  playerId: p.playerId ?? p.userId,
+                })) as LobbyPlayer[],
+              );
+            }
+            break;
           }
-          break;
-        }
 
-        // ── Lobby fill timer started ──────────────────────────────────────
-        // Broadcast when the first human player joins a room lobby.
-        // `expiresAt` is epoch-ms; use (expiresAt - Date.now()) for countdown.
-        case 'lobby-timer-started': {
-          const expiresAt = msg.expiresAt as number | undefined;
-          if (typeof expiresAt === 'number' && expiresAt > 0) {
-            setLobbyTimer({ expiresAt });
+          // ── Lobby fill timer started ──────────────────────────────────────
+          // Broadcast when the first human player joins a room lobby.
+          // `expiresAt` is epoch-ms; use (expiresAt - Date.now()) for countdown.
+          case 'lobby-timer-started': {
+            const expiresAt = msg.expiresAt as number | undefined;
+            if (typeof expiresAt === 'number' && expiresAt > 0) {
+              setLobbyTimer({ expiresAt });
+            }
+            break;
           }
-          break;
-        }
 
-        // ── Lobby / game transitioning to active gameplay ─────────────────
-        // Both event types signal that the room has transitioned from "waiting"
-        // to "starting" and all clients should navigate to the game board.
-        //
-        // 'lobby-starting' — sent by:
-        // • roomSocketServer.js (/ws/room/<CODE>) when the host fires
-        // start_game.
-        // • wsServer.js (/ws) when the lobby fill timer fires or the
-        // room reaches capacity.
-        //
-        // 'game_starting' — forward-compatible alias (same semantics).
-        //
-        // Payload: { seats: LobbySeat[], botsAdded: string[], roomCode: string }
-        case 'lobby-starting':
-        // eslint-disable-next-line no-fallthrough
-        case 'game_starting': {
-          setLobbyStarting(true);
-          setLobbyTimer(null); // timer no longer relevant
-          // Update player list with final seats (includes bots).
-          // `isBot` must be mapped here so bot seats render BotBadge indicators
-          // in the brief pre-navigation lobby snapshot.
-          const seats = msg.seats;
-          if (Array.isArray(seats)) {
-            setPlayers(
-              seats.map((s: Record<string, unknown>) => ({
-                playerId:    s.playerId    as string,
-                displayName: s.displayName as string,
-                avatarId:    (s.avatarId   as string | null) ?? null,
-                isGuest:     (s.isGuest    as boolean) ?? false,
-                isHost:      (s.isHost     as boolean) ?? false,
-                teamId:      s.teamId      as 1 | 2 | undefined,
-                isBot:       (s.isBot      as boolean) ?? false,
-              }))
-            );
+          // ── Lobby / game transitioning to active gameplay ─────────────────
+          // Both event types signal that the room has transitioned from "waiting"
+          // to "starting" and all clients should navigate to the game board.
+          //
+          // 'lobby-starting' — sent by:
+          // • roomSocketServer.js (/ws/room/<CODE>) when the host fires
+          // start_game.
+          // • wsServer.js (/ws) when the lobby fill timer fires or the
+          // room reaches capacity.
+          //
+          // 'game_starting' — forward-compatible alias (same semantics).
+          //
+          // Payload: { seats: LobbySeat[], botsAdded: string[], roomCode: string }
+          case 'lobby-starting':
+          // eslint-disable-next-line no-fallthrough
+          case 'game_starting': {
+            setLobbyStarting(true);
+            setLobbyTimer(null); // timer no longer relevant
+            // Update player list with final seats (includes bots).
+            // `isBot` must be mapped here so bot seats render BotBadge indicators
+            // in the brief pre-navigation lobby snapshot.
+            const seats = msg.seats;
+            if (Array.isArray(seats)) {
+              setPlayers(
+                seats.map((s: Record<string, unknown>) => ({
+                  playerId:    s.playerId    as string,
+                  displayName: s.displayName as string,
+                  avatarId:    (s.avatarId   as string | null) ?? null,
+                  isGuest:     (s.isGuest    as boolean) ?? false,
+                  isHost:      (s.isHost     as boolean) ?? false,
+                  teamId:      s.teamId      as 1 | 2 | undefined,
+                  isBot:       (s.isBot      as boolean) ?? false,
+                }))
+              );
+            }
+            break;
           }
-          break;
-        }
 
-        case 'closing': {
-          failWith(msg.code as number, (msg.reason as string) ?? '');
-          ws.close(1000, 'server closing');
-          break;
-        }
-
-        // ── Server-sent non-fatal error ───────────────────────────────────────
-        // e.g. "Only the host can start the game", "Team X is full", etc.
-        case 'error': {
-          const errMessage = msg.message as string | undefined;
-          if (typeof errMessage === 'string') {
-            setLastError(errMessage);
-            setErrorSeq((n) => n + 1);
+          case 'closing': {
+            failWith(msg.code as number, (msg.reason as string) ?? '');
+            ws.close(1000, 'server closing');
+            break;
           }
-          break;
-        }
 
-        // ── Host authority transferred ────────────────────────────────────────
-        // Sent by the server when the original host's 30-second grace window
-        // expires without a reconnect and a new player has been promoted.
-        // The server immediately follows this message with a `room_players`
-        // snapshot carrying the updated `isHost` flags — callers relying on
-        // the live player list don't need to do anything beyond re-deriving
-        // `amIHost` from the updated `players` array.
-        // `hostChangedEvent` is exposed so callers can show a toast/banner.
-        case 'host_changed': {
-          const newHostId   = msg.newHostId   as string | undefined;
-          const newHostName = msg.newHostName as string | undefined;
-          if (newHostId && newHostName) {
-            setHostChangedEvent({ newHostId, newHostName });
+          // ── Server-sent non-fatal error ───────────────────────────────────────
+          // e.g. "Only the host can start the game", "Team X is full", etc.
+          case 'error': {
+            const errMessage = msg.message as string | undefined;
+            if (typeof errMessage === 'string') {
+              setLastError(errMessage);
+              setErrorSeq((n) => n + 1);
+            }
+            break;
           }
-          break;
-        }
 
-        // ── kick-confirmed, team-reassigned, etc. — ignored here ─────────────
-        default:
-          break;
+          // ── Host authority transferred ────────────────────────────────────────
+          // Sent by the server when the original host's 30-second grace window
+          // expires without a reconnect and a new player has been promoted.
+          // The server immediately follows this message with a `room_players`
+          // snapshot carrying the updated `isHost` flags — callers relying on
+          // the live player list don't need to do anything beyond re-deriving
+          // `amIHost` from the updated `players` array.
+          // `hostChangedEvent` is exposed so callers can show a toast/banner.
+          case 'host_changed': {
+            const newHostId   = msg.newHostId   as string | undefined;
+            const newHostName = msg.newHostName as string | undefined;
+            if (newHostId && newHostName) {
+              setHostChangedEvent({ newHostId, newHostName });
+            }
+            break;
+          }
+
+          // ── kick-confirmed, team-reassigned, etc. — ignored here ─────────────
+          default:
+            break;
+        }
+      };
+    }
+
+    connect();
+
+    // Returning to a backgrounded tab: retry now instead of waiting out the backoff.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && retryTimer) {
+        clearTimeout(retryTimer);
+        connect();
       }
     };
+    document.addEventListener('visibilitychange', onVisible);
 
     // Teardown: close the socket when the hook unmounts or deps change.
     return () => {
-      ws.close(1000, 'unmount');
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      if (retryTimer) clearTimeout(retryTimer);
+      wsRef.current?.close(1000, 'unmount');
       wsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
