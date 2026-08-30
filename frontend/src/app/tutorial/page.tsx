@@ -133,6 +133,9 @@ function declarationRevealFor(step: Step, before: TableState, players: GamePlaye
 export default function TutorialPage() {
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
+  // Seat tapped to inspect a hand in the footer; null shows your own hand.
+  const [inspectedId, setInspectedId] = useState<string | null>(null);
+  const shownId = inspectedId ?? ME;
 
   const step = SCRIPT[index];
   const isLast = index === SCRIPT.length - 1;
@@ -241,7 +244,8 @@ export default function TutorialPage() {
               playerCount={6}
               currentTurnPlayerId={state.turn}
               indicatorActive={state.turn === ME}
-              highlightedPlayerIds={focus}
+              highlightedPlayerIds={inspectedId ? new Set([...focus, inspectedId]) : focus}
+              onDirectSeatClick={(id) => setInspectedId(id === ME ? null : id)}
               askTargetPlayerIds={askTarget}
               declarationSeatRevealByPlayerId={declarationReveal}
               renderSeatWrapper={(player, seat) => (
@@ -337,17 +341,31 @@ export default function TutorialPage() {
               </div>
             </section>
 
-            <div className="hidden sm:block">
-              <span className="text-xs text-slate-400">
-                Your hand — <strong className="text-white">{state.hands[ME].length}</strong> card
-                {state.hands[ME].length !== 1 ? 's' : ''}
-              </span>
+            <div className={inspectedId ? 'block' : 'hidden sm:block'} data-testid="footer-hand">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-slate-400">
+                  {inspectedId ? `${getPlayerDisplayName(inspectedId)}'s hand` : 'Your hand'} —{' '}
+                  <strong className="text-white">{state.hands[shownId].length}</strong> card
+                  {state.hands[shownId].length !== 1 ? 's' : ''}
+                </span>
+                {inspectedId ? (
+                  <button
+                    type="button"
+                    onClick={() => setInspectedId(null)}
+                    className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+                  >
+                    Show my hand
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-500">Tap a seat to see that player’s hand here</span>
+                )}
+              </div>
               <CardHand
-                hand={state.hands[ME]}
-                isMyTurn={state.turn === ME}
+                hand={state.hands[shownId]}
+                isMyTurn={state.turn === shownId}
                 disabled
                 variant={TUTORIAL_VARIANT}
-                newlyArrivedCardId={newlyArrivedCardId}
+                newlyArrivedCardId={inspectedId ? null : newlyArrivedCardId}
               />
             </div>
           </div>
@@ -382,7 +400,7 @@ export default function TutorialPage() {
 /** Face-up mini hand under a seat; the tutorial's "all cards open" device. */
 function OpenHand({ hand, highlighted }: { hand: CardId[]; highlighted: Set<CardId> }) {
   return (
-    <div className="flex flex-wrap justify-center gap-px lg:gap-0.5 w-[9rem] lg:w-[13rem]" data-testid="open-hand">
+    <div className="flex flex-wrap justify-center gap-px lg:gap-0.5 w-[11rem] lg:w-[15rem]" data-testid="open-hand">
       {sortHand(hand).map((card) => (
         <PlayingCard
           key={card}
@@ -390,7 +408,7 @@ function OpenHand({ hand, highlighted }: { hand: CardId[]; highlighted: Set<Card
           size="sm"
           className={[
             // "!" beats PlayingCard's own size classes, which Tailwind sorts later.
-            'w-4! h-6! lg:w-6! lg:h-9! rounded-[4px]! lg:rounded-[6px]!',
+            'w-5! h-[1.875rem]! lg:w-7! lg:h-[2.625rem]! rounded-[4px]! lg:rounded-[6px]!',
             highlighted.has(card) ? 'ring-2 ring-amber-400 -translate-y-1 border-amber-300' : '',
           ].join(' ')}
         />
