@@ -254,7 +254,7 @@ export default function TutorialPage() {
               currentTurnPlayerId={state.turn}
               indicatorActive={state.turn === ME}
               highlightedPlayerIds={inspectedId ? new Set([...focus, inspectedId]) : focus}
-              onDirectSeatClick={(id) => setInspectedId(id === ME ? null : id)}
+              onDirectSeatClick={setInspectedId}
               askTargetPlayerIds={askTarget}
               declarationSeatRevealByPlayerId={declarationReveal}
               renderSeatWrapper={(player, seat) => (
@@ -357,7 +357,7 @@ export default function TutorialPage() {
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs text-slate-400">
-                  {inspectedId ? `${getPlayerDisplayName(inspectedId)}'s hand` : 'Your hand'} —{' '}
+                  {shownId === ME ? 'Your hand' : `${getPlayerDisplayName(shownId)}'s hand`} —{' '}
                   <strong className="text-white">{state.hands[shownId].length}</strong> card
                   {state.hands[shownId].length !== 1 ? 's' : ''}
                 </span>
@@ -378,7 +378,7 @@ export default function TutorialPage() {
                 isMyTurn={state.turn === shownId}
                 disabled
                 variant={TUTORIAL_VARIANT}
-                newlyArrivedCardId={inspectedId ? null : newlyArrivedCardId}
+                newlyArrivedCardId={shownId === ME ? newlyArrivedCardId : null}
               />
             </div>
           </div>
@@ -413,7 +413,7 @@ export default function TutorialPage() {
 /** Face-up mini hand under a seat; the tutorial's "all cards open" device. */
 function OpenHand({ hand, highlighted }: { hand: CardId[]; highlighted: Set<CardId> }) {
   return (
-    <div className="flex flex-wrap justify-center gap-px lg:gap-0.5 w-[11rem] lg:w-[15rem]" data-testid="open-hand">
+    <div className="relative z-20 flex flex-wrap justify-center gap-px lg:gap-0.5 w-[11rem] lg:w-[15rem]" data-testid="open-hand">
       {sortHand(hand).map((card) => (
         <PlayingCard
           key={card}
