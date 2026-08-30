@@ -647,13 +647,27 @@ describe('GamePage — in_progress game view', () => {
       expect(screen.getByTestId('ask-denied-animation')).toBeTruthy();
       expect(screen.getByTestId('ask-denied-card')).toBeTruthy();
       expect(screen.getByTestId('ask-denied-x')).toBeTruthy();
+      expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
 
       act(() => {
-        jest.advanceTimersByTime(3500);
+        jest.advanceTimersByTime(1200);
+      });
+
+      expect(screen.getByTestId('denied-speech-bubble-text').textContent).toMatch(/\S/);
+
+      act(() => {
+        jest.advanceTimersByTime(2300);
       });
 
       expect(screen.queryByTestId('ask-speech-bubble-overlay')).toBeNull();
       expect(screen.queryByTestId('ask-denied-animation')).toBeNull();
+      expect(screen.getByTestId('denied-speech-bubble-overlay')).toBeTruthy();
+
+      act(() => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
     } finally {
       jest.useRealTimers();
     }

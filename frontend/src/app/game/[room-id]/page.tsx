@@ -68,6 +68,7 @@ import MuteToggle from '@/components/MuteToggle';
 import KnowledgePanel from '@/components/KnowledgePanel';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
+import { useReactionBubble } from '@/hooks/useReactionBubble';
 import type { Room } from '@/types/room';
 import { cardLabel, getCardHalfSuit, getHalfSuitCards } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
@@ -387,6 +388,7 @@ export default function GamePage({ params }: PageProps) {
     getAskBubbleCardIds,
     getPlayerDisplayName,
   });
+  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult);
 
   const publishMoveMessage = useCallback((message: string, persistentMessage: string | null = null) => {
     setLastResultMsg(message);
@@ -1709,6 +1711,10 @@ export default function GamePage({ params }: PageProps) {
 
       {askSpeechBubble && (
         <AskSpeechBubbleOverlay bubble={askSpeechBubble} />
+      )}
+
+      {reactionBubble && (
+        <AskSpeechBubbleOverlay bubble={reactionBubble} />
       )}
 
       {askDeniedCue && (
