@@ -357,6 +357,20 @@ function sortSpectatorHands(
   );
 }
 
+function describeClose(code: number): string | null {
+  switch (code) {
+    case 4000: return 'Invalid room code';
+    case 4001: return 'Authentication failed';
+    case 4003: return 'You are no longer recognized as a player in this game. Please rejoin from the room page.';
+    case 4004: return 'Room not found';
+    case 4005: return 'Game has not started yet';
+    case 4006: return 'This game was opened in another tab or window.';
+    case 4008: return 'Disconnected for sending too many messages. Refresh to rejoin.';
+    case 4500: return 'Server error. Refresh to rejoin.';
+    default:   return null;
+  }
+}
+
 export function useGameSocket({
   roomCode,
   bearerToken,
@@ -441,14 +455,8 @@ export function useGameSocket({
       const isIntentional = e.code === 1000;
       const isKnownError = e.code >= 4000 && e.code < 5000;
       setStatus(isKnownError || statusRef.current === 'error' ? 'error' : 'disconnected');
-      if (e.code === 4000) setError('Invalid room code');
-      else if (e.code === 4001) setError('Authentication failed');
-      else if (e.code === 4003) setError('You are no longer recognized as a player in this game. Please rejoin from the room page.');
-      else if (e.code === 4004) setError('Room not found');
-      else if (e.code === 4005) setError('Game has not started yet');
-      else if (e.code === 4006) setError('This game was opened in another tab or window.');
-      else if (e.code === 4008) setError('Disconnected for sending too many messages. Refresh to rejoin.');
-      else if (e.code === 4500) setError('Server error. Refresh to rejoin.');
+      const closeMessage = describeClose(e.code);
+      if (closeMessage) setError(closeMessage);
 
       // Auto-reload on unexpected disconnect (e.g. backend redeploy).
       if (!isIntentional && !isKnownError) {
@@ -845,6 +853,16 @@ export function useGameSocket({
           const { message: errMsg, code } = msg as { message: string; code?: string };
           console.warn('[game-ws] Server error:', code, errMsg);
           setError(errMsg ?? 'Unknown error');
+          break;
+        }
+
+        // Render's proxy drops server-initiated close frames, so the server
+        // announces the close as a message; close from our side instead.
+        case 'closing': {
+          const { code, reason } = msg as { code: number; reason?: string };
+          setStatus('error');
+          setError(describeClose(code) ?? reason ?? 'Connection closed by server');
+          ws.close(1000, 'server closing');
           break;
         }
 

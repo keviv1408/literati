@@ -583,6 +583,32 @@ describe('useRoomSocket', () => {
 
   // ── kickPlayer ────────────────────────────────────────────────────────────
 
+  describe('server-announced close', () => {
+    it('treats a "closing" message as a fatal error and closes the socket', () => {
+      const { result } = renderHook(() =>
+        useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
+      );
+      openSocket(wsInstances[0]);
+      sendMessage(wsInstances[0], { type: 'closing', code: 4005, reason: 'Room not accepting connections' });
+      expect(result.current.wsStatus).toBe('error');
+      expect(result.current.lastError).toBe('Room not accepting connections');
+      expect(wsInstances[0].close).toHaveBeenCalled();
+    });
+
+    it('surfaces a 4xxx close code as an error', () => {
+      const { result } = renderHook(() =>
+        useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
+      );
+      openSocket(wsInstances[0]);
+      act(() => {
+        wsInstances[0].readyState = MockWebSocket.CLOSED;
+        wsInstances[0].onclose?.({ code: 4001, reason: 'Unauthorized' });
+      });
+      expect(result.current.wsStatus).toBe('error');
+      expect(result.current.lastError).toBe('Unauthorized');
+    });
+  });
+
   describe('kickPlayer', () => {
     it('sends the kick_player message the room server expects when OPEN', () => {
       const { result } = renderHook(() =>

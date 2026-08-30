@@ -1,5 +1,7 @@
 'use strict';
 
+const { closeWithNotice } = require('../ws/closeWs');
+
 /**
  * In-memory game state store.
  *
@@ -72,7 +74,7 @@ function registerConnection(roomCode, playerId, ws) {
   }
   const prev = _connections.get(code).get(playerId);
   // Second tab / fast reconnect: the stale socket must not keep the seat or bot-flag it on close.
-  if (prev && prev !== ws) prev.close?.(4006, 'Superseded by a newer connection');
+  if (prev && prev !== ws) closeWithNotice(prev, 4006, 'This game was opened in another tab or window');
   _connections.get(code).set(playerId, ws);
 }
 

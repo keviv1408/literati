@@ -125,6 +125,7 @@ const crypto = require('crypto');
 
 const { getGuestSession } = require('../sessions/guestSessionStore');
 const rateLimiter = require('../ws/rateLimiter');
+const { closeWithNotice } = require('../ws/closeWs');
 const { getSupabaseClient } = require('../db/supabase');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const { clearRoom: clearBlocklistRoom } = require('../rooms/roomBlocklist');
@@ -3288,7 +3289,7 @@ function attachGameSocketServer(httpServer) {
     // Validate room code format
     if (!roomCode || !/^[A-Z0-9]{6}$/.test(roomCode)) {
       sendJson(ws, { type: 'error', code: 'INVALID_ROOM_CODE', message: 'Invalid room code' });
-      ws.close(4000, 'Invalid room code');
+      closeWithNotice(ws, 4000, 'Invalid room code');
       return;
     }
 
@@ -3310,7 +3311,7 @@ function attachGameSocketServer(httpServer) {
           code:    'INVALID_SPECTATOR_TOKEN',
           message: 'Invalid or expired spectator token',
         });
-        ws.close(4001, 'Invalid spectator token');
+        closeWithNotice(ws, 4001, 'Invalid spectator token');
         return;
       }
 
@@ -3338,7 +3339,7 @@ function attachGameSocketServer(httpServer) {
     } else if (!user) {
       console.warn(`[game-ws] Auth failed for room ${roomCode}: no valid token or recovery key`);
       sendJson(ws, { type: 'error', code: 'UNAUTHORIZED', message: 'Authentication required' });
-      ws.close(4001, 'Unauthorized');
+      closeWithNotice(ws, 4001, 'Unauthorized');
       return;
     }
 
@@ -3359,19 +3360,19 @@ function attachGameSocketServer(httpServer) {
 
         if (error || !room) {
           sendJson(ws, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Room not found' });
-          ws.close(4004, 'Room not found');
+          closeWithNotice(ws, 4004, 'Room not found');
           return;
         }
 
         if (room.status === 'abandoned' || room.game_state?.status === 'abandoned') {
           sendJson(ws, { type: 'error', code: 'GAME_ABANDONED', message: 'Game was abandoned' });
-          ws.close(4005, 'Game abandoned');
+          closeWithNotice(ws, 4005, 'Game abandoned');
           return;
         }
 
         if (room.status !== 'in_progress' && room.status !== 'completed') {
           sendJson(ws, { type: 'error', code: 'GAME_NOT_STARTED', message: 'Game has not started yet' });
-          ws.close(4005, 'Game not started');
+          closeWithNotice(ws, 4005, 'Game not started');
           return;
         }
 
@@ -3380,20 +3381,20 @@ function attachGameSocketServer(httpServer) {
           console.log(`[game-ws] Recovered game state for room ${roomCode} from Supabase`);
         } else {
           sendJson(ws, { type: 'error', code: 'GAME_NOT_FOUND', message: 'Game state not available' });
-          ws.close(4005, 'Game state not available');
+          closeWithNotice(ws, 4005, 'Game state not available');
           return;
         }
       } catch (err) {
         console.error('[game-ws] Recovery error:', err);
         sendJson(ws, { type: 'error', code: 'SERVER_ERROR', message: 'Server error' });
-        ws.close(4500, 'Server error');
+        closeWithNotice(ws, 4500, 'Server error');
         return;
       }
     }
 
     if (gs.status === 'abandoned') {
       sendJson(ws, { type: 'error', code: 'GAME_ABANDONED', message: 'Game was abandoned' });
-      ws.close(4005, 'Game abandoned');
+      closeWithNotice(ws, 4005, 'Game abandoned');
       return;
     }
 
@@ -3466,7 +3467,7 @@ function attachGameSocketServer(httpServer) {
         code:    'PLAYER_NOT_IN_GAME',
         message: 'You are not a player in this game',
       });
-      ws.close(4003, 'Player not in game');
+      closeWithNotice(ws, 4003, 'Player not in game');
       return;
     }
 
@@ -3628,7 +3629,7 @@ function attachGameSocketServer(httpServer) {
       const rlResult = rateLimiter.check(ws);
       if (rlResult === 'disconnect') {
         console.warn(`[game-ws] Rate limit disconnect: player=${playerId} room=${roomCode}`);
-        ws.close(rateLimiter.RATE_LIMIT_CLOSE_CODE, 'Rate limit exceeded');
+        closeWithNotice(ws, rateLimiter.RATE_LIMIT_CLOSE_CODE, 'Rate limit exceeded');
         return;
       }
       if (rlResult === 'limited') {
