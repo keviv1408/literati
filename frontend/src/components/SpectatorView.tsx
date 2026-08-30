@@ -73,6 +73,7 @@ import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CountdownTimer from '@/components/CountdownTimer';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
+import { useReactionBubble } from '@/hooks/useReactionBubble';
 
 // ── Variant display helpers ────────────────────────────────────────────────────
 
@@ -191,6 +192,7 @@ export default function SpectatorView({
   } = useAskResultAnimations(lastAskResult, {
     getPlayerDisplayName,
   });
+  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult);
   const showTransientLastResult = useEffectEvent((msg: string, persistentMessage: string | null = null) => {
     setLastResultMsg(msg);
     setSyntheticLastMoveMsg(persistentMessage);
@@ -692,6 +694,10 @@ export default function SpectatorView({
 
       {askSpeechBubble && (
         <AskSpeechBubbleOverlay bubble={askSpeechBubble} />
+      )}
+
+      {reactionBubble && (
+        <AskSpeechBubbleOverlay bubble={reactionBubble} />
       )}
 
       {askDeniedCue && (

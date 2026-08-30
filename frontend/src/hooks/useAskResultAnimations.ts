@@ -1,6 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type {
+  AskSpeechBubbleState,
+  SpeechBubbleVariant,
+} from '@/components/AskSpeechBubbleOverlay';
 import {
   SUIT_NAMES,
   parseCard,
@@ -25,12 +29,7 @@ export interface AskDeniedCueState {
   seatHeight: number;
 }
 
-export interface AskSpeechBubbleState {
-  text: string;
-  anchorX: number;
-  anchorY: number;
-  placement: 'above' | 'below';
-}
+export type { AskSpeechBubbleState };
 
 const ASKER_BUBBLE_MS = 3500;
 
@@ -39,7 +38,7 @@ interface UseAskResultAnimationsOptions {
   getPlayerDisplayName?: (playerId: string) => string | undefined;
 }
 
-function getPlayerSeatElement(playerId: string): HTMLElement | null {
+export function getPlayerSeatElement(playerId: string): HTMLElement | null {
   if (typeof document === 'undefined') return null;
   return document.querySelector<HTMLElement>(`[data-player-id="${playerId}"]`);
 }
@@ -129,9 +128,12 @@ function buildNarratedBotAskBubbleText(
   return `${leadIn}. ${askClause}`;
 }
 
-function buildAskSpeechBubble(
-  playerRect: DOMRect,
+export type SeatRect = Pick<DOMRect, 'top' | 'bottom' | 'left' | 'width' | 'height'>;
+
+export function buildAskSpeechBubble(
+  playerRect: SeatRect,
   text: string,
+  variant: SpeechBubbleVariant = 'ask',
 ): AskSpeechBubbleState {
   // Place above for seats in the top half of the viewport and below for seats
   // in the bottom half. This pushes bubbles outward away from the table centre,
@@ -143,6 +145,7 @@ function buildAskSpeechBubble(
     anchorX: playerRect.left + playerRect.width / 2,
     anchorY: placement === 'above' ? playerRect.top - 10 : playerRect.bottom + 10,
     placement,
+    variant,
   };
 }
 
