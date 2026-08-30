@@ -21,6 +21,15 @@ export type RoomStatus =
   | 'cancelled';
 
 /** A game room record as returned by the backend API. */
+/** A player currently connected to the lobby, as returned by GET /api/rooms/:code. */
+export interface RoomLobbyPlayer {
+  userId: string;
+  displayName: string;
+  isGuest: boolean;
+  isHost: boolean;
+  teamId?: 1 | 2;
+}
+
 export interface Room {
   id: string;
   /** 6-character human-readable room code for verbal / keyboard sharing. */
@@ -46,6 +55,8 @@ export interface Room {
    * False (default) for private rooms created by a specific host.
    */
   is_matchmaking?: boolean;
+  /** Players connected to the lobby right now. Present on GET /api/rooms/:code. */
+  players?: RoomLobbyPlayer[];
   created_at: string;
   updated_at: string;
 }

@@ -462,7 +462,9 @@ router.get('/:code', async (req, res) => {
       return res.status(404).json({ error: 'Room not found' });
     }
 
-    return res.status(200).json({ room });
+    // Lazy require: roomSocketServer imports this module (guestHostMap).
+    const { getRoomPlayers } = require('../ws/roomSocketServer');
+    return res.status(200).json({ room: { ...room, players: getRoomPlayers(room.code) } });
   } catch (err) {
     console.error('Unexpected error fetching room:', err);
     return res.status(500).json({ error: 'Internal server error' });
