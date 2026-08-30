@@ -95,6 +95,8 @@ interface GuestAuthResponse {
   sessionTtlMs: number;
 }
 
+let _inflightGuestAuth: { key: string; promise: Promise<string> } | null = null;
+
 /**
  * Return a valid backend bearer token for the given guest display name.
  *
@@ -102,25 +104,37 @@ interface GuestAuthResponse {
  * Otherwise the guest is registered with the backend and the returned token
  * is cached for future calls.
  */
-export async function getGuestBearerToken(
+export function getGuestBearerToken(
   displayName: string,
   recoveryKey?: string | null,
 ): Promise<string> {
   // 1. Check cache — avoids a network round-trip on every action.
   const cached = getCachedToken(displayName, recoveryKey);
-  if (cached) return cached;
+  if (cached) return Promise.resolve(cached);
 
-  // 2. Register with the backend and get a fresh token.
-  const data = await apiFetch<GuestAuthResponse>('/api/auth/guest', {
+  // 2. Share an in-flight registration. Concurrent callers (React StrictMode
+  // double-running an effect, two hooks mounting together) would otherwise
+  // each mint their own server session before the first one is cached.
+  const key = `${displayName}\u0000${recoveryKey ?? ''}`;
+  if (_inflightGuestAuth?.key === key) return _inflightGuestAuth.promise;
+
+  const promise = apiFetch<GuestAuthResponse>('/api/auth/guest', {
     method: 'POST',
     body: JSON.stringify({
       displayName,
       ...(recoveryKey ? { recoveryKey } : {}),
     }),
-  });
+  })
+    .then((data) => {
+      saveToken(data.token, data.session.expiresAt, displayName, recoveryKey);
+      return data.token;
+    })
+    .finally(() => {
+      if (_inflightGuestAuth?.promise === promise) _inflightGuestAuth = null;
+    });
 
-  saveToken(data.token, data.session.expiresAt, displayName, recoveryKey);
-  return data.token;
+  _inflightGuestAuth = { key, promise };
+  return promise;
 }
 
 /** Invalidate the cached backend token (call on guest logout / name change). */

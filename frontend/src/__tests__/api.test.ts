@@ -14,7 +14,7 @@ jest.mock('@/lib/backendSession', () => ({
   clearToken: () => mockClearToken(),
 }));
 
-import { ApiError, createRoom } from '@/lib/api';
+import { ApiError, createRoom, getGuestBearerToken } from '@/lib/api';
 
 const payload: CreateRoomPayload = {
   playerCount: 6,
@@ -136,5 +136,82 @@ describe('createRoom', () => {
 
     expect(mockClearToken).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getGuestBearerToken', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    mockGetCachedToken.mockReset();
+    mockSaveToken.mockReset();
+    global.fetch = jest.fn();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  const guestResponse = (token: string) =>
+    ({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        token,
+        session: {
+          sessionId: 'guest-session-1',
+          displayName: 'Viv',
+          avatarId: 'avatar-1',
+          isGuest: true,
+          expiresAt: 1_900_000_000_000,
+        },
+        validAvatarIds: ['avatar-1'],
+        sessionTtlMs: 86_400_000,
+      }),
+    }) as Response;
+
+  it('shares one registration between concurrent callers', async () => {
+    mockGetCachedToken.mockReturnValue(null);
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValue(guestResponse('guest-token-1'));
+
+    const [a, b] = await Promise.all([
+      getGuestBearerToken('Viv', 'rk'),
+      getGuestBearerToken('Viv', 'rk'),
+    ]);
+
+    expect(a).toBe('guest-token-1');
+    expect(b).toBe('guest-token-1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockSaveToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers again once the previous call has settled', async () => {
+    mockGetCachedToken.mockReturnValue(null);
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock
+      .mockResolvedValueOnce(guestResponse('guest-token-1'))
+      .mockResolvedValueOnce(guestResponse('guest-token-2'));
+
+    await expect(getGuestBearerToken('Viv', 'rk')).resolves.toBe('guest-token-1');
+    await expect(getGuestBearerToken('Viv', 'rk')).resolves.toBe('guest-token-2');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not share a registration across different identities', async () => {
+    mockGetCachedToken.mockReturnValue(null);
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock
+      .mockResolvedValueOnce(guestResponse('guest-token-viv'))
+      .mockResolvedValueOnce(guestResponse('guest-token-ada'));
+
+    const [viv, ada] = await Promise.all([
+      getGuestBearerToken('Viv', 'rk'),
+      getGuestBearerToken('Ada', 'rk'),
+    ]);
+
+    expect(viv).toBe('guest-token-viv');
+    expect(ada).toBe('guest-token-ada');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
