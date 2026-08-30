@@ -1,15 +1,17 @@
 'use client';
 
 /**
- * useTurnIndicator — manages the "your turn" visual + single audio notification.
+ * useTurnIndicator — manages the "your turn" visual + turn-start nudges.
  *
  * Persists the glow visual until the player submits a valid
  * action, then clears it immediately (optimistic clear before the server
- * acknowledges the action). Audio plays once when the turn starts.
+ * acknowledges the action). Audio and vibration fire once when the turn
+ * starts; the tab title flashes while the turn is pending and the tab is
+ * in the background.
  *
  * ### Lifecycle
- * 1. When `isMyTurn` transitions **false → true**: activates the indicator
- * and plays a single turn-start chime.
+ * 1. When `isMyTurn` transitions **false → true**: activates the indicator,
+ * plays a single turn-start chime and vibrates (where supported).
  * 2. When `clearIndicator()` is called (player taps Ask or Declare): the
  * indicator is cleared *immediately*, before the server responds.
  * 3. When `isMyTurn` transitions **true → false** (server confirmed the
@@ -35,6 +37,10 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { playTurnChime } from '@/lib/audio';
+
+const TURN_VIBRATION_PATTERN = [200, 100, 200];
+const TURN_TITLE = '🔔 Your turn!';
+const TITLE_FLASH_INTERVAL_MS = 1000;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -90,14 +96,36 @@ export function useTurnIndicator(
       activeRef.current = true;
       setIndicatorActive(true);
 
-      // Immediate chime on turn start
+      // Immediate chime + haptic on turn start
       playTurnChime();
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate(TURN_VIBRATION_PATTERN);
+      }
     } else if (!isMyTurn && wasMine) {
       // ── Turn passed (server confirmed action or enforced timeout) ──────
       activeRef.current = false;
       setIndicatorActive(false);
     }
   }, [isMyTurn]);
+
+  // ── Tab title flash ───────────────────────────────────────────────────────
+  // Only alternates while the tab is hidden, so a player looking at the
+  // table never sees the title change. Restores the original on clear.
+
+  useEffect(() => {
+    if (!indicatorActive || typeof document === 'undefined') return;
+
+    const originalTitle = document.title;
+    const id = setInterval(() => {
+      document.title =
+        document.hidden && document.title === originalTitle ? TURN_TITLE : originalTitle;
+    }, TITLE_FLASH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(id);
+      document.title = originalTitle;
+    };
+  }, [indicatorActive]);
 
   return { indicatorActive, clearIndicator };
 }
