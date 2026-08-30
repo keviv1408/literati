@@ -39,7 +39,7 @@
  * share link and react to room state changes when WebSocket support is added.
  */
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoomByCode, ApiError } from '@/lib/api';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
@@ -52,7 +52,9 @@ import {
 import { consumeCreatedRoom } from '@/components/CreateRoomModal';
 import { useRoomSocket } from '@/hooks/useRoomSocket';
 import { useReconnect } from '@/hooks/useReconnect';
-import { useGuestSession } from '@/hooks/useGuestSession';
+import { useGuest } from '@/contexts/GuestContext';
+import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from '@/types/user';
+import Avatar from '@/components/Avatar';
 import { connectSocket, disconnectSocket } from '@/lib/socket';
 import type { RoomCreatedPayload } from '@/lib/socket';
 import type { Room, Team } from '@/types/room';
@@ -89,7 +91,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
     retry: retryReconnect,
   } = useReconnect();
 
-  const { ensureGuestName } = useGuestSession();
+  const { setGuestName } = useGuest();
+  const [joinName, setJoinName] = useState('');
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const [room, setRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
@@ -640,34 +644,106 @@ export default function RoomLobbyPage({ params }: PageProps) {
     );
   }
 
-  // ── No session — guest without a display name / not logged in ────────────
-  if (!kickedOnEntry && !isKicked && reconnectStatus === 'no_session') {
-    // Prompt the guest to enter a display name, then retry session validation.
-    const handleSetName = async () => {
-      const session = await ensureGuestName();
-      if (session) {
-        retryReconnect();
+  // ── No session — the landing screen is the join form itself ──────────────
+  // Who invited you, who's already here, your name, Join. Setting the guest
+  // name re-runs useReconnect, which then lets the room socket connect.
+  if (!kickedOnEntry && !isKicked && !notFound && reconnectStatus === 'no_session') {
+    const host = room?.players?.find((p) => p.isHost);
+    const handleJoin = (e: FormEvent) => {
+      e.preventDefault();
+      const err = validateDisplayName(joinName);
+      if (err) {
+        setJoinError(err);
+        return;
       }
+      setGuestName(joinName);
     };
 
     return (
       <div
-        className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
+        className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4"
         data-testid="no-session-screen"
       >
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-slate-300 text-sm">Enter a display name to join this room</p>
+        <form
+          onSubmit={handleJoin}
+          noValidate
+          className="
+            w-full max-w-sm flex flex-col gap-5 p-6 rounded-2xl
+            bg-gradient-to-b from-slate-800/80 to-slate-900/80
+            border border-emerald-700/40 shadow-xl shadow-black/40
+          "
+        >
+          <div className="text-center">
+            <h1 className="text-xl font-bold text-white">
+              {host ? `${host.displayName} invited you` : 'You’re invited'}
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              Room <span className="font-mono font-bold tracking-widest text-emerald-300">{roomCode}</span>
+              {room && ` · ${room.player_count} players`}
+            </p>
+          </div>
+
+          {room && (
+            <div className="flex flex-wrap justify-center gap-2" data-testid="join-roster">
+              {room.players?.length ? (
+                room.players.map((p) => (
+                  <span
+                    key={p.userId}
+                    className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-slate-800 text-slate-200 text-xs"
+                  >
+                    <Avatar displayName={p.displayName} size="xs" />
+                    {p.displayName}
+                    {p.isHost && <span aria-label="host">👑</span>}
+                  </span>
+                ))
+              ) : (
+                <span className="text-slate-500 text-xs">No one’s here yet</span>
+              )}
+            </div>
+          )}
+
+          <label className="flex flex-col gap-1.5 text-sm text-slate-300">
+            Your name
+            <input
+              autoFocus
+              value={joinName}
+              maxLength={DISPLAY_NAME_MAX_LENGTH}
+              onChange={(e) => {
+                setJoinName(e.target.value);
+                setJoinError(null);
+              }}
+              aria-invalid={!!joinError}
+              aria-describedby={joinError ? 'join-name-error' : undefined}
+              placeholder="e.g. Ada"
+              className="
+                px-3 py-2.5 rounded-xl bg-slate-950/60 text-white
+                border border-slate-700 focus:border-emerald-500
+                focus:outline-none focus:ring-2 focus:ring-emerald-500/40
+              "
+              data-testid="join-name-input"
+            />
+          </label>
+          {joinError && (
+            <p id="join-name-error" role="alert" className="-mt-3 text-red-400 text-xs">
+              {joinError}
+            </p>
+          )}
+
           <button
-            onClick={handleSetName}
+            type="submit"
+            disabled={!joinName.trim()}
             className="
-              py-2 px-4 rounded-xl text-sm font-medium
-              bg-emerald-700 hover:bg-emerald-600 text-white
+              py-3 px-6 rounded-xl font-semibold
+              bg-emerald-600 hover:bg-emerald-500 text-white
+              disabled:opacity-50 disabled:cursor-not-allowed
               transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
             "
+            data-testid="join-room-btn"
           >
-            Set Display Name
+            Join room
           </button>
           <button
+            type="button"
             onClick={() => router.push('/')}
             className="
               py-1.5 px-3 rounded-xl text-xs font-medium
@@ -677,7 +753,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           >
             Back to Home
           </button>
-        </div>
+        </form>
       </div>
     );
   }

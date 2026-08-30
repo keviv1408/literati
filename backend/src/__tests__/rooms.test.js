@@ -467,6 +467,28 @@ describe('GET /api/rooms/:code', () => {
     expect(res.body.room.invite_code).toBe('E7F6A5B4C3D21098');
     // spectator_token is NOT in GET response (security)
     expect(res.body.room).not.toHaveProperty('spectator_token');
+    expect(res.body.room.players).toEqual([]);
+  });
+
+  it('includes the players currently connected to the lobby', async () => {
+    mockSupabase._chain.maybeSingle.mockResolvedValue({
+      data: { id: 'room-uuid', code: 'ABCDEF', status: 'waiting', player_count: 6 },
+      error: null,
+    });
+    const { roomClients } = require('../ws/roomSocketServer');
+    roomClients.set('ABCDEF', new Map([
+      ['u1', { ws: {}, userId: 'u1', displayName: 'HostA', isGuest: true, isHost: true, teamId: 1 }],
+      ['u2', { ws: {}, userId: 'u2', displayName: 'Bea', isGuest: true, isHost: false, teamId: 2 }],
+    ]));
+
+    const res = await request(app).get('/api/rooms/abcdef');
+
+    expect(res.status).toBe(200);
+    expect(res.body.room.players).toEqual([
+      { userId: 'u1', displayName: 'HostA', isGuest: true, isHost: true, teamId: 1 },
+      { userId: 'u2', displayName: 'Bea', isGuest: true, isHost: false, teamId: 2 },
+    ]);
+    roomClients.delete('ABCDEF');
   });
 
   it('returns 404 when room not found', async () => {
