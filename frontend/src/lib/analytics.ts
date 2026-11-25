@@ -37,6 +37,23 @@ function _stripUrls(props: Properties): Properties {
   return _redact(props, '') as Properties;
 }
 
+export function trackEvent(event: string, props: Properties = {}): void {
+  try {
+    _capture(event, props);
+  } catch {
+    // Tracking must never break the game.
+  }
+}
+
+export function trackException(error: unknown): void {
+  try {
+    if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
+    posthog.captureException(error);
+  } catch {
+    // Tracking must never break the app.
+  }
+}
+
 export function trackGameInit(
   roomCode: string,
   status: PublicGameState['status'] | undefined,

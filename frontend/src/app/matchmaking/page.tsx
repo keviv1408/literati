@@ -23,6 +23,7 @@ import {
   type MatchmakingFilter,
 } from '@/hooks/useMatchmakingSocket';
 import { getGuestBearerToken, getLiveGames, getMatchmakingQueues } from '@/lib/api';
+import { trackEvent } from '@/lib/analytics';
 import { VARIANT_OPTIONS } from '@/types/room';
 import type { CardRemovalVariant } from '@/types/room';
 
@@ -125,6 +126,10 @@ export default function MatchmakingPage() {
       // Setting bearerToken + autoJoinFilter triggers the hook to:
       //   1. Open a WebSocket to /ws?token=<token>
       //   2. On server 'connected' event, auto-send 'join-queue'
+      trackEvent('matchmaking_requested', {
+        player_count: playerCount,
+        card_removal_variant: cardVariant,
+      });
       setSessionId(session.sessionId);
       setBearerToken(token);
       setAutoJoinFilter({ playerCount, cardRemovalVariant: cardVariant });
@@ -144,6 +149,10 @@ export default function MatchmakingPage() {
   function handleCancel() {
     // Ask the server to remove us from the queue so others see the updated count
     leaveQueue();
+    trackEvent('matchmaking_cancelled', {
+      player_count: playerCount,
+      card_removal_variant: cardVariant,
+    });
     // Tear down the WS connection by nulling the auth state
     setBearerToken(null);
     setSessionId(null);

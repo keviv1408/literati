@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { API_URL } from '@/lib/api';
-import { trackGameInit, trackGameOver, trackSocketDropped } from '@/lib/analytics';
+import { trackEvent, trackGameInit, trackGameOver, trackSocketDropped } from '@/lib/analytics';
 import { FAILED_DECLARATION_SEAT_REVEAL_MS } from '@/lib/declarationSeatReveal';
 import type {
   CardId,
@@ -927,6 +927,8 @@ export function useGameSocket({
       cardId,
       ...(batchCardIds && batchCardIds.length > 1 ? { batchCardIds } : {}),
     }));
+    // A multi-card ask sends one message per card, so this fires once per card.
+    trackEvent('game_ask_submitted', { batch_size: batchCardIds?.length ?? 1 });
   }, []);
 
   const sendDeclare = useCallback((
@@ -936,12 +938,14 @@ export function useGameSocket({
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'declare_suit', halfSuitId, assignment }));
+    trackEvent('game_declaration_submitted');
   }, []);
 
   const sendRematchVote = useCallback((vote: boolean) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ type: 'rematch_vote', vote }));
+    trackEvent('rematch_vote_submitted', { vote: vote ? 'yes' : 'no' });
   }, []);
 
   /**
