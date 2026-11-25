@@ -1699,7 +1699,7 @@ async function executeTimedOutTurn(roomCode, playerId) {
   // treats the attempt as a failed declaration and awards the point to the
   // opposing team.
   //
-  // A DISCONNECTED player (in `_reconnectWindows`) falls through to the bot-
+  // A DISCONNECTED player (held, or in `_reconnectWindows`) falls through to the bot-
   // completion path so the seat's bot can finish the declaration instead.
   if (effectivePartial?.flow === 'declare') {
     const isDisconnected = _reconnectWindows.has(playerId) || _seatHolds.has(`${roomCode}:${playerId}`);
@@ -3914,7 +3914,7 @@ function attachGameSocketServer(httpServer) {
       if (registered && registered !== ws) return; // superseded by a newer socket
       removeConnection(roomCode, playerId);
 
-      // Only human players in active games get the reconnect window treatment.
+      // Only human players in active games get a seat hold.
       // Bots and spectators are excluded.
       if (!isSpectator) {
         const currentGs = getGame(roomCode);
