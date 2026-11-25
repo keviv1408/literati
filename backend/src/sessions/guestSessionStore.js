@@ -9,7 +9,7 @@
  *
  * Shape of a stored session:
  * {
- * sessionId : string — UUIDv4, stable identity for this guest
+ * sessionId : string — UUIDv5 of the recoveryKey (UUIDv4 without one), stable identity for this guest
  * token : string — cryptographically random hex string used as the
  * bearer token; treated as a secret
  * recoveryKey: string|null — browser-held secret used to recover the same
@@ -23,7 +23,7 @@
  */
 
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4, v5: uuidv5 } = require('uuid');
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -38,7 +38,11 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 /** Maximum display name length (matches frontend validation). */
 const MAX_DISPLAY_NAME_LENGTH = 20;
 const MIN_DISPLAY_NAME_LENGTH = 1;
+const MIN_RECOVERY_KEY_LENGTH = 32;
 const MAX_RECOVERY_KEY_LENGTH = 128;
+
+// Never change: every guest's player id is derived from it.
+const GUEST_ID_NAMESPACE = '6bec2a0e-e10e-49e2-8395-3f5c56172263';
 
 /**
  * Allowed avatar identifiers.
@@ -104,6 +108,13 @@ function createGuestSession(displayName, avatarId, recoveryKey = null) {
 
   if (
     resolvedRecoveryKey &&
+    resolvedRecoveryKey.length < MIN_RECOVERY_KEY_LENGTH
+  ) {
+    throw new Error(`recoveryKey must be at least ${MIN_RECOVERY_KEY_LENGTH} characters`);
+  }
+
+  if (
+    resolvedRecoveryKey &&
     resolvedRecoveryKey.length > MAX_RECOVERY_KEY_LENGTH
   ) {
     throw new Error(`recoveryKey must be at most ${MAX_RECOVERY_KEY_LENGTH} characters`);
@@ -111,7 +122,9 @@ function createGuestSession(displayName, avatarId, recoveryKey = null) {
 
   const now = Date.now();
   const session = {
-    sessionId: uuidv4(),
+    sessionId: resolvedRecoveryKey
+      ? uuidv5(resolvedRecoveryKey, GUEST_ID_NAMESPACE)
+      : uuidv4(),
     recoveryKey: resolvedRecoveryKey || null,
     displayName: trimmedName,
     avatarId: resolvedAvatar,
@@ -153,22 +166,23 @@ function getGuestSession(token) {
 }
 
 /**
- * Change the avatar of the live session with `sessionId`.
+ * Change the avatar of every live session with `sessionId`.
  *
  * @param {string} sessionId
  * @param {string} avatarId - One of VALID_AVATAR_IDS.
- * @returns {boolean} true when a session was updated.
+ * @returns {boolean} true when at least one session was updated.
  */
 function updateGuestAvatar(sessionId, avatarId) {
   if (!VALID_AVATAR_IDS.includes(avatarId)) return false;
+  let updated = false;
   // ponytail: linear scan over live sessions; add a sessionId index if this shows up in profiles
   for (const session of _store.values()) {
     if (session.sessionId === sessionId) {
       session.avatarId = avatarId;
-      return true;
+      updated = true;
     }
   }
-  return false;
+  return updated;
 }
 
 /**
@@ -273,7 +287,9 @@ module.exports = {
   DEFAULT_AVATAR_ID,
   MAX_DISPLAY_NAME_LENGTH,
   MIN_DISPLAY_NAME_LENGTH,
+  MIN_RECOVERY_KEY_LENGTH,
   MAX_RECOVERY_KEY_LENGTH,
+  GUEST_ID_NAMESPACE,
   SESSION_TTL_MS,
 
   // Test helpers

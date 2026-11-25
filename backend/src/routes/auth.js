@@ -18,6 +18,7 @@ const {
   VALID_AVATAR_IDS,
   MAX_DISPLAY_NAME_LENGTH,
   MIN_DISPLAY_NAME_LENGTH,
+  MIN_RECOVERY_KEY_LENGTH,
   MAX_RECOVERY_KEY_LENGTH,
   SESSION_TTL_MS,
 } = require('../sessions/guestSessionStore');
@@ -114,6 +115,8 @@ router.post('/guest', guestCreateLimiter, (req, res) => {
   if (recoveryKey !== undefined && recoveryKey !== null) {
     if (typeof recoveryKey !== 'string') {
       errors.push('recoveryKey must be a string');
+    } else if (recoveryKey.trim().length < MIN_RECOVERY_KEY_LENGTH) {
+      errors.push(`recoveryKey must be at least ${MIN_RECOVERY_KEY_LENGTH} characters`);
     } else if (recoveryKey.trim().length > MAX_RECOVERY_KEY_LENGTH) {
       errors.push(`recoveryKey must be at most ${MAX_RECOVERY_KEY_LENGTH} characters`);
     }

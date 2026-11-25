@@ -13,6 +13,7 @@
  *  - Timer lifecycle helpers
  */
 
+const { v5: uuidv5 } = require('uuid');
 const {
   createGuestSession,
   getGuestSession,
@@ -27,6 +28,8 @@ const {
   MAX_DISPLAY_NAME_LENGTH,
   MIN_DISPLAY_NAME_LENGTH,
   SESSION_TTL_MS,
+  GUEST_ID_NAMESPACE,
+  MIN_RECOVERY_KEY_LENGTH,
   _clearStore,
   _getRawStore,
 } = require('../sessions/guestSessionStore');
@@ -52,6 +55,9 @@ beforeEach(() => {
 afterEach(() => {
   stopCleanupTimer();
 });
+
+const KEY_A = 'a'.repeat(32);
+const KEY_B = 'b'.repeat(32);
 
 // =============================================================================
 // createGuestSession
@@ -104,8 +110,8 @@ describe('createGuestSession', () => {
   });
 
   it('stores an optional recoveryKey for restart-safe guest reconnects', () => {
-    const { session } = createGuestSession('Grace', undefined, 'client-sid');
-    expect(session.recoveryKey).toBe('client-sid');
+    const { session } = createGuestSession('Grace', undefined, KEY_A);
+    expect(session.recoveryKey).toBe(KEY_A);
   });
 
   it('generates unique tokens for each call', () => {
@@ -288,7 +294,63 @@ describe('startCleanupTimer / stopCleanupTimer', () => {
   });
 });
 
+describe('stable guest id', () => {
+  it('requires recovery keys of at least 32 characters', () => {
+    expect(MIN_RECOVERY_KEY_LENGTH).toBe(32);
+  });
+
+  it('gives the same sessionId and a new token for the same key', () => {
+    const first = createGuestSession('Alice', undefined, KEY_A);
+    const second = createGuestSession('Alice', undefined, KEY_A);
+    expect(second.session.sessionId).toBe(first.session.sessionId);
+    expect(second.token).not.toBe(first.token);
+  });
+
+  it('derives the sessionId as a UUID v5 of the trimmed key', () => {
+    const { session } = createGuestSession('Alice', undefined, `  ${KEY_A}  `);
+    expect(session.sessionId).toBe(uuidv5(KEY_A, GUEST_ID_NAMESPACE));
+  });
+
+  it('keeps the same sessionId after the store is wiped', () => {
+    const before = createGuestSession('Alice', undefined, KEY_A).session.sessionId;
+    _clearStore();
+    const after = createGuestSession('Alice', undefined, KEY_A).session.sessionId;
+    expect(after).toBe(before);
+  });
+
+  it('gives different sessionIds for different keys', () => {
+    const a = createGuestSession('Alice', undefined, KEY_A).session.sessionId;
+    const b = createGuestSession('Alice', undefined, KEY_B).session.sessionId;
+    expect(a).not.toBe(b);
+  });
+
+  it('gives a fresh sessionId on every call without a key', () => {
+    const a = createGuestSession('Alice').session.sessionId;
+    const b = createGuestSession('Alice').session.sessionId;
+    expect(a).not.toBe(b);
+  });
+
+  it('does not expose the key in the sessionId', () => {
+    const key = 'k3y-'.repeat(8);
+    const { session } = createGuestSession('Alice', undefined, key);
+    expect(session.sessionId).not.toBe(key);
+    expect(session.sessionId).not.toContain(key);
+  });
+
+  it('rejects a 31-character key', () => {
+    expect(() => createGuestSession('Alice', undefined, 'a'.repeat(31))).toThrow(/recoveryKey/);
+  });
+});
+
 describe('updateGuestAvatar', () => {
+  it('changes every live session that shares the sessionId', () => {
+    const first = createGuestSession('Alice', undefined, KEY_A);
+    const second = createGuestSession('Alice', undefined, KEY_A);
+    expect(updateGuestAvatar(first.session.sessionId, 'avatar-3')).toBe(true);
+    expect(getGuestSession(first.token).avatarId).toBe('avatar-3');
+    expect(getGuestSession(second.token).avatarId).toBe('avatar-3');
+  });
+
   it('changes the avatar of the matching live session', () => {
     const { token, session } = createGuestSession('Alice');
     expect(updateGuestAvatar(session.sessionId, 'avatar-7')).toBe(true);
