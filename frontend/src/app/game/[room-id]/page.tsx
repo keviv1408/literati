@@ -838,9 +838,10 @@ export default function GamePage({ params }: PageProps) {
 
   // ── Inline declare: DnD handlers ────────────────────────────
   const handleDeclareDragStart = useCallback((event: DragStartEvent) => {
+    if (!canSend) return;
     setDeclareActiveDragId(String(event.active.id));
     setDeclareSelectedCard(null);
-  }, []);
+  }, [canSend]);
 
   const handleDeclareDragEnd = useCallback((event: DragEndEvent) => {
     setDeclareActiveDragId(null);
@@ -867,9 +868,9 @@ export default function GamePage({ params }: PageProps) {
 
   // ── Inline declare: tap-to-assign ────────────────────────────
   const handleDeclareTapCard = useCallback((cardId: CardId) => {
-    if (myHand.includes(cardId)) return;
+    if (!canSend || myHand.includes(cardId)) return;
     setDeclareSelectedCard((prev) => (prev === cardId ? null : cardId));
-  }, [myHand]);
+  }, [canSend, myHand]);
 
   const handleDeclareTapZone = useCallback((playerId: string) => {
     if (!canSend || !declareSelectedCard || playerId === myPlayerId) return;

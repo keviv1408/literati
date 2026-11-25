@@ -2362,6 +2362,21 @@ describe('GamePage — while the game socket reconnects', () => {
       expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
       expect(fake.state.sendDeclareProgress).not.toHaveBeenCalled();
     });
+
+    it('keeps the highlight on its card when another card in the declare tray is tapped', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      const tray = openDeclareTray();
+      const cardLabels = () => within(tray).getAllByTestId('declare-draggable-card').map((c) => c.getAttribute('aria-label'));
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[0]);
+      const selectedBefore = cardLabels();
+      expect(selectedBefore[0]).toMatch(/, selected/);
+      update({ wsStatus: 'reconnecting' });
+
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[1]);
+
+      expect(cardLabels()).toEqual(selectedBefore);
+    });
   });
 
   describe('kept trays after the reconnect', () => {
