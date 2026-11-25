@@ -276,6 +276,8 @@ describe('lobby socket lifecycle', () => {
 
     expect(first.messages.find((m) => m.type === 'closing').code).toBe(4006);
     expect(hostFlags(second)).toEqual({ Host: true });
+    expect(players(second)).toHaveLength(1);
+    expect(players(second)[0]).toMatchObject({ userId: hostId, isHost: true });
     expect(has(second, 'host_disconnected')).toBe(false);
   });
 
