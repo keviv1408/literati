@@ -101,6 +101,48 @@ describe('redactUrls', () => {
     expect(out?.$set_once).toEqual({ $initial_current_url: 'https://x.test/game/A' });
   });
 
+  it('strips them from nested exception stack frames', () => {
+    const out = redactUrls(event({
+      properties: {
+        $exception_list: [{
+          stacktrace: {
+            frames: [{ filename: 'https://x.test/game/A?spectatorToken=s', lineno: 3, function: 'f' }],
+          },
+        }],
+      },
+    }));
+    expect(out?.properties.$exception_list[0].stacktrace.frames[0]).toEqual({
+      filename: 'https://x.test/game/A',
+      lineno: 3,
+      function: 'f',
+    });
+  });
+
+  it('strips them from URLs inside free text', () => {
+    const out = redactUrls(event({
+      properties: {
+        $exception_list: [{
+          value: "Failed to construct 'WebSocket': The URL 'wss://api.x.test/ws/game/A?token=t&spectatorToken=s' is invalid.",
+        }],
+      },
+    }));
+    expect(out?.properties.$exception_list[0].value).toBe(
+      "Failed to construct 'WebSocket': The URL 'wss://api.x.test/ws/game/A' is invalid.",
+    );
+  });
+
+  it('leaves text with ? and # but no URL alone', () => {
+    const out = redactUrls(event({ properties: { message: 'Why? Because #1' } }));
+    expect(out?.properties.message).toBe('Why? Because #1');
+  });
+
+  it('matches URL keys in any case', () => {
+    const out = redactUrls(event({
+      $set_once: { $Initial_Current_URL: 'https://x.test/game/A?spectatorToken=s' },
+    }));
+    expect(out?.$set_once).toEqual({ $Initial_Current_URL: 'https://x.test/game/A' });
+  });
+
   it('passes null through', () => {
     expect(redactUrls(null)).toBeNull();
   });

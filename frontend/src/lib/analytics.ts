@@ -2,7 +2,8 @@ import posthog from 'posthog-js';
 import type { CaptureResult, Properties } from 'posthog-js';
 import type { PublicGameState } from '@/types/game';
 
-const _URL_KEY = /url|href|referrer/i;
+const _URL_KEY = /url|href|referrer|filename/i;
+const _URL_IN_TEXT = /([a-z][a-z0-9+.-]*:\/\/[^\s?#'"`<>]*)[?#][^\s'"`<>]*/gi;
 
 function _markerKey(roomCode: string): string {
   return `literati:game-counted:${roomCode}`;
@@ -13,13 +14,26 @@ function _capture(event: string, props: Properties): void {
   posthog.capture(event, props);
 }
 
+function _isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+// Array elements take their array's key, so a list of URLs is cut like a single one.
+function _redact(value: unknown, key: string): unknown {
+  if (typeof value === 'string') {
+    return _URL_KEY.test(key) ? value.split(/[?#]/, 1)[0] : value.replace(_URL_IN_TEXT, '$1');
+  }
+  if (Array.isArray(value)) return value.map((item) => _redact(item, key));
+  if (_isPlainObject(value)) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, _redact(v, k)]));
+  }
+  return value;
+}
+
 function _stripUrls(props: Properties): Properties {
-  return Object.fromEntries(
-    Object.entries(props).map(([key, value]) => [
-      key,
-      _URL_KEY.test(key) && typeof value === 'string' ? value.split(/[?#]/, 1)[0] : value,
-    ]),
-  );
+  return _redact(props, '') as Properties;
 }
 
 export function trackGameInit(
