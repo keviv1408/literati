@@ -1154,6 +1154,18 @@ export default function GamePage({ params }: PageProps) {
       ? gameState.declaredSuits
       : (gameSummary?.declaredSuits ?? []);
 
+  // Only a seated player has controls that a stopped socket disables.
+  const wsErrorBanner = wsStatus === 'error' && wsError && myPlayerId ? (
+    <div
+      className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-rose-900/60 border-b border-rose-700/40 text-xs text-rose-200"
+      role="alert"
+      data-testid="ws-error-banner"
+    >
+      <span aria-hidden="true">⚠️</span>
+      <span>{wsError}</span>
+    </div>
+  ) : null;
+
   if (finalGameOver || room.status === 'completed') {
     const { winner, scores, tiebreakerWinner } = finalGameOver ?? { winner: null as 1 | 2 | null, tiebreakerWinner: null as 1 | 2 | null, scores: { team1: 0, team2: 0 } };
 
@@ -1178,6 +1190,7 @@ export default function GamePage({ params }: PageProps) {
             <ReconnectBar onRetry={retryNow} />
           </div>
         )}
+        {wsErrorBanner && <div className="fixed inset-x-0 top-0 z-50">{wsErrorBanner}</div>}
 
         {/* ── Game-over summary ─────────────────────────────────
          * Renders the winner announcement, final score, tiebreak reason (if
@@ -1465,16 +1478,7 @@ export default function GamePage({ params }: PageProps) {
        * Cleared automatically when the following `ask_result` or
        * `declaration_result` arrives (handled in useGameSocket).
        */}
-      {wsStatus === 'error' && wsError && myPlayerId && (
-        <div
-          className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-rose-900/60 border-b border-rose-700/40 text-xs text-rose-200"
-          role="alert"
-          data-testid="ws-error-banner"
-        >
-          <span aria-hidden="true">⚠️</span>
-          <span>{wsError}</span>
-        </div>
-      )}
+      {wsErrorBanner}
 
       {wsStatus === 'reconnecting' && <ReconnectBar onRetry={retryNow} />}
 

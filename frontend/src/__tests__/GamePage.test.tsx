@@ -2505,32 +2505,51 @@ describe('GamePage — while the game socket reconnects', () => {
     expect(screen.getByTestId('game-view')).toBeTruthy();
   });
 
-  it('shows the bar on the results screen and disables the rematch vote', async () => {
-    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
-    const fake = fakeGameSocket({
-      wsStatus: 'reconnecting',
-      gameState: activeState(null, { status: 'completed', winner: 1, scores: { team1: 5, team2: 3 } }),
-      rematchVote: {
-        type: 'rematch_vote_update',
-        yesCount: 0,
-        noCount: 0,
-        totalCount: 6,
-        humanCount: 6,
-        majority: 4,
-        majorityReached: false,
-        majorityDeclined: false,
-        votes: {},
-        playerVotes: players6.map((p) => ({ playerId: p.playerId, displayName: p.displayName, isBot: false, vote: null })),
-      },
-    });
-    await renderWithFake(fake, 'game-completed-view');
-    await waitFor(() => expect(screen.getByTestId('ask-stats-table')).toBeTruthy());
+  describe('the results screen', () => {
+    const OPEN_VOTE = {
+      type: 'rematch_vote_update' as const,
+      yesCount: 0,
+      noCount: 0,
+      totalCount: 6,
+      humanCount: 6,
+      majority: 4,
+      majorityReached: false,
+      majorityDeclined: false,
+      votes: {},
+      playerVotes: players6.map((p) => ({ playerId: p.playerId, displayName: p.displayName, isBot: false, vote: null })),
+    };
+    const COMPLETED = activeState(null, { status: 'completed', winner: 1, scores: { team1: 5, team2: 3 } });
 
-    expect(screen.getByTestId('ws-reconnecting-banner')).toBeTruthy();
-    expect(screen.getByTestId('rematch-yes-btn')).toBeDisabled();
-    expect(screen.getByTestId('rematch-no-btn')).toBeDisabled();
-    fireEvent.click(screen.getByTestId('rematch-yes-btn'));
-    expect(fake.state.sendRematchVote).not.toHaveBeenCalled();
+    async function renderResults(overrides: Partial<UseGameSocketReturn>) {
+      mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
+      const fake = fakeGameSocket({ gameState: COMPLETED, rematchVote: OPEN_VOTE, ...overrides });
+      await renderWithFake(fake, 'game-completed-view');
+      await waitFor(() => expect(screen.getByTestId('ask-stats-table')).toBeTruthy());
+      return fake;
+    }
+
+    it('shows the bar and disables the rematch vote while reconnecting', async () => {
+      const fake = await renderResults({ wsStatus: 'reconnecting' });
+
+      expect(screen.getByTestId('ws-reconnecting-banner')).toBeTruthy();
+      expect(screen.getByTestId('rematch-yes-btn')).toBeDisabled();
+      expect(screen.getByTestId('rematch-no-btn')).toBeDisabled();
+      fireEvent.click(screen.getByTestId('rematch-yes-btn'));
+      expect(fake.state.sendRematchVote).not.toHaveBeenCalled();
+    });
+
+    it('says why the rematch vote is disabled after the socket stops for good', async () => {
+      await renderResults({ wsStatus: 'error', error: 'This game was opened in another tab or window.' });
+
+      expect(screen.getByTestId('ws-error-banner').textContent).toBe('⚠️This game was opened in another tab or window.');
+      expect(screen.getByTestId('rematch-yes-btn')).toBeDisabled();
+    });
+
+    it('shows no error to a visitor who never had a seat', async () => {
+      await renderResults({ wsStatus: 'error', error: 'Player not in game', myPlayerId: null, myHand: [] });
+
+      expect(screen.queryByTestId('ws-error-banner')).toBeNull();
+    });
   });
 
   it('reads "Reconnecting…" in the footer before the first init, with no "refresh"', async () => {
