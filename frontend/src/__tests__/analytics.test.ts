@@ -99,8 +99,20 @@ it('never throws when storage is unavailable', () => {
   expect(() => {
     trackGameInit('ABCDEF', 'active', 6);
     trackGameOver('ABCDEF');
+    trackSocketDropped(1006);
     reportPendingSocketDrop();
   }).not.toThrow();
+  expect(capture).not.toHaveBeenCalled();
+});
+
+it('sends nothing when only storage writes fail', () => {
+  jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+  expect(() => {
+    trackGameInit('ABCDEF', 'active', 6);
+    trackSocketDropped(1006);
+    reportPendingSocketDrop();
+  }).not.toThrow();
+  expect(capture).not.toHaveBeenCalled();
 });
 
 describe('redactUrls', () => {
