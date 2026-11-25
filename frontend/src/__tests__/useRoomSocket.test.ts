@@ -481,6 +481,21 @@ describe('useRoomSocket', () => {
       expect(wsInstances[0].close).toHaveBeenCalled();
     });
 
+    it('reports "disconnected" after "you-were-kicked" on a confirmed socket', () => {
+      const { result } = renderHook(() =>
+        useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })
+      );
+      openSocket(wsInstances[0]);
+      sendMessage(wsInstances[0], { type: 'connected', userId: 'p1' });
+      expect(result.current.wsStatus).toBe('connected');
+
+      sendMessage(wsInstances[0], {
+        type: 'you-were-kicked',
+        roomCode: 'ABC123',
+      });
+      expect(result.current.wsStatus).toBe('disconnected');
+    });
+
     it('ignores non-JSON messages without throwing', () => {
       const { result } = renderHook(() =>
         useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })

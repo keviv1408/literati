@@ -361,6 +361,8 @@ export function useRoomSocket({
           setIsKicked(true);
           setKickReason(reason);
           socket.close();
+          // close() is silent; without this the hook keeps reporting connected on a socket that is gone.
+          setWsStatus('disconnected');
           onKickedRef.current?.(reason);
           break;
         }
