@@ -7,6 +7,8 @@ jest.mock('@/lib/analytics', () => ({
   trackGameInit: jest.fn(),
   trackGameOver: jest.fn(),
   trackSocketDropped: jest.fn(),
+  reportPendingSocketDrop: jest.fn(),
+  trackSocketRecovered: jest.fn(),
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -57,23 +59,14 @@ beforeAll(() => {
   });
 });
 
-const _realConsoleError = console.error;
-
 beforeEach(() => {
   jest.useFakeTimers();
   wsInstances.length = 0;
   jest.clearAllMocks();
-  // jsdom cannot navigate and its reload cannot be stubbed, so drop only that one report.
-  jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-    const message = (args[0] as { message?: unknown } | undefined)?.message;
-    if (typeof message === 'string' && message.startsWith('Not implemented: navigation')) return;
-    _realConsoleError(...args);
-  });
 });
 
 afterEach(() => {
   jest.useRealTimers();
-  jest.restoreAllMocks();
 });
 
 function _latestWs(): MockWsInstance {
@@ -110,11 +103,31 @@ function _serverClose(ws: MockWsInstance, code: number) {
   });
 }
 
-function _waitForReload() {
+function _outliveDrop() {
   act(() => {
     jest.advanceTimersByTime(2000);
   });
 }
+
+const GAME_INIT = {
+  type: 'game_init',
+  myPlayerId: 'p1',
+  myHand: [],
+  players: [],
+  gameState: { status: 'active' },
+  variant: 'remove_7s',
+  playerCount: 6,
+};
+
+const SPECTATOR_INIT = {
+  type: 'spectator_init',
+  players: [],
+  hands: {},
+  moveHistory: [],
+  gameState: { status: 'active' },
+  variant: 'remove_7s',
+  playerCount: 6,
+};
 
 const GAME_OVER = {
   type: 'game_over',
@@ -148,38 +161,45 @@ describe('useGameSocket tracking', () => {
     expect(trackGameOver).toHaveBeenCalledWith('ABCDEF');
   });
 
-  it('reports a drop when an open socket closes and the page reloads', () => {
+  it('reports a drop when a confirmed socket closes and the page outlives it', () => {
     _renderPlayer();
     const ws = _latestWs();
     _open(ws);
+    _message(ws, GAME_INIT);
     _serverClose(ws, 1006);
-    _waitForReload();
+    _outliveDrop();
     expect(trackSocketDropped).toHaveBeenCalledTimes(1);
     expect(trackSocketDropped).toHaveBeenCalledWith({ closeCode: 1006, detectedBy: 'close' });
   });
 
-  it('ignores a drop when the page goes away before the reload', () => {
+  it('ignores a drop when the page goes away within 2 seconds', () => {
+    const { unmount } = _renderPlayer();
+    const ws = _latestWs();
+    _open(ws);
+    _message(ws, GAME_INIT);
+    _serverClose(ws, 1006);
+    unmount();
+    _outliveDrop();
+    expect(trackSocketDropped).not.toHaveBeenCalled();
+  });
+
+  it('ignores a socket that was never confirmed', () => {
     _renderPlayer();
     const ws = _latestWs();
     _open(ws);
     _serverClose(ws, 1006);
+    _outliveDrop();
     expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
-  it('ignores a socket that never opened', () => {
-    _renderPlayer();
-    const ws = _latestWs();
-    _serverClose(ws, 1006);
-    _waitForReload();
-    expect(trackSocketDropped).not.toHaveBeenCalled();
-  });
-
-  it('ignores an intentional close', () => {
-    _renderPlayer();
+  it('ignores the hook closing its own socket', () => {
+    const { unmount } = _renderPlayer();
     const ws = _latestWs();
     _open(ws);
-    _serverClose(ws, 1000);
-    _waitForReload();
+    _message(ws, GAME_INIT);
+    unmount();
+    _outliveDrop();
+    expect(ws.close).toHaveBeenCalledWith(1000);
     expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
@@ -187,8 +207,9 @@ describe('useGameSocket tracking', () => {
     _renderPlayer();
     const ws = _latestWs();
     _open(ws);
+    _message(ws, GAME_INIT);
     _serverClose(ws, 4001);
-    _waitForReload();
+    _outliveDrop();
     expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
@@ -196,14 +217,17 @@ describe('useGameSocket tracking', () => {
     _renderSpectator();
     const ws = _latestWs();
     _open(ws);
+    _message(ws, SPECTATOR_INIT);
     _serverClose(ws, 1006);
-    _waitForReload();
+    _outliveDrop();
     expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
   it('reports an ask, a declaration, and a rematch vote once each is sent', () => {
     const { result } = _renderPlayer();
-    _open(_latestWs());
+    const ws = _latestWs();
+    _open(ws);
+    _message(ws, GAME_INIT);
     act(() => {
       result.current.sendAsk('p2', '5_s', ['5_s', '6_s']);
       result.current.sendDeclare('low_s', { '5_s': 'p1' });
@@ -215,10 +239,22 @@ describe('useGameSocket tracking', () => {
     expect(trackEvent).toHaveBeenCalledWith('rematch_vote_submitted', { vote: 'yes' });
   });
 
+  it('reports nothing for an action taken before game_init', () => {
+    const { result } = _renderPlayer();
+    _open(_latestWs());
+    act(() => {
+      result.current.sendAsk('p2', '5_s', ['5_s', '6_s']);
+      result.current.sendDeclare('low_s', { '5_s': 'p1' });
+      result.current.sendRematchVote(true);
+    });
+    expect(trackEvent).not.toHaveBeenCalled();
+  });
+
   it('reports nothing for an action taken after the socket dropped', () => {
     const { result } = _renderPlayer();
     const ws = _latestWs();
     _open(ws);
+    _message(ws, GAME_INIT);
     _serverClose(ws, 1006);
     act(() => {
       result.current.sendAsk('p2', '5_s');
