@@ -2439,6 +2439,61 @@ describe('GamePage — while the game socket reconnects', () => {
     });
   });
 
+  describe.each(viewers)('the last move after a reconnect, for %s', (_viewer, myPlayerId, liveView) => {
+    const lastMoveTestId = myPlayerId ? 'last-move-display' : 'spectator-last-move';
+
+    function carolAsksAlice(cardId: CardId, lastMove: string, batchCardIds?: CardId[]) {
+      return {
+        type: 'ask_result' as const,
+        askerId: 'p4',
+        targetId: 'p2',
+        cardId,
+        batchCardIds,
+        success: true,
+        newTurnPlayerId: 'p4',
+        lastMove,
+      };
+    }
+
+    async function renderOnCarolsTurn() {
+      const fake = fakeGameSocket({ myPlayerId, myHand: myPlayerId ? HAND : [], gameState: activeState('p4') });
+      return renderWithFake(fake, liveView);
+    }
+
+    it('shows the server\'s last move, not the summary of an ask batch from before the drop', async () => {
+      const update = await renderOnCarolsTurn();
+      // The batch summary shows only once the 5 s flash of the latest result has gone.
+      jest.useFakeTimers();
+      try {
+        update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it', ['10_c', '11_c']) });
+        act(() => jest.advanceTimersByTime(5000));
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for 10♣ and J♣');
+
+        update({ wsStatus: 'reconnecting' });
+        update({
+          wsStatus: 'connected',
+          lastAskResult: null,
+          gameState: activeState('p4', { lastMove: 'Carol asked Alice for J♣ — got it' }),
+        });
+
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for J♣ — got it');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('starts a new ask summary after the reconnect instead of extending one from before the drop', async () => {
+      const update = await renderOnCarolsTurn();
+      update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it') });
+      update({ wsStatus: 'reconnecting' });
+      update({ wsStatus: 'connected', lastAskResult: null });
+
+      update({ lastAskResult: carolAsksAlice('11_c', 'Carol asked Alice for J♣ — got it') });
+
+      expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for J♣ — got it');
+    });
+  });
+
   it('clears a completed room status when an init reports an active game', async () => {
     mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
     const fake = fakeGameSocket();

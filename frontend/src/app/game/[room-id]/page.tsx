@@ -762,6 +762,10 @@ export default function GamePage({ params }: PageProps) {
     const beforeDrop = beforeDropRef.current;
     if (wsStatus !== 'connected' || !beforeDrop) return;
     beforeDropRef.current = null;
+    // A reload starts with no ask batch, so the summary from before the drop must not outlive it.
+    setSyntheticLastMoveMsg(null);
+    observedAskBatchRef.current = null;
+    processedAskResultKeyRef.current = null;
     // Nobody else can act on the player's own turn, so the same hand on that turn keeps every selection valid.
     if (beforeDrop.isMyTurn && isMyTurn && beforeDrop.handKey === handKey && beforeDrop.declaredKey === declaredKey) {
       // The server's timeout move plays the stored selection, which a backend restart loses.

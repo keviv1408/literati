@@ -235,6 +235,19 @@ export default function SpectatorView({
     showTransientLastResult(summaryMessage ?? lastAskResult.lastMove, summaryMessage);
   }, [lastAskResult, players]);
 
+  // A reload starts with no ask batch, so the summary from before a drop must not outlive the reconnect.
+  const clearAskSummary = useEffectEvent(() => {
+    setSyntheticLastMoveMsg(null);
+    observedAskBatchRef.current = null;
+    processedAskResultKeyRef.current = null;
+  });
+  const lastWsStatusRef = useRef(wsStatus);
+  useEffect(() => {
+    const previous = lastWsStatusRef.current;
+    lastWsStatusRef.current = wsStatus;
+    if (previous === 'reconnecting' && wsStatus === 'connected') clearAskSummary();
+  }, [wsStatus]);
+
   useEffect(() => {
     const result = lastDeclareResult;
     const msg = result?.lastMove ?? null;
