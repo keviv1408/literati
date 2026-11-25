@@ -21,8 +21,8 @@ export interface ReconnectingSocket {
 
 const _SERVER_ERROR_CODE = 4500;
 
-function _isStopCode(code: number | null): code is number {
-  return code !== null && code >= 4000 && code <= 4999 && code !== _SERVER_ERROR_CODE;
+function _isStopCode(code: number): boolean {
+  return code >= 4000 && code <= 4999 && code !== _SERVER_ERROR_CODE;
 }
 
 function _parse(data: unknown): Record<string, unknown> | null {
@@ -106,7 +106,7 @@ export function createReconnectingSocket(options: ReconnectingSocketOptions): Re
   }
 
   function drop(code: number | null, reason: string, detectedBy: DropCause) {
-    if (_isStopCode(code)) {
+    if (code !== null && _isStopCode(code)) {
       teardown();
       setStatus('error', { code, reason });
       return;
