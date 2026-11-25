@@ -159,11 +159,30 @@ describe('sessionStorage helpers', () => {
 // ---------------------------------------------------------------------------
 
 describe('CreateRoomModal — form phase', () => {
-  it('renders the form with player count and variant options', () => {
+  it('renders the form with player count options', () => {
     renderModal();
     expect(screen.getByText('Create Private Room')).toBeDefined();
     expect(screen.getByLabelText('6 players')).toBeDefined();
     expect(screen.getByLabelText('8 players')).toBeDefined();
+  });
+
+  it('has no card variant picker', () => {
+    renderModal();
+    expect(screen.queryByText('Card Removal Variant')).toBeNull();
+    expect(screen.queryByText('Remove 2s')).toBeNull();
+    expect(screen.queryByText('Remove 8s')).toBeNull();
+  });
+
+  it('creates the room with 7s removed', async () => {
+    mockCreateRoom.mockResolvedValue({ room: MOCK_ROOM });
+    renderModal();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Create Room'));
+    });
+    expect(mockCreateRoom.mock.calls[0][0]).toEqual({
+      playerCount: 6,
+      cardRemovalVariant: 'remove_7s',
+    });
   });
 
   it('closes when Cancel button is clicked', () => {
