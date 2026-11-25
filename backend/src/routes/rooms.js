@@ -37,9 +37,6 @@ const { getIO, getConnectedUsers } = require('../socket/server');
 const { toPublicSeat } = require('../game/gameInitService');
 const roomHost = require('../rooms/roomHost');
 
-// Kept empty until the lobby socket stops importing it.
-const guestHostMap = new Map();
-
 function isRoomHost(room, user) {
   return roomHost.isRoomHost(room, user.isGuest ? user.sessionId : user.id);
 }
@@ -408,7 +405,6 @@ router.get('/:code', async (req, res) => {
       return res.status(404).json({ error: 'Room not found' });
     }
 
-    // Lazy require: roomSocketServer imports this module (guestHostMap).
     const { getRoomPlayers } = require('../ws/roomSocketServer');
     return res.status(200).json({ room: { ...room, players: getRoomPlayers(room.code) } });
   } catch (err) {
@@ -833,4 +829,3 @@ module.exports = router;
 module.exports.VALID_PLAYER_COUNTS = VALID_PLAYER_COUNTS;
 module.exports.VALID_CARD_REMOVAL_VARIANTS = VALID_CARD_REMOVAL_VARIANTS;
 module.exports.ROOM_STATUS = ROOM_STATUS;
-module.exports.guestHostMap = guestHostMap;

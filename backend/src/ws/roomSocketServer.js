@@ -67,7 +67,7 @@ const { closeWithNotice } = require('./closeWs');
 const { buildGameSeats, toPublicSeat } = require('../game/gameInitService');
 const { persistGameState } = require('../game/gameState');
 const { getSupabaseClient } = require('../db/supabase');
-const { guestHostMap } = require('../routes/rooms');
+const { isRoomHost, hostColumns } = require('../rooms/roomHost');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
@@ -257,6 +257,13 @@ function getRoomSpectatorMap(roomCode) {
   return roomSpectators.get(roomCode);
 }
 
+function _hasConnectedHost(clients) {
+  for (const entry of clients.values()) {
+    if (entry.isHost) return true;
+  }
+  return false;
+}
+
 /**
  * Auto-assign a team for a newly-joining player.
  *
@@ -397,7 +404,7 @@ function _cancelHostTransferTimer(roomCode) {
  * 1. Select the first remaining player in Map insertion order as new host.
  * 2. Set `isHost = false` on every existing in-memory entry.
  * 3. Set `isHost = true` on the selected entry.
- * 4. Persist the new `host_user_id` to Supabase (best-effort).
+ * 4. Persist the new host to `host_user_id` or `host_guest_id` (best-effort).
  * 5. Broadcast `host_changed` to notify all clients of the new authority.
  * 6. Broadcast `room_players` so all isHost badges refresh.
  *
@@ -432,7 +439,7 @@ async function _executeHostTransfer(roomCode) {
     const supabase = getSupabase();
     const { error } = await supabase
       .from('rooms')
-      .update({ host_user_id: newHostId })
+      .update(hostColumns(newHostId, newHostEntry.isGuest))
       .eq('code', roomCode);
     if (error) {
       console.error(`[RoomWS] Supabase host-transfer update failed for room "${roomCode}":`, error.message);
@@ -586,14 +593,14 @@ async function fetchRoomMetaWithToken(roomCode) {
 /**
  * Fetch minimal room metadata from Supabase (connection-time check).
  * @param {string} roomCode
- * @returns {Promise<{id: string, host_user_id: string, status: string, player_count: number, is_matchmaking: boolean}|null>}
+ * @returns {Promise<{id: string, host_user_id: string|null, host_guest_id: string|null, status: string, player_count: number, is_matchmaking: boolean}|null>}
  */
 async function fetchRoomMeta(roomCode) {
   try {
     const supabase = getSupabase();
     const { data: room, error } = await supabase
       .from('rooms')
-      .select('id, host_user_id, status, player_count, is_matchmaking')
+      .select('id, host_user_id, host_guest_id, status, player_count, is_matchmaking')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -1872,22 +1879,27 @@ function attachRoomSocketServer(httpServer) {
     // PLAYER BRANCH (normal join)
     // ── ─────────────────────────────────────────────────────────────────────
 
-    // ── Determine host status ───────────────────────────────────────────────
-    // Matchmaking rooms have no designated host — all players are peers.
-    // For guests, host_user_id is null in DB; check the in-memory guestHostMap instead.
-    const isHost = isMatchmakingRoom
-      ? false
-      : (dbRoom.host_user_id === userId || guestHostMap.get(dbRoom.id) === userId);
-
-    // ── Auto-assign team ────────────────────────────────────────────────────
     const clients = getRoomClientMap(roomCode);
     const playerCount = meta ? meta.playerCount : 6;
+    const existingEntry = clients.get(userId);
 
+    // ── Determine host status ───────────────────────────────────────────────
+    // Matchmaking rooms have no designated host — all players are peers.
+    // A reconnecting player keeps the crown the lobby gave them, even after a transfer the row may not reflect yet.
+    let isHost;
+    if (isMatchmakingRoom) {
+      isHost = false;
+    } else if (existingEntry) {
+      isHost = existingEntry.isHost;
+    } else {
+      isHost = isRoomHost(dbRoom, userId) && !_hasConnectedHost(clients);
+    }
+
+    // ── Auto-assign team ────────────────────────────────────────────────────
     // Team assignment priority:
     // 1. Existing in-memory entry (reconnect / tab refresh) — preserves current teamId.
     // 2. Pending rematch entry — restores the player's team from the previous game.
     // 3. Auto-assign — for fresh joins with no prior context.
-    const existingEntry = clients.get(userId);
     let teamId;
     if (existingEntry) {
       teamId = existingEntry.teamId;

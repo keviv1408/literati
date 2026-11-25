@@ -12,7 +12,7 @@
  * 2. Clears isHost flag on all previous entries
  * 3. Broadcasts host_changed with newHostId and newHostName
  * 4. Broadcasts room_players snapshot with updated isHost flags
- * 5. Persists the new host_user_id to Supabase
+ * 5. Persists the new host to host_user_id or host_guest_id
  * 6. No-op when room has no remaining clients
  * 7. Handles Supabase errors gracefully (does not throw)
  * 8. Broadcasts to spectators as well as players
@@ -218,7 +218,7 @@ describe('_executeHostTransfer', () => {
     expect(bobInSnapshot.isHost).toBe(false);
   });
 
-  it('5. persists the new host_user_id to Supabase', async () => {
+  it('5. persists a registered new host to host_user_id', async () => {
     populateRoom(ROOM, [
       { userId: 'new-host', displayName: 'New Host', isHost: false, isGuest: false, teamId: 1 },
     ]);
@@ -226,8 +226,18 @@ describe('_executeHostTransfer', () => {
     await _executeHostTransfer(ROOM);
 
     expect(mockSupabase.from).toHaveBeenCalledWith('rooms');
-    expect(mockSupabase._update).toHaveBeenCalledWith({ host_user_id: 'new-host' });
+    expect(mockSupabase._update).toHaveBeenCalledWith({ host_user_id: 'new-host', host_guest_id: null });
     expect(mockSupabase._eq).toHaveBeenCalledWith('code', ROOM);
+  });
+
+  it('5b. persists a guest new host to host_guest_id', async () => {
+    populateRoom(ROOM, [
+      { userId: 'guest-host', displayName: 'Guest Host', isHost: false, isGuest: true, teamId: 1 },
+    ]);
+
+    await _executeHostTransfer(ROOM);
+
+    expect(mockSupabase._update).toHaveBeenCalledWith({ host_user_id: null, host_guest_id: 'guest-host' });
   });
 
   it('6. no-op when room has no remaining clients', async () => {
