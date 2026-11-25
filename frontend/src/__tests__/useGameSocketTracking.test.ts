@@ -155,7 +155,7 @@ describe('useGameSocket tracking', () => {
     _serverClose(ws, 1006);
     _waitForReload();
     expect(trackSocketDropped).toHaveBeenCalledTimes(1);
-    expect(trackSocketDropped).toHaveBeenCalledWith(1006);
+    expect(trackSocketDropped).toHaveBeenCalledWith({ closeCode: 1006, detectedBy: 'close' });
   });
 
   it('ignores a drop when the page goes away before the reload', () => {

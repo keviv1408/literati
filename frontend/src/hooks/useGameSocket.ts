@@ -469,7 +469,7 @@ export function useGameSocket({
       if (!isIntentional && !isKnownError) {
         reloadTimerRef.current = setTimeout(() => {
           // Here, not at close: an unload or a failed handshake never reaches this reload.
-          if (opened && !spectatorToken) trackSocketDropped(e.code);
+          if (opened && !spectatorToken) trackSocketDropped({ closeCode: e.code, detectedBy: 'close' });
           window.location.reload();
         }, 2000);
       }

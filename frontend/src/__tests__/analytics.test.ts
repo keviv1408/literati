@@ -13,10 +13,12 @@ import {
   trackGameInit,
   trackGameOver,
   trackSocketDropped,
+  trackSocketRecovered,
 } from '@/lib/analytics';
 
 const capture = posthog.capture as jest.Mock;
 const captureException = posthog.captureException as jest.Mock;
+const DROP_KEY = 'literati:socket-dropped';
 
 beforeEach(() => {
   capture.mockReset();
@@ -65,14 +67,49 @@ it('forgets a counted game once it is no longer active', () => {
   expect(capture).toHaveBeenLastCalledWith('game_started', { player_count: 8 });
 });
 
-it('reports a dropped socket on the next page load, once', () => {
-  trackSocketDropped(1006);
+it('stores a closed socket and reports it with how it was detected', () => {
+  trackSocketDropped({ closeCode: 1006, detectedBy: 'close' });
   expect(capture).not.toHaveBeenCalled();
+  expect(localStorage.getItem(DROP_KEY)).toBe('{"close_code":1006,"detected_by":"close"}');
   reportPendingSocketDrop();
   expect(capture).toHaveBeenCalledTimes(1);
-  expect(capture).toHaveBeenCalledWith('game_socket_dropped', { close_code: 1006 });
+  expect(capture).toHaveBeenCalledWith('game_socket_dropped', { close_code: 1006, detected_by: 'close' });
+  expect(localStorage.getItem(DROP_KEY)).toBeNull();
+});
+
+it('reports a heartbeat drop without a close code', () => {
+  trackSocketDropped({ closeCode: null, detectedBy: 'heartbeat' });
+  expect(localStorage.getItem(DROP_KEY)).toBe('{"detected_by":"heartbeat"}');
   reportPendingSocketDrop();
   expect(capture).toHaveBeenCalledTimes(1);
+  expect(capture.mock.calls[0][0]).toBe('game_socket_dropped');
+  expect(capture.mock.calls[0][1]).toStrictEqual({ detected_by: 'heartbeat' });
+});
+
+it('reads a bare close code stored by an older build as a close drop', () => {
+  localStorage.setItem(DROP_KEY, '1006');
+  reportPendingSocketDrop();
+  expect(capture).toHaveBeenCalledWith('game_socket_dropped', { close_code: 1006, detected_by: 'close' });
+});
+
+it.each(['nope', '{"detected_by":"bogus"}'])('drops a stored value it cannot read: %s', (stored) => {
+  localStorage.setItem(DROP_KEY, stored);
+  reportPendingSocketDrop();
+  expect(capture).not.toHaveBeenCalled();
+  expect(localStorage.getItem(DROP_KEY)).toBeNull();
+});
+
+it('reports a stored drop once', () => {
+  trackSocketDropped({ closeCode: 1006, detectedBy: 'close' });
+  reportPendingSocketDrop();
+  reportPendingSocketDrop();
+  expect(capture).toHaveBeenCalledTimes(1);
+});
+
+it('reports a recovery in whole seconds with how the drop was detected', () => {
+  trackSocketRecovered(3.4, 'close');
+  expect(capture).toHaveBeenCalledTimes(1);
+  expect(capture).toHaveBeenCalledWith('game_socket_recovered', { seconds_down: 3, detected_by: 'close' });
 });
 
 it('reports no socket drop when none was stored', () => {
@@ -99,11 +136,12 @@ it('sends nothing without a key', () => {
   trackException(new Error('boom'));
   trackGameInit('ABCDEF', 'active', 6);
   trackGameOver('ABCDEF');
-  trackSocketDropped(1006);
+  trackSocketDropped({ closeCode: 1006, detectedBy: 'close' });
   reportPendingSocketDrop();
+  trackSocketRecovered(3.4, 'close');
   expect(capture).not.toHaveBeenCalled();
   expect(captureException).not.toHaveBeenCalled();
-  expect(localStorage.getItem('literati:socket-dropped')).toBeNull();
+  expect(localStorage.getItem(DROP_KEY)).toBeNull();
 });
 
 it('never throws when PostHog throws', () => {
@@ -114,8 +152,9 @@ it('never throws when PostHog throws', () => {
     trackException(new Error('boom'));
     trackGameInit('ABCDEF', 'active', 6);
     trackGameOver('ABCDEF');
-    trackSocketDropped(1006);
+    trackSocketDropped({ closeCode: 1006, detectedBy: 'close' });
     reportPendingSocketDrop();
+    trackSocketRecovered(3.4, 'close');
   }).not.toThrow();
 });
 
@@ -125,7 +164,7 @@ it('never throws when storage is unavailable', () => {
   expect(() => {
     trackGameInit('ABCDEF', 'active', 6);
     trackGameOver('ABCDEF');
-    trackSocketDropped(1006);
+    trackSocketDropped({ closeCode: 1006, detectedBy: 'close' });
     reportPendingSocketDrop();
   }).not.toThrow();
   expect(capture).not.toHaveBeenCalled();
@@ -135,7 +174,7 @@ it('sends nothing when only storage writes fail', () => {
   jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
   expect(() => {
     trackGameInit('ABCDEF', 'active', 6);
-    trackSocketDropped(1006);
+    trackSocketDropped({ closeCode: 1006, detectedBy: 'close' });
     reportPendingSocketDrop();
   }).not.toThrow();
   expect(capture).not.toHaveBeenCalled();
