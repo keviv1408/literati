@@ -2,7 +2,8 @@ import posthog from 'posthog-js';
 import type { CaptureResult, Properties } from 'posthog-js';
 import type { PublicGameState } from '@/types/game';
 
-const _URL_KEY = /url|href|referrer|filename/i;
+const _SOCKET_DROPPED_KEY = 'literati:socket-dropped';
+const _URL_KEY =/url|href|referrer|filename/i;
 const _URL_IN_TEXT = /([a-z][a-z0-9+.-]*:\/\/[^\s?#'"`<>]*)[?#][^\s'"`<>]*/gi;
 
 function _markerKey(roomCode: string): string {
@@ -66,11 +67,27 @@ export function trackGameOver(roomCode: string): void {
   }
 }
 
+// The hook reloads 2 s after a drop and the network may be down, so a send now would be lost.
 export function trackSocketDropped(closeCode: number): void {
   try {
-    _capture('game_socket_dropped', { close_code: closeCode });
+    if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
+    localStorage.setItem(_SOCKET_DROPPED_KEY, String(closeCode));
   } catch {
     // Tracking must never break the game.
+  }
+}
+
+export function reportPendingSocketDrop(): void {
+  try {
+    const stored = localStorage.getItem(_SOCKET_DROPPED_KEY);
+    if (stored === null) return;
+    // Removing first means a failing capture cannot resend the drop on every load.
+    localStorage.removeItem(_SOCKET_DROPPED_KEY);
+    const closeCode = Number(stored);
+    if (!Number.isFinite(closeCode)) return;
+    _capture('game_socket_dropped', { close_code: closeCode });
+  } catch {
+    // Tracking must never break the app.
   }
 }
 

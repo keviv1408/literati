@@ -2,7 +2,13 @@ jest.mock('posthog-js', () => ({ __esModule: true, default: { capture: jest.fn()
 
 import posthog from 'posthog-js';
 import type { CaptureResult } from 'posthog-js';
-import { redactUrls, trackGameInit, trackGameOver, trackSocketDropped } from '@/lib/analytics';
+import {
+  redactUrls,
+  reportPendingSocketDrop,
+  trackGameInit,
+  trackGameOver,
+  trackSocketDropped,
+} from '@/lib/analytics';
 
 const capture = posthog.capture as jest.Mock;
 
@@ -42,9 +48,19 @@ it('counts a rematch in the same room as a new game', () => {
   expect(capture.mock.calls.map((c) => c[0])).toEqual(['game_started', 'game_finished', 'game_started']);
 });
 
-it('reports a dropped socket with its close code', () => {
+it('reports a dropped socket on the next page load, once', () => {
   trackSocketDropped(1006);
+  expect(capture).not.toHaveBeenCalled();
+  reportPendingSocketDrop();
+  expect(capture).toHaveBeenCalledTimes(1);
   expect(capture).toHaveBeenCalledWith('game_socket_dropped', { close_code: 1006 });
+  reportPendingSocketDrop();
+  expect(capture).toHaveBeenCalledTimes(1);
+});
+
+it('reports no socket drop when none was stored', () => {
+  reportPendingSocketDrop();
+  expect(capture).not.toHaveBeenCalled();
 });
 
 it('sends nothing without a key', () => {
@@ -52,7 +68,9 @@ it('sends nothing without a key', () => {
   trackGameInit('ABCDEF', 'active', 6);
   trackGameOver('ABCDEF');
   trackSocketDropped(1006);
+  reportPendingSocketDrop();
   expect(capture).not.toHaveBeenCalled();
+  expect(localStorage.getItem('literati:socket-dropped')).toBeNull();
 });
 
 it('never throws when PostHog throws', () => {
@@ -61,6 +79,7 @@ it('never throws when PostHog throws', () => {
     trackGameInit('ABCDEF', 'active', 6);
     trackGameOver('ABCDEF');
     trackSocketDropped(1006);
+    reportPendingSocketDrop();
   }).not.toThrow();
 });
 
@@ -70,6 +89,7 @@ it('never throws when storage is unavailable', () => {
   expect(() => {
     trackGameInit('ABCDEF', 'active', 6);
     trackGameOver('ABCDEF');
+    reportPendingSocketDrop();
   }).not.toThrow();
 });
 

@@ -1,5 +1,5 @@
 import posthog from 'posthog-js';
-import { redactUrls } from '@/lib/analytics';
+import { redactUrls, reportPendingSocketDrop } from '@/lib/analytics';
 
 const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
@@ -20,6 +20,7 @@ if (key) {
       advanced_disable_flags: true,
       before_send: redactUrls,
     });
+    reportPendingSocketDrop();
   } catch {
     // Tracking must never stop the app from loading.
   }
