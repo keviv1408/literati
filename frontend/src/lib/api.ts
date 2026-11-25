@@ -303,9 +303,10 @@ export async function getGameSummary(roomCode: string): Promise<GameSummaryRespo
  * Public endpoint — no auth required.
  */
 export async function getRoomByCode(
-  code: string
+  code: string,
+  signal?: AbortSignal
 ): Promise<{ room: import('@/types/room').Room }> {
-  return apiFetch(`/api/rooms/${code.toUpperCase()}`, { method: 'GET' });
+  return apiFetch(`/api/rooms/${code.toUpperCase()}`, { method: 'GET', signal });
 }
 
 /**

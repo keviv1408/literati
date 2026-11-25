@@ -21,6 +21,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
+import { backoffDelayMs, retryWithBackoff } from '@/lib/backoff';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import {
   buildDeclarationSeatRevealMap,
@@ -75,6 +76,9 @@ import { cardLabel, getCardHalfSuit, getHalfSuitCards } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
+// apiFetch has no deadline, so a stalled request would otherwise hold up the retries.
+const _ROOM_LOAD_ATTEMPT_MS = 15_000;
+const _SERVER_UNREACHABLE_MS = 60_000;
 
 const VARIANT_LABELS: Record<string, string> = {
   remove_2s: 'Remove 2s',
@@ -145,11 +149,25 @@ export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { guestSession } = useGuest();
-  const { status: reconnectStatus, bearerToken: reconnectBearerToken } = useReconnect();
+  const { status: reconnectStatus, bearerToken: reconnectBearerToken, retry: retrySession } = useReconnect();
+  const sessionRetriesRef = useRef(0);
+
+  // Only from error: a retry from any other state would drop the game token and close the socket.
+  useEffect(() => {
+    if (reconnectStatus === 'ready') sessionRetriesRef.current = 0;
+    if (reconnectStatus !== 'error') return;
+    const timer = setTimeout(() => {
+      sessionRetriesRef.current += 1;
+      retrySession();
+    }, backoffDelayMs(sessionRetriesRef.current));
+    return () => clearTimeout(timer);
+  }, [reconnectStatus, retrySession]);
 
   const [roomCode, setRoomCode]           = useState<string | null>(null);
   const [room, setRoom]                   = useState<Room | null>(null);
   const [loading, setLoading]             = useState(true);
+  const [roomRetrying, setRoomRetrying]   = useState(false);
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
   const [gameBearerToken, setGameBearerToken] = useState<string | null>(null);
@@ -239,20 +257,31 @@ export default function GamePage({ params }: PageProps) {
   useEffect(() => {
     if (roomCode === null) return;
     if (!ROOM_CODE_RE.test(roomCode)) { setInvalidFormat(true); setLoading(false); return; }
-    let cancelled = false;
-    getRoomByCode(roomCode)
-      .then(({ room: fetched }) => {
-        if (cancelled) return;
-        if (fetched.status === 'waiting' || fetched.status === 'starting') { router.replace(`/room/${fetched.code}`); return; }
+    let attempt = 0;
+    const unreachableTimer = setTimeout(() => setServerUnreachable(true), _SERVER_UNREACHABLE_MS);
+    const cancel = retryWithBackoff(async (signal) => {
+      attempt += 1;
+      if (attempt > 1) setRoomRetrying(true);
+      try {
+        const { room: fetched } = await getRoomByCode(roomCode, signal);
+        if (signal.aborted) return false;
+        clearTimeout(unreachableTimer);
+        if (fetched.status === 'waiting' || fetched.status === 'starting') { router.replace(`/room/${fetched.code}`); return true; }
         setRoom(fetched);
         setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) setNotFound(true);
+        return true;
+      } catch (err: unknown) {
+        if (signal.aborted || !(err instanceof ApiError && err.status === 404)) return false;
+        clearTimeout(unreachableTimer);
+        setNotFound(true);
         setLoading(false);
-      });
-    return () => { cancelled = true; };
+        return true;
+      }
+    }, { attemptTimeoutMs: _ROOM_LOAD_ATTEMPT_MS });
+    return () => {
+      cancel();
+      clearTimeout(unreachableTimer);
+    };
   }, [roomCode, router]);
 
   useEffect(() => {
@@ -1080,7 +1109,8 @@ export default function GamePage({ params }: PageProps) {
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
   if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (loading) return <LoadingView />;
+  if (loading && serverUnreachable) return <GameErrorView testId="server-unreachable-view" emoji="📡" title="Can't Reach the Server" body="Still trying. The game opens as soon as the server is back." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
+  if (loading) return <LoadingView wakingUp={roomRetrying} />;
   if (notFound) return <GameErrorView testId="not-found-view" emoji="🔍" title="Room Not Found" body={<>No room <span className="font-mono text-emerald-400">{roomCode}</span> found.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
   if (!room) return <GameErrorView testId="generic-error-view" emoji="⚠️" title="Something Went Wrong" body="Could not load the game." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
   if (room.status === 'cancelled') return <GameErrorView testId="cancelled-view" emoji="🚫" title="Game Cancelled" body={<>Room <span className="font-mono text-slate-300">{room.code}</span> was cancelled.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
@@ -1801,7 +1831,7 @@ export default function GamePage({ params }: PageProps) {
   );
 }
 
-function LoadingView() {
+function LoadingView({ wakingUp }: { wakingUp: boolean }) {
   return (
     <div
       className="animate-delayed-reveal flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
@@ -1825,6 +1855,7 @@ function LoadingView() {
           />
         </div>
         <span className="text-sm tracking-wide">Loading game…</span>
+        {wakingUp && <span className="text-sm text-amber-200">Waking up the table… this can take up to a minute.</span>}
       </div>
     </div>
   );

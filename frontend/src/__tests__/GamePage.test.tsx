@@ -5,7 +5,7 @@
  * • Renders loading state immediately on mount.
  * • Renders "Invalid Room Code" error for malformed room IDs (e.g. "ABC").
  * • Renders "Room Not Found" error when GET /api/rooms/:code returns 404.
- * • Renders "Something Went Wrong" error for unexpected API failures.
+ * • Keeps retrying the room load behind the loading view on any other failure.
  * • Redirects to /room/<CODE> when room status is 'waiting'.
  * • Redirects to /room/<CODE> when room status is 'starting'.
  * • Renders game view (data-testid="game-view") for 'in_progress' rooms.
@@ -19,8 +19,9 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within, cleanup } from '@testing-library/react';
 import type { useGameSocket, UseGameSocketReturn } from '@/hooks/useGameSocket';
+import type { ReconnectResult } from '@/hooks/useReconnect';
 import type { CardId, GamePlayer, PublicGameState } from '@/types/game';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,16 @@ jest.mock('@/hooks/useGameSocket', () => {
     ...actual,
     useGameSocket: (options: GameSocketOptions) =>
       mockGameSocket ? mockGameSocket(options) : actual.useGameSocket(options),
+  };
+});
+
+// Null runs the real hook; a test sets it before render to fake the session check.
+let mockReconnect: ReconnectResult | null = null;
+jest.mock('@/hooks/useReconnect', () => {
+  const actual = jest.requireActual('@/hooks/useReconnect');
+  return {
+    ...actual,
+    useReconnect: () => mockReconnect ?? actual.useReconnect(),
   };
 });
 
@@ -172,10 +183,19 @@ function makeParams(roomId: string): Promise<{ 'room-id': string }> {
   return Promise.resolve({ 'room-id': roomId });
 }
 
+// An async act renders only when its callback ends, so call this once after render
+// before timing anything: the room load starts in the render it flushes.
+async function _advanceTime(ms: number) {
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(ms);
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   lastMockWsInstance = null;
   mockGameSocket = null;
+  mockReconnect = null;
   mockGetGameSummary.mockResolvedValue({
     roomCode: 'ABC123',
     winner: 1,
@@ -298,15 +318,142 @@ describe('GamePage — room not found', () => {
     expect(screen.getByText('Room Not Found')).toBeTruthy();
   });
 
-  it('shows "Something Went Wrong" for non-404 API errors', async () => {
+  it('keeps loading and retries after an HTTP 500 instead of "Something Went Wrong"', async () => {
     const { ApiError } = await import('@/lib/api');
     mockGetRoomByCode.mockRejectedValue(new ApiError(500, 'Internal server error'));
 
-    render(<GamePage params={makeParams('ABC123')} />);
+    jest.useFakeTimers();
+    try {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await _advanceTime(0);
+      await _advanceTime(1000);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('generic-error-view')).toBeTruthy();
-    });
+      expect(mockGetRoomByCode).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('game-loading')).toBeTruthy();
+      expect(screen.queryByTestId('generic-error-view')).toBeNull();
+    } finally {
+      cleanup();
+      jest.useRealTimers();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// While the backend is down (fake timers)
+// ---------------------------------------------------------------------------
+
+describe('GamePage — while the backend is down', () => {
+  const WAKING_LINE = 'Waking up the table… this can take up to a minute.';
+
+  beforeEach(() => {
+    // clearAllMocks keeps queued once-values, so an unconsumed one would leak into the next test.
+    mockGetRoomByCode.mockReset();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    jest.useRealTimers();
+  });
+
+  it('loads the game once the room fetch succeeds, never showing "Something Went Wrong"', async () => {
+    mockGetRoomByCode
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({ room: buildRoom('in_progress') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+    await _advanceTime(0);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('generic-error-view')).toBeNull();
+
+    await _advanceTime(1000);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('generic-error-view')).toBeNull();
+
+    await _advanceTime(2000);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(3);
+    expect(screen.queryByTestId('generic-error-view')).toBeNull();
+    expect(screen.getByTestId('game-view')).toBeTruthy();
+  });
+
+  it('shows "Room Not Found" on a 404 and stops retrying', async () => {
+    const { ApiError } = await import('@/lib/api');
+    mockGetRoomByCode.mockRejectedValue(new ApiError(404, 'Room not found'));
+
+    render(<GamePage params={makeParams('XYZ999')} />);
+    await _advanceTime(0);
+    expect(screen.getByTestId('not-found-view')).toBeTruthy();
+
+    await _advanceTime(60_000);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('not-found-view')).toBeTruthy();
+  });
+
+  it('shows the waking line while it retries, then the unreachable view at 60 s, and keeps retrying', async () => {
+    mockGetRoomByCode.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    render(<GamePage params={makeParams('ABC123')} />);
+    await _advanceTime(0);
+    await _advanceTime(2000);
+    expect(screen.getByTestId('game-loading')).toBeTruthy();
+    expect(screen.getByText(WAKING_LINE)).toBeTruthy();
+
+    await _advanceTime(57_999);
+    expect(screen.queryByTestId('server-unreachable-view')).toBeNull();
+
+    await _advanceTime(1);
+    const view = screen.getByTestId('server-unreachable-view');
+    fireEvent.click(within(view).getByRole('button', { name: 'Back to Home' }));
+    expect(mockPush).toHaveBeenCalledWith('/');
+
+    const callsAt60s = mockGetRoomByCode.mock.calls.length;
+    await _advanceTime(10_000);
+    expect(mockGetRoomByCode.mock.calls.length).toBeGreaterThan(callsAt60s);
+  });
+
+  it('retries the session check from error on the backoff schedule, and restarts the schedule after ready', async () => {
+    const retry = jest.fn();
+    mockReconnect = {
+      status: 'error',
+      sessionId: null,
+      bearerToken: null,
+      isGuest: false,
+      displayName: null,
+      errorMessage: 'Could not connect to the server.',
+      retry,
+    };
+    mockGetRoomByCode.mockReturnValue(new Promise(() => {}));
+    const params = makeParams('ABC123');
+    const { rerender } = render(<GamePage params={params} />);
+    // Walks the statuses the real hook goes through, one render each.
+    const goThrough = (...statuses: ReconnectResult['status'][]) => {
+      for (const status of statuses) {
+        mockReconnect = { ...mockReconnect!, status };
+        rerender(<GamePage params={params} />);
+      }
+    };
+
+    await _advanceTime(999);
+    expect(retry).not.toHaveBeenCalled();
+    await _advanceTime(1);
+    expect(retry).toHaveBeenCalledTimes(1);
+
+    goThrough('loading', 'reconnecting', 'error');
+    await _advanceTime(1999);
+    expect(retry).toHaveBeenCalledTimes(1);
+    await _advanceTime(1);
+    expect(retry).toHaveBeenCalledTimes(2);
+
+    goThrough('loading', 'reconnecting', 'ready');
+    await _advanceTime(60_000);
+    expect(retry).toHaveBeenCalledTimes(2);
+
+    goThrough('reconnecting', 'error');
+    await _advanceTime(999);
+    expect(retry).toHaveBeenCalledTimes(2);
+    await _advanceTime(1);
+    expect(retry).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -719,7 +866,7 @@ describe('GamePage — room code normalisation (deep-link)', () => {
     render(<GamePage params={makeParams('def456')} />);
 
     await waitFor(() => {
-      expect(mockGetRoomByCode).toHaveBeenCalledWith('DEF456');
+      expect(mockGetRoomByCode).toHaveBeenCalledWith('DEF456', expect.any(AbortSignal));
     });
   });
 });
