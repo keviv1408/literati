@@ -309,6 +309,8 @@ describe('stable guest id', () => {
   it('derives the sessionId as a UUID v5 of the trimmed key', () => {
     const { session } = createGuestSession('Alice', undefined, `  ${KEY_A}  `);
     expect(session.sessionId).toBe(uuidv5(KEY_A, GUEST_ID_NAMESPACE));
+    // Changing the namespace would change every guest's id, so pin one result.
+    expect(session.sessionId).toBe('bcf23427-b896-53be-bd18-12c060f2635c');
   });
 
   it('keeps the same sessionId after the store is wiped', () => {
