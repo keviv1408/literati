@@ -47,12 +47,15 @@ function buildMockSupabase() {
   const eq          = jest.fn();
   const insert      = jest.fn();
   const inFn        = jest.fn();
+  const order       = jest.fn();
+  const limit       = jest.fn().mockResolvedValue({ data: [], error: null });
 
-  const chain = { select, eq, maybeSingle, single, in: inFn, insert };
+  const chain = { select, eq, maybeSingle, single, in: inFn, insert, order, limit };
   select.mockReturnValue(chain);
   eq.mockReturnValue(chain);
   inFn.mockReturnValue(chain);
   insert.mockReturnValue(chain);
+  order.mockReturnValue(chain);
 
   const from = jest.fn().mockReturnValue(chain);
 
@@ -205,11 +208,8 @@ describe('room-created Socket.io event', () => {
   it('emits room-created to host socket after successful POST /api/rooms', (done) => {
     const fakeRoom = makeFakeRoom();
 
-    // Supabase DB mocks for the POST /api/rooms handler:
-    //   call 1: existing-active-room check  → null (no active room)
-    //   call 2: room-code uniqueness check  → null (code is unique)
+    // The active-room check resolves through limit(), which defaults to no rows.
     mockSupabase._chain.maybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })  // active room check
       .mockResolvedValueOnce({ data: null, error: null }); // code uniqueness
     // insert().select().single() → new room
     mockSupabase._chain.single.mockResolvedValueOnce({
@@ -287,9 +287,7 @@ describe('room-created Socket.io event', () => {
       card_removal_variant: 'remove_2s',
     });
 
-    mockSupabase._chain.maybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: null, error: null });
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
     mockSupabase._chain.single.mockResolvedValueOnce({ data: fakeRoom, error: null });
 
     const socket = ioc(`http://localhost:${port}`, {
@@ -328,9 +326,7 @@ describe('room-created Socket.io event', () => {
   it('REST succeeds with 201 even when host has no socket connection', async () => {
     const fakeRoom = makeFakeRoom({ code: 'NOSCKT', id: 'room-no-socket-id' });
 
-    mockSupabase._chain.maybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: null, error: null });
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
     mockSupabase._chain.single.mockResolvedValueOnce({ data: fakeRoom, error: null });
 
     // Remove any lingering socket registrations so host appears offline.
@@ -349,9 +345,7 @@ describe('room-created Socket.io event', () => {
   it('room-created payload inviteLink uses the room code (not the invite_code token)', (done) => {
     const fakeRoom = makeFakeRoom({ code: 'LNKCHK', invite_code: 'INVITE_TOKEN_ABC1' });
 
-    mockSupabase._chain.maybeSingle
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: null, error: null });
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
     mockSupabase._chain.single.mockResolvedValueOnce({ data: fakeRoom, error: null });
 
     const socket = ioc(`http://localhost:${port}`, {

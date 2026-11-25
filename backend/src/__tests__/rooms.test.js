@@ -245,10 +245,8 @@ describe('POST /api/rooms', () => {
       error: null,
     });
 
-    // The route checks for an existing active room FIRST (before generating a
-    // room code), so the first maybeSingle call must return the existing room.
-    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
-      data: { id: 'existing-room', code: 'XYZ999', status: 'waiting' },
+    mockSupabase._chain.limit.mockResolvedValueOnce({
+      data: [{ id: 'existing-room', code: 'XYZ999', status: 'waiting' }],
       error: null,
     });
 
@@ -262,86 +260,99 @@ describe('POST /api/rooms', () => {
     expect(res.body.existingRoom.code).toBe('XYZ999');
   });
 
-  it('returns guest existing room code when a guest host already has an active room', async () => {
+  it('stores a guest host in host_guest_id and leaves host_user_id null', async () => {
     const { createGuestSession } = require('../sessions/guestSessionStore');
     const { token, session } = createGuestSession('Guest Host');
-    const fakeGuestRoom = {
-      id: 'guest-room-id',
-      code: 'GUEST1',
-      invite_code: 'A3F2C91E7B046D52',
-      spectator_token: 'A3F2C91E7B046D52C91E7B046D52A3F2',
-      host_user_id: null,
-      player_count: 6,
-      card_removal_variant: 'remove_7s',
-      status: 'waiting',
-      created_at: '2026-03-16T00:00:00.000Z',
-      updated_at: '2026-03-16T00:00:00.000Z',
-    };
-
-    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
-      data: null,
-      error: null,
-    });
+    mockSupabase._chain.maybeSingle.mockResolvedValue({ data: null, error: null });
     mockSupabase._chain.single.mockResolvedValueOnce({
-      data: fakeGuestRoom,
+      data: { id: 'guest-room-id', code: 'GUEST1', host_user_id: null, host_guest_id: session.sessionId },
       error: null,
     });
 
-    const creationRes = await request(app)
+    const res = await request(app)
       .post('/api/rooms')
       .set('Authorization', `Bearer ${token}`)
       .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
 
-    expect(creationRes.status).toBe(201);
-
-    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({
-      data: { id: fakeGuestRoom.id, code: fakeGuestRoom.code, status: 'waiting' },
-      error: null,
-    });
-
-    const conflictRes = await request(app)
-      .post('/api/rooms')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
-
-    expect(conflictRes.status).toBe(409);
-    expect(conflictRes.body.existingRoom.id).toBe(fakeGuestRoom.id);
-    expect(conflictRes.body.existingRoom.code).toBe(fakeGuestRoom.code);
-    expect(conflictRes.body.existingRoom.status).toBe('waiting');
-    expect(session.displayName).toBe('Guest Host');
+    expect(res.status).toBe(201);
+    const insertCall = mockSupabase._chain.insert.mock.calls[0][0];
+    expect(insertCall.host_guest_id).toBe(session.sessionId);
+    expect(insertCall.host_user_id).toBeNull();
   });
 
-  it('allows a guest host to create a new room after their previous room completed', async () => {
-    const { createGuestSession } = require('../sessions/guestSessionStore');
-    const { guestHostMap } = require('../routes/rooms');
-    const { token, session } = createGuestSession('Guest Host');
-    const staleRoomId = 'completed-room-id';
-    const freshGuestRoom = {
-      id: 'new-guest-room-id',
-      code: 'NEW123',
-      invite_code: 'B3F2C91E7B046D52',
-      spectator_token: 'B3F2C91E7B046D52C91E7B046D52B3F2',
-      host_user_id: null,
-      player_count: 6,
-      card_removal_variant: 'remove_7s',
-      status: 'waiting',
-      created_at: '2026-03-17T00:00:00.000Z',
-      updated_at: '2026-03-17T00:00:00.000Z',
-    };
-
-    guestHostMap.set(staleRoomId, session.sessionId);
-
-    mockSupabase._chain.maybeSingle
-      .mockResolvedValueOnce({
-        data: { id: staleRoomId, code: 'OLD123', status: 'completed' },
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: null,
-        error: null,
-      });
+  it('stores a registered host in host_user_id and leaves host_guest_id null', async () => {
+    const fakeUserId = 'user-registered-host';
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: fakeUserId } },
+      error: null,
+    });
+    mockSupabase._chain.maybeSingle.mockResolvedValue({ data: null, error: null });
     mockSupabase._chain.single.mockResolvedValueOnce({
-      data: freshGuestRoom,
+      data: { id: 'room-id', code: 'AABBCC', host_user_id: fakeUserId, host_guest_id: null },
+      error: null,
+    });
+
+    const res = await request(app)
+      .post('/api/rooms')
+      .set('Authorization', 'Bearer valid-token')
+      .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
+
+    expect(res.status).toBe(201);
+    const insertCall = mockSupabase._chain.insert.mock.calls[0][0];
+    expect(insertCall.host_user_id).toBe(fakeUserId);
+    expect(insertCall.host_guest_id).toBeNull();
+  });
+
+  it('returns 409 when a guest already hosts an active room, querying host_guest_id', async () => {
+    const { createGuestSession } = require('../sessions/guestSessionStore');
+    const { token, session } = createGuestSession('Guest Host');
+    mockSupabase._chain.limit.mockResolvedValueOnce({
+      data: [{ id: 'guest-room-id', code: 'GUEST1', status: 'waiting' }],
+      error: null,
+    });
+
+    const res = await request(app)
+      .post('/api/rooms')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.existingRoom).toEqual({ id: 'guest-room-id', code: 'GUEST1', status: 'waiting' });
+    expect(mockSupabase._chain.eq).toHaveBeenCalledWith('host_guest_id', session.sessionId);
+    expect(mockSupabase._chain.eq).not.toHaveBeenCalledWith('host_user_id', session.sessionId);
+    expect(mockSupabase._chain.in).toHaveBeenCalledWith('status', ['waiting', 'starting', 'in_progress']);
+    expect(mockSupabase._chain.insert).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 with the newest room when a guest hosts two active rooms', async () => {
+    const { createGuestSession } = require('../sessions/guestSessionStore');
+    const { token } = createGuestSession('Guest Host');
+    mockSupabase._chain.limit.mockResolvedValueOnce({
+      data: [
+        { id: 'newest-room', code: 'NEW111', status: 'in_progress' },
+        { id: 'older-room', code: 'OLD222', status: 'waiting' },
+      ],
+      error: null,
+    });
+
+    const res = await request(app)
+      .post('/api/rooms')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ playerCount: 6, cardRemovalVariant: 'remove_7s' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.existingRoom).toEqual({ id: 'newest-room', code: 'NEW111', status: 'in_progress' });
+    expect(mockSupabase._chain.order).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(mockSupabase._chain.limit).toHaveBeenCalledWith(1);
+  });
+
+  it('lets a guest create a room when their only hosted room is abandoned', async () => {
+    const { createGuestSession } = require('../sessions/guestSessionStore');
+    const { token, session } = createGuestSession('Guest Host');
+    mockSupabase._chain.limit.mockResolvedValueOnce({ data: [], error: null });
+    mockSupabase._chain.maybeSingle.mockResolvedValue({ data: null, error: null });
+    mockSupabase._chain.single.mockResolvedValueOnce({
+      data: { id: 'new-guest-room-id', code: 'NEW123', host_user_id: null, host_guest_id: session.sessionId },
       error: null,
     });
 
@@ -352,8 +363,8 @@ describe('POST /api/rooms', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.room.code).toBe('NEW123');
-    expect(guestHostMap.has(staleRoomId)).toBe(false);
-    expect(guestHostMap.get(freshGuestRoom.id)).toBe(session.sessionId);
+    expect(mockSupabase._chain.eq).toHaveBeenCalledWith('host_guest_id', session.sessionId);
+    expect(mockSupabase._chain.in).toHaveBeenCalledWith('status', ['waiting', 'starting', 'in_progress']);
   });
 
   // ── All card removal variants accepted ────────────────────────────────────
@@ -533,14 +544,17 @@ function buildMockSupabase() {
   const eq = jest.fn();
   const insert = jest.fn();
   const inFn = jest.fn();
+  const order = jest.fn();
+  const limit = jest.fn().mockResolvedValue({ data: [], error: null });
 
   // Build the fluent chain
-  const chain = { select, eq, maybeSingle, single, in: inFn, insert };
+  const chain = { select, eq, maybeSingle, single, in: inFn, insert, order, limit };
 
   select.mockReturnValue(chain);
   eq.mockReturnValue(chain);
   inFn.mockReturnValue(chain);
   insert.mockReturnValue(chain);
+  order.mockReturnValue(chain);
 
   const from = jest.fn().mockReturnValue(chain);
 
