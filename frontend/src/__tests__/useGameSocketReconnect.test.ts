@@ -239,6 +239,7 @@ describe('useGameSocket reconnect', () => {
     });
     _message(first, { type: 'declaration_timer', playerId: 'p1', durationMs: 60000, expiresAt: 1 });
     _message(first, { type: 'player_disconnected', playerId: 'p2', expiresAt: 1, reconnectWindowMs: 60000 });
+    expect(result.current.reconnectWindows).toEqual({ p2: { expiresAt: 1, reconnectWindowMs: 60000 } });
     _serverClose(first, 1006);
     expect(result.current.declarationTimer).not.toBeNull();
     expect(result.current.eligibleNextTurnPlayerIds).toEqual(['p2', 'p3']);
