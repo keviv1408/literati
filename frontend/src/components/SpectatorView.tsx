@@ -240,7 +240,6 @@ export default function SpectatorView({
   const clearAskSummary = useEffectEvent(() => {
     setSyntheticLastMoveMsg(null);
     observedAskBatchRef.current = null;
-    processedAskResultKeyRef.current = null;
   });
   const lastWsStatusRef = useRef(wsStatus);
   useEffect(() => {
