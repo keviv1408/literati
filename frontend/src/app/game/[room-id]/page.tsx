@@ -55,6 +55,7 @@ import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CircularGameTable from '@/components/CircularGameTable';
 import RematchVotePanel from '@/components/RematchVotePanel';
+import ReconnectBar from '@/components/ReconnectBar';
 import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import DealAnimation from '@/components/DealAnimation';
@@ -258,6 +259,16 @@ export default function GamePage({ params }: PageProps) {
 
   const isGameActive = room?.status === 'in_progress' || room?.status === 'starting' || room?.status === 'completed';
 
+  // A new game spun up server-side with the same seats, so its game_init takes over without a reload.
+  function clearPostGameState() {
+    setGameOver(null);
+    setGameSummary(null);
+    setVoteStartedAt(undefined);
+    setRematchStarted(false);
+    setRoom((prev) => prev ? { ...prev, status: 'in_progress' } : prev);
+    hasDealtRef.current = false;
+  }
+
   const {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, askHistory, players, gameState, variant, playerCount,
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
@@ -268,6 +279,7 @@ export default function GamePage({ params }: PageProps) {
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight, sendChooseNextTurn, sendBotSpeed,
     postDeclarationTimer, pendingTurnPassAck,
+    retryNow,
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
@@ -281,18 +293,14 @@ export default function GamePage({ params }: PageProps) {
     onRematchStart: () => {
       setRematchStarted(true);
     },
-    onRematchStarting: () => {
-      // new game spun up server-side with same teams/seats.
-      // Clear post-game state so the upcoming game_init seamlessly transitions
-      // into the new game without a page reload.
-      setGameOver(null);
-      setGameSummary(null);
-      setVoteStartedAt(undefined);
-      setRematchStarted(false);
-      setRoom((prev) => prev ? { ...prev, status: 'in_progress' } : prev);
-      hasDealtRef.current = false;
+    onRematchStarting: clearPostGameState,
+    onGameInit: (status) => {
+      // A client that was away for rematch_starting learns of the rematch from this init alone.
+      if (status === 'active' && (gameOver || gameSummary || room?.status === 'completed')) clearPostGameState();
     },
   });
+
+  const canSend = wsStatus === 'connected';
 
   // Persist the exact token that was accepted by the game WS server.
   // On refresh this lets us reconnect as the same player identity.
@@ -699,6 +707,33 @@ export default function GamePage({ params }: PageProps) {
     setDeclareSelectedCard(null);
   }, [declareSelectedSuit, sendDeclareSelecting, sendDeclareProgress]);
 
+  const handKey = [...myHand].sort().join(',');
+  const declaredKey = declaredSuits.map((d) => d.halfSuitId).sort().join(',');
+  const lastWsStatusRef = useRef(wsStatus);
+  const beforeDropRef = useRef<{ isMyTurn: boolean; handKey: string; declaredKey: string } | null>(null);
+
+  useEffect(() => {
+    const previous = lastWsStatusRef.current;
+    lastWsStatusRef.current = wsStatus;
+    if (previous === wsStatus) return;
+
+    if (previous === 'connected') {
+      beforeDropRef.current = { isMyTurn, handKey, declaredKey };
+      // A send in flight may never get its result; the next game_init shows whether it landed.
+      updatePendingAskBatch(null);
+      setActionLoading(false);
+      return;
+    }
+
+    const beforeDrop = beforeDropRef.current;
+    if (wsStatus !== 'connected' || !beforeDrop) return;
+    beforeDropRef.current = null;
+    // Nobody else can act on the player's own turn, so the same hand on that turn keeps every selection valid.
+    if (beforeDrop.isMyTurn && isMyTurn && beforeDrop.handKey === handKey && beforeDrop.declaredKey === declaredKey) return;
+    resetAskMode();
+    resetDeclareMode();
+  }, [wsStatus, isMyTurn, handKey, declaredKey, resetAskMode, resetDeclareMode, updatePendingAskBatch]);
+
   const handleAskHalfSuitSelect = useCallback((halfSuitId: HalfSuitId) => {
     if (!availableAskHalfSuits.includes(halfSuitId)) return;
     setShowAskInline(true);
@@ -807,18 +842,18 @@ export default function GamePage({ params }: PageProps) {
 
   // ── Inline declare: confirm ──────────────────────────────────
   const handleDeclareConfirm = useCallback(() => {
-    if (!declareSelectedSuit || actionLoading) return;
+    if (!canSend || !declareSelectedSuit || actionLoading) return;
     const suitCards = getHalfSuitCards(declareSelectedSuit, resolvedVariant);
     const isComplete = suitCards.length > 0 && suitCards.every((c: CardId) => declareAssignment[c]);
     if (!isComplete) return;
     setActionLoading(true);
     clearIndicator();
     sendDeclare(declareSelectedSuit, declareAssignment);
-  }, [declareSelectedSuit, actionLoading, resolvedVariant, declareAssignment, clearIndicator, sendDeclare]);
+  }, [canSend, declareSelectedSuit, actionLoading, resolvedVariant, declareAssignment, clearIndicator, sendDeclare]);
 
   // ── Inline declare: timer expiry auto-fill ───────────────────
   const handleDeclareTimerExpiry = useCallback(() => {
-    if (!declareSelectedSuit || actionLoading) return;
+    if (!canSend || !declareSelectedSuit || actionLoading) return;
     const suitCards = getHalfSuitCards(declareSelectedSuit, resolvedVariant);
     const teammates = players.filter((p) => p.teamId === myTeamId).sort((a, b) => a.seatIndex - b.seatIndex);
     const firstOther = teammates.find((p) => p.playerId !== myPlayerId);
@@ -831,7 +866,7 @@ export default function GamePage({ params }: PageProps) {
     setActionLoading(true);
     clearIndicator();
     sendDeclare(declareSelectedSuit, filled);
-  }, [declareSelectedSuit, actionLoading, resolvedVariant, players, myTeamId, myPlayerId, declareAssignment, clearIndicator, sendDeclare]);
+  }, [canSend, declareSelectedSuit, actionLoading, resolvedVariant, players, myTeamId, myPlayerId, declareAssignment, clearIndicator, sendDeclare]);
 
   // ── Inline declare: derived data ─────────────────────────────
   const declareSuitCards = declareSelectedSuit ? getHalfSuitCards(declareSelectedSuit, resolvedVariant) : [];
@@ -866,6 +901,7 @@ export default function GamePage({ params }: PageProps) {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (askTrayRef.current?.contains(target)) return;
+      if (target.closest('[data-testid="ws-reconnecting-banner"]')) return;
       if (selectedAskCardIds.length > 0 && target.closest('[data-ask-targetable="true"]')) return;
       resetAskMode();
     };
@@ -917,6 +953,7 @@ export default function GamePage({ params }: PageProps) {
   const seatClickHandler =
     highlightedPlayerIds &&
     isMyTurn &&
+    canSend &&
     gameState?.currentTurnPlayerId === myPlayerId
       ? handleChooseNextTurnSeat
       : undefined;
@@ -947,6 +984,7 @@ export default function GamePage({ params }: PageProps) {
       if (!(target instanceof Element)) return;
       if (declareTrayRef.current?.contains(target)) return;
       if (target.closest('[data-testid="declare-drop-seat"]')) return;
+      if (target.closest('[data-testid="ws-reconnecting-banner"]')) return;
       resetDeclareMode();
     };
 
@@ -965,7 +1003,7 @@ export default function GamePage({ params }: PageProps) {
   }, [clearIndicator, sendAsk]);
 
   const handleAskTargetSeat = useCallback((targetPlayerId: string) => {
-    if (selectedAskCardIds.length === 0 || actionLoading) return;
+    if (!canSend || selectedAskCardIds.length === 0 || actionLoading) return;
     const targetPlayer = players.find((player) => player.playerId === targetPlayerId);
     const [firstCardId, ...remainingCardIds] = selectedAskCardIds;
     if (!firstCardId || !targetPlayer) return;
@@ -982,7 +1020,7 @@ export default function GamePage({ params }: PageProps) {
       lastKnownTargetCardCount: targetPlayer.cardCount,
     });
     handleAsk(targetPlayerId, firstCardId, [firstCardId, ...remainingCardIds]);
-  }, [actionLoading, handleAsk, players, resetAskMode, selectedAskCardIds, updatePendingAskBatch]);
+  }, [canSend, actionLoading, handleAsk, players, resetAskMode, selectedAskCardIds, updatePendingAskBatch]);
 
   useEffect(() => {
     if (!pendingAskBatch?.waitingForStateSync || pendingAskBatch.awaitingResultFor) return;
@@ -1089,6 +1127,12 @@ export default function GamePage({ params }: PageProps) {
         className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-8 gap-6 overflow-y-auto"
         data-testid="game-completed-view"
       >
+        {wsStatus === 'reconnecting' && (
+          <div className="fixed inset-x-0 top-0 z-50">
+            <ReconnectBar onRetry={retryNow} />
+          </div>
+        )}
+
         {/* ── Game-over summary ─────────────────────────────────
          * Renders the winner announcement, final score, tiebreak reason (if
          * applicable), and the full half-suit tally. declaredSuits is drawn
@@ -1139,6 +1183,7 @@ export default function GamePage({ params }: PageProps) {
               myPlayerId={myPlayerId}
               onVote={sendRematchVote}
               voteStartedAt={voteStartedAt}
+              disabled={!canSend}
             />
           )
         )}
@@ -1155,6 +1200,7 @@ export default function GamePage({ params }: PageProps) {
         {isHostOfPrivateRoom && !roomDissolved && (
           <button
             onClick={() => roomCode && sendRematchInitiate(roomCode)}
+            disabled={!canSend}
             className="py-3 px-6 rounded-xl font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
             data-testid="host-rematch-button"
             aria-label="Initiate rematch as host"
@@ -1177,13 +1223,15 @@ export default function GamePage({ params }: PageProps) {
   //
   // When the WebSocket server sends `spectator_init` the hook populates
   // `players` but leaves `myPlayerId` as null. We detect this combination
-  // once the socket is connected AND players have been received: if players are
-  // populated but the current client has no assigned player ID, we are a spectator.
+  // once the socket is connected (or reconnecting after a drop) AND players have
+  // been received: if players are populated but the current client has no
+  // assigned player ID, we are a spectator.
   //
   // This must only trigger after `spectator_init` is actually received — NOT
   // during the initial connection phase when both players[] and myPlayerId are
   // still empty (that state is shared with legitimate players pre-game_init).
-  const isSpectatorMode = wsStatus === 'connected' && players.length > 0 && !myPlayerId;
+  const isSpectatorMode =
+    (wsStatus === 'connected' || wsStatus === 'reconnecting') && players.length > 0 && !myPlayerId;
 
   if (isSpectatorMode && room) {
     return (
@@ -1207,6 +1255,7 @@ export default function GamePage({ params }: PageProps) {
           cardRemovalVariant={room.card_removal_variant}
           gamePlayerCount={room.player_count}
           onGoHome={handleGoHome}
+          onRetry={retryNow}
         />
       </VoiceProvider>
     );
@@ -1269,6 +1318,7 @@ export default function GamePage({ params }: PageProps) {
               step={1000}
               value={gameState?.botDelayMs ?? 5000}
               onChange={(e) => sendBotSpeed(Number(e.target.value))}
+              disabled={!canSend}
               aria-label="Bot speed"
               className="w-20 accent-emerald-400"
               data-testid="bot-speed-slider"
@@ -1379,6 +1429,8 @@ export default function GamePage({ params }: PageProps) {
           <span>{wsError}</span>
         </div>
       )}
+
+      {wsStatus === 'reconnecting' && <ReconnectBar onRetry={retryNow} />}
 
       {reclaimQueued && (
         <div
@@ -1525,13 +1577,13 @@ export default function GamePage({ params }: PageProps) {
                               resetAskMode();
                             }
                           }}
-                          disabled={actionLoading}
+                          disabled={actionLoading || !canSend}
                           className={[
                             'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
                             !declareMode
                               ? 'bg-emerald-600 text-white shadow-sm'
                               : 'text-slate-400 hover:text-white',
-                            actionLoading ? 'opacity-50' : '',
+                            actionLoading || !canSend ? 'opacity-50' : '',
                           ].join(' ')}
                           data-testid="toggle-ask"
                         >
@@ -1546,13 +1598,13 @@ export default function GamePage({ params }: PageProps) {
                               setDeclareMode(true);
                             }
                           }}
-                          disabled={actionLoading}
+                          disabled={actionLoading || !canSend}
                           className={[
                             'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
                             declareMode
                               ? 'bg-violet-600 text-white shadow-sm'
                               : 'text-slate-400 hover:text-white',
-                            actionLoading ? 'opacity-50' : '',
+                            actionLoading || !canSend ? 'opacity-50' : '',
                           ].join(' ')}
                           data-testid="toggle-declare"
                         >
@@ -1600,6 +1652,7 @@ export default function GamePage({ params }: PageProps) {
                       onTimerExpiry={handleDeclareTimerExpiry}
                       isComplete={declareIsComplete}
                       isLoading={actionLoading}
+                      disabled={!canSend}
                       onConfirm={handleDeclareConfirm}
                     />
                   </div>
@@ -1618,7 +1671,7 @@ export default function GamePage({ params }: PageProps) {
                         : undefined
                     }
                     isMyTurn={isMyTurn}
-                    disabled={actionLoading || !isMyTurn || isTurnPassMode || showAskInline || (declareMode && !!declareSelectedSuit)}
+                    disabled={actionLoading || !canSend || !isMyTurn || isTurnPassMode || showAskInline || (declareMode && !!declareSelectedSuit)}
                     variant={effectiveVariant}
                     newlyArrivedCardId={newlyArrivedCardId}
                   />
@@ -1650,7 +1703,9 @@ export default function GamePage({ params }: PageProps) {
                  * legitimate players who connected but haven't yet received
                  * their personalised game_init message.
                  */}
-                {wsStatus === 'connected' && players.length > 0
+                {wsStatus === 'reconnecting'
+                  ? 'Reconnecting…'
+                  : wsStatus === 'connected' && players.length > 0
                   ? 'Watching as spectator'
                   : (wsStatus === 'connected' || wsStatus === 'connecting')
                   ? 'Connecting to game…'

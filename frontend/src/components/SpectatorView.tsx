@@ -70,6 +70,7 @@ import type {
 } from '@/types/game';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
+import ReconnectBar from '@/components/ReconnectBar';
 import CountdownTimer from '@/components/CountdownTimer';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
@@ -138,6 +139,8 @@ export interface SpectatorViewProps {
   postDeclarationTimer?: PostDeclarationTimerPayload | null;
   /** Called when the user clicks "Back to Home". */
   onGoHome: () => void;
+  /** Called when the user clicks "Try now" on the reconnect bar. */
+  onRetry: () => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -164,6 +167,7 @@ export default function SpectatorView({
   cardRemovalVariant,
   gamePlayerCount,
   onGoHome,
+  onRetry,
 }: SpectatorViewProps) {
   // ── Failed Declaration Seat Reveal dismiss state ──────────────
   const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
@@ -403,6 +407,8 @@ export default function SpectatorView({
         scores={gameState?.scores ?? null}
         onGoHome={onGoHome}
       />
+
+      {wsStatus === 'reconnecting' && <ReconnectBar onRetry={onRetry} />}
 
       {/* ── Prominent SPECTATING banner ──────────────────────────────────────
        * Rendered as a full-width strip directly below the header so spectators
