@@ -87,6 +87,29 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+const HEALTH_DB_TIMEOUT_MS = 5_000;
+
+app.get('/health/db', async (_req, res) => {
+  let timer;
+  const timeout = new Promise((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Supabase query timed out after ${HEALTH_DB_TIMEOUT_MS} ms`)),
+      HEALTH_DB_TIMEOUT_MS
+    );
+  });
+  try {
+    const query = getSupabaseClient().from('rooms').select('id').limit(1);
+    const { error } = await Promise.race([query, timeout]);
+    if (error) throw error;
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error('Health DB check failed:', err);
+    res.status(503).json({ status: 'error', timestamp: new Date().toISOString() });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 // ── API routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
 app.use('/api/stats', statsRouter);
