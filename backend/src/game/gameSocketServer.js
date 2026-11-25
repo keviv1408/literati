@@ -3533,6 +3533,13 @@ function attachGameSocketServer(httpServer) {
 
     const isSpectator  = !playerInGame;
 
+    // Holds a seat this socket took back but never registered; a superseding socket keeps it.
+    const holdIfUnclaimed = () => {
+      if (!isSpectator && !getConnection(roomCode, playerId)) _startSeatHold(roomCode, playerId);
+    };
+    // The reclaim persist below is awaited before the main close listener exists.
+    ws.once('close', holdIfUnclaimed);
+
     // ── Seat reclaim ──────────────────────────────────
     // If this player has an active reconnect window, they are reclaiming their
     // seat from the temporary bot that filled in while they were disconnected.
@@ -3610,9 +3617,12 @@ function attachGameSocketServer(httpServer) {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
+    ws.off('close', holdIfUnclaimed);
     if (ws.readyState !== 1) {
       // It closed during the reclaim persist, after taking the seat back.
-      if (!isSpectator) _startSeatHold(roomCode, playerId);
+      holdIfUnclaimed();
+      // The reclaim cleared the bot timer, so a turn timer must drive this seat's turn.
+      if (gs.status === 'active' && !_turnTimers.has(gs.roomCode)) scheduleTurnTimerIfNeeded(gs);
       return;
     }
 

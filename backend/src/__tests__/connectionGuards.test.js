@@ -215,6 +215,62 @@ describe('connection-handler guards', () => {
     expect(gameSocketServer._seatHolds.has(`${ROOM_CODE}:${p1Id}`)).toBe(true);
   });
 
+  /** Put p1 in a reconnect window and connect them; resolves once the reclaim persist is parked. */
+  async function parkOnReclaimPersist() {
+    gameSocketServer._startReconnectWindow(gs, player(p1Id));
+    const persist = deferred();
+    let eqCalled = false;
+    supabaseMock.chain.update.mockImplementationOnce(() => ({
+      eq: () => { eqCalled = true; return persist.promise; },
+    }));
+    const conn = await connect(`token=${p1Token}`);
+    await waitFor(() => eqCalled);
+    return { conn, persist };
+  }
+
+  test('a socket that closes during the reclaim persist is held at close time', async () => {
+    const { conn, persist } = await parkOnReclaimPersist();
+
+    conn.ws.close();
+    await conn.closed;
+    await sleep(50);
+
+    expect(gameSocketServer._seatHolds.has(`${ROOM_CODE}:${p1Id}`)).toBe(true);
+    persist.resolve({ data: null, error: null });
+  });
+
+  test('a socket that closes during the reclaim persist does not hold a seat another socket took', async () => {
+    const { conn, persist } = await parkOnReclaimPersist();
+    const live = await connect(`token=${p1Token}`);
+    await waitFor(() => live.messages.some((m) => m.type === 'game_init'));
+    const liveServerSocket = gameStore.getConnection(ROOM_CODE, p1Id);
+
+    conn.ws.close();
+    await conn.closed;
+    await sleep(50);
+    persist.resolve({ data: null, error: null });
+    await sleep(100);
+
+    expect(gameSocketServer._seatHolds.has(`${ROOM_CODE}:${p1Id}`)).toBe(false);
+    expect(liveServerSocket !== undefined && gameStore.getConnection(ROOM_CODE, p1Id) === liveServerSocket).toBe(true);
+  });
+
+  test('a socket that closes during the reclaim persist on its own turn leaves a turn timer running', async () => {
+    gs.currentTurnPlayerId = p1Id;
+    const { conn, persist } = await parkOnReclaimPersist();
+    // The window's bot already moved, which cleared the human turn timer.
+    gameSocketServer.cancelTurnTimer(ROOM_CODE);
+
+    conn.ws.close();
+    await conn.closed;
+    await sleep(50);
+    persist.resolve({ data: null, error: null });
+    await sleep(100);
+
+    expect(player(p1Id).isBot).toBe(false);
+    expect(gameSocketServer._turnTimers.has(ROOM_CODE)).toBe(true);
+  });
+
   test('two connections recovering the game at once end with one game object', async () => {
     await persistGameState(gs, supabaseMock);
     const snapshot = supabaseMock.chain.update.mock.calls[0][0].game_state;
