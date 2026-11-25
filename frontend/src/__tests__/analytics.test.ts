@@ -48,6 +48,16 @@ it('counts a rematch in the same room as a new game', () => {
   expect(capture.mock.calls.map((c) => c[0])).toEqual(['game_started', 'game_finished', 'game_started']);
 });
 
+it('forgets a counted game once it is no longer active', () => {
+  trackGameInit('ABCDEF', 'active', 6);
+  trackGameInit('ABCDEF', 'completed', 6);
+  trackGameOver('ABCDEF');
+  expect(capture.mock.calls.map((c) => c[0])).toEqual(['game_started']);
+  trackGameInit('ABCDEF', 'active', 8);
+  expect(capture).toHaveBeenCalledTimes(2);
+  expect(capture).toHaveBeenLastCalledWith('game_started', { player_count: 8 });
+});
+
 it('reports a dropped socket on the next page load, once', () => {
   trackSocketDropped(1006);
   expect(capture).not.toHaveBeenCalled();

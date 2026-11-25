@@ -43,8 +43,12 @@ export function trackGameInit(
   playerCount: number,
 ): void {
   try {
-    if (status !== 'active') return;
     const key = _markerKey(roomCode);
+    // game_over can be missed (tab closed, reload onto a finished game), so a stale marker would hide a rematch.
+    if (status !== 'active') {
+      localStorage.removeItem(key);
+      return;
+    }
     // A reload replays game_init; the marker keeps it from counting twice.
     if (localStorage.getItem(key) !== null) return;
     localStorage.setItem(key, String(playerCount));
