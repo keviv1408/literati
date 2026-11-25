@@ -16,6 +16,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { API_URL } from '@/lib/api';
+import { trackGameInit, trackGameOver, trackSocketDropped } from '@/lib/analytics';
 import { FAILED_DECLARATION_SEAT_REVEAL_MS } from '@/lib/declarationSeatReveal';
 import type {
   CardId,
@@ -464,6 +465,7 @@ export function useGameSocket({
 
       // Auto-reload on unexpected disconnect (e.g. backend redeploy).
       if (!isIntentional && !isKnownError) {
+        if (!spectatorToken) trackSocketDropped(e.code);
         reloadTimerRef.current = setTimeout(() => {
           window.location.reload();
         }, 2000);
@@ -513,6 +515,7 @@ export function useGameSocket({
           // Reset ephemeral timer state on fresh init to avoid stale countdowns
           // from a previous turn/room before the next timer event arrives.
           setTurnTimer(null);
+          trackGameInit(roomCode, payload.gameState?.status, payload.playerCount);
           break;
         }
 
@@ -725,6 +728,7 @@ export function useGameSocket({
 
         case 'game_over': {
           const payload = msg as unknown as GameOverPayload;
+          if (!spectatorToken) trackGameOver(roomCode);
           onGameOver?.(payload);
           break;
         }

@@ -78,6 +78,9 @@ Frontend variables:
 NEXT_PUBLIC_API_URL=http://localhost:3012
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+
+# Optional: PostHog tracking, leave empty to turn it off
+NEXT_PUBLIC_POSTHOG_KEY=
 ```
 
 Notes:
