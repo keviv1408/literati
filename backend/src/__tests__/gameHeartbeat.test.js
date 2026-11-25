@@ -145,6 +145,7 @@ describe('heartbeat on a real socket', () => {
     gameSocketServer.cancelTurnTimer(ROOM_CODE);
     gameSocketServer.cancelBotTimer(ROOM_CODE);
     gameSocketServer._clearAllReconnectWindows();
+    gameSocketServer._clearAllSeatHolds();
     gameStore._clearAll();
     guestSessionStore._clearStore();
     await new Promise((r) => httpServer.close(r));
