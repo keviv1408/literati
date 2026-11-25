@@ -2371,6 +2371,50 @@ describe('GamePage — while the game socket reconnects', () => {
     });
   });
 
+  describe('the turn deadline during a drop', () => {
+    const turnTimerIn = (ms: number) => ({
+      type: 'turn_timer' as const,
+      playerId: MY_PLAYER_ID,
+      durationMs: 60_000,
+      expiresAt: Date.now() + ms,
+    });
+
+    async function dropPastTheDeadlineWithAskTrayOpen() {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openAskTray(['1_h']);
+      // The reset runs on a timer, so fake timers must be in place before it arms.
+      jest.useFakeTimers();
+      update({ turnTimer: turnTimerIn(1000) });
+      update({ wsStatus: 'reconnecting' });
+      act(() => jest.advanceTimersByTime(1000));
+      return update;
+    }
+
+    afterEach(() => {
+      cleanup();
+      jest.useRealTimers();
+    });
+
+    it('keeps the ask tray open when the old deadline passes during the drop', async () => {
+      await dropPastTheDeadlineWithAskTrayOpen();
+
+      expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+      expect(screen.getByTestId('inline-ask-card-1_h')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('keeps the ask tray after a reconnect with a fresh deadline, and resets it when that deadline passes', async () => {
+      const update = await dropPastTheDeadlineWithAskTrayOpen();
+      update({ wsStatus: 'connected', turnTimer: null, myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+      update({ turnTimer: turnTimerIn(60_000) });
+
+      act(() => jest.advanceTimersByTime(59_999));
+      expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+      act(() => jest.advanceTimersByTime(1));
+      expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+    });
+  });
+
   describe('tray edits during the drop', () => {
     it('keeps an open declare tray on an outside click and sends nothing', async () => {
       const fake = fakeGameSocket();

@@ -681,7 +681,8 @@ export default function GamePage({ params }: PageProps) {
   // Keyed on `turnTimer?.expiresAt` so the timeout is correctly reset whenever
   // a new turn begins (i.e. when the server sends a new `turn_timer` event).
   useEffect(() => {
-    if (!turnTimer) return;
+    // A backend restart gives the turn a fresh deadline, so the old one must not close trays during a drop.
+    if (!turnTimer || !canSend) return;
 
     const remaining = Math.max(0, turnTimer.expiresAt - Date.now());
 
@@ -700,7 +701,7 @@ export default function GamePage({ params }: PageProps) {
 
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnTimer?.expiresAt]);
+  }, [turnTimer?.expiresAt, canSend]);
 
   const myPlayer          = players.find((p) => p.playerId === myPlayerId) ?? null;
   const myTeamId          = myPlayer?.teamId ?? null;
