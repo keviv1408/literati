@@ -281,6 +281,7 @@ describe('connection-handler guards', () => {
       .mockImplementationOnce(() => read.promise)
       .mockImplementationOnce(() => read.promise);
     setGameSpy.mockClear();
+    const logSpy = jest.spyOn(console, 'log');
 
     const a = await connect(`token=${p1Token}`);
     const b = await connect(`token=${p2Token}`);
@@ -296,6 +297,9 @@ describe('connection-handler guards', () => {
     ));
 
     expect(setGameSpy).toHaveBeenCalledTimes(1);
+    const recoveredLogs = logSpy.mock.calls.filter(([line]) => String(line).includes('Recovered game state'));
+    logSpy.mockRestore();
+    expect(recoveredLogs).toHaveLength(1);
   });
 
   test('a failed room read closes with 4500', async () => {

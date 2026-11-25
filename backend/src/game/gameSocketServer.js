@@ -3436,8 +3436,11 @@ function attachGameSocketServer(httpServer) {
 
         if (room.game_state) {
           // Another connection may have recovered the game while this read was in flight.
-          gs = getGame(roomCode) ?? recoverGame(roomCode, room.id, room.game_state);
-          console.log(`[game-ws] Recovered game state for room ${roomCode} from Supabase`);
+          gs = getGame(roomCode);
+          if (!gs) {
+            gs = recoverGame(roomCode, room.id, room.game_state);
+            console.log(`[game-ws] Recovered game state for room ${roomCode} from Supabase`);
+          }
         } else {
           sendJson(ws, { type: 'error', code: 'GAME_NOT_FOUND', message: 'Game state not available' });
           closeWithNotice(ws, 4005, 'Game state not available');
