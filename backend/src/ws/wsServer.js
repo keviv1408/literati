@@ -59,6 +59,7 @@ const { blockPlayer } = require('../rooms/roomBlocklist');
 const lobbyManager = require('./lobbyManager');
 const { startLobbyTimer, cancelLobbyTimer, isLobbyTimerActive } = require('../matchmaking/lobbyTimer');
 const { fillWithBots } = require('../matchmaking/botFiller');
+const { toPublicSeat } = require('../game/gameInitService');
 const {
   handleJoinQueue,
   handleLeaveQueue,
@@ -278,7 +279,7 @@ async function _handleGameStart(roomCode, playerCount) {
   broadcastToRoom(roomCode, {
     type:      'lobby-starting',
     roomCode,
-    seats:     snapshotSeats,
+    seats:     snapshotSeats.map(toPublicSeat),
     botsAdded: bots.map((b) => b.playerId),
   });
 

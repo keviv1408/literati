@@ -19,6 +19,7 @@
 const {
   handleStartGame,
   roomClients,
+  roomSpectators,
   roomMeta,
   _setSupabaseClientFactory,
   _setGameServer,
@@ -427,6 +428,35 @@ describe('D. Broadcast', () => {
 
     const msg = msgOfType(hostWs, 'lobby-starting');
     expect(msg.roomCode).toBe(ROOM_CODE);
+  });
+
+  it('keeps a guest recovery key out of lobby-starting but passes it to createGame', async () => {
+    const supabase = buildMockSupabase(makeWaitingRoom());
+    _setSupabaseClientFactory(() => supabase);
+    const gameServer = buildMockGameServer();
+    _setGameServer(gameServer);
+
+    const key       = 'k'.repeat(32);
+    const hostWs    = createMockWs();
+    const guestWs   = createMockWs();
+    const spectWs   = createMockWs();
+    registerClients(ROOM_CODE, 6, [
+      { userId: HOST_ID,    displayName: 'Host',  isGuest: false, isHost: true,  teamId: 1, ws: hostWs },
+      { userId: PLAYER1_ID, displayName: 'Guest', isGuest: true,  isHost: false, teamId: 2, ws: guestWs, guestRecoveryKey: key },
+    ]);
+    roomSpectators.set(ROOM_CODE, new Map([['spect-1', { ws: spectWs, userId: 'spect-1', role: 'spectator' }]]));
+    const clients = roomClients.get(ROOM_CODE);
+
+    await handleStartGame({ ws: hostWs, userId: HOST_ID, isHost: true, roomCode: ROOM_CODE, clients });
+
+    expect(msgOfType(spectWs, 'lobby-starting')).not.toBeNull();
+    for (const ws of [hostWs, guestWs, spectWs]) {
+      const raw = JSON.stringify(ws.send.mock.calls);
+      expect(raw).not.toContain('guestRecoveryKey');
+      expect(raw).not.toContain(key);
+    }
+    const { seats } = gameServer.createGame.mock.calls[0][0];
+    expect(seats.find((s) => s.playerId === PLAYER1_ID).guestRecoveryKey).toBe(key);
   });
 
 });

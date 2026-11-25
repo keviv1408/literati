@@ -64,7 +64,7 @@ const url = require('url');
 const { getGuestSession, updateGuestAvatar, VALID_AVATAR_IDS } = require('../sessions/guestSessionStore');
 const rateLimiter = require('./rateLimiter');
 const { closeWithNotice } = require('./closeWs');
-const { buildGameSeats } = require('../game/gameInitService');
+const { buildGameSeats, toPublicSeat } = require('../game/gameInitService');
 const { persistGameState } = require('../game/gameState');
 const { getSupabaseClient } = require('../db/supabase');
 const { guestHostMap } = require('../routes/rooms');
@@ -1256,7 +1256,7 @@ async function handleStartGame(ctx) {
     broadcast(roomCode, {
       type:      'lobby-starting',
       roomCode,
-      seats:     allSeats,
+      seats:     allSeats.map(toPublicSeat),
       botsAdded: bots.map((b) => b.playerId),
     });
 
@@ -1384,7 +1384,7 @@ async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
   broadcast(roomCode, {
     type:          'lobby-starting',
     roomCode,
-    seats:         allSeats,
+    seats:         allSeats.map(toPublicSeat),
     botsAdded:     bots.map((b) => b.playerId),
     isMatchmaking: true,
   });
@@ -1649,7 +1649,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
     broadcast(code, {
       type:      'lobby-starting',
       roomCode:  code,
-      seats:     allSeats,
+      seats:     allSeats.map(toPublicSeat),
       botsAdded: botSeats.map((b) => b.playerId),
       isRematch: true,
     });

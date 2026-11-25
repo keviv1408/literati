@@ -24,6 +24,7 @@ const {
   handleReassignTeam,
   handleStartGame,
   roomClients,
+  roomSpectators,
   roomMeta,
   matchmakingTimers,
   MATCHMAKING_LOBBY_TIMEOUT_MS,
@@ -305,6 +306,29 @@ describe('F. handleAutoStartMatchmaking broadcasts lobby-starting', () => {
     const msg = msgOfType(ws, 'lobby-starting');
     expect(Array.isArray(msg.seats)).toBe(true);
     expect(msg.seats.length).toBe(6); // always full count
+  });
+
+  it('keeps a guest recovery key out of lobby-starting but passes it to createGame', async () => {
+    _setSupabaseClientFactory(() => buildMockSupabase(makeRoom()));
+    const gameServer = buildMockGameServer();
+    _setGameServer(gameServer);
+
+    const key     = 'k'.repeat(32);
+    const clients = seedMatchmakingRoom(6, 2);
+    Object.assign(clients.get('user-2'), { isGuest: true, guestRecoveryKey: key });
+    const spectWs = makeWs();
+    roomSpectators.set(ROOM_CODE, new Map([['spect-1', { ws: spectWs, userId: 'spect-1', role: 'spectator' }]]));
+
+    await handleAutoStartMatchmaking(ROOM_CODE, clients, 6);
+
+    expect(msgOfType(spectWs, 'lobby-starting')).not.toBeNull();
+    for (const ws of [...Array.from(clients.values()).map((e) => e.ws), spectWs]) {
+      const raw = JSON.stringify(ws.send.mock.calls);
+      expect(raw).not.toContain('guestRecoveryKey');
+      expect(raw).not.toContain(key);
+    }
+    const { seats } = gameServer.createGame.mock.calls[0][0];
+    expect(seats.find((s) => s.playerId === 'user-2').guestRecoveryKey).toBe(key);
   });
 });
 

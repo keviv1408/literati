@@ -41,6 +41,7 @@ const {
   addPlayerToLobby: addSeatToLobbyManager,
   reassignPlayerTeam,
   getLobbySnapshot,
+  _getRawRooms,
 } = require('../ws/lobbyManager');
 const {
   handleReassignTeam,
@@ -429,6 +430,30 @@ describe('handleReassignTeam', () => {
 
     const movedSeat = event.seats.find((s) => s.playerId === PLAYER1_ID);
     expect(movedSeat.teamId).toBe(1);
+  });
+
+  it('keeps a guest recovery key out of team-reassigned but in the stored seat', async () => {
+    const mockSupabase = buildMockSupabase({ room: waitingRoom6 });
+    _setSupabaseClient(mockSupabase);
+    const { hostWs, p1Ws, p2Ws } = setupFullTestLobby();
+    const key = 'k'.repeat(32);
+    const storedSeat = _getRawRooms().get(ROOM_CODE).seats.get(2);
+    storedSeat.guestRecoveryKey = key;
+
+    await handleReassignTeam(hostWs, 'conn-host', hostUser, {
+      type: 'reassign-team',
+      roomCode: ROOM_CODE,
+      targetPlayerId: PLAYER1_ID,
+      newTeamId: 1,
+    });
+
+    expect(allSent(hostWs).some((p) => p.type === 'team-reassigned')).toBe(true);
+    for (const ws of [hostWs, p1Ws, p2Ws]) {
+      const raw = JSON.stringify(ws.send.mock.calls);
+      expect(raw).not.toContain('guestRecoveryKey');
+      expect(raw).not.toContain(key);
+    }
+    expect(storedSeat.guestRecoveryKey).toBe(key);
   });
 
   it('does not send an error message on success', async () => {

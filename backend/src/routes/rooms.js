@@ -34,6 +34,7 @@ const {
   getPlayerIdentifier,
 } = require('../rooms/roomBlocklist');
 const { getIO, getConnectedUsers } = require('../socket/server');
+const { toPublicSeat } = require('../game/gameInitService');
 
 // In-memory map: roomId → guest sessionId (for guest-hosted rooms).
 // Guest sessions are already ephemeral/in-memory, so this is consistent.
@@ -854,7 +855,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
   broadcastToRoomClients(roomCode, {
     type:      'game_starting',
     roomCode,
-    seats:     allSeats,
+    seats:     allSeats.map(toPublicSeat),
     botsAdded: bots.map((b) => b.playerId),
   });
 
@@ -878,7 +879,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
   return res.status(200).json({
     started:   true,
     roomCode,
-    seats:     allSeats,
+    seats:     allSeats.map(toPublicSeat),
     botsAdded: bots.map((b) => b.playerId),
   });
 });

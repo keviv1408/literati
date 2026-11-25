@@ -141,6 +141,12 @@ function buildGameSeats(playerCount, occupiedSeats) {
   return { allSeats, botSeats, emptySlots };
 }
 
+/** The recovery key is a guest's credential, so no seat sent to clients carries it. */
+function toPublicSeat(seat) {
+  const { guestRecoveryKey, ...publicSeat } = seat;
+  return publicSeat;
+}
+
 // ---------------------------------------------------------------------------
 // Full initialization entry point
 // ---------------------------------------------------------------------------
@@ -199,5 +205,6 @@ module.exports = {
   detectEmptySeats,
   buildBotSeats,
   buildGameSeats,
+  toPublicSeat,
   initializeGame,
 };

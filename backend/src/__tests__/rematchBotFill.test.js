@@ -50,6 +50,7 @@ const {
   _rematchBotFillTimers,
   REMATCH_BOT_FILL_TIMEOUT_MS,
   roomClients,
+  roomSpectators,
   _resetRoomState,
   _startingRooms,
 } = require('../ws/roomSocketServer');
@@ -398,6 +399,27 @@ describe('_executeRematchBotFill', () => {
     expect(lobbyStarting).toBeDefined();
     expect(lobbyStarting.isRematch).toBe(true);
     expect(lobbyStarting.roomCode).toBe('ROOM01');
+  });
+
+  test('13b. lobby-starting carries no guest recovery key', async () => {
+    const key = 'k'.repeat(32);
+    registerFakeClient('ROOM01', 'h1', 1);
+    Object.assign(roomClients.get('ROOM01').get('h1'), { isGuest: true, guestRecoveryKey: key });
+    const spectWs = { send: jest.fn(), readyState: 1 };
+    roomSpectators.set('ROOM01', new Map([['spect-1', { ws: spectWs, userId: 'spect-1', role: 'spectator' }]]));
+    const pending = makePending6();
+    Object.assign(pending.players[0], { isGuest: true, guestRecoveryKey: key });
+    setPendingRematch('ROOM01', pending);
+
+    await _executeRematchBotFill('ROOM01', roomClients.get('ROOM01'));
+
+    const hostWs = roomClients.get('ROOM01').get('h1').ws;
+    expect(spectWs.send.mock.calls.some(([raw]) => JSON.parse(raw).type === 'lobby-starting')).toBe(true);
+    for (const ws of [hostWs, spectWs]) {
+      const raw = JSON.stringify(ws.send.mock.calls);
+      expect(raw).not.toContain('guestRecoveryKey');
+      expect(raw).not.toContain(key);
+    }
   });
 
   test('14. Supabase room status updated to in_progress', async () => {
