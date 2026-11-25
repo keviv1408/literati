@@ -3,8 +3,8 @@ import type { CaptureResult, Properties } from 'posthog-js';
 import type { PublicGameState } from '@/types/game';
 
 const _SOCKET_DROPPED_KEY = 'literati:socket-dropped';
-const _URL_KEY =/url|href|referrer|filename/i;
-const _URL_IN_TEXT = /([a-z][a-z0-9+.-]*:\/\/[^\s?#'"`<>]*)[?#][^\s'"`<>]*/gi;
+const _URL_KEY = /url|href|referrer|filename/i;
+const _URL_IN_TEXT = /([a-z][a-z0-9+.-]{0,31}:\/\/[^\s?#'"`<>]*)[?#][^\s'"`<>]*/gi;
 
 function _markerKey(roomCode: string): string {
   return `literati:game-counted:${roomCode}`;

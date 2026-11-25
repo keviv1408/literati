@@ -166,6 +166,14 @@ describe('redactUrls', () => {
     expect(out?.properties.message).toBe('Why? Because #1');
   });
 
+  it('handles a long run of scheme characters before :// quickly', () => {
+    const message = `${'a'.repeat(50_000)}://${'b'.repeat(50_000)}`;
+    const start = performance.now();
+    const out = redactUrls(event({ properties: { message } }));
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(out?.properties.message).toBe(message);
+  });
+
   it('matches URL keys in any case', () => {
     const out = redactUrls(event({
       $set_once: { $Initial_Current_URL: 'https://x.test/game/A?spectatorToken=s' },
