@@ -36,6 +36,7 @@ Literati is an online, real-time version of the classic Literature card game. It
 literati/
 ├── frontend/   # Next.js app
 ├── backend/    # Express API + WebSocket game server
+├── e2e/        # Playwright end-to-end tests
 ├── LICENSE
 └── README.md
 ```
@@ -163,6 +164,18 @@ If you want to run a single test file:
 cd frontend && npm test -- --testPathPattern=GamePage
 cd backend && npm test -- roomSocket
 ```
+
+### End-to-end tests
+
+`e2e/` holds Playwright tests for the game socket reconnect. They need Node.js 20 or newer and an installed Google Chrome. They do not start the apps: run the backend and frontend as in "Run the apps" above (ports 3012 and 3011), then:
+
+```bash
+cd e2e
+npm install
+npx playwright test
+```
+
+The run takes about a minute, because one test waits out 30 seconds of silence on purpose. Each test creates one real room in the Supabase project that `backend/.env` points at.
 
 ## Notes
 
