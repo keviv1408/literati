@@ -437,7 +437,8 @@ async function _executeHostTransfer(roomCode) {
     const { error } = await supabase
       .from('rooms')
       .update(hostColumns(newHostId, newHostEntry.isGuest))
-      .eq('code', roomCode);
+      .eq('code', roomCode)
+      .eq('status', 'waiting');
     if (error) {
       console.error(`[RoomWS] Supabase host-transfer update failed for room "${roomCode}":`, error.message);
     }

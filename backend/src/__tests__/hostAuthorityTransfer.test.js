@@ -68,7 +68,12 @@ function makeFakeWs(isOpen = true) {
 // ---------------------------------------------------------------------------
 
 function buildMockSupabase({ updateError = null } = {}) {
-  const eqFn    = jest.fn().mockResolvedValue({ data: null, error: updateError });
+  const result = { data: null, error: updateError };
+  const filterChain = {
+    then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+  };
+  const eqFn    = jest.fn().mockReturnValue(filterChain);
+  filterChain.eq = eqFn;
   const updateFn = jest.fn().mockReturnValue({ eq: eqFn });
   const fromFn   = jest.fn().mockReturnValue({ update: updateFn });
 
@@ -238,6 +243,17 @@ describe('_executeHostTransfer', () => {
     await _executeHostTransfer(ROOM);
 
     expect(mockSupabase._update).toHaveBeenCalledWith({ host_user_id: null, host_guest_id: 'guest-host' });
+  });
+
+  it('5c. saves the transfer only while the room is waiting', async () => {
+    populateRoom(ROOM, [
+      { userId: 'new-host', displayName: 'New Host', isHost: false, isGuest: false, teamId: 1 },
+    ]);
+
+    await _executeHostTransfer(ROOM);
+
+    expect(mockSupabase._eq).toHaveBeenCalledWith('code', ROOM);
+    expect(mockSupabase._eq).toHaveBeenCalledWith('status', 'waiting');
   });
 
   it('6. no-op when room has no remaining clients', async () => {
