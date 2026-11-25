@@ -258,6 +258,8 @@ describe('POST /api/rooms', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('active game room');
     expect(res.body.existingRoom.code).toBe('XYZ999');
+    expect(mockSupabase._chain.eq).toHaveBeenCalledWith('host_user_id', fakeUserId);
+    expect(mockSupabase._chain.eq).not.toHaveBeenCalledWith('host_guest_id', expect.anything());
   });
 
   it('stores a guest host in host_guest_id and leaves host_user_id null', async () => {
