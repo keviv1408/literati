@@ -6,6 +6,8 @@
  *
  * 1. A close that arrives late from a replaced socket must not unregister the
  *    lobby the same player has since rejoined.
+ * 2. A socket that closes while the handler awaits the room row is not
+ *    registered, and does not evict the player's live socket.
  */
 
 const http      = require('http');
@@ -128,5 +130,45 @@ describe('lobby socket lifecycle', () => {
     expect(roster(friend)).toEqual(['Host', 'Friend']);
     await until(() => roster(third).length === 2, 300);
     expect(roster(third)).toEqual(['Host', 'Friend']);
+  });
+
+  it('does not register a socket that closed during the room lookup', async () => {
+    const gate = deferred();
+    nextLookup = () => gate.promise;
+    const before = lookups;
+
+    const early = connect(friendToken);
+    await until(() => lookups === before + 1); // handler is parked on the room row
+    early.ws.close();
+    await until(() => wss.clients.size === 0);
+
+    gate.resolve({ data: ROOM_ROW, error: null });
+    await sleep(30);
+
+    expect(room.getRoomPlayers(ROOM_CODE)).toEqual([]);
+  });
+
+  it('does not let a socket that closed during the room lookup evict the live one', async () => {
+    const live = connect(hostToken);
+    await received(live, 'connected');
+
+    const gate = deferred();
+    nextLookup = () => gate.promise;
+    const before = lookups;
+    const stale = connect(hostToken);
+    await until(() => lookups === before + 1);
+    stale.ws.close();
+    await until(() => wss.clients.size === 1);
+
+    nextLookup = null;
+    gate.resolve({ data: ROOM_ROW, error: null });
+    await sleep(30);
+
+    const friend = connect(friendToken);
+    await received(friend, 'room_players');
+
+    expect(has(live, 'closing')).toBe(false);
+    await until(() => roster(live).length === 2, 300);
+    expect(roster(live)).toEqual(['Host', 'Friend']);
   });
 });

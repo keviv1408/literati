@@ -1773,6 +1773,9 @@ function attachRoomSocketServer(httpServer) {
       return;
     }
 
+    // The awaits above can outlast the client; its close event has already fired, so nothing would ever remove the entry.
+    if (ws.readyState !== 1 /* OPEN */) return;
+
     // ── Store room metadata (playerCount + matchmaking flag) ────────────────
     if (!roomMeta.has(roomCode)) {
       roomMeta.set(roomCode, {
