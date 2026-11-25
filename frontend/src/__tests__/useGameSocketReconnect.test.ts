@@ -226,14 +226,27 @@ describe('useGameSocket reconnect', () => {
     const { result } = _renderPlayer();
     const first = _latestWs();
     _confirm(first);
+    // First, because a declaration result clears the declaration timer.
+    _message(first, {
+      type: 'declaration_result',
+      declarerId: 'p1',
+      halfSuitId: 'low_s',
+      correct: false,
+      winningTeam: 2,
+      newTurnPlayerId: 'p2',
+      assignment: {},
+      eligibleNextTurnPlayerIds: ['p2', 'p3'],
+    });
     _message(first, { type: 'declaration_timer', playerId: 'p1', durationMs: 60000, expiresAt: 1 });
     _message(first, { type: 'player_disconnected', playerId: 'p2', expiresAt: 1, reconnectWindowMs: 60000 });
     _serverClose(first, 1006);
     expect(result.current.declarationTimer).not.toBeNull();
+    expect(result.current.eligibleNextTurnPlayerIds).toEqual(['p2', 'p3']);
     _advance(1000);
     _confirm(_latestWs());
     expect(result.current.declarationTimer).toBeNull();
     expect(result.current.reconnectWindows).toEqual({});
+    expect(result.current.eligibleNextTurnPlayerIds).toEqual([]);
   });
 
   it('counts a drop that heals in 1 second once, then reports the recovery', () => {

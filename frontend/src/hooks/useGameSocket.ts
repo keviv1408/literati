@@ -465,6 +465,7 @@ export function useGameSocket({
       setBotTakeover(null);
       setDeclareProgress(null);
       setReconnectWindows({});
+      setEligibleNextTurnPlayerIds([]);
       setPostDeclarationHighlight(null);
       setPostDeclarationTimer(null);
       setPendingTurnPassAck(false);
