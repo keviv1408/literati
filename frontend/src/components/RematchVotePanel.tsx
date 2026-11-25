@@ -20,7 +20,6 @@
  */
 
 import { useEffect, useState, useRef } from 'react';
-import { trackEvent } from '@/lib/analytics';
 import type { RematchVoteUpdatePayload, RematchDeclinedPayload } from '@/types/game';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -76,7 +75,6 @@ export default function RematchVotePanel({
     if (hasVoted) return;
     setHasVoted(true);
     setLocalVote(vote);
-    trackEvent('rematch_vote_submitted', { vote: vote ? 'yes' : 'no' });
     onVote(vote);
   }
 

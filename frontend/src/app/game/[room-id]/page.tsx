@@ -21,7 +21,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
-import { trackEvent } from '@/lib/analytics';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import {
   buildDeclarationSeatRevealMap,
@@ -814,7 +813,6 @@ export default function GamePage({ params }: PageProps) {
     if (!isComplete) return;
     setActionLoading(true);
     clearIndicator();
-    trackEvent('game_declaration_submitted');
     sendDeclare(declareSelectedSuit, declareAssignment);
   }, [declareSelectedSuit, actionLoading, resolvedVariant, declareAssignment, clearIndicator, sendDeclare]);
 
@@ -963,8 +961,6 @@ export default function GamePage({ params }: PageProps) {
     // Immediately clear the turn indicator so the glow and audio repeat
     // stop as soon as the player submits — before the server responds.
     clearIndicator();
-    // A multi-card ask sends one message per card, so this fires once per card.
-    trackEvent('game_ask_submitted', { batch_size: batchCardIds?.length ?? 1 });
     sendAsk(targetId, cardId, batchCardIds);
   }, [clearIndicator, sendAsk]);
 

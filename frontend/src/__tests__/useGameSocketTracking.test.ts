@@ -1,8 +1,9 @@
 import { renderHook, act } from '@testing-library/react';
 import { useGameSocket } from '@/hooks/useGameSocket';
-import { trackGameInit, trackGameOver, trackSocketDropped } from '@/lib/analytics';
+import { trackEvent, trackGameInit, trackGameOver, trackSocketDropped } from '@/lib/analytics';
 
 jest.mock('@/lib/analytics', () => ({
+  trackEvent: jest.fn(),
   trackGameInit: jest.fn(),
   trackGameOver: jest.fn(),
   trackSocketDropped: jest.fn(),
@@ -198,6 +199,33 @@ describe('useGameSocket tracking', () => {
     _serverClose(ws, 1006);
     _waitForReload();
     expect(trackSocketDropped).not.toHaveBeenCalled();
+  });
+
+  it('reports an ask, a declaration, and a rematch vote once each is sent', () => {
+    const { result } = _renderPlayer();
+    _open(_latestWs());
+    act(() => {
+      result.current.sendAsk('p2', '5_s', ['5_s', '6_s']);
+      result.current.sendDeclare('low_s', { '5_s': 'p1' });
+      result.current.sendRematchVote(true);
+    });
+    expect(trackEvent).toHaveBeenCalledTimes(3);
+    expect(trackEvent).toHaveBeenCalledWith('game_ask_submitted', { batch_size: 2 });
+    expect(trackEvent).toHaveBeenCalledWith('game_declaration_submitted');
+    expect(trackEvent).toHaveBeenCalledWith('rematch_vote_submitted', { vote: 'yes' });
+  });
+
+  it('reports nothing for an action taken after the socket dropped', () => {
+    const { result } = _renderPlayer();
+    const ws = _latestWs();
+    _open(ws);
+    _serverClose(ws, 1006);
+    act(() => {
+      result.current.sendAsk('p2', '5_s');
+      result.current.sendDeclare('low_s', { '5_s': 'p1' });
+      result.current.sendRematchVote(false);
+    });
+    expect(trackEvent).not.toHaveBeenCalled();
   });
 
   it('ignores game_over for a spectator', () => {
