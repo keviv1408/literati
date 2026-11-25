@@ -46,8 +46,9 @@ describe('_broadcastHeartbeat', () => {
 
 describe('heartbeat interval', () => {
   afterEach(() => {
-    jest.useRealTimers();
+    // The spies wrap the fake timer functions, so restoring them after useRealTimers would put the fakes back.
     jest.restoreAllMocks();
+    jest.useRealTimers();
   });
 
   it('sends every 15 s and stops when the server closes', () => {
@@ -67,13 +68,16 @@ describe('heartbeat interval', () => {
     expect(stub.send).toHaveBeenCalledTimes(1);
     expect(stub.send).toHaveBeenCalledWith(HEARTBEAT);
 
+    jest.advanceTimersByTime(15_000);
+    expect(stub.send).toHaveBeenCalledTimes(2);
+
     wss.clients.delete(stub);
     wss.close();
     jest.runAllTicks();
     expect(clearSpy).toHaveBeenCalledWith(heartbeatTimer);
 
     jest.advanceTimersByTime(30_000);
-    expect(stub.send).toHaveBeenCalledTimes(1);
+    expect(stub.send).toHaveBeenCalledTimes(2);
   });
 });
 
