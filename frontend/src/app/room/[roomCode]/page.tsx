@@ -42,6 +42,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoomByCode, ApiError } from '@/lib/api';
+import { captureAnalyticsEvent } from '@/lib/analytics';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
 import {
   loadRoomMembership,
@@ -1340,7 +1341,12 @@ export default function RoomLobbyPage({ params }: PageProps) {
               type="button"
               onClick={() => {
                 const sent = startGame();
-                if (sent) setIsStarting(true);
+                if (sent) {
+                  captureAnalyticsEvent('lobby_game_started', {
+                    player_count: room.player_count,
+                  });
+                  setIsStarting(true);
+                }
               }}
               disabled={isStarting || lobbyStarting || !myPlayerId}
               aria-label="Start Game"

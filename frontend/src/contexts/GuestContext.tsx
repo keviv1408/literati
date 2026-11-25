@@ -17,6 +17,7 @@ import React, {
   useEffect,
   useState,
 } from 'react';
+import posthog from 'posthog-js';
 import type { GuestSession } from '@/types/user';
 import {
   clearGuestSession,
@@ -49,6 +50,36 @@ interface GuestContextValue {
 
 const GuestContext = createContext<GuestContextValue | null>(null);
 
+function isPostHogConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN &&
+      process.env.NEXT_PUBLIC_POSTHOG_HOST,
+  );
+}
+
+function identifyGuest(session: GuestSession): void {
+  if (!isPostHogConfigured()) return;
+
+  try {
+    posthog.identify(session.sessionId, {
+      display_name: session.displayName,
+      user_type: 'guest',
+    });
+  } catch {
+    // Analytics must not interrupt guest session setup.
+  }
+}
+
+function resetPostHog(): void {
+  if (!isPostHogConfigured()) return;
+
+  try {
+    posthog.reset();
+  } catch {
+    // Analytics must not interrupt guest session changes.
+  }
+}
+
 export function GuestProvider({ children }: { children: React.ReactNode }) {
   const [guestSession, setGuestSession] = useState<GuestSession | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,11 +93,16 @@ export function GuestProvider({ children }: { children: React.ReactNode }) {
     const existing = loadGuestSession();
     if (existing) {
       setGuestSession(existing);
+      identifyGuest(existing);
     }
   }, []);
 
   const setGuestName = useCallback((name: string): GuestSession => {
     const session = saveGuestSession(name);
+    if (guestSession) {
+      resetPostHog();
+    }
+    identifyGuest(session);
     setGuestSession(session);
     setIsModalOpen(false);
     // Resolve any pending promises
@@ -75,17 +111,20 @@ export function GuestProvider({ children }: { children: React.ReactNode }) {
       return [];
     });
     return session;
-  }, []);
+  }, [guestSession]);
 
   const clearGuest = useCallback(() => {
     clearGuestSession();
+    if (guestSession) {
+      resetPostHog();
+    }
     setGuestSession(null);
     // Reject pending promises
     setPendingResolvers((prev) => {
       prev.forEach((resolve) => resolve(null));
       return [];
     });
-  }, []);
+  }, [guestSession]);
 
   const openModal = useCallback(() => {
     setIsModalOpen(true);

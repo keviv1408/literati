@@ -11,8 +11,26 @@ function _markerKey(roomCode: string): string {
 }
 
 function _capture(event: string, props: Properties): void {
-  if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
+  if (!process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN || !process.env.NEXT_PUBLIC_POSTHOG_HOST) return;
   posthog.capture(event, props);
+}
+
+export function captureAnalyticsEvent(event: string, props: Properties = {}): void {
+  try {
+    _capture(event, props);
+  } catch {
+    // Tracking must never break the app.
+  }
+}
+
+// The dedicated PostHog logger exports only the structured lines added by this integration.
+export function logGameFlow(message: string, attributes: Properties = {}): void {
+  try {
+    if (!process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN || !process.env.NEXT_PUBLIC_POSTHOG_HOST) return;
+    posthog.logger.info(message, attributes);
+  } catch {
+    // Log delivery must never break the game.
+  }
 }
 
 function _isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -74,7 +92,7 @@ export function trackGameOver(roomCode: string): void {
 // The hook reloads 2 s after a drop and the network may be down, so a send now would be lost.
 export function trackSocketDropped(closeCode: number): void {
   try {
-    if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
+    if (!process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN || !process.env.NEXT_PUBLIC_POSTHOG_HOST) return;
     localStorage.setItem(_SOCKET_DROPPED_KEY, String(closeCode));
   } catch {
     // Tracking must never break the game.

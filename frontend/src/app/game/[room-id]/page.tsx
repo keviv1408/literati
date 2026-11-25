@@ -21,6 +21,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
+import { captureAnalyticsEvent, logGameFlow } from '@/lib/analytics';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import {
   buildDeclarationSeatRevealMap,
@@ -813,6 +814,12 @@ export default function GamePage({ params }: PageProps) {
     if (!isComplete) return;
     setActionLoading(true);
     clearIndicator();
+    captureAnalyticsEvent('game_declaration_submitted', {
+      card_count: suitCards.length,
+    });
+    logGameFlow('game declaration submitted', {
+      card_count: suitCards.length,
+    });
     sendDeclare(declareSelectedSuit, declareAssignment);
   }, [declareSelectedSuit, actionLoading, resolvedVariant, declareAssignment, clearIndicator, sendDeclare]);
 
@@ -961,6 +968,9 @@ export default function GamePage({ params }: PageProps) {
     // Immediately clear the turn indicator so the glow and audio repeat
     // stop as soon as the player submits — before the server responds.
     clearIndicator();
+    captureAnalyticsEvent('game_ask_submitted', {
+      card_count: batchCardIds?.length ?? 1,
+    });
     sendAsk(targetId, cardId, batchCardIds);
   }, [clearIndicator, sendAsk]);
 

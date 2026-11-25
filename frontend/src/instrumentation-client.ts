@@ -1,27 +1,27 @@
 import posthog from 'posthog-js';
 import { redactUrls, reportPendingSocketDrop } from '@/lib/analytics';
 
-const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
+const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
 
-if (key) {
-  try {
-    posthog.init(key, {
-      api_host: 'https://eu.i.posthog.com',
-      defaults: '2026-08-30',
-      autocapture: false,
-      disable_session_recording: true,
-      capture_exceptions: true,
-      capture_pageview: 'history_change',
-      // Remote config never loads with flags off; these keep the features off if flags come back.
-      capture_heatmaps: false,
-      capture_dead_clicks: false,
-      capture_performance: false,
-      // The /flags request sends person properties with the raw page URL and skips before_send.
-      advanced_disable_flags: true,
-      before_send: redactUrls,
-    });
-    reportPendingSocketDrop();
-  } catch {
-    // Tracking must never stop the app from loading.
-  }
+if (token && host) {
+  posthog.init(token, {
+    api_host: host,
+    defaults: '2026-08-30',
+    capture_exceptions: true,
+    capture_pageview: 'history_change',
+    before_send: redactUrls,
+    logs: {
+      serviceName: 'literati-frontend',
+      environment: process.env.NODE_ENV ?? 'production',
+    },
+  });
+  reportPendingSocketDrop();
+} else if (process.env.NODE_ENV === 'development') {
+  const missingVariable = token
+    ? 'NEXT_PUBLIC_POSTHOG_HOST'
+    : 'NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN';
+  throw new Error(
+    `${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`,
+  );
 }
