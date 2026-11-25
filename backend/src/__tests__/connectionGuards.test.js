@@ -211,6 +211,35 @@ describe('connection-handler guards', () => {
     expect(gameStore.getConnection(ROOM_CODE, p1Id) === undefined).toBe(true);
   });
 
+  test('a returning player takes the seat back from a temporary bot with no reconnect window', async () => {
+    player(p1Id).isBot = true;
+    expect(gameSocketServer._reconnectWindows.has(p1Id)).toBe(false);
+
+    const conn = await connect(`token=${p1Token}`);
+    await waitFor(() => conn.messages.some((m) => m.type === 'game_init'));
+
+    expect(player(p1Id).isBot).toBe(false);
+    expect(player(p1Id).botReplacedAt).toBeUndefined();
+    expect(conn.messages.find((m) => m.type === 'game_init').myPlayerId).toBe(p1Id);
+  });
+
+  test('a returning player whose seat a bot took permanently is still queued for reclaim', async () => {
+    const disconnectStore = require('../game/disconnectStore');
+    player(p1Id).isBot = true;
+    player(p1Id).botReplacedAt = Date.now();
+
+    try {
+      const conn = await connect(`token=${p1Token}`);
+      await waitFor(() => conn.messages.some((m) => m.type === 'reclaim_queued'));
+
+      expect(player(p1Id).isBot).toBe(true);
+      expect(disconnectStore.isInReclaimQueue(ROOM_CODE, p1Id)).toBe(true);
+      expect(conn.messages.some((m) => m.type === 'game_init')).toBe(true);
+    } finally {
+      disconnectStore.removeFromReclaimQueue(ROOM_CODE, p1Id);
+    }
+  });
+
   test('a socket that closes while a seat reclaim persists is not registered, and the seat is held', async () => {
     gameSocketServer._startReconnectWindow(gs, player(p1Id));
     expect(gameSocketServer._reconnectWindows.has(p1Id)).toBe(true);
