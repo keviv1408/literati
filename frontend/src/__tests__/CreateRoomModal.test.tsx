@@ -179,7 +179,7 @@ describe('CreateRoomModal — form phase', () => {
     await act(async () => {
       fireEvent.click(screen.getByText('Create Room'));
     });
-    expect(mockCreateRoom.mock.calls[0][0]).toEqual({
+    expect(mockCreateRoom.mock.lastCall?.[0]).toEqual({
       playerCount: 6,
       cardRemovalVariant: 'remove_7s',
     });
