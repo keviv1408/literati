@@ -343,6 +343,7 @@ describe('connection-handler guards', () => {
     await conn.closed;
     errorSpy.mockRestore();
 
+    expect(conn.messages).toContainEqual(expect.objectContaining({ type: 'error', code: 'SERVER_ERROR' }));
     expect(conn.messages).toContainEqual(expect.objectContaining({ type: 'closing', code: 4500 }));
   });
 
