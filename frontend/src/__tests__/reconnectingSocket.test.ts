@@ -174,6 +174,18 @@ describe('createReconnectingSocket', () => {
     expect(wsInstances).toHaveLength(2);
   });
 
+  it('a first attempt that fails before any confirm reports reconnecting, retries after 1000 ms and fires no onDrop', () => {
+    const { onStatus, onDrop } = _start();
+    _serverClose(_latest(), 1006);
+
+    expect(_statuses(onStatus)).toEqual(['connecting', 'reconnecting']);
+    jest.advanceTimersByTime(999);
+    expect(wsInstances).toHaveLength(1);
+    jest.advanceTimersByTime(1);
+    expect(wsInstances).toHaveLength(2);
+    expect(onDrop).not.toHaveBeenCalled();
+  });
+
   it('failed attempts wait 1000, 2000, 4000, 8000, 10000, 10000 ms and fire no further onDrop', () => {
     const { socket, onStatus, onDrop } = _start();
     _serverClose(_confirmLatest(socket), 1006);
@@ -274,16 +286,15 @@ describe('createReconnectingSocket', () => {
     expect(onDrop).not.toHaveBeenCalled();
   });
 
-  it('a closing message with 4003 stops for good and closes the socket with 1000', () => {
+  it('a closing message with 4003 on a confirmed socket stops for good and closes the socket with 1000', () => {
     const { socket, onStatus, onDrop, onMessage } = _start();
-    const ws = _latest();
-    _open(ws);
+    const ws = _confirmLatest(socket);
     _receive(ws, { type: 'closing', code: 4003, reason: 'Player not in game' });
 
     expect(ws.close).toHaveBeenCalledTimes(1);
     expect(ws.close).toHaveBeenCalledWith(1000);
     expect(onStatus).toHaveBeenLastCalledWith('error', { code: 4003, reason: 'Player not in game' });
-    expect(_statuses(onStatus)).toEqual(['connecting', 'error']);
+    expect(_statuses(onStatus)).toEqual(['connecting', 'connected', 'error']);
     expect(onMessage).not.toHaveBeenCalled();
 
     socket.retryNow();
@@ -334,7 +345,7 @@ describe('createReconnectingSocket', () => {
     _receive(ws, { type: 'heartbeat' });
     expect(onMessage).not.toHaveBeenCalled();
 
-    jest.advanceTimersByTime(HEARTBEAT_DEAD_MS - 1);
+    jest.advanceTimersByTime(34_999);
     expect(wsInstances).toHaveLength(1);
     jest.advanceTimersByTime(1);
 
