@@ -21,6 +21,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
+import { backoffDelayMs, retryWithBackoff } from '@/lib/backoff';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import {
   buildDeclarationSeatRevealMap,
@@ -30,7 +31,7 @@ import {
 import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
 import { useGuest } from '@/contexts/GuestContext';
 import { useReconnect } from '@/hooks/useReconnect';
-import { useGameSocket } from '@/hooks/useGameSocket';
+import { useGameSocket, type PartialSelectionPayload } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
 import { GameProvider } from '@/contexts/GameContext';
@@ -55,6 +56,7 @@ import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
 import CircularGameTable from '@/components/CircularGameTable';
 import RematchVotePanel from '@/components/RematchVotePanel';
+import ReconnectBar from '@/components/ReconnectBar';
 import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import DealAnimation from '@/components/DealAnimation';
@@ -74,6 +76,9 @@ import { cardLabel, getCardHalfSuit, getHalfSuitCards } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
+// apiFetch has no deadline, so a stalled request would otherwise hold up the retries.
+const _ROOM_LOAD_ATTEMPT_MS = 15_000;
+const _SERVER_UNREACHABLE_MS = 60_000;
 
 const VARIANT_LABELS: Record<string, string> = {
   remove_2s: 'Remove 2s',
@@ -101,6 +106,11 @@ function formatNaturalList(items: string[]): string {
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+function _askPartial(halfSuitId: HalfSuitId, cardIds: CardId[]): PartialSelectionPayload {
+  const cardId = cardIds[cardIds.length - 1];
+  return cardId ? { flow: 'ask', halfSuitId, cardId } : { flow: 'ask', halfSuitId };
 }
 
 function buildAskBatchSummary(
@@ -139,11 +149,25 @@ export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { guestSession } = useGuest();
-  const { status: reconnectStatus, bearerToken: reconnectBearerToken } = useReconnect();
+  const { status: reconnectStatus, bearerToken: reconnectBearerToken, retry: retrySession } = useReconnect();
+  const sessionRetriesRef = useRef(0);
+
+  // Only from error: a retry from any other state would drop the game token and close the socket.
+  useEffect(() => {
+    if (reconnectStatus === 'ready') sessionRetriesRef.current = 0;
+    if (reconnectStatus !== 'error') return;
+    const timer = setTimeout(() => {
+      sessionRetriesRef.current += 1;
+      retrySession();
+    }, backoffDelayMs(sessionRetriesRef.current));
+    return () => clearTimeout(timer);
+  }, [reconnectStatus, retrySession]);
 
   const [roomCode, setRoomCode]           = useState<string | null>(null);
   const [room, setRoom]                   = useState<Room | null>(null);
   const [loading, setLoading]             = useState(true);
+  const [roomRetrying, setRoomRetrying]   = useState(false);
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
   const [gameBearerToken, setGameBearerToken] = useState<string | null>(null);
@@ -233,20 +257,31 @@ export default function GamePage({ params }: PageProps) {
   useEffect(() => {
     if (roomCode === null) return;
     if (!ROOM_CODE_RE.test(roomCode)) { setInvalidFormat(true); setLoading(false); return; }
-    let cancelled = false;
-    getRoomByCode(roomCode)
-      .then(({ room: fetched }) => {
-        if (cancelled) return;
-        if (fetched.status === 'waiting' || fetched.status === 'starting') { router.replace(`/room/${fetched.code}`); return; }
+    let attempt = 0;
+    const unreachableTimer = setTimeout(() => setServerUnreachable(true), _SERVER_UNREACHABLE_MS);
+    const cancel = retryWithBackoff(async (signal) => {
+      attempt += 1;
+      if (attempt > 1) setRoomRetrying(true);
+      try {
+        const { room: fetched } = await getRoomByCode(roomCode, signal);
+        if (signal.aborted) return false;
+        clearTimeout(unreachableTimer);
+        if (fetched.status === 'waiting' || fetched.status === 'starting') { router.replace(`/room/${fetched.code}`); return true; }
         setRoom(fetched);
         setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) setNotFound(true);
+        return true;
+      } catch (err: unknown) {
+        if (signal.aborted || !(err instanceof ApiError && err.status === 404)) return false;
+        clearTimeout(unreachableTimer);
+        setNotFound(true);
         setLoading(false);
-      });
-    return () => { cancelled = true; };
+        return true;
+      }
+    }, { attemptTimeoutMs: _ROOM_LOAD_ATTEMPT_MS });
+    return () => {
+      cancel();
+      clearTimeout(unreachableTimer);
+    };
   }, [roomCode, router]);
 
   useEffect(() => {
@@ -258,6 +293,16 @@ export default function GamePage({ params }: PageProps) {
 
   const isGameActive = room?.status === 'in_progress' || room?.status === 'starting' || room?.status === 'completed';
 
+  // A new game spun up server-side with the same seats, so its game_init takes over without a reload.
+  function clearPostGameState() {
+    setGameOver(null);
+    setGameSummary(null);
+    setVoteStartedAt(undefined);
+    setRematchStarted(false);
+    setRoom((prev) => prev ? { ...prev, status: 'in_progress' } : prev);
+    hasDealtRef.current = false;
+  }
+
   const {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, askHistory, players, gameState, variant, playerCount,
     lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
@@ -268,6 +313,7 @@ export default function GamePage({ params }: PageProps) {
     eligibleNextTurnPlayerIds,
     postDeclarationHighlight, sendChooseNextTurn, sendBotSpeed,
     postDeclarationTimer, pendingTurnPassAck,
+    retryNow,
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
@@ -281,18 +327,14 @@ export default function GamePage({ params }: PageProps) {
     onRematchStart: () => {
       setRematchStarted(true);
     },
-    onRematchStarting: () => {
-      // new game spun up server-side with same teams/seats.
-      // Clear post-game state so the upcoming game_init seamlessly transitions
-      // into the new game without a page reload.
-      setGameOver(null);
-      setGameSummary(null);
-      setVoteStartedAt(undefined);
-      setRematchStarted(false);
-      setRoom((prev) => prev ? { ...prev, status: 'in_progress' } : prev);
-      hasDealtRef.current = false;
+    onRematchStarting: clearPostGameState,
+    onGameInit: (status) => {
+      // A client that was away for rematch_starting learns of the rematch from this init alone.
+      if (status === 'active' && (gameOver || gameSummary || room?.status === 'completed')) clearPostGameState();
     },
   });
+
+  const canSend = wsStatus === 'connected';
 
   // Persist the exact token that was accepted by the game WS server.
   // On refresh this lets us reconnect as the same player identity.
@@ -403,6 +445,8 @@ export default function GamePage({ params }: PageProps) {
   }, []);
 
   useEffect(() => {
+    // The hook nulls the result on a reconnect, so an identical next result is a new ask, not a replay.
+    if (!lastAskResult) processedAskResultKeyRef.current = null;
     if (lastAskResult?.lastMove) {
       const askResultKey = [
         lastAskResult.askerId,
@@ -637,7 +681,8 @@ export default function GamePage({ params }: PageProps) {
   // Keyed on `turnTimer?.expiresAt` so the timeout is correctly reset whenever
   // a new turn begins (i.e. when the server sends a new `turn_timer` event).
   useEffect(() => {
-    if (!turnTimer) return;
+    // A backend restart gives the turn a fresh deadline, so the old one must not close trays during a drop.
+    if (!turnTimer || !canSend) return;
 
     const remaining = Math.max(0, turnTimer.expiresAt - Date.now());
 
@@ -656,7 +701,7 @@ export default function GamePage({ params }: PageProps) {
 
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnTimer?.expiresAt]);
+  }, [turnTimer?.expiresAt, canSend]);
 
   const myPlayer          = players.find((p) => p.playerId === myPlayerId) ?? null;
   const myTeamId          = myPlayer?.teamId ?? null;
@@ -698,6 +743,48 @@ export default function GamePage({ params }: PageProps) {
     setDeclareActiveDragId(null);
     setDeclareSelectedCard(null);
   }, [declareSelectedSuit, sendDeclareSelecting, sendDeclareProgress]);
+
+  const handKey = [...myHand].sort().join(',');
+  const declaredKey = declaredSuits.map((d) => d.halfSuitId).sort().join(',');
+  const lastWsStatusRef = useRef(wsStatus);
+  const beforeDropRef = useRef<{ isMyTurn: boolean; handKey: string; declaredKey: string } | null>(null);
+
+  useEffect(() => {
+    const previous = lastWsStatusRef.current;
+    lastWsStatusRef.current = wsStatus;
+    if (previous === wsStatus) return;
+
+    if (previous === 'connected') {
+      beforeDropRef.current = { isMyTurn, handKey, declaredKey };
+      // A send in flight may never get its result; the next game_init shows whether it landed.
+      updatePendingAskBatch(null);
+      setActionLoading(false);
+      return;
+    }
+
+    const beforeDrop = beforeDropRef.current;
+    if (wsStatus !== 'connected' || !beforeDrop) return;
+    beforeDropRef.current = null;
+    // A reload starts with no ask batch, so the summary from before the drop must not outlive it.
+    setSyntheticLastMoveMsg(null);
+    observedAskBatchRef.current = null;
+    // Nobody else can act on the player's own turn, so the same hand on that turn keeps every selection valid.
+    if (beforeDrop.isMyTurn && isMyTurn && beforeDrop.handKey === handKey && beforeDrop.declaredKey === declaredKey) {
+      // The server's timeout move plays the stored selection, which a backend restart loses.
+      if (selectedAskHalfSuit) sendPartialSelection(_askPartial(selectedAskHalfSuit, selectedAskCardIds));
+      if (declareSelectedSuit) {
+        sendDeclareSelecting(declareSelectedSuit);
+        sendDeclareProgress(declareSelectedSuit, declareAssignment);
+      }
+      return;
+    }
+    resetAskMode();
+    resetDeclareMode();
+  }, [
+    wsStatus, isMyTurn, handKey, declaredKey, resetAskMode, resetDeclareMode, updatePendingAskBatch,
+    selectedAskHalfSuit, selectedAskCardIds, declareSelectedSuit, declareAssignment,
+    sendPartialSelection, sendDeclareSelecting, sendDeclareProgress,
+  ]);
 
   const handleAskHalfSuitSelect = useCallback((halfSuitId: HalfSuitId) => {
     if (!availableAskHalfSuits.includes(halfSuitId)) return;
@@ -753,12 +840,14 @@ export default function GamePage({ params }: PageProps) {
 
   // ── Inline declare: DnD handlers ────────────────────────────
   const handleDeclareDragStart = useCallback((event: DragStartEvent) => {
+    if (!canSend) return;
     setDeclareActiveDragId(String(event.active.id));
     setDeclareSelectedCard(null);
-  }, []);
+  }, [canSend]);
 
   const handleDeclareDragEnd = useCallback((event: DragEndEvent) => {
     setDeclareActiveDragId(null);
+    if (!canSend) return;
     const rawId = String(event.active.id);
     // Draggable IDs are prefixed with "declare-"
     const cardId = rawId.replace(/^declare-/, '') as CardId;
@@ -777,48 +866,48 @@ export default function GamePage({ params }: PageProps) {
         return next;
       });
     }
-  }, [myHand, players, myTeamId, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
+  }, [canSend, myHand, players, myTeamId, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
 
   // ── Inline declare: tap-to-assign ────────────────────────────
   const handleDeclareTapCard = useCallback((cardId: CardId) => {
-    if (myHand.includes(cardId)) return;
+    if (!canSend || myHand.includes(cardId)) return;
     setDeclareSelectedCard((prev) => (prev === cardId ? null : cardId));
-  }, [myHand]);
+  }, [canSend, myHand]);
 
   const handleDeclareTapZone = useCallback((playerId: string) => {
-    if (!declareSelectedCard || playerId === myPlayerId) return;
+    if (!canSend || !declareSelectedCard || playerId === myPlayerId) return;
     setDeclareAssignment((prev) => {
       const next = { ...prev, [declareSelectedCard]: playerId };
       if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
       return next;
     });
     setDeclareSelectedCard(null);
-  }, [declareSelectedCard, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
+  }, [canSend, declareSelectedCard, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
 
   const handleDeclareRemoveCard = useCallback((cardId: CardId) => {
-    if (myHand.includes(cardId)) return;
+    if (!canSend || myHand.includes(cardId)) return;
     setDeclareAssignment((prev) => {
       const next = { ...prev };
       delete next[cardId];
       if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
       return next;
     });
-  }, [myHand, declareSelectedSuit, sendDeclareProgress]);
+  }, [canSend, myHand, declareSelectedSuit, sendDeclareProgress]);
 
   // ── Inline declare: confirm ──────────────────────────────────
   const handleDeclareConfirm = useCallback(() => {
-    if (!declareSelectedSuit || actionLoading) return;
+    if (!canSend || !declareSelectedSuit || actionLoading) return;
     const suitCards = getHalfSuitCards(declareSelectedSuit, resolvedVariant);
     const isComplete = suitCards.length > 0 && suitCards.every((c: CardId) => declareAssignment[c]);
     if (!isComplete) return;
     setActionLoading(true);
     clearIndicator();
     sendDeclare(declareSelectedSuit, declareAssignment);
-  }, [declareSelectedSuit, actionLoading, resolvedVariant, declareAssignment, clearIndicator, sendDeclare]);
+  }, [canSend, declareSelectedSuit, actionLoading, resolvedVariant, declareAssignment, clearIndicator, sendDeclare]);
 
   // ── Inline declare: timer expiry auto-fill ───────────────────
   const handleDeclareTimerExpiry = useCallback(() => {
-    if (!declareSelectedSuit || actionLoading) return;
+    if (!canSend || !declareSelectedSuit || actionLoading) return;
     const suitCards = getHalfSuitCards(declareSelectedSuit, resolvedVariant);
     const teammates = players.filter((p) => p.teamId === myTeamId).sort((a, b) => a.seatIndex - b.seatIndex);
     const firstOther = teammates.find((p) => p.playerId !== myPlayerId);
@@ -831,7 +920,7 @@ export default function GamePage({ params }: PageProps) {
     setActionLoading(true);
     clearIndicator();
     sendDeclare(declareSelectedSuit, filled);
-  }, [declareSelectedSuit, actionLoading, resolvedVariant, players, myTeamId, myPlayerId, declareAssignment, clearIndicator, sendDeclare]);
+  }, [canSend, declareSelectedSuit, actionLoading, resolvedVariant, players, myTeamId, myPlayerId, declareAssignment, clearIndicator, sendDeclare]);
 
   // ── Inline declare: derived data ─────────────────────────────
   const declareSuitCards = declareSelectedSuit ? getHalfSuitCards(declareSelectedSuit, resolvedVariant) : [];
@@ -845,27 +934,22 @@ export default function GamePage({ params }: PageProps) {
   [declareSuitCards, declareAssignment]);
 
   const handleAskCardToggle = useCallback((cardId: CardId) => {
-    if (!selectedAskHalfSuit) return;
+    if (!canSend || !selectedAskHalfSuit) return;
     const next = selectedAskCardIds.includes(cardId)
       ? selectedAskCardIds.filter((id) => id !== cardId)
       : [...selectedAskCardIds, cardId];
     setSelectedAskCardIds(next);
-
-    const lastSelectedCardId = next[next.length - 1];
-    if (lastSelectedCardId) {
-      sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit, cardId: lastSelectedCardId });
-    } else {
-      sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit });
-    }
-  }, [selectedAskCardIds, selectedAskHalfSuit, sendPartialSelection]);
+    sendPartialSelection(_askPartial(selectedAskHalfSuit, next));
+  }, [canSend, selectedAskCardIds, selectedAskHalfSuit, sendPartialSelection]);
 
   useEffect(() => {
-    if (!showAskInline || !selectedAskHalfSuit) return;
+    if (!canSend || !showAskInline || !selectedAskHalfSuit) return;
 
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (askTrayRef.current?.contains(target)) return;
+      if (target.closest('[data-testid="ws-reconnecting-banner"]')) return;
       if (selectedAskCardIds.length > 0 && target.closest('[data-ask-targetable="true"]')) return;
       resetAskMode();
     };
@@ -874,7 +958,7 @@ export default function GamePage({ params }: PageProps) {
     return () => {
       document.removeEventListener('click', handleOutsideClick, true);
     };
-  }, [resetAskMode, selectedAskCardIds.length, selectedAskHalfSuit, showAskInline]);
+  }, [canSend, resetAskMode, selectedAskCardIds.length, selectedAskHalfSuit, showAskInline]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -917,6 +1001,7 @@ export default function GamePage({ params }: PageProps) {
   const seatClickHandler =
     highlightedPlayerIds &&
     isMyTurn &&
+    canSend &&
     gameState?.currentTurnPlayerId === myPlayerId
       ? handleChooseNextTurnSeat
       : undefined;
@@ -940,13 +1025,14 @@ export default function GamePage({ params }: PageProps) {
   const showDeclareTray = declareMode && !!declareSelectedSuit && isMyTurn && !isTurnPassMode;
 
   useEffect(() => {
-    if (!showDeclareTray) return;
+    if (!canSend || !showDeclareTray) return;
 
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (declareTrayRef.current?.contains(target)) return;
       if (target.closest('[data-testid="declare-drop-seat"]')) return;
+      if (target.closest('[data-testid="ws-reconnecting-banner"]')) return;
       resetDeclareMode();
     };
 
@@ -954,7 +1040,7 @@ export default function GamePage({ params }: PageProps) {
     return () => {
       document.removeEventListener('click', handleOutsideClick, true);
     };
-  }, [resetDeclareMode, showDeclareTray]);
+  }, [canSend, resetDeclareMode, showDeclareTray]);
 
   const handleAsk = useCallback((targetId: string, cardId: CardId, batchCardIds?: CardId[]) => {
     setActionLoading(true);
@@ -965,7 +1051,7 @@ export default function GamePage({ params }: PageProps) {
   }, [clearIndicator, sendAsk]);
 
   const handleAskTargetSeat = useCallback((targetPlayerId: string) => {
-    if (selectedAskCardIds.length === 0 || actionLoading) return;
+    if (!canSend || selectedAskCardIds.length === 0 || actionLoading) return;
     const targetPlayer = players.find((player) => player.playerId === targetPlayerId);
     const [firstCardId, ...remainingCardIds] = selectedAskCardIds;
     if (!firstCardId || !targetPlayer) return;
@@ -982,7 +1068,7 @@ export default function GamePage({ params }: PageProps) {
       lastKnownTargetCardCount: targetPlayer.cardCount,
     });
     handleAsk(targetPlayerId, firstCardId, [firstCardId, ...remainingCardIds]);
-  }, [actionLoading, handleAsk, players, resetAskMode, selectedAskCardIds, updatePendingAskBatch]);
+  }, [canSend, actionLoading, handleAsk, players, resetAskMode, selectedAskCardIds, updatePendingAskBatch]);
 
   useEffect(() => {
     if (!pendingAskBatch?.waitingForStateSync || pendingAskBatch.awaitingResultFor) return;
@@ -1030,7 +1116,8 @@ export default function GamePage({ params }: PageProps) {
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
   if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (loading) return <LoadingView />;
+  if (loading && serverUnreachable) return <GameErrorView testId="server-unreachable-view" emoji="📡" title="Can't Reach the Server" body="Still trying. The game opens as soon as the server is back." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
+  if (loading) return <LoadingView wakingUp={roomRetrying} />;
   if (notFound) return <GameErrorView testId="not-found-view" emoji="🔍" title="Room Not Found" body={<>No room <span className="font-mono text-emerald-400">{roomCode}</span> found.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
   if (!room) return <GameErrorView testId="generic-error-view" emoji="⚠️" title="Something Went Wrong" body="Could not load the game." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
   if (room.status === 'cancelled') return <GameErrorView testId="cancelled-view" emoji="🚫" title="Game Cancelled" body={<>Room <span className="font-mono text-slate-300">{room.code}</span> was cancelled.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
@@ -1070,6 +1157,18 @@ export default function GamePage({ params }: PageProps) {
       ? gameState.declaredSuits
       : (gameSummary?.declaredSuits ?? []);
 
+  // Only a seated player has controls that a stopped socket disables.
+  const wsErrorBanner = wsStatus === 'error' && wsError && myPlayerId ? (
+    <div
+      className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-rose-900/60 border-b border-rose-700/40 text-xs text-rose-200"
+      role="alert"
+      data-testid="ws-error-banner"
+    >
+      <span aria-hidden="true">⚠️</span>
+      <span>{wsError}</span>
+    </div>
+  ) : null;
+
   if (finalGameOver || room.status === 'completed') {
     const { winner, scores, tiebreakerWinner } = finalGameOver ?? { winner: null as 1 | 2 | null, tiebreakerWinner: null as 1 | 2 | null, scores: { team1: 0, team2: 0 } };
 
@@ -1089,6 +1188,13 @@ export default function GamePage({ params }: PageProps) {
         className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-8 gap-6 overflow-y-auto"
         data-testid="game-completed-view"
       >
+        {wsStatus === 'reconnecting' && (
+          <div className="fixed inset-x-0 top-0 z-50">
+            <ReconnectBar onRetry={retryNow} />
+          </div>
+        )}
+        {wsErrorBanner && <div className="fixed inset-x-0 top-0 z-50">{wsErrorBanner}</div>}
+
         {/* ── Game-over summary ─────────────────────────────────
          * Renders the winner announcement, final score, tiebreak reason (if
          * applicable), and the full half-suit tally. declaredSuits is drawn
@@ -1139,6 +1245,7 @@ export default function GamePage({ params }: PageProps) {
               myPlayerId={myPlayerId}
               onVote={sendRematchVote}
               voteStartedAt={voteStartedAt}
+              disabled={!canSend}
             />
           )
         )}
@@ -1155,6 +1262,7 @@ export default function GamePage({ params }: PageProps) {
         {isHostOfPrivateRoom && !roomDissolved && (
           <button
             onClick={() => roomCode && sendRematchInitiate(roomCode)}
+            disabled={!canSend}
             className="py-3 px-6 rounded-xl font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
             data-testid="host-rematch-button"
             aria-label="Initiate rematch as host"
@@ -1177,13 +1285,15 @@ export default function GamePage({ params }: PageProps) {
   //
   // When the WebSocket server sends `spectator_init` the hook populates
   // `players` but leaves `myPlayerId` as null. We detect this combination
-  // once the socket is connected AND players have been received: if players are
-  // populated but the current client has no assigned player ID, we are a spectator.
+  // once the socket is connected (or reconnecting after a drop) AND players have
+  // been received: if players are populated but the current client has no
+  // assigned player ID, we are a spectator.
   //
   // This must only trigger after `spectator_init` is actually received — NOT
   // during the initial connection phase when both players[] and myPlayerId are
   // still empty (that state is shared with legitimate players pre-game_init).
-  const isSpectatorMode = wsStatus === 'connected' && players.length > 0 && !myPlayerId;
+  const isSpectatorMode =
+    (wsStatus === 'connected' || wsStatus === 'reconnecting') && players.length > 0 && !myPlayerId;
 
   if (isSpectatorMode && room) {
     return (
@@ -1207,6 +1317,7 @@ export default function GamePage({ params }: PageProps) {
           cardRemovalVariant={room.card_removal_variant}
           gamePlayerCount={room.player_count}
           onGoHome={handleGoHome}
+          onRetry={retryNow}
         />
       </VoiceProvider>
     );
@@ -1269,6 +1380,7 @@ export default function GamePage({ params }: PageProps) {
               step={1000}
               value={gameState?.botDelayMs ?? 5000}
               onChange={(e) => sendBotSpeed(Number(e.target.value))}
+              disabled={!canSend}
               aria-label="Bot speed"
               className="w-20 accent-emerald-400"
               data-testid="bot-speed-slider"
@@ -1369,16 +1481,9 @@ export default function GamePage({ params }: PageProps) {
        * Cleared automatically when the following `ask_result` or
        * `declaration_result` arrives (handled in useGameSocket).
        */}
-      {wsStatus === 'error' && wsError && myPlayerId && (
-        <div
-          className="relative z-10 flex items-center justify-center gap-2 px-4 py-1.5 bg-rose-900/60 border-b border-rose-700/40 text-xs text-rose-200"
-          role="alert"
-          data-testid="ws-error-banner"
-        >
-          <span aria-hidden="true">⚠️</span>
-          <span>{wsError}</span>
-        </div>
-      )}
+      {wsErrorBanner}
+
+      {wsStatus === 'reconnecting' && <ReconnectBar onRetry={retryNow} />}
 
       {reclaimQueued && (
         <div
@@ -1525,13 +1630,13 @@ export default function GamePage({ params }: PageProps) {
                               resetAskMode();
                             }
                           }}
-                          disabled={actionLoading}
+                          disabled={actionLoading || !canSend}
                           className={[
                             'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
                             !declareMode
                               ? 'bg-emerald-600 text-white shadow-sm'
                               : 'text-slate-400 hover:text-white',
-                            actionLoading ? 'opacity-50' : '',
+                            actionLoading || !canSend ? 'opacity-50' : '',
                           ].join(' ')}
                           data-testid="toggle-ask"
                         >
@@ -1546,13 +1651,13 @@ export default function GamePage({ params }: PageProps) {
                               setDeclareMode(true);
                             }
                           }}
-                          disabled={actionLoading}
+                          disabled={actionLoading || !canSend}
                           className={[
                             'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
                             declareMode
                               ? 'bg-violet-600 text-white shadow-sm'
                               : 'text-slate-400 hover:text-white',
-                            actionLoading ? 'opacity-50' : '',
+                            actionLoading || !canSend ? 'opacity-50' : '',
                           ].join(' ')}
                           data-testid="toggle-declare"
                         >
@@ -1600,6 +1705,7 @@ export default function GamePage({ params }: PageProps) {
                       onTimerExpiry={handleDeclareTimerExpiry}
                       isComplete={declareIsComplete}
                       isLoading={actionLoading}
+                      disabled={!canSend}
                       onConfirm={handleDeclareConfirm}
                     />
                   </div>
@@ -1618,7 +1724,7 @@ export default function GamePage({ params }: PageProps) {
                         : undefined
                     }
                     isMyTurn={isMyTurn}
-                    disabled={actionLoading || !isMyTurn || isTurnPassMode || showAskInline || (declareMode && !!declareSelectedSuit)}
+                    disabled={actionLoading || !canSend || !isMyTurn || isTurnPassMode || showAskInline || (declareMode && !!declareSelectedSuit)}
                     variant={effectiveVariant}
                     newlyArrivedCardId={newlyArrivedCardId}
                   />
@@ -1650,7 +1756,9 @@ export default function GamePage({ params }: PageProps) {
                  * legitimate players who connected but haven't yet received
                  * their personalised game_init message.
                  */}
-                {wsStatus === 'connected' && players.length > 0
+                {wsStatus === 'reconnecting'
+                  ? 'Reconnecting…'
+                  : wsStatus === 'connected' && players.length > 0
                   ? 'Watching as spectator'
                   : (wsStatus === 'connected' || wsStatus === 'connecting')
                   ? 'Connecting to game…'
@@ -1734,7 +1842,7 @@ export default function GamePage({ params }: PageProps) {
   );
 }
 
-function LoadingView() {
+function LoadingView({ wakingUp }: { wakingUp: boolean }) {
   return (
     <div
       className="animate-delayed-reveal flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
@@ -1758,6 +1866,7 @@ function LoadingView() {
           />
         </div>
         <span className="text-sm tracking-wide">Loading game…</span>
+        {wakingUp && <span className="text-sm text-amber-200">Waking up the table… this can take up to a minute.</span>}
       </div>
     </div>
   );

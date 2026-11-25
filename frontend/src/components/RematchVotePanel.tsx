@@ -17,6 +17,7 @@
  *   onVote           — callback invoked with true (yes) or false (no)
  *   voteTimeoutMs    — total vote window in ms (default 60 000), used to show countdown
  *   voteStartedAt    — epoch ms when the vote window opened (optional; estimated from mount)
+ *   disabled         — true while the vote cannot be sent
  */
 
 import { useEffect, useState, useRef } from 'react';
@@ -31,6 +32,7 @@ interface RematchVotePanelProps {
   onVote:          (vote: boolean) => void;
   voteTimeoutMs?:  number;
   voteStartedAt?:  number; // epoch ms; defaults to component mount time
+  disabled?:       boolean;
 }
 
 export default function RematchVotePanel({
@@ -40,6 +42,7 @@ export default function RematchVotePanel({
   onVote,
   voteTimeoutMs = DEFAULT_TIMEOUT_MS,
   voteStartedAt,
+  disabled = false,
 }: RematchVotePanelProps) {
   const mountTimeRef   = useRef<number>(Date.now());
   const startTime      = voteStartedAt ?? mountTimeRef.current;
@@ -72,7 +75,7 @@ export default function RematchVotePanel({
   }, [rematchVote, myPlayerId]);
 
   function handleVote(vote: boolean) {
-    if (hasVoted) return;
+    if (hasVoted || disabled) return;
     setHasVoted(true);
     setLocalVote(vote);
     onVote(vote);
@@ -112,6 +115,7 @@ export default function RematchVotePanel({
   const myVoteRecord = myPlayerId ? playerVotes.find((pv) => pv.playerId === myPlayerId) : null;
   // Prefer local optimistic vote; fall back to server-confirmed vote
   const myCurrentVote = localVote ?? myVoteRecord?.vote ?? null;
+  const locked = hasVoted || disabled;
 
   return (
     <div
@@ -132,14 +136,14 @@ export default function RematchVotePanel({
         <div className="flex gap-3 w-full" data-testid="rematch-vote-buttons">
           <button
             onClick={() => handleVote(true)}
-            disabled={hasVoted}
+            disabled={locked}
             aria-pressed={myCurrentVote === true}
             data-testid="rematch-yes-btn"
             className={[
               'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400',
               myCurrentVote === true
                 ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
-                : hasVoted
+                : locked
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 : 'bg-emerald-700 hover:bg-emerald-600 text-white',
             ].join(' ')}
@@ -148,14 +152,14 @@ export default function RematchVotePanel({
           </button>
           <button
             onClick={() => handleVote(false)}
-            disabled={hasVoted}
+            disabled={locked}
             aria-pressed={myCurrentVote === false}
             data-testid="rematch-no-btn"
             className={[
               'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-red-400',
               myCurrentVote === false
                 ? 'bg-red-700 text-white ring-2 ring-red-400'
-                : hasVoted
+                : locked
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 : 'bg-slate-700 hover:bg-slate-600 text-slate-200',
             ].join(' ')}

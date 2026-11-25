@@ -8,7 +8,7 @@
  * - myPlayerId: string | null
  * - players: GamePlayer[]
  * - gameState: PublicGameState | null
- * - wsStatus: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
+ * - wsStatus: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
  * - sendAsk(targetId, cardId): void
  * - sendDeclare(halfSuitId, assignment): void
  * - lastAskResult / lastDeclareResult: for animations
@@ -16,8 +16,16 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { API_URL } from '@/lib/api';
-import { trackEvent, trackGameInit, trackGameOver, trackSocketDropped } from '@/lib/analytics';
+import {
+  reportPendingSocketDrop,
+  trackEvent,
+  trackGameInit,
+  trackGameOver,
+  trackSocketDropped,
+  trackSocketRecovered,
+} from '@/lib/analytics';
 import { FAILED_DECLARATION_SEAT_REVEAL_MS } from '@/lib/declarationSeatReveal';
+import { createReconnectingSocket, type ReconnectingSocket, type SocketDrop } from '@/lib/reconnectingSocket';
 import type {
   CardId,
   GamePlayer,
@@ -44,7 +52,10 @@ import type {
 } from '@/types/game';
 import { sortHandByHalfSuit, type CardVariant } from '@/utils/cardSort';
 
-export type GameWsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
+export type GameWsStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
+
+// A tab closed or reloaded this soon after a drop does not count it.
+const _DROP_COUNTED_AFTER_MS = 2_000;
 
 function toWsUrl(
   roomCode: string,
@@ -69,6 +80,7 @@ interface UseGameSocketOptions {
   onRematchStart?: (payload: RematchStartPayload) => void;
   /** called when a new game is spun up in-place after a rematch vote. */
   onRematchStarting?: (payload: RematchStartingPayload) => void;
+  onGameInit?: (status: PublicGameState['status']) => void;
 }
 
 export interface TurnTimerPayload {
@@ -319,6 +331,7 @@ export interface UseGameSocketReturn {
    * - `declaration_result` arrives (safety reset — new declaration happened).
    */
   pendingTurnPassAck: boolean;
+  retryNow: () => void;
   error: string | null;
 }
 
@@ -383,6 +396,7 @@ export function useGameSocket({
   onGameOver,
   onRematchStart,
   onRematchStarting,
+  onGameInit,
 }: UseGameSocketOptions): UseGameSocketReturn {
   const [wsStatus, setWsStatus]         = useState<GameWsStatus>('idle');
   const [myPlayerId, setMyPlayerId]      = useState<string | null>(null);
@@ -419,76 +433,59 @@ export function useGameSocket({
   const [pendingTurnPassAck, setPendingTurnPassAck] = useState<boolean>(false);
   const [error, setError]                   = useState<string | null>(null);
 
-  const wsRef      = useRef<WebSocket | null>(null);
-  const statusRef  = useRef<GameWsStatus>('idle');
-  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const socketRef  = useRef<ReconnectingSocket | null>(null);
   const declarationFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Persist the variant across message handlers so hand_update (which only
   // carries the new hand array) can still apply the half-suit sort.
   const variantRef = useRef<CardVariant | null>(null);
 
-  function setStatus(s: GameWsStatus) {
-    statusRef.current = s;
-    setWsStatus(s);
-  }
+  // The connect effect outlives renders, and the page's handler reads page state.
+  const onGameInitRef = useRef(onGameInit);
+  useEffect(() => {
+    onGameInitRef.current = onGameInit;
+  });
 
   // ── Connect / reconnect when roomCode and token are ready ─────────────────
   useEffect(() => {
     if (!roomCode || (!bearerToken && !spectatorToken)) return;
 
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(toWsUrl(roomCode, bearerToken, spectatorToken, guestRecoveryKey));
-    } catch {
-      setStatus('error');
-      setError('Failed to create WebSocket connection');
-      return;
+    let lost: { drop: SocketDrop; at: number } | null = null;
+    let countTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function confirmSocket() {
+      socket.confirm();
+      if (!lost) return;
+      const { drop, at } = lost;
+      lost = null;
+      // A reload would not show these, so a reconnect must not either.
+      setLastAskResult(null);
+      setLastDeclareResult(null);
+      setDeclarationFailed(null);
+      setDeclarationTimer(null);
+      setBotTakeover(null);
+      setDeclareProgress(null);
+      setReconnectWindows({});
+      setEligibleNextTurnPlayerIds([]);
+      setPostDeclarationHighlight(null);
+      setPostDeclarationTimer(null);
+      setPendingTurnPassAck(false);
+      setRematchVote(null);
+      setRematchDeclined(null);
+      setError(null);
+      if (spectatorToken) return;
+      if (countTimer !== undefined) {
+        clearTimeout(countTimer);
+        countTimer = undefined;
+        trackSocketDropped(drop);
+      }
+      reportPendingSocketDrop();
+      trackSocketRecovered((Date.now() - at) / 1000, drop.detectedBy);
     }
 
-    wsRef.current = ws;
-    setStatus('connecting');
-    setError(null);
-    let opened = false;
-
-    ws.onopen = () => {
-      opened = true;
-      setStatus('connected');
-    };
-
-    ws.onclose = (e) => {
-      wsRef.current = null;
-      // Code 1000 = intentional close (unmount). Any 4xxx is a deliberate server
-      // close that a reload would only repeat, so surface it instead.
-      const isIntentional = e.code === 1000;
-      const isKnownError = e.code >= 4000 && e.code < 5000;
-      setStatus(isKnownError || statusRef.current === 'error' ? 'error' : 'disconnected');
-      const closeMessage = describeClose(e.code);
-      if (closeMessage) setError(closeMessage);
-
-      // Auto-reload on unexpected disconnect (e.g. backend redeploy).
-      if (!isIntentional && !isKnownError) {
-        reloadTimerRef.current = setTimeout(() => {
-          // Here, not at close: an unload or a failed handshake never reaches this reload.
-          if (opened && !spectatorToken) trackSocketDropped(e.code);
-          window.location.reload();
-        }, 2000);
-      }
-    };
-
-    ws.onerror = () => {
-      setStatus('error');
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
-      let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(event.data as string) as Record<string, unknown>;
-      } catch {
-        return;
-      }
-
+    const onMessage = (msg: Record<string, unknown>) => {
       switch (msg.type) {
         case 'game_init': {
+          confirmSocket();
           const payload = msg as unknown as {
             myPlayerId: string;
             myHand: CardId[];
@@ -519,10 +516,12 @@ export function useGameSocket({
           // from a previous turn/room before the next timer event arrives.
           setTurnTimer(null);
           trackGameInit(roomCode, payload.gameState?.status, payload.playerCount);
+          if (payload.gameState) onGameInitRef.current?.(payload.gameState.status);
           break;
         }
 
         case 'spectator_init': {
+          confirmSocket();
           const payload = msg as unknown as {
             players: GamePlayer[];
             hands: SpectatorHands;
@@ -543,6 +542,7 @@ export function useGameSocket({
           setPlayerCount(payload.playerCount ?? null);
           // Spectators should not carry over a player's previous turn timer.
           setTurnTimer(null);
+          if (payload.gameState) onGameInitRef.current?.(payload.gameState.status);
           break;
         }
 
@@ -868,16 +868,8 @@ export function useGameSocket({
           const { message: errMsg, code } = msg as { message: string; code?: string };
           console.warn('[game-ws] Server error:', code, errMsg);
           setError(errMsg ?? 'Unknown error');
-          break;
-        }
-
-        // Render's proxy drops server-initiated close frames, so the server
-        // announces the close as a message; close from our side instead.
-        case 'closing': {
-          const { code, reason } = msg as { code: number; reason?: string };
-          setStatus('error');
-          setError(describeClose(code) ?? reason ?? 'Connection closed by server');
-          ws.close(1000, 'server closing');
+          // A player who was offline for the room_dissolved broadcast learns of the abandonment only here.
+          if (code === 'GAME_ABANDONED') setRoomDissolved({ type: 'room_dissolved', reason: 'all_bots' });
           break;
         }
 
@@ -886,13 +878,34 @@ export function useGameSocket({
       }
     };
 
+    const socket = createReconnectingSocket({
+      getUrl: () => toWsUrl(roomCode, bearerToken, spectatorToken, guestRecoveryKey),
+      onMessage,
+      onStatus: (status, stop) => {
+        setWsStatus(status);
+        if (status === 'connecting') setError(null);
+        if (status !== 'error') return;
+        setError(stop
+          ? describeClose(stop.code) ?? (stop.reason || 'Connection closed by server')
+          : 'Failed to create WebSocket connection');
+      },
+      onDrop: (drop) => {
+        lost = { drop, at: Date.now() };
+        if (spectatorToken) return;
+        countTimer = setTimeout(() => {
+          countTimer = undefined;
+          trackSocketDropped(drop);
+        }, _DROP_COUNTED_AFTER_MS);
+      },
+    });
+    socketRef.current = socket;
+
     return () => {
-      if (reloadTimerRef.current) {
-        clearTimeout(reloadTimerRef.current);
-        reloadTimerRef.current = null;
-      }
-      ws.close(1000, 'unmount');
-      wsRef.current = null;
+      clearTimeout(countTimer);
+      socket.close();
+      socketRef.current = null;
+      // close() is silent, so nothing else marks the hook as unconnected.
+      setWsStatus('idle');
     };
   }, [roomCode, bearerToken, spectatorToken, guestRecoveryKey]);
 
@@ -919,14 +932,13 @@ export function useGameSocket({
   // ── Send helpers ──────────────────────────────────────────────────────────
 
   const sendAsk = useCallback((targetPlayerId: string, cardId: CardId, batchCardIds?: CardId[]) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({
+    const sent = socketRef.current?.send({
       type: 'ask_card',
       targetPlayerId,
       cardId,
       ...(batchCardIds && batchCardIds.length > 1 ? { batchCardIds } : {}),
-    }));
+    });
+    if (!sent) return;
     // A multi-card ask sends one message per card, so this fires once per card.
     trackEvent('game_ask_submitted', { batch_size: batchCardIds?.length ?? 1 });
   }, []);
@@ -935,16 +947,12 @@ export function useGameSocket({
     halfSuitId: HalfSuitId,
     assignment: Record<CardId, string>
   ) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'declare_suit', halfSuitId, assignment }));
+    if (!socketRef.current?.send({ type: 'declare_suit', halfSuitId, assignment })) return;
     trackEvent('game_declaration_submitted');
   }, []);
 
   const sendRematchVote = useCallback((vote: boolean) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'rematch_vote', vote }));
+    if (!socketRef.current?.send({ type: 'rematch_vote', vote })) return;
     trackEvent('rematch_vote_submitted', { vote: vote ? 'yes' : 'no' });
   }, []);
 
@@ -954,9 +962,7 @@ export function useGameSocket({
    * validate host identity and immediately trigger rematch_start.
    */
   const sendRematchInitiate = useCallback((roomCode: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'rematch_initiate', roomCode }));
+    socketRef.current?.send({ type: 'rematch_initiate', roomCode });
   }, []);
 
   /**
@@ -966,9 +972,7 @@ export function useGameSocket({
    * timer fires before the player clicks Confirm.
    */
   const sendPartialSelection = useCallback((partial: PartialSelectionPayload) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'partial_selection', ...partial }));
+    socketRef.current?.send({ type: 'partial_selection', ...partial });
   }, []);
 
   /**
@@ -983,13 +987,11 @@ export function useGameSocket({
     halfSuitId: HalfSuitId | null,
     assignment: Record<CardId, string>,
   ) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({
+    socketRef.current?.send({
       type:       'declare_progress',
       halfSuitId: halfSuitId ?? null,
       assignment,
-    }));
+    });
   }, []);
 
   /**
@@ -1008,12 +1010,10 @@ export function useGameSocket({
    * from non-active players.
    */
   const sendDeclareSelecting = useCallback((halfSuitId?: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({
+    socketRef.current?.send({
       type: 'declare_selecting',
       ...(halfSuitId ? { halfSuitId } : {}),
-    }));
+    });
   }, []);
 
   /**
@@ -1022,15 +1022,11 @@ export function useGameSocket({
    * is ready for the next turn.
    */
   const sendGameAdvance = useCallback(() => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'game_advance' }));
+    socketRef.current?.send({ type: 'game_advance' });
   }, []);
 
   const sendBotSpeed = useCallback((delayMs: number) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'set_bot_speed', delayMs }));
+    socketRef.current?.send({ type: 'set_bot_speed', delayMs });
   }, []);
 
   /**
@@ -1042,14 +1038,14 @@ export function useGameSocket({
    * server confirms the selection via `post_declaration_turn_selected`.
    */
   const sendChooseNextTurn = useCallback((chosenPlayerId: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'choose_next_turn', chosenPlayerId }));
+    if (!socketRef.current?.send({ type: 'choose_next_turn', chosenPlayerId })) return;
     // Optimistically clear the highlight so the UI responds immediately
     setPostDeclarationHighlight(null);
     // block further interaction until server ack arrives
     setPendingTurnPassAck(true);
   }, []);
+
+  const retryNow = useCallback(() => socketRef.current?.retryNow(), []);
 
   return {
     wsStatus,
@@ -1088,6 +1084,7 @@ export function useGameSocket({
     sendGameAdvance,
     sendBotSpeed,
     sendChooseNextTurn,
+    retryNow,
     error,
   };
 }

@@ -1,5 +1,6 @@
 import posthog from 'posthog-js';
 import type { CaptureResult, Properties } from 'posthog-js';
+import type { DropCause, SocketDrop } from '@/lib/reconnectingSocket';
 import type { PublicGameState } from '@/types/game';
 
 const _SOCKET_DROPPED_KEY = 'literati:socket-dropped';
@@ -88,11 +89,27 @@ export function trackGameOver(roomCode: string): void {
   }
 }
 
-// The hook reloads 2 s after a drop and the network may be down, so a send now would be lost.
-export function trackSocketDropped(closeCode: number): void {
+// Builds the event from checked fields only, so nothing else in storage reaches PostHog.
+function _droppedProps(stored: string): Properties | null {
+  const parsed: unknown = JSON.parse(stored);
+  // A bare number is a close code stored by an older build.
+  const value = typeof parsed === 'number' ? { close_code: parsed, detected_by: 'close' } : parsed;
+  if (!_isPlainObject(value)) return null;
+  const { close_code: closeCode, detected_by: detectedBy } = value;
+  if (detectedBy !== 'close' && detectedBy !== 'heartbeat') return null;
+  if (closeCode === undefined) return { detected_by: detectedBy };
+  return Number.isFinite(closeCode) ? { close_code: closeCode, detected_by: detectedBy } : null;
+}
+
+// The network may be down when a drop is counted, so it waits in storage for the next send.
+export function trackSocketDropped(drop: SocketDrop): void {
   try {
     if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
-    localStorage.setItem(_SOCKET_DROPPED_KEY, String(closeCode));
+    const stored = {
+      ...(drop.closeCode !== null && { close_code: drop.closeCode }),
+      detected_by: drop.detectedBy,
+    };
+    localStorage.setItem(_SOCKET_DROPPED_KEY, JSON.stringify(stored));
   } catch {
     // Tracking must never break the game.
   }
@@ -104,11 +121,18 @@ export function reportPendingSocketDrop(): void {
     if (stored === null) return;
     // Removing first means a failing capture cannot resend the drop on every load.
     localStorage.removeItem(_SOCKET_DROPPED_KEY);
-    const closeCode = Number(stored);
-    if (!Number.isFinite(closeCode)) return;
-    _capture('game_socket_dropped', { close_code: closeCode });
+    const props = _droppedProps(stored);
+    if (props) _capture('game_socket_dropped', props);
   } catch {
     // Tracking must never break the app.
+  }
+}
+
+export function trackSocketRecovered(secondsDown: number, detectedBy: DropCause): void {
+  try {
+    _capture('game_socket_recovered', { seconds_down: Math.round(secondsDown), detected_by: detectedBy });
+  } catch {
+    // Tracking must never break the game.
   }
 }
 

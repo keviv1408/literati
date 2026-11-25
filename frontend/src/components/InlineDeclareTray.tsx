@@ -29,6 +29,7 @@ interface InlineDeclareTrayProps {
   onTimerExpiry: () => void;
   isComplete: boolean;
   isLoading: boolean;
+  disabled?: boolean;
   onConfirm: () => void;
 }
 
@@ -43,6 +44,7 @@ export default function InlineDeclareTray({
   onTimerExpiry,
   isComplete,
   isLoading,
+  disabled = false,
   onConfirm,
 }: InlineDeclareTrayProps) {
   const hasCards = unassignedCards.length > 0;
@@ -89,7 +91,7 @@ export default function InlineDeclareTray({
           <div className="flex-shrink-0">
             <button
               onClick={onConfirm}
-              disabled={isLoading}
+              disabled={isLoading || disabled}
               className="rounded-xl border border-emerald-600 bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
               data-testid="inline-declare-confirm"
             >

@@ -156,6 +156,7 @@ function buildProps(
     cardRemovalVariant: 'remove_7s',
     gamePlayerCount: 6,
     onGoHome: jest.fn(),
+    onRetry: jest.fn(),
     ...overrides,
   };
 }

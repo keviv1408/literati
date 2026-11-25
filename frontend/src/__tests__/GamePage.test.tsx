@@ -5,7 +5,7 @@
  * • Renders loading state immediately on mount.
  * • Renders "Invalid Room Code" error for malformed room IDs (e.g. "ABC").
  * • Renders "Room Not Found" error when GET /api/rooms/:code returns 404.
- * • Renders "Something Went Wrong" error for unexpected API failures.
+ * • Keeps retrying the room load behind the loading view on any other failure.
  * • Redirects to /room/<CODE> when room status is 'waiting'.
  * • Redirects to /room/<CODE> when room status is 'starting'.
  * • Renders game view (data-testid="game-view") for 'in_progress' rooms.
@@ -19,7 +19,10 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within, cleanup } from '@testing-library/react';
+import type { useGameSocket, UseGameSocketReturn } from '@/hooks/useGameSocket';
+import type { ReconnectResult } from '@/hooks/useReconnect';
+import type { CardId, GamePlayer, PublicGameState } from '@/types/game';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -27,10 +30,35 @@ import { render, screen, waitFor, act, fireEvent, within } from '@testing-librar
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+// The real router is stable across renders; a new object each render would refetch the room.
+const mockRouter = { push: mockPush, replace: mockReplace };
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useRouter: () => mockRouter,
   useSearchParams: () => ({ get: () => null }),
 }));
+
+type GameSocketOptions = Parameters<typeof useGameSocket>[0];
+
+// Null runs the real hook over MockWebSocket; a test sets it before render to fake the hook.
+let mockGameSocket: ((options: GameSocketOptions) => UseGameSocketReturn) | null = null;
+jest.mock('@/hooks/useGameSocket', () => {
+  const actual = jest.requireActual('@/hooks/useGameSocket');
+  return {
+    ...actual,
+    useGameSocket: (options: GameSocketOptions) =>
+      mockGameSocket ? mockGameSocket(options) : actual.useGameSocket(options),
+  };
+});
+
+// Null runs the real hook; a test sets it before render to fake the session check.
+let mockReconnect: ReconnectResult | null = null;
+jest.mock('@/hooks/useReconnect', () => {
+  const actual = jest.requireActual('@/hooks/useReconnect');
+  return {
+    ...actual,
+    useReconnect: () => mockReconnect ?? actual.useReconnect(),
+  };
+});
 
 // Mock the API module
 const mockGetRoomByCode = jest.fn();
@@ -155,9 +183,18 @@ function makeParams(roomId: string): Promise<{ 'room-id': string }> {
   return Promise.resolve({ 'room-id': roomId });
 }
 
+// The room load starts in the render this flushes, so call it once after render before timing anything.
+async function _advanceTime(ms: number) {
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(ms);
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   lastMockWsInstance = null;
+  mockGameSocket = null;
+  mockReconnect = null;
   mockGetGameSummary.mockResolvedValue({
     roomCode: 'ABC123',
     winner: 1,
@@ -280,15 +317,165 @@ describe('GamePage — room not found', () => {
     expect(screen.getByText('Room Not Found')).toBeTruthy();
   });
 
-  it('shows "Something Went Wrong" for non-404 API errors', async () => {
+  it('keeps loading and retries after an HTTP 500 instead of "Something Went Wrong"', async () => {
     const { ApiError } = await import('@/lib/api');
     mockGetRoomByCode.mockRejectedValue(new ApiError(500, 'Internal server error'));
 
-    render(<GamePage params={makeParams('ABC123')} />);
+    jest.useFakeTimers();
+    try {
+      render(<GamePage params={makeParams('ABC123')} />);
+      await _advanceTime(0);
+      await _advanceTime(1000);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('generic-error-view')).toBeTruthy();
-    });
+      expect(mockGetRoomByCode).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('game-loading')).toBeTruthy();
+      expect(screen.queryByTestId('generic-error-view')).toBeNull();
+    } finally {
+      cleanup();
+      jest.useRealTimers();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// While the backend is down (fake timers)
+// ---------------------------------------------------------------------------
+
+describe('GamePage — while the backend is down', () => {
+  const WAKING_LINE = 'Waking up the table… this can take up to a minute.';
+
+  beforeEach(() => {
+    // clearAllMocks keeps queued once-values, so an unconsumed one would leak into the next test.
+    mockGetRoomByCode.mockReset();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    jest.useRealTimers();
+  });
+
+  it('loads the game once the room fetch succeeds, never showing "Something Went Wrong"', async () => {
+    mockGetRoomByCode
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({ room: buildRoom('in_progress') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+    await _advanceTime(0);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('generic-error-view')).toBeNull();
+
+    await _advanceTime(1000);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('generic-error-view')).toBeNull();
+
+    await _advanceTime(2000);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(3);
+    expect(screen.queryByTestId('generic-error-view')).toBeNull();
+    expect(screen.getByTestId('game-view')).toBeTruthy();
+  });
+
+  it('shows "Room Not Found" on a 404 and stops retrying', async () => {
+    const { ApiError } = await import('@/lib/api');
+    mockGetRoomByCode.mockRejectedValue(new ApiError(404, 'Room not found'));
+
+    render(<GamePage params={makeParams('XYZ999')} />);
+    await _advanceTime(0);
+    expect(screen.getByTestId('not-found-view')).toBeTruthy();
+
+    await _advanceTime(60_000);
+    expect(mockGetRoomByCode).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('not-found-view')).toBeTruthy();
+  });
+
+  it('shows the waking line while it retries, then the unreachable view at 60 s, and keeps retrying', async () => {
+    mockGetRoomByCode.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    render(<GamePage params={makeParams('ABC123')} />);
+    await _advanceTime(0);
+    await _advanceTime(2000);
+    expect(screen.getByTestId('game-loading')).toBeTruthy();
+    expect(screen.getByText(WAKING_LINE)).toBeTruthy();
+
+    await _advanceTime(57_999);
+    expect(screen.queryByTestId('server-unreachable-view')).toBeNull();
+
+    await _advanceTime(1);
+    const view = screen.getByTestId('server-unreachable-view');
+    fireEvent.click(within(view).getByRole('button', { name: 'Back to Home' }));
+    expect(mockPush).toHaveBeenCalledWith('/');
+
+    const callsAt60s = mockGetRoomByCode.mock.calls.length;
+    await _advanceTime(10_000);
+    expect(mockGetRoomByCode.mock.calls.length).toBeGreaterThan(callsAt60s);
+  });
+
+  it.each<ReconnectResult['status']>(['reconnecting', 'no_session'])(
+    'never retries the session check while it reports %s',
+    async (status) => {
+      const retry = jest.fn();
+      mockReconnect = {
+        status,
+        sessionId: null,
+        bearerToken: null,
+        isGuest: false,
+        displayName: null,
+        errorMessage: null,
+        retry,
+      };
+      mockGetRoomByCode.mockReturnValue(new Promise(() => {}));
+
+      render(<GamePage params={makeParams('ABC123')} />);
+      await _advanceTime(0);
+      await _advanceTime(60_000);
+
+      expect(retry).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retries the session check from error on the backoff schedule, and restarts the schedule after ready', async () => {
+    const retry = jest.fn();
+    mockReconnect = {
+      status: 'error',
+      sessionId: null,
+      bearerToken: null,
+      isGuest: false,
+      displayName: null,
+      errorMessage: 'Could not connect to the server.',
+      retry,
+    };
+    mockGetRoomByCode.mockReturnValue(new Promise(() => {}));
+    const params = makeParams('ABC123');
+    const { rerender } = render(<GamePage params={params} />);
+    // One render per status, as the real hook reports them, so the retry effect sees every step.
+    const goThrough = (...statuses: ReconnectResult['status'][]) => {
+      for (const status of statuses) {
+        mockReconnect = { ...mockReconnect!, status };
+        rerender(<GamePage params={params} />);
+      }
+    };
+
+    await _advanceTime(999);
+    expect(retry).not.toHaveBeenCalled();
+    await _advanceTime(1);
+    expect(retry).toHaveBeenCalledTimes(1);
+
+    goThrough('loading', 'reconnecting', 'error');
+    await _advanceTime(1999);
+    expect(retry).toHaveBeenCalledTimes(1);
+    await _advanceTime(1);
+    expect(retry).toHaveBeenCalledTimes(2);
+
+    goThrough('loading', 'reconnecting', 'ready');
+    await _advanceTime(60_000);
+    expect(retry).toHaveBeenCalledTimes(2);
+
+    goThrough('reconnecting', 'error');
+    await _advanceTime(999);
+    expect(retry).toHaveBeenCalledTimes(2);
+    await _advanceTime(1);
+    expect(retry).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -368,6 +555,21 @@ describe('GamePage — abandoned room', () => {
       expect(screen.getByTestId('abandoned-view')).toBeTruthy();
     });
     expect(screen.getByText(/bot-only game was ended automatically/i)).toBeTruthy();
+  });
+
+  it('switches to the abandoned state when the server rejects the socket with GAME_ABANDONED', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({ type: 'error', code: 'GAME_ABANDONED', message: 'Game was abandoned' }));
+    act(() => sendWsMessage({ type: 'closing', code: 4005, reason: 'Game abandoned' }));
+
+    await waitFor(() => expect(screen.getByTestId('abandoned-view')).toBeTruthy());
+    warn.mockRestore();
   });
 });
 
@@ -701,7 +903,7 @@ describe('GamePage — room code normalisation (deep-link)', () => {
     render(<GamePage params={makeParams('def456')} />);
 
     await waitFor(() => {
-      expect(mockGetRoomByCode).toHaveBeenCalledWith('DEF456');
+      expect(mockGetRoomByCode).toHaveBeenCalledWith('DEF456', expect.any(AbortSignal));
     });
   });
 });
@@ -1850,5 +2052,682 @@ describe('GamePage — rematch vote UI and room_dissolved', () => {
     // Vote panel and decline panel must no longer be shown
     expect(screen.queryByTestId('rematch-vote-panel')).toBeNull();
     expect(screen.queryByTestId('rematch-declined-panel')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// While the game socket reconnects (fake hook)
+// ---------------------------------------------------------------------------
+
+describe('GamePage — while the game socket reconnects', () => {
+  const MY_PLAYER_ID = 'player-me';
+  const HAND: CardId[] = ['1_s', '3_h', '5_d', '6_c', '9_s'];
+  const players6: GamePlayer[] = [
+    makePlayer(MY_PLAYER_ID, 'Me',    1, 0),
+    makePlayer('p2',          'Alice', 1, 2),
+    makePlayer('p3',          'Bob',   1, 4),
+    makePlayer('p4',          'Carol', 2, 1),
+    makePlayer('p5',          'Dave',  2, 3),
+    makePlayer('p6',          'Eve',   2, 5),
+  ];
+  const GAME_OVER = {
+    type: 'game_over' as const,
+    winner: 1 as const,
+    tiebreakerWinner: null,
+    scores: { team1: 5, team2: 3 },
+  };
+
+  interface FakeSocket {
+    state: UseGameSocketReturn;
+    options: GameSocketOptions | null;
+  }
+
+  function activeState(currentTurnPlayerId: string | null, overrides: Partial<PublicGameState> = {}): PublicGameState {
+    return {
+      status: 'active',
+      currentTurnPlayerId,
+      scores: { team1: 0, team2: 0 },
+      lastMove: null,
+      winner: null,
+      tiebreakerWinner: null,
+      declaredSuits: [],
+      ...overrides,
+    };
+  }
+
+  function fakeGameSocket(overrides: Partial<UseGameSocketReturn> = {}): FakeSocket {
+    const fake: FakeSocket = {
+      options: null,
+      state: {
+        wsStatus: 'connected',
+        myPlayerId: MY_PLAYER_ID,
+        myHand: HAND,
+        spectatorHands: {},
+        spectatorMoveHistory: [],
+        askHistory: [],
+        players: players6,
+        gameState: activeState(MY_PLAYER_ID),
+        variant: 'remove_7s',
+        playerCount: 6,
+        lastAskResult: null,
+        lastDeclareResult: null,
+        declarationFailed: null,
+        turnTimer: null,
+        declarationTimer: null,
+        rematchVote: null,
+        rematchDeclined: null,
+        roomDissolved: null,
+        botTakeover: null,
+        reclaimQueued: false,
+        reconnectWindows: {},
+        declareProgress: null,
+        eligibleNextTurnPlayerIds: [],
+        postDeclarationHighlight: null,
+        postDeclarationTimer: null,
+        pendingTurnPassAck: false,
+        error: null,
+        sendAsk: jest.fn(),
+        sendDeclare: jest.fn(),
+        sendDeclareProgress: jest.fn(),
+        sendRematchVote: jest.fn(),
+        sendRematchInitiate: jest.fn(),
+        sendPartialSelection: jest.fn(),
+        sendDeclareSelecting: jest.fn(),
+        sendGameAdvance: jest.fn(),
+        sendBotSpeed: jest.fn(),
+        sendChooseNextTurn: jest.fn(),
+        retryNow: jest.fn(),
+        ...overrides,
+      },
+    };
+    mockGameSocket = (options) => {
+      fake.options = options;
+      return fake.state;
+    };
+    return fake;
+  }
+
+  /** Renders the page over the fake hook. The returned function applies one hook update in one render. */
+  async function renderWithFake(fake: FakeSocket, readyTestId: string) {
+    const params = makeParams('ABC123');
+    const { rerender } = render(<GamePage params={params} />);
+    await waitFor(() => expect(screen.getByTestId(readyTestId)).toBeTruthy());
+    return (patch: Partial<UseGameSocketReturn>) => {
+      fake.state = { ...fake.state, ...patch };
+      rerender(<GamePage params={params} />);
+    };
+  }
+
+  function clickHandCard(cardId: CardId) {
+    const wrapper = document.querySelector(`[data-testid="card-wrapper-${cardId}"]`) as HTMLElement;
+    fireEvent.click(wrapper.querySelector('[role="button"]') as HTMLElement);
+  }
+
+  function clickSeat(playerId: string) {
+    fireEvent.click(document.querySelector(`[data-player-id="${playerId}"]`) as HTMLElement);
+  }
+
+  function openAskTray(cardIds: CardId[]) {
+    clickHandCard('3_h');
+    for (const cardId of cardIds) fireEvent.click(screen.getByTestId(`inline-ask-card-${cardId}`));
+  }
+
+  function openDeclareTray() {
+    fireEvent.click(screen.getByTestId('toggle-declare'));
+    clickHandCard('1_s');
+    return screen.getByTestId('inline-declare-tray');
+  }
+
+  function teammateDropSeat(playerId: string) {
+    return screen.getAllByTestId('declare-drop-seat').find((s) => s.getAttribute('data-player-id') === playerId)!;
+  }
+
+  function pressBar() {
+    const text = within(screen.getByTestId('ws-reconnecting-banner')).getByText('Reconnecting…');
+    fireEvent.mouseDown(text);
+    fireEvent.click(text);
+  }
+
+  beforeEach(() => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
+  });
+
+  it('shows the reconnect bar and keeps the hand on screen', async () => {
+    const fake = fakeGameSocket({ wsStatus: 'reconnecting' });
+    await renderWithFake(fake, 'game-view');
+
+    expect(screen.getByTestId('ws-reconnecting-banner')).toBeTruthy();
+    expect(document.querySelector('[data-testid="card-wrapper-1_s"]')).toBeTruthy();
+  });
+
+  it('does not send an ask when the opponent seat is clicked after the drop', async () => {
+    const fake = fakeGameSocket();
+    const update = await renderWithFake(fake, 'game-view');
+    openAskTray(['1_h']);
+
+    update({ wsStatus: 'reconnecting' });
+    clickSeat('p4');
+
+    expect(fake.state.sendAsk).not.toHaveBeenCalled();
+  });
+
+  it('disables the confirm button of a completed declare tray after the drop', async () => {
+    const fake = fakeGameSocket();
+    const update = await renderWithFake(fake, 'game-view');
+    const tray = openDeclareTray();
+    for (let i = 0; i < 5; i++) {
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[0]);
+      fireEvent.click(
+        screen.getAllByTestId('declare-drop-seat').find((s) => s.getAttribute('data-player-id') === 'p2')!,
+      );
+    }
+    expect(screen.getByTestId('inline-declare-confirm')).toBeEnabled();
+
+    update({ wsStatus: 'reconnecting' });
+    const confirm = screen.getByTestId('inline-declare-confirm');
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+
+    expect(fake.state.sendDeclare).not.toHaveBeenCalled();
+  });
+
+  it('drops a pending ask batch on a drop and frees the controls after the reconnect', async () => {
+    const fake = fakeGameSocket();
+    const update = await renderWithFake(fake, 'game-view');
+    openAskTray(['1_h', '2_h']);
+    clickSeat('p4');
+    expect(fake.state.sendAsk).toHaveBeenCalledWith('p4', '1_h', ['1_h', '2_h']);
+
+    // Card 1 lands, so the page waits for Carol's count to drop before it asks for card 2.
+    update({
+      myHand: [...HAND, '1_h'],
+      lastAskResult: {
+        type: 'ask_result',
+        askerId: MY_PLAYER_ID,
+        targetId: 'p4',
+        cardId: '1_h',
+        success: true,
+        newTurnPlayerId: MY_PLAYER_ID,
+        lastMove: 'Me asked Carol for A♥ and got it',
+      },
+    });
+    expect(screen.getByTestId('toggle-ask')).toBeDisabled();
+
+    update({ wsStatus: 'reconnecting' });
+    update({
+      wsStatus: 'connected',
+      lastAskResult: null,
+      players: players6.map((p) => (p.playerId === 'p4' ? { ...p, cardCount: 4 } : p)),
+      gameState: activeState(MY_PLAYER_ID),
+    });
+
+    expect(fake.state.sendAsk).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('toggle-ask')).toBeEnabled();
+    clickHandCard('5_d');
+    expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+  });
+
+  it('frees the controls after an ask result identical to the last one before the drop', async () => {
+    const fake = fakeGameSocket();
+    const update = await renderWithFake(fake, 'game-view');
+    const gotAceOfHearts = () => ({
+      type: 'ask_result' as const,
+      askerId: MY_PLAYER_ID,
+      targetId: 'p4',
+      cardId: '1_h' as CardId,
+      success: true,
+      newTurnPlayerId: MY_PLAYER_ID,
+      lastMove: 'Me asked Carol for A♥ — got it',
+    });
+    openAskTray(['1_h']);
+    clickSeat('p4');
+    update({ myHand: [...HAND, '1_h'], lastAskResult: gotAceOfHearts() });
+    expect(screen.getByTestId('toggle-ask')).toBeEnabled();
+
+    // Carol took the card back while the player was away, so asking for it again is the natural move.
+    update({ wsStatus: 'reconnecting' });
+    update({ wsStatus: 'connected', lastAskResult: null, myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+    openAskTray(['1_h']);
+    clickSeat('p4');
+    expect(fake.state.sendAsk).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('toggle-ask')).toBeDisabled();
+
+    update({ myHand: [...HAND, '1_h'], lastAskResult: gotAceOfHearts() });
+
+    expect(screen.getByTestId('toggle-ask')).toBeEnabled();
+  });
+
+  it('keeps an open ask tray when the reconnect bar is pressed', async () => {
+    const fake = fakeGameSocket();
+    const update = await renderWithFake(fake, 'game-view');
+    openAskTray(['1_h']);
+
+    update({ wsStatus: 'reconnecting' });
+    pressBar();
+
+    expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+    expect(screen.getByTestId('inline-ask-card-1_h')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps an open declare tray when the reconnect bar is pressed', async () => {
+    const fake = fakeGameSocket();
+    const update = await renderWithFake(fake, 'game-view');
+    openDeclareTray();
+
+    update({ wsStatus: 'reconnecting' });
+    pressBar();
+
+    expect(screen.getByTestId('inline-declare-tray')).toBeTruthy();
+  });
+
+  describe('trays after the reconnect', () => {
+    async function dropWithAskTrayOpen() {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openAskTray(['1_h']);
+      update({ wsStatus: 'reconnecting' });
+      return update;
+    }
+
+    it('keeps the tray and its selection on the same turn with the same hand and declared suits', async () => {
+      const update = await dropWithAskTrayOpen();
+
+      update({ wsStatus: 'connected', myHand: [...HAND].reverse(), gameState: activeState(MY_PLAYER_ID) });
+
+      expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+      expect(screen.getByTestId('inline-ask-card-1_h')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('resets the tray when the hand changed', async () => {
+      const update = await dropWithAskTrayOpen();
+
+      update({ wsStatus: 'connected', myHand: [...HAND, '2_h'], gameState: activeState(MY_PLAYER_ID) });
+
+      expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+    });
+
+    it('resets the tray when the declared suits changed', async () => {
+      const update = await dropWithAskTrayOpen();
+
+      update({
+        wsStatus: 'connected',
+        myHand: [...HAND],
+        gameState: activeState(MY_PLAYER_ID, {
+          declaredSuits: [{ halfSuitId: 'high_c', teamId: 2, declaredBy: 'p4' }],
+        }),
+      });
+
+      expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+    });
+
+    it('resets the tray when it is no longer the player\'s turn', async () => {
+      const update = await dropWithAskTrayOpen();
+
+      update({ wsStatus: 'connected', myHand: [...HAND], gameState: activeState('p4') });
+      // The tray hides on another player's turn anyway; it must stay closed when the turn comes back.
+      update({ gameState: activeState(MY_PLAYER_ID) });
+
+      expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+    });
+  });
+
+  describe('the turn deadline during a drop', () => {
+    const turnTimerIn = (ms: number) => ({
+      type: 'turn_timer' as const,
+      playerId: MY_PLAYER_ID,
+      durationMs: 60_000,
+      expiresAt: Date.now() + ms,
+    });
+
+    async function dropPastTheDeadlineWithAskTrayOpen() {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openAskTray(['1_h']);
+      // The reset runs on a timer, so fake timers must be in place before it arms.
+      jest.useFakeTimers();
+      update({ turnTimer: turnTimerIn(1000) });
+      update({ wsStatus: 'reconnecting' });
+      act(() => jest.advanceTimersByTime(1000));
+      return update;
+    }
+
+    afterEach(() => {
+      cleanup();
+      jest.useRealTimers();
+    });
+
+    it('keeps the ask tray open when the old deadline passes during the drop', async () => {
+      await dropPastTheDeadlineWithAskTrayOpen();
+
+      expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+      expect(screen.getByTestId('inline-ask-card-1_h')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('keeps the ask tray after a reconnect with a fresh deadline, and resets it when that deadline passes', async () => {
+      const update = await dropPastTheDeadlineWithAskTrayOpen();
+      update({ wsStatus: 'connected', turnTimer: null, myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+      update({ turnTimer: turnTimerIn(60_000) });
+
+      act(() => jest.advanceTimersByTime(59_999));
+      expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
+      act(() => jest.advanceTimersByTime(1));
+      expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+    });
+  });
+
+  describe('tray edits during the drop', () => {
+    it('keeps an open declare tray on an outside click and sends nothing', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openDeclareTray();
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendDeclareSelecting).mockClear();
+      jest.mocked(fake.state.sendDeclareProgress).mockClear();
+
+      fireEvent.click(document.body);
+
+      expect(screen.getByTestId('inline-declare-tray')).toBeTruthy();
+      expect(fake.state.sendDeclareSelecting).not.toHaveBeenCalled();
+      expect(fake.state.sendDeclareProgress).not.toHaveBeenCalled();
+    });
+
+    it('ignores a card toggle in an open ask tray and sends nothing', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openAskTray(['1_h']);
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendPartialSelection).mockClear();
+
+      fireEvent.click(screen.getByTestId('inline-ask-card-2_h'));
+
+      expect(screen.getByTestId('inline-ask-card-1_h')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('inline-ask-card-2_h')).toHaveAttribute('aria-pressed', 'false');
+      expect(fake.state.sendPartialSelection).not.toHaveBeenCalled();
+    });
+
+    it('ignores a card assignment in an open declare tray and sends nothing', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      const tray = openDeclareTray();
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendDeclareProgress).mockClear();
+
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[0]);
+      fireEvent.click(teammateDropSeat('p2'));
+
+      expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
+      expect(fake.state.sendDeclareProgress).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing and leaves the controls free when the declaration countdown runs out during the drop', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openDeclareTray();
+      // The countdown runs on requestAnimationFrame, so fake timers must be in place before it mounts.
+      jest.useFakeTimers();
+      try {
+        update({
+          declarationTimer: { type: 'declaration_timer', playerId: MY_PLAYER_ID, durationMs: 60_000, expiresAt: Date.now() + 1000 },
+        });
+        update({ wsStatus: 'reconnecting' });
+        act(() => jest.advanceTimersByTime(1100));
+
+        update({ wsStatus: 'connected', declarationTimer: null, myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+
+        expect(screen.getByTestId('toggle-declare')).toBeEnabled();
+        expect(fake.state.sendDeclare).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('keeps the highlight on its card when another card in the declare tray is tapped', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      const tray = openDeclareTray();
+      const cardLabels = () => within(tray).getAllByTestId('declare-draggable-card').map((c) => c.getAttribute('aria-label'));
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[0]);
+      const selectedBefore = cardLabels();
+      expect(selectedBefore[0]).toMatch(/, selected/);
+      update({ wsStatus: 'reconnecting' });
+
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[1]);
+
+      expect(cardLabels()).toEqual(selectedBefore);
+    });
+  });
+
+  describe('kept trays after the reconnect', () => {
+    it('resends the declare tray\'s suit and assignment', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      const tray = openDeclareTray();
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[0]);
+      fireEvent.click(teammateDropSeat('p2'));
+      const [, assignment] = jest.mocked(fake.state.sendDeclareProgress).mock.lastCall!;
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendDeclareSelecting).mockClear();
+      jest.mocked(fake.state.sendDeclareProgress).mockClear();
+
+      update({ wsStatus: 'connected', myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+
+      expect(screen.getByTestId('inline-declare-tray')).toBeTruthy();
+      expect(fake.state.sendDeclareSelecting).toHaveBeenCalledWith('low_s');
+      expect(fake.state.sendDeclareProgress).toHaveBeenCalledWith('low_s', assignment);
+    });
+
+    it('resends the ask tray\'s partial selection', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openAskTray(['1_h', '2_h']);
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendPartialSelection).mockClear();
+
+      update({ wsStatus: 'connected', myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+
+      expect(fake.state.sendPartialSelection).toHaveBeenCalledWith({ flow: 'ask', halfSuitId: 'low_h', cardId: '2_h' });
+    });
+  });
+
+  it('keeps the spectator view mounted, with its God mode still on, when the socket drops', async () => {
+    const fake = fakeGameSocket({ myPlayerId: null, myHand: [] });
+    const update = await renderWithFake(fake, 'spectator-view');
+    fireEvent.click(screen.getByTestId('spectator-god-mode-toggle'));
+    const view = screen.getByTestId('spectator-view');
+
+    update({ wsStatus: 'reconnecting' });
+
+    expect(screen.getByTestId('ws-reconnecting-banner')).toBeTruthy();
+    expect(screen.getByTestId('spectator-view')).toBe(view);
+    expect(screen.getByTestId('spectator-god-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  const viewers: Array<[string, string | null, string]> = [
+    ['a player', MY_PLAYER_ID, 'game-view'],
+    ['a spectator', null, 'spectator-view'],
+  ];
+
+  describe.each(viewers)('a rematch that started during the drop, for %s', (_viewer, myPlayerId, liveView) => {
+    async function renderUntilGameOver() {
+      const fake = fakeGameSocket({ myPlayerId, myHand: myPlayerId ? HAND : [] });
+      await renderWithFake(fake, liveView);
+
+      act(() => fake.options!.onGameInit!('active'));
+      expect(screen.getByTestId(liveView)).toBeTruthy();
+
+      act(() => fake.options!.onGameOver!(GAME_OVER));
+      await waitFor(() => expect(screen.getByTestId('ask-stats-table')).toBeTruthy());
+      return fake;
+    }
+
+    it('clears the results screen when the next init reports an active game', async () => {
+      const fake = await renderUntilGameOver();
+
+      act(() => fake.options!.onGameInit!('active'));
+
+      expect(screen.queryByTestId('game-completed-view')).toBeNull();
+      expect(screen.getByTestId(liveView)).toBeTruthy();
+    });
+
+    it('keeps the results screen when the next init reports a completed game', async () => {
+      const fake = await renderUntilGameOver();
+
+      act(() => fake.options!.onGameInit!('completed'));
+
+      expect(screen.getByTestId('game-completed-view')).toBeTruthy();
+    });
+  });
+
+  describe.each(viewers)('the last move after a reconnect, for %s', (_viewer, myPlayerId, liveView) => {
+    const lastMoveTestId = myPlayerId ? 'last-move-display' : 'spectator-last-move';
+
+    function carolAsksAlice(cardId: CardId, lastMove: string, batchCardIds?: CardId[]) {
+      return {
+        type: 'ask_result' as const,
+        askerId: 'p4',
+        targetId: 'p2',
+        cardId,
+        batchCardIds,
+        success: true,
+        newTurnPlayerId: 'p4',
+        lastMove,
+      };
+    }
+
+    async function renderOnCarolsTurn() {
+      const fake = fakeGameSocket({ myPlayerId, myHand: myPlayerId ? HAND : [], gameState: activeState('p4') });
+      return renderWithFake(fake, liveView);
+    }
+
+    it('shows the server\'s last move, not the summary of an ask batch from before the drop', async () => {
+      const update = await renderOnCarolsTurn();
+      // The batch summary shows only once the 5 s flash of the latest result has gone.
+      jest.useFakeTimers();
+      try {
+        update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it', ['10_c', '11_c']) });
+        act(() => jest.advanceTimersByTime(5000));
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for 10♣ and J♣');
+
+        update({ wsStatus: 'reconnecting' });
+        update({
+          wsStatus: 'connected',
+          lastAskResult: null,
+          gameState: activeState('p4', { lastMove: 'Carol asked Alice for J♣ — got it' }),
+        });
+
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for J♣ — got it');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('shows an ask result identical to the last one before the drop', async () => {
+      const update = await renderOnCarolsTurn();
+      // The flash of the first result must be gone, or it would hide whether the repeat was shown.
+      jest.useFakeTimers();
+      try {
+        update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it') });
+        act(() => jest.advanceTimersByTime(5000));
+        update({ wsStatus: 'reconnecting' });
+        update({
+          wsStatus: 'connected',
+          lastAskResult: null,
+          gameState: activeState('p4', { lastMove: 'Bob asked Carol for 2♠ — denied' }),
+        });
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Bob asked Carol for 2♠ — denied');
+
+        update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it') });
+
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for 10♣ — got it');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('starts a new ask summary after the reconnect instead of extending one from before the drop', async () => {
+      const update = await renderOnCarolsTurn();
+      update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it') });
+      update({ wsStatus: 'reconnecting' });
+      update({ wsStatus: 'connected', lastAskResult: null });
+
+      update({ lastAskResult: carolAsksAlice('11_c', 'Carol asked Alice for J♣ — got it') });
+
+      expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for J♣ — got it');
+    });
+  });
+
+  it('clears a completed room status when an init reports an active game', async () => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
+    const fake = fakeGameSocket();
+    await renderWithFake(fake, 'game-completed-view');
+    await waitFor(() => expect(screen.getByTestId('ask-stats-table')).toBeTruthy());
+
+    act(() => fake.options!.onGameInit!('active'));
+
+    expect(screen.getByTestId('game-view')).toBeTruthy();
+  });
+
+  describe('the results screen', () => {
+    const OPEN_VOTE = {
+      type: 'rematch_vote_update' as const,
+      yesCount: 0,
+      noCount: 0,
+      totalCount: 6,
+      humanCount: 6,
+      majority: 4,
+      majorityReached: false,
+      majorityDeclined: false,
+      votes: {},
+      playerVotes: players6.map((p) => ({ playerId: p.playerId, displayName: p.displayName, isBot: false, vote: null })),
+    };
+    const COMPLETED = activeState(null, { status: 'completed', winner: 1, scores: { team1: 5, team2: 3 } });
+
+    async function renderResults(overrides: Partial<UseGameSocketReturn>) {
+      mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
+      const fake = fakeGameSocket({ gameState: COMPLETED, rematchVote: OPEN_VOTE, ...overrides });
+      await renderWithFake(fake, 'game-completed-view');
+      await waitFor(() => expect(screen.getByTestId('ask-stats-table')).toBeTruthy());
+      return fake;
+    }
+
+    it('shows the bar and disables the rematch vote while reconnecting', async () => {
+      const fake = await renderResults({ wsStatus: 'reconnecting' });
+
+      expect(screen.getByTestId('ws-reconnecting-banner')).toBeTruthy();
+      expect(screen.getByTestId('rematch-yes-btn')).toBeDisabled();
+      expect(screen.getByTestId('rematch-no-btn')).toBeDisabled();
+      fireEvent.click(screen.getByTestId('rematch-yes-btn'));
+      expect(fake.state.sendRematchVote).not.toHaveBeenCalled();
+    });
+
+    it('says why the rematch vote is disabled after the socket stops for good', async () => {
+      await renderResults({ wsStatus: 'error', error: 'This game was opened in another tab or window.' });
+
+      expect(screen.getByTestId('ws-error-banner').textContent).toBe('⚠️This game was opened in another tab or window.');
+      expect(screen.getByTestId('rematch-yes-btn')).toBeDisabled();
+    });
+
+    it('shows no error to a visitor who never had a seat', async () => {
+      await renderResults({ wsStatus: 'error', error: 'Player not in game', myPlayerId: null, myHand: [] });
+
+      expect(screen.queryByTestId('ws-error-banner')).toBeNull();
+    });
+  });
+
+  it('reads "Reconnecting…" in the footer before the first init, with no "refresh"', async () => {
+    const fake = fakeGameSocket({
+      wsStatus: 'reconnecting',
+      myPlayerId: null,
+      myHand: [],
+      players: [],
+      gameState: null,
+      variant: null,
+      playerCount: null,
+    });
+    await renderWithFake(fake, 'game-view');
+
+    const footer = screen.getByTestId('spectator-status');
+    expect(footer.textContent).toBe('Reconnecting…');
+    expect(footer.textContent).not.toMatch(/refresh/i);
   });
 });

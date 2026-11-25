@@ -14,7 +14,7 @@ jest.mock('@/lib/backendSession', () => ({
   clearToken: () => mockClearToken(),
 }));
 
-import { ApiError, createRoom, getGuestBearerToken } from '@/lib/api';
+import { ApiError, createRoom, getGuestBearerToken, getRoomByCode } from '@/lib/api';
 
 const payload: CreateRoomPayload = {
   playerCount: 6,
@@ -213,5 +213,32 @@ describe('getGuestBearerToken', () => {
     expect(viv).toBe('guest-token-viv');
     expect(ada).toBe('guest-token-ada');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('getRoomByCode', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = jest.fn();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('passes the abort signal through to fetch', async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ room: { code: 'ABCDEF' } }),
+    } as Response);
+    const { signal } = new AbortController();
+
+    await getRoomByCode('ABCDEF', signal);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.signal).toBe(signal);
   });
 });

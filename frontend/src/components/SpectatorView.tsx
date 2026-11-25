@@ -40,6 +40,7 @@
  * cardRemovalVariant={room.card_removal_variant}
  * gamePlayerCount={room.player_count}
  * onGoHome={handleGoHome}
+ * onRetry={retryNow}
  * />
  */
 
@@ -70,6 +71,7 @@ import type {
 } from '@/types/game';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
+import ReconnectBar from '@/components/ReconnectBar';
 import CountdownTimer from '@/components/CountdownTimer';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
@@ -138,6 +140,8 @@ export interface SpectatorViewProps {
   postDeclarationTimer?: PostDeclarationTimerPayload | null;
   /** Called when the user clicks "Back to Home". */
   onGoHome: () => void;
+  /** Called when the user clicks "Try now" on the reconnect bar. */
+  onRetry: () => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -164,6 +168,7 @@ export default function SpectatorView({
   cardRemovalVariant,
   gamePlayerCount,
   onGoHome,
+  onRetry,
 }: SpectatorViewProps) {
   // ── Failed Declaration Seat Reveal dismiss state ──────────────
   const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
@@ -203,6 +208,8 @@ export default function SpectatorView({
     variant ?? (cardRemovalVariant as 'remove_2s' | 'remove_7s' | 'remove_8s');
 
   useEffect(() => {
+    // The hook nulls the result on a reconnect, so an identical next result is a new ask, not a replay.
+    if (!lastAskResult) processedAskResultKeyRef.current = null;
     if (!lastAskResult?.lastMove) return;
     const askResultKey = [
       lastAskResult.askerId,
@@ -230,6 +237,18 @@ export default function SpectatorView({
 
     showTransientLastResult(summaryMessage ?? lastAskResult.lastMove, summaryMessage);
   }, [lastAskResult, players]);
+
+  // A reload starts with no ask batch, so the summary from before a drop must not outlive the reconnect.
+  const clearAskSummary = useEffectEvent(() => {
+    setSyntheticLastMoveMsg(null);
+    observedAskBatchRef.current = null;
+  });
+  const lastWsStatusRef = useRef(wsStatus);
+  useEffect(() => {
+    const previous = lastWsStatusRef.current;
+    lastWsStatusRef.current = wsStatus;
+    if (previous === 'reconnecting' && wsStatus === 'connected') clearAskSummary();
+  }, [wsStatus]);
 
   useEffect(() => {
     const result = lastDeclareResult;
@@ -403,6 +422,8 @@ export default function SpectatorView({
         scores={gameState?.scores ?? null}
         onGoHome={onGoHome}
       />
+
+      {wsStatus === 'reconnecting' && <ReconnectBar onRetry={onRetry} />}
 
       {/* ── Prominent SPECTATING banner ──────────────────────────────────────
        * Rendered as a full-width strip directly below the header so spectators
