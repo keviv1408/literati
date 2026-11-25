@@ -445,6 +445,8 @@ export default function GamePage({ params }: PageProps) {
   }, []);
 
   useEffect(() => {
+    // The hook nulls the result on a reconnect, so an identical next result is a new ask, not a replay.
+    if (!lastAskResult) processedAskResultKeyRef.current = null;
     if (lastAskResult?.lastMove) {
       const askResultKey = [
         lastAskResult.askerId,

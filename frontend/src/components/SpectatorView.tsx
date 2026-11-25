@@ -208,6 +208,8 @@ export default function SpectatorView({
     variant ?? (cardRemovalVariant as 'remove_2s' | 'remove_7s' | 'remove_8s');
 
   useEffect(() => {
+    // The hook nulls the result on a reconnect, so an identical next result is a new ask, not a replay.
+    if (!lastAskResult) processedAskResultKeyRef.current = null;
     if (!lastAskResult?.lastMove) return;
     const askResultKey = [
       lastAskResult.askerId,

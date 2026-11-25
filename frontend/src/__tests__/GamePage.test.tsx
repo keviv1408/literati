@@ -2267,6 +2267,36 @@ describe('GamePage — while the game socket reconnects', () => {
     expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
   });
 
+  it('frees the controls after an ask result identical to the last one before the drop', async () => {
+    const fake = fakeGameSocket();
+    const update = await renderWithFake(fake, 'game-view');
+    const gotAceOfHearts = () => ({
+      type: 'ask_result' as const,
+      askerId: MY_PLAYER_ID,
+      targetId: 'p4',
+      cardId: '1_h' as CardId,
+      success: true,
+      newTurnPlayerId: MY_PLAYER_ID,
+      lastMove: 'Me asked Carol for A♥ — got it',
+    });
+    openAskTray(['1_h']);
+    clickSeat('p4');
+    update({ myHand: [...HAND, '1_h'], lastAskResult: gotAceOfHearts() });
+    expect(screen.getByTestId('toggle-ask')).toBeEnabled();
+
+    // Carol took the card back while the player was away, so asking for it again is the natural move.
+    update({ wsStatus: 'reconnecting' });
+    update({ wsStatus: 'connected', lastAskResult: null, myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+    openAskTray(['1_h']);
+    clickSeat('p4');
+    expect(fake.state.sendAsk).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('toggle-ask')).toBeDisabled();
+
+    update({ myHand: [...HAND, '1_h'], lastAskResult: gotAceOfHearts() });
+
+    expect(screen.getByTestId('toggle-ask')).toBeEnabled();
+  });
+
   it('keeps an open ask tray when the reconnect bar is pressed', async () => {
     const fake = fakeGameSocket();
     const update = await renderWithFake(fake, 'game-view');
@@ -2542,6 +2572,29 @@ describe('GamePage — while the game socket reconnects', () => {
         });
 
         expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for J♣ — got it');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('shows an ask result identical to the last one before the drop', async () => {
+      const update = await renderOnCarolsTurn();
+      // The flash of the first result must be gone, or it would hide whether the repeat was shown.
+      jest.useFakeTimers();
+      try {
+        update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it') });
+        act(() => jest.advanceTimersByTime(5000));
+        update({ wsStatus: 'reconnecting' });
+        update({
+          wsStatus: 'connected',
+          lastAskResult: null,
+          gameState: activeState('p4', { lastMove: 'Bob asked Carol for 2♠ — denied' }),
+        });
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Bob asked Carol for 2♠ — denied');
+
+        update({ lastAskResult: carolAsksAlice('10_c', 'Carol asked Alice for 10♣ — got it') });
+
+        expect(screen.getByTestId(lastMoveTestId).textContent).toBe('Carol asked Alice for 10♣ — got it');
       } finally {
         jest.useRealTimers();
       }
