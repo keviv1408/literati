@@ -190,10 +190,14 @@ describe('reconnect sockets', () => {
   test('closing the registered socket holds the seat, and reconnecting cancels the hold', async () => {
     const p2 = await openPlayer(p2Token);
     const p1 = await openPlayer(p1Token);
+    const logSpy = jest.spyOn(console, 'log');
 
     p1.ws.close();
     await p1.closed;
     await sleep(200);
+
+    expect(logSpy.mock.calls.some(([line]) => String(line).includes(`(${p1Id}) disconnected`) && String(line).includes('seat held'))).toBe(true);
+    logSpy.mockRestore();
 
     expect(gameSocketServer._seatHolds.has(`${ROOM_CODE}:${p1Id}`)).toBe(true);
     expect(player(p1Id).isBot).toBe(false);

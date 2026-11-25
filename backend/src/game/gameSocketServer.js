@@ -3919,6 +3919,10 @@ function attachGameSocketServer(httpServer) {
           const player = currentGs.players.find((p) => p.playerId === playerId);
           if (player && !player.isBot) {
             _startSeatHold(roomCode, playerId);
+            console.log(
+              `[game-ws] Player ${displayName} (${playerId}) disconnected from game ${roomCode} — ` +
+              `seat held ${SEAT_HOLD_MS / 1000}s`
+            );
             return;
           }
         }
