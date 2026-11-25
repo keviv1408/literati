@@ -29,6 +29,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { createRoom, ApiError } from '@/lib/api';
+import { trackEvent } from '@/lib/analytics';
 import { useGuest } from '@/contexts/GuestContext';
 import {
   PLAYER_COUNT_OPTIONS,
@@ -157,6 +158,10 @@ export default function CreateRoomModal({
           undefined,
           guestSession?.sessionId ?? null,
         );
+        trackEvent('private_room_created', {
+          player_count: room.player_count,
+          card_removal_variant: room.card_removal_variant,
+        });
         // Cache room data so the lobby page can render without an extra fetch
         cacheCreatedRoom(room);
         // Show the success confirmation panel immediately

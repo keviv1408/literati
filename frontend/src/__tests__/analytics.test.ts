@@ -1,19 +1,26 @@
-jest.mock('posthog-js', () => ({ __esModule: true, default: { capture: jest.fn() } }));
+jest.mock('posthog-js', () => ({
+  __esModule: true,
+  default: { capture: jest.fn(), captureException: jest.fn() },
+}));
 
 import posthog from 'posthog-js';
 import type { CaptureResult } from 'posthog-js';
 import {
   redactUrls,
   reportPendingSocketDrop,
+  trackEvent,
+  trackException,
   trackGameInit,
   trackGameOver,
   trackSocketDropped,
 } from '@/lib/analytics';
 
 const capture = posthog.capture as jest.Mock;
+const captureException = posthog.captureException as jest.Mock;
 
 beforeEach(() => {
   capture.mockReset();
+  captureException.mockReset();
   localStorage.clear();
   jest.restoreAllMocks();
   process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_test';
@@ -73,19 +80,38 @@ it('reports no socket drop when none was stored', () => {
   expect(capture).not.toHaveBeenCalled();
 });
 
+it('sends a named event with its properties', () => {
+  trackEvent('rematch_vote_submitted', { vote: 'yes' });
+  expect(capture).toHaveBeenCalledTimes(1);
+  expect(capture).toHaveBeenCalledWith('rematch_vote_submitted', { vote: 'yes' });
+});
+
+it('reports an exception', () => {
+  const error = new Error('boom');
+  trackException(error);
+  expect(captureException).toHaveBeenCalledTimes(1);
+  expect(captureException).toHaveBeenCalledWith(error);
+});
+
 it('sends nothing without a key', () => {
   delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  trackEvent('rematch_vote_submitted', { vote: 'yes' });
+  trackException(new Error('boom'));
   trackGameInit('ABCDEF', 'active', 6);
   trackGameOver('ABCDEF');
   trackSocketDropped(1006);
   reportPendingSocketDrop();
   expect(capture).not.toHaveBeenCalled();
+  expect(captureException).not.toHaveBeenCalled();
   expect(localStorage.getItem('literati:socket-dropped')).toBeNull();
 });
 
 it('never throws when PostHog throws', () => {
   capture.mockImplementation(() => { throw new Error('blocked'); });
+  captureException.mockImplementation(() => { throw new Error('blocked'); });
   expect(() => {
+    trackEvent('rematch_vote_submitted', { vote: 'yes' });
+    trackException(new Error('boom'));
     trackGameInit('ABCDEF', 'active', 6);
     trackGameOver('ABCDEF');
     trackSocketDropped(1006);
