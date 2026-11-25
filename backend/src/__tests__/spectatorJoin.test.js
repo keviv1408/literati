@@ -370,6 +370,7 @@ describe('Game WebSocket spectator connection', () => {
       ws.on('message', (data) => {
         let msg;
         try { msg = JSON.parse(data.toString()); } catch { return; }
+        if (msg.type === 'heartbeat') return;
         messages.push(msg);
         if (messages.length >= count) finish(null);
       });

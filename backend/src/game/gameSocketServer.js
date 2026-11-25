@@ -281,6 +281,14 @@ const RECONNECT_WINDOW_MS = 180_000;
  */
 const TIMER_TICK_INTERVAL_MS = 5_000;
 
+/** Clients treat a socket that stays silent past a few heartbeats as dead. */
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
+/** @param {import('ws').WebSocketServer} wss */
+function _broadcastHeartbeat(wss) {
+  for (const ws of wss.clients) sendJson(ws, { type: 'heartbeat' });
+}
+
 /**
  * How long players from the previous game have to reconnect to the room lobby
  * after the rematch vote reaches majority.
@@ -3277,6 +3285,12 @@ function attachGameSocketServer(httpServer) {
     });
   });
 
+  // Sent on connect too, because the client's silence check starts at the first heartbeat.
+  wss.on('connection', (ws) => sendJson(ws, { type: 'heartbeat' }));
+  const heartbeatTimer = setInterval(() => _broadcastHeartbeat(wss), HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
+  wss.on('close', () => clearInterval(heartbeatTimer));
+
   wss.on('connection', async (ws, req) => {
     const parsed         = url.parse(req.url || '', true);
     const match          = parsed.pathname.match(/^\/ws\/game\/([A-Za-z0-9]{6})$/);
@@ -3936,6 +3950,8 @@ module.exports = {
   BOT_TURN_DELAY_MS,
   RECONNECT_WINDOW_MS,
   TIMER_TICK_INTERVAL_MS,
+  HEARTBEAT_INTERVAL_MS,
+  _broadcastHeartbeat,
   DECLARATION_PHASE_TIMEOUT_MS,
   BOT_DECLARATION_TAKEOVER_MS,
   // Rematch gathering countdown:
