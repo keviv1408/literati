@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
 import { API_URL } from '@/lib/api';
@@ -13,7 +12,6 @@ const emptySubscribe = () => () => {};
 const WAKE_NOTICE_DELAY_MS = 2000;
 
 export default function Home() {
-  const router = useRouter();
   const { guestSession, hasName, ensureGuestName } = useGuestSession();
   const { clearGuest } = useGuest();
 
@@ -41,13 +39,6 @@ export default function Home() {
       clearTimeout(slowTimer);
     };
   }, []);
-
-  async function handlePlayNow() {
-    const session = await ensureGuestName();
-    if (!session) return; // user dismissed the modal
-    // Navigate to the matchmaking page — filter selection and queue joining happens there
-    router.push('/matchmaking');
-  }
 
   async function handlePrivateRoom() {
     const session = await ensureGuestName();
@@ -102,7 +93,7 @@ export default function Home() {
         {/* Action buttons */}
         <div className="flex flex-col sm:flex-row gap-3 w-full">
           <button
-            onClick={handlePlayNow}
+            onClick={handlePrivateRoom}
             className="
               flex-1 py-4 px-6 rounded-xl font-bold text-lg
               bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
@@ -112,26 +103,8 @@ export default function Home() {
             "
           >
             <span className="flex flex-col items-center leading-tight">
-              <span>🎮 Find Online Match</span>
-              <span className="text-xs font-medium text-emerald-100/90 mt-1">
-                Join public matchmaking
-              </span>
-            </span>
-          </button>
-          <button
-            onClick={handlePrivateRoom}
-            className="
-              flex-1 py-4 px-6 rounded-xl font-bold text-lg
-              border border-emerald-700 text-emerald-200
-              hover:bg-emerald-900/50 hover:border-emerald-500 hover:text-white
-              active:scale-[0.97]
-              transition-all duration-150
-              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
-            "
-          >
-            <span className="flex flex-col items-center leading-tight">
               <span>🔒 Private Room</span>
-              <span className="text-xs font-medium text-emerald-200/90 mt-1">
+              <span className="text-xs font-medium text-emerald-100/90 mt-1">
                 Play with friends in your own room
               </span>
             </span>
@@ -153,7 +126,6 @@ export default function Home() {
           {[
             '6–8 Players',
             'Smart Bots',
-            'Spectators',
             'No Account Required',
           ].map((f) => (
             <span
@@ -163,26 +135,6 @@ export default function Home() {
               {f}
             </span>
           ))}
-        </div>
-
-        {/* Spectate button */}
-        <div className="flex w-full justify-center">
-          <a
-            href="/live-games"
-            className="
-              inline-flex w-full max-w-[240px] items-center justify-center rounded-xl
-              border border-emerald-700/70 bg-slate-900/70 px-4 py-3
-              text-sm font-semibold text-emerald-200 shadow-md shadow-slate-950/40
-              transition-all duration-150 hover:border-emerald-500 hover:bg-emerald-900/40 hover:text-white
-              active:scale-[0.98]
-              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
-            "
-          >
-            <span className="flex items-center gap-2 leading-none">
-              <span aria-hidden="true">👀</span>
-              <span>Spectate Live Games</span>
-            </span>
-          </a>
         </div>
       </main>
 

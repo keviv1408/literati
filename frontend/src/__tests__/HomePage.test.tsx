@@ -5,10 +5,6 @@
 import React from 'react';
 import { render, screen, act } from '@testing-library/react';
 
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
-}));
-
 jest.mock('@/hooks/useGuestSession', () => ({
   useGuestSession: () => ({
     guestSession: null,
@@ -78,5 +74,27 @@ describe('Home wake-up notice', () => {
       jest.advanceTimersByTime(5000);
     });
     expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
+describe('Home entry points', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = jest.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('offers Private Room as the only way to play', () => {
+    render(<Home />);
+    expect(screen.getByRole('button', { name: /Private Room/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Find Online Match/)).toBeNull();
+    expect(screen.queryByText(/Spectate Live Games/)).toBeNull();
+    expect(screen.queryByText('Spectators')).toBeNull();
+    expect(screen.getByText('Smart Bots')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Begin Interactive Tutorial/ })).toHaveAttribute('href', '/tutorial');
   });
 });

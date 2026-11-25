@@ -8,9 +8,7 @@
  * Presented when the host clicks "Private Room" on the home page (after their
  * display name has already been set via GuestNameModal).
  *
- * Form fields:
- *  1. Player count   — 6 or 8 players (radio cards)
- *  2. Card variant   — remove_2s | remove_7s | remove_8s (radio list)
+ * Form: player count, 6 or 8 (radio cards). Rooms always remove the 7s.
  *
  * On success the modal transitions to a "Room Created!" confirmation phase that
  * immediately displays the invite code, invite link, and spectator link.
@@ -34,8 +32,6 @@ import { createRoom, ApiError } from '@/lib/api';
 import { useGuest } from '@/contexts/GuestContext';
 import {
   PLAYER_COUNT_OPTIONS,
-  VARIANT_OPTIONS,
-  type CardRemovalVariant,
   type Room,
   type RoomStatus,
 } from '@/types/room';
@@ -103,7 +99,6 @@ export default function CreateRoomModal({
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [playerCount, setPlayerCount] = useState<6 | 8>(6);
-  const [variant, setVariant] = useState<CardRemovalVariant>('remove_7s');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,7 +112,6 @@ export default function CreateRoomModal({
   useEffect(() => {
     if (open) {
       setPlayerCount(6);
-      setVariant('remove_7s');
       setError(null);
       setIsSubmitting(false);
       setCreatedRoom(null);
@@ -158,7 +152,7 @@ export default function CreateRoomModal({
 
       try {
         const { room } = await createRoom(
-          { playerCount, cardRemovalVariant: variant },
+          { playerCount, cardRemovalVariant: 'remove_7s' },
           displayName,
           undefined,
           guestSession?.sessionId ?? null,
@@ -192,7 +186,7 @@ export default function CreateRoomModal({
         setIsSubmitting(false);
       }
     },
-    [isSubmitting, playerCount, variant, displayName, guestSession, onClose, router]
+    [isSubmitting, playerCount, displayName, guestSession, onClose, router]
   );
 
   // ── Enter room (from success phase) ────────────────────────────────────────
@@ -469,59 +463,6 @@ export default function CreateRoomModal({
                         ✓
                       </span>
                     )}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {/* ── Card removal variant ───────────────────────────────────────── */}
-          <fieldset className="mb-5">
-            <legend className="block text-sm font-medium text-emerald-200 mb-2">
-              Card Removal Variant
-            </legend>
-
-            <div className="flex flex-col gap-2" role="radiogroup">
-              {VARIANT_OPTIONS.map((opt) => {
-                const isSelected = variant === opt.value;
-                return (
-                  <label
-                    key={opt.value}
-                    className={`
-                      flex items-start gap-3 p-3 rounded-xl border cursor-pointer
-                      transition-all duration-150 select-none
-                      focus-within:ring-2 focus-within:ring-emerald-400 focus-within:ring-offset-2 focus-within:ring-offset-slate-900
-                      ${
-                        isSelected
-                          ? 'border-emerald-500 bg-emerald-900/40'
-                          : 'border-slate-600 bg-slate-800/30 hover:border-slate-500 hover:bg-slate-800/50'
-                      }
-                    `}
-                  >
-                    <input
-                      type="radio"
-                      name="cardRemovalVariant"
-                      value={opt.value}
-                      checked={isSelected}
-                      onChange={() => setVariant(opt.value)}
-                      className="mt-0.5 accent-emerald-500 w-4 h-4 flex-shrink-0"
-                      aria-describedby={`variant-desc-${opt.value}`}
-                    />
-                    <span>
-                      <span
-                        className={`font-semibold text-sm ${
-                          isSelected ? 'text-emerald-300' : 'text-slate-200'
-                        }`}
-                      >
-                        {opt.label}
-                      </span>
-                      <span
-                        id={`variant-desc-${opt.value}`}
-                        className="block text-xs text-slate-400 mt-0.5"
-                      >
-                        {opt.description}
-                      </span>
-                    </span>
                   </label>
                 );
               })}
