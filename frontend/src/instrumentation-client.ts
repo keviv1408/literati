@@ -16,6 +16,8 @@ if (key) {
       capture_heatmaps: false,
       capture_dead_clicks: false,
       capture_performance: false,
+      // The /flags request sends person properties with the raw page URL and skips before_send.
+      advanced_disable_flags: true,
       before_send: redactUrls,
     });
   } catch {
