@@ -2067,9 +2067,10 @@ function attachRoomSocketServer(httpServer) {
       // Capture host status from in-memory entry before deleting it so that the
       // host-transfer timer can be started even if liveIsHost is false at this
       // moment due to a prior transfer.
+      // A replaced or kicked socket can close long after the lobby emptied and was rebuilt; only the entry's own socket cleans up.
       const entry = clients.get(userId);
-      if (entry && entry.ws !== ws) return; // superseded by a newer socket
-      const wasHost = entry?.isHost ?? false;
+      if (!entry || entry.ws !== ws) return;
+      const wasHost = entry.isHost;
 
       clients.delete(userId);
 
