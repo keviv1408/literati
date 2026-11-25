@@ -276,10 +276,10 @@ describe('AC 18 — Failed card request passes turn to the specific player who w
   });
 
   /**
-   * Tear down WS connections from a test without triggering reconnect windows.
+   * Tear down WS connections from a test without triggering seat holds.
    *
    * Marks every player as a bot first (so the server's `ws.on('close')` handler
-   * skips `_startReconnectWindow`), closes the provided sockets, then awaits
+   * skips `_startSeatHold`), closes the provided sockets, then awaits
    * 50 ms for the server-side close callbacks to fire.  Using `await` here
    * guarantees the close events are fully processed BEFORE the test's async
    * function returns — which means they are processed before `beforeEach` for

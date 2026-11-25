@@ -4,7 +4,7 @@
  * Unit tests for seat reclaim within the reconnect window.
  *
  * When a human player disconnects during an active game:
- * 1. A reconnect window starts immediately.
+ * 1. A reconnect window starts once the 45 s seat hold ends.
  * 2. The player's slot is temporarily bot-controlled (isBot: true).
  * 3. `player_disconnected` is broadcast to all remaining connections.
  * 4. If it's the disconnected player's turn, a bot turn is scheduled.
