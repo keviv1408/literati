@@ -207,7 +207,7 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
   // A host may not create a new room while they have an existing room that is
   // waiting, starting, or in progress.
   try {
-    const hostColumn = req.user.isGuest ? 'host_guest_id' : 'host_user_id';
+    const hostColumn = Object.keys(hostIds).find((column) => hostIds[column] !== null);
     // A list query, not maybeSingle: two active rows must still yield 409, not an error.
     const { data: activeRooms, error: existingError } = await supabase
       .from('rooms')
