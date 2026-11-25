@@ -103,6 +103,10 @@ describe('GET /health/db', () => {
 });
 
 describe('GET /health', () => {
+  afterEach(() => {
+    _setSupabaseClient(null);
+  });
+
   it('returns 200 without touching Supabase', async () => {
     const mock = _buildSupabaseMock();
     _setSupabaseClient(mock.client);
@@ -112,6 +116,5 @@ describe('GET /health', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(mock.client.from).not.toHaveBeenCalled();
-    _setSupabaseClient(null);
   });
 });
