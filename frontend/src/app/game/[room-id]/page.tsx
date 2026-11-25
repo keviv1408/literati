@@ -30,7 +30,7 @@ import {
 import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
 import { useGuest } from '@/contexts/GuestContext';
 import { useReconnect } from '@/hooks/useReconnect';
-import { useGameSocket } from '@/hooks/useGameSocket';
+import { useGameSocket, type PartialSelectionPayload } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
 import { useTurnIndicator } from '@/hooks/useTurnIndicator';
 import { GameProvider } from '@/contexts/GameContext';
@@ -102,6 +102,11 @@ function formatNaturalList(items: string[]): string {
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+function _askPartial(halfSuitId: HalfSuitId, cardIds: CardId[]): PartialSelectionPayload {
+  const cardId = cardIds[cardIds.length - 1];
+  return cardId ? { flow: 'ask', halfSuitId, cardId } : { flow: 'ask', halfSuitId };
 }
 
 function buildAskBatchSummary(
@@ -729,10 +734,22 @@ export default function GamePage({ params }: PageProps) {
     if (wsStatus !== 'connected' || !beforeDrop) return;
     beforeDropRef.current = null;
     // Nobody else can act on the player's own turn, so the same hand on that turn keeps every selection valid.
-    if (beforeDrop.isMyTurn && isMyTurn && beforeDrop.handKey === handKey && beforeDrop.declaredKey === declaredKey) return;
+    if (beforeDrop.isMyTurn && isMyTurn && beforeDrop.handKey === handKey && beforeDrop.declaredKey === declaredKey) {
+      // The server's timeout move plays the stored selection, which a backend restart loses.
+      if (selectedAskHalfSuit) sendPartialSelection(_askPartial(selectedAskHalfSuit, selectedAskCardIds));
+      if (declareSelectedSuit) {
+        sendDeclareSelecting(declareSelectedSuit);
+        sendDeclareProgress(declareSelectedSuit, declareAssignment);
+      }
+      return;
+    }
     resetAskMode();
     resetDeclareMode();
-  }, [wsStatus, isMyTurn, handKey, declaredKey, resetAskMode, resetDeclareMode, updatePendingAskBatch]);
+  }, [
+    wsStatus, isMyTurn, handKey, declaredKey, resetAskMode, resetDeclareMode, updatePendingAskBatch,
+    selectedAskHalfSuit, selectedAskCardIds, declareSelectedSuit, declareAssignment,
+    sendPartialSelection, sendDeclareSelecting, sendDeclareProgress,
+  ]);
 
   const handleAskHalfSuitSelect = useCallback((halfSuitId: HalfSuitId) => {
     if (!availableAskHalfSuits.includes(halfSuitId)) return;
@@ -886,13 +903,7 @@ export default function GamePage({ params }: PageProps) {
       ? selectedAskCardIds.filter((id) => id !== cardId)
       : [...selectedAskCardIds, cardId];
     setSelectedAskCardIds(next);
-
-    const lastSelectedCardId = next[next.length - 1];
-    if (lastSelectedCardId) {
-      sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit, cardId: lastSelectedCardId });
-    } else {
-      sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit });
-    }
+    sendPartialSelection(_askPartial(selectedAskHalfSuit, next));
   }, [canSend, selectedAskCardIds, selectedAskHalfSuit, sendPartialSelection]);
 
   useEffect(() => {

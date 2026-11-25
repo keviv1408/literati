@@ -2202,6 +2202,38 @@ describe('GamePage — while the game socket reconnects', () => {
     });
   });
 
+  describe('kept trays after the reconnect', () => {
+    it('resends the declare tray\'s suit and assignment', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      const tray = openDeclareTray();
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[0]);
+      fireEvent.click(teammateDropSeat('p2'));
+      const [, assignment] = jest.mocked(fake.state.sendDeclareProgress).mock.lastCall!;
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendDeclareSelecting).mockClear();
+      jest.mocked(fake.state.sendDeclareProgress).mockClear();
+
+      update({ wsStatus: 'connected', myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+
+      expect(screen.getByTestId('inline-declare-tray')).toBeTruthy();
+      expect(fake.state.sendDeclareSelecting).toHaveBeenCalledWith('low_s');
+      expect(fake.state.sendDeclareProgress).toHaveBeenCalledWith('low_s', assignment);
+    });
+
+    it('resends the ask tray\'s partial selection', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openAskTray(['1_h', '2_h']);
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendPartialSelection).mockClear();
+
+      update({ wsStatus: 'connected', myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+
+      expect(fake.state.sendPartialSelection).toHaveBeenCalledWith({ flow: 'ask', halfSuitId: 'low_h', cardId: '2_h' });
+    });
+  });
+
   it('keeps the spectator view mounted while reconnecting', async () => {
     const fake = fakeGameSocket({ wsStatus: 'reconnecting', myPlayerId: null, myHand: [] });
     await renderWithFake(fake, 'spectator-view');
