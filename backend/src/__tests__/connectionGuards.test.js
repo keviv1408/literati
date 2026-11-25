@@ -193,6 +193,24 @@ describe('connection-handler guards', () => {
     expect(b.messages.some((m) => m.type === 'closing')).toBe(false);
   });
 
+  test('a socket that closes during auth never takes back a bot-flagged seat by recovery key', async () => {
+    player(p1Id).isBot = true;
+
+    const auth = deferred();
+    supabaseMock.auth.getUser.mockImplementationOnce(() => auth.promise);
+    const late = await connect(`token=bogus&guestRecoveryKey=${P1_KEY}`);
+    await waitFor(() => supabaseMock.auth.getUser.mock.calls.length === 1);
+
+    late.ws.close();
+    await late.closed;
+    await sleep(50);
+    auth.resolve({ data: { user: null }, error: 'no-user' });
+    await sleep(100);
+
+    expect(player(p1Id).isBot).toBe(true);
+    expect(gameStore.getConnection(ROOM_CODE, p1Id) === undefined).toBe(true);
+  });
+
   test('a socket that closes while a seat reclaim persists is not registered, and the seat is held', async () => {
     gameSocketServer._startReconnectWindow(gs, player(p1Id));
     expect(gameSocketServer._reconnectWindows.has(p1Id)).toBe(true);
