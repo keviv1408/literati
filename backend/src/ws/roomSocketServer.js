@@ -29,6 +29,9 @@
  * Contains the final seat list (human players + bots for empty seats).
  * Clients should navigate to the game board upon receiving this message.
  *
+ * { type: 'heartbeat' }
+ * Sent to every open socket on connect and every 15 seconds.
+ *
  * Client → Server messages:
  * { type: 'kick_player', targetId: string }
  * Only accepted from the room host. Kicks the player with the given userId.
@@ -219,6 +222,16 @@ const _rematchBotFillTimers = new Map();
  * player slots with bots at the inherited difficulty and start the new game."
  */
 const REMATCH_BOT_FILL_TIMEOUT_MS = 30_000;
+
+// A quiet lobby and a dead connection look the same to a browser; regular traffic lets the client tell them apart.
+const HEARTBEAT_INTERVAL_MS = 15_000;
+const HEARTBEAT_PAYLOAD = JSON.stringify({ type: 'heartbeat' });
+
+function _broadcastHeartbeat(wss) {
+  for (const ws of wss.clients) {
+    if (ws.readyState === 1 /* OPEN */) ws.send(HEARTBEAT_PAYLOAD);
+  }
+}
 
 /**
  * Return (or create) the per-room player client Map.
@@ -1699,6 +1712,12 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
 function attachRoomSocketServer(httpServer) {
   const wss = new WebSocketServer({ noServer: true });
 
+  // ── Heartbeat: once on connect, then on the interval ─────────────────────
+  wss.on('connection', (ws) => ws.send(HEARTBEAT_PAYLOAD));
+  const heartbeatTimer = setInterval(() => _broadcastHeartbeat(wss), HEARTBEAT_INTERVAL_MS);
+  if (heartbeatTimer.unref) heartbeatTimer.unref();
+  wss.on('close', () => clearInterval(heartbeatTimer));
+
   // ── Route HTTP upgrade requests to this WS server ────────────────────────
   httpServer.on('upgrade', (req, socket, head) => {
     const parsed = url.parse(req.url || '', true);
@@ -2187,4 +2206,6 @@ module.exports = {
   _executeRematchBotFill,
   _rematchBotFillTimers,
   REMATCH_BOT_FILL_TIMEOUT_MS,
+  HEARTBEAT_INTERVAL_MS,
+  _broadcastHeartbeat,
 };
