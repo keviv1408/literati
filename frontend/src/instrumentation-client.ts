@@ -12,7 +12,7 @@ if (key) {
       disable_session_recording: true,
       capture_exceptions: true,
       capture_pageview: 'history_change',
-      // Explicit false so PostHog project settings cannot switch these on remotely.
+      // Remote config never loads with flags off; these keep the features off if flags come back.
       capture_heatmaps: false,
       capture_dead_clicks: false,
       capture_performance: false,
