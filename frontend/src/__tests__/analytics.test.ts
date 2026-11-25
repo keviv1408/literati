@@ -92,7 +92,18 @@ it('reads a bare close code stored by an older build as a close drop', () => {
   expect(capture).toHaveBeenCalledWith('game_socket_dropped', { close_code: 1006, detected_by: 'close' });
 });
 
-it.each(['nope', '{"detected_by":"bogus"}'])('drops a stored value it cannot read: %s', (stored) => {
+it('sends only the checked fields of a stored drop', () => {
+  localStorage.setItem(DROP_KEY, '{"close_code":1006,"detected_by":"close","token":"x"}');
+  reportPendingSocketDrop();
+  expect(capture).toHaveBeenCalledTimes(1);
+  expect(capture.mock.calls[0][1]).toStrictEqual({ close_code: 1006, detected_by: 'close' });
+});
+
+it.each([
+  'nope',
+  '{"detected_by":"bogus"}',
+  '{"close_code":"1006","detected_by":"close"}',
+])('drops a stored value it cannot read: %s', (stored) => {
   localStorage.setItem(DROP_KEY, stored);
   reportPendingSocketDrop();
   expect(capture).not.toHaveBeenCalled();
