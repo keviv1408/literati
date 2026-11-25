@@ -1230,6 +1230,8 @@ function _startSeatHold(roomCode, playerId) {
     const player = gs.players.find((p) => p.playerId === playerId);
     if (!player || player.isBot) return;
     _startReconnectWindow(gs, player);
+    // A bot move now would cancel the bot declaration already announced for this turn.
+    if (_botDeclarationTimers.has(roomCode) && gs.currentTurnPlayerId === playerId) cancelBotTimer(roomCode);
   }, SEAT_HOLD_MS);
   timer.unref();
   _seatHolds.set(key, timer);

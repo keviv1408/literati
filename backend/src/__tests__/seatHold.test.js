@@ -223,4 +223,65 @@ describe('seat hold', () => {
     expect(_botDeclarationTimers.has('DECLTO')).toBe(true);
     expect(observer._messages.some((m) => m.type === 'bot_declaration_timer' && m.playerId === 'p1')).toBe(true);
   });
+
+  it('lets an announced bot declaration complete when the hold expires during its countdown', async () => {
+    const hands = new Map([
+      ['p1', new Set(['1_s', '2_s', '3_s', '8_s', '9_s', '10_s'])],
+      ['p2', new Set(['4_s', '5_s', '6_s', '11_s', '12_s', '13_s'])],
+      ['p3', new Set(['1_h', '2_h', '3_h', '8_h', '9_h', '10_h'])],
+      ['p4', new Set(['4_h', '5_h', '6_h', '11_h', '12_h', '13_h'])],
+      ['p5', new Set(['1_d', '2_d', '3_d', '8_d', '9_d', '10_d'])],
+      ['p6', new Set(['4_d', '5_d', '6_d', '11_d', '12_d', '13_d'])],
+    ]);
+    setGame('DECLTO', {
+      roomCode:            'DECLTO',
+      roomId:              'room-uuid',
+      variant:             'remove_7s',
+      playerCount:         6,
+      status:              'active',
+      currentTurnPlayerId: 'p1',
+      players: [
+        { playerId: 'p1', displayName: 'P1', teamId: 1, seatIndex: 0, isBot: false, isGuest: false },
+        { playerId: 'p2', displayName: 'P2', teamId: 1, seatIndex: 2, isBot: false, isGuest: false },
+        { playerId: 'p3', displayName: 'P3', teamId: 1, seatIndex: 4, isBot: false, isGuest: false },
+        { playerId: 'p4', displayName: 'P4', teamId: 2, seatIndex: 1, isBot: false, isGuest: false },
+        { playerId: 'p5', displayName: 'P5', teamId: 2, seatIndex: 3, isBot: false, isGuest: false },
+        { playerId: 'p6', displayName: 'P6', teamId: 2, seatIndex: 5, isBot: false, isGuest: false },
+      ],
+      hands,
+      declaredSuits:    new Map(),
+      scores:           { team1: 0, team2: 0 },
+      lastMove:         null,
+      winner:           null,
+      tiebreakerWinner: null,
+      botKnowledge:     new Map(),
+      moveHistory:      [],
+    });
+    setPartialSelection('DECLTO', 'p1', {
+      flow:       'declare',
+      halfSuitId: 'low_s',
+      assignment: { '1_s': 'p1', '2_s': 'p1', '3_s': 'p1' },
+    });
+    const observer = makeMockWs();
+    registerConnection('DECLTO', 'p4', observer);
+
+    _startSeatHold('DECLTO', 'p1');
+    await jest.advanceTimersByTimeAsync(30_000);
+    await executeTimedOutTurn('DECLTO', 'p1');
+    expect(_botDeclarationTimers.has('DECLTO')).toBe(true);
+
+    // The hold fires 15 s into the 30 s countdown; then run past the countdown.
+    await jest.advanceTimersByTimeAsync(SEAT_HOLD_MS - 30_000);
+    expect(_reconnectWindows.has('p1')).toBe(true);
+    await jest.advanceTimersByTimeAsync(20_000);
+
+    const resultAt = observer._messages.findIndex((m) => m.type === 'declaration_result' && m.declarerId === 'p1');
+    expect(resultAt).toBeGreaterThanOrEqual(0);
+    expect(observer._messages.slice(0, resultAt).some((m) => m.type === 'ask_result' && m.askerId === 'p1')).toBe(false);
+
+    // The game keeps moving after the declaration resolves.
+    const afterResult = observer._messages.length;
+    await jest.advanceTimersByTimeAsync(120_000);
+    expect(observer._messages.slice(afterResult).some((m) => m.type === 'ask_result' || m.type === 'declaration_result')).toBe(true);
+  });
 });
