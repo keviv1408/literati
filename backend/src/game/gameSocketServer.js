@@ -274,6 +274,9 @@ const BOT_DECLARATION_TAKEOVER_MS = 30_000;
  */
 const RECONNECT_WINDOW_MS = 180_000;
 
+/** A dropped seat waits this long before the disconnect flow, so a quick reconnect finds it untouched. */
+const SEAT_HOLD_MS = 45_000;
+
 /**
  * How often tick events are emitted for both the turn timer and the reconnect
  * window. Clients use tick events to keep their countdown UI accurate without
@@ -1212,6 +1215,38 @@ function _clearAllReconnectWindows() {
   _reconnectWindows.clear();
 }
 
+/** Pending seat holds. Key: `${roomCode}:${playerId}`, value: Timeout. */
+const _seatHolds = new Map();
+
+function _startSeatHold(roomCode, playerId) {
+  const key = `${roomCode}:${playerId}`;
+  if (_seatHolds.has(key)) return;
+  const timer = setTimeout(() => {
+    _seatHolds.delete(key);
+    // Read the game at fire time: it may have ended, been replaced, or been reclaimed.
+    const gs = getGame(roomCode);
+    if (!gs || gs.status !== 'active') return;
+    if (getConnection(roomCode, playerId)) return;
+    const player = gs.players.find((p) => p.playerId === playerId);
+    if (!player || player.isBot) return;
+    _startReconnectWindow(gs, player);
+  }, SEAT_HOLD_MS);
+  timer.unref();
+  _seatHolds.set(key, timer);
+}
+
+function _cancelSeatHold(roomCode, playerId) {
+  const key = `${roomCode}:${playerId}`;
+  clearTimeout(_seatHolds.get(key));
+  _seatHolds.delete(key);
+}
+
+/** Exported for test teardown only. */
+function _clearAllSeatHolds() {
+  for (const timer of _seatHolds.values()) clearTimeout(timer);
+  _seatHolds.clear();
+}
+
 /**
  * Execute a seat reclaim for an original human player at a turn boundary.
  *
@@ -1665,7 +1700,7 @@ async function executeTimedOutTurn(roomCode, playerId) {
   // A DISCONNECTED player (in `_reconnectWindows`) falls through to the bot-
   // completion path so the seat's bot can finish the declaration instead.
   if (effectivePartial?.flow === 'declare') {
-    const isDisconnected = _reconnectWindows.has(playerId);
+    const isDisconnected = _reconnectWindows.has(playerId) || _seatHolds.has(`${roomCode}:${playerId}`);
     if (!isDisconnected) {
       const halfSuitId    = effectivePartial.halfSuitId;
       const assignment    = effectivePartial.assignment ?? {};
@@ -3565,6 +3600,7 @@ function attachGameSocketServer(httpServer) {
     // ─────────────────────────────────────────────────────────────────────────
 
     // Register the connection
+    _cancelSeatHold(roomCode, playerId);
     registerConnection(roomCode, playerId, ws);
 
     if (isSpectator) {
@@ -3853,11 +3889,8 @@ function attachGameSocketServer(httpServer) {
         if (currentGs && currentGs.status === 'active') {
           const player = currentGs.players.find((p) => p.playerId === playerId);
           if (player && !player.isBot) {
-            // Start the concurrent timer sequence: 60s turn timer + 180s reconnect window.
-            // _startReconnectWindow handles both — it starts the turn timer BEFORE
-            // marking the seat as bot, ensuring both timers run simultaneously.
-            _startReconnectWindow(currentGs, player);
-            return; // _startReconnectWindow logs the disconnect
+            _startSeatHold(roomCode, playerId);
+            return;
           }
         }
       }
@@ -3908,6 +3941,11 @@ module.exports = {
   _startReconnectWindow,
   _cancelReconnectWindow,
   _clearAllReconnectWindows,
+  _startSeatHold,
+  _cancelSeatHold,
+  _clearAllSeatHolds,
+  _seatHolds,
+  SEAT_HOLD_MS,
   // Concurrent timer infrastructure:
   startReconnectWindow,
   cancelReconnectWindow,

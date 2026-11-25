@@ -7,6 +7,8 @@
  * 2. Connecting resumes a live turn timer instead of restarting it.
  * 3. An eliminated player who reconnects after the window gets the seat back
  *    immediately (a turn-boundary reclaim would never fire for them).
+ * 4. Closing the registered socket holds the seat instead of starting the
+ *    disconnect flow, and reconnecting cancels the hold.
  */
 
 const http      = require('http');
@@ -102,6 +104,7 @@ describe('reconnect sockets', () => {
     gameSocketServer.cancelTurnTimer(ROOM_CODE);
     gameSocketServer.cancelBotTimer(ROOM_CODE);
     gameSocketServer._clearAllReconnectWindows();
+    gameSocketServer._clearAllSeatHolds();
   });
 
   afterEach(async () => {
@@ -114,6 +117,7 @@ describe('reconnect sockets', () => {
   afterAll((done) => {
     gameSocketServer.cancelTurnTimer(ROOM_CODE);
     gameSocketServer._clearAllReconnectWindows();
+    gameSocketServer._clearAllSeatHolds();
     gameStore._clearAll();
     guestSessionStore._clearStore();
     httpServer.close(done);
@@ -181,5 +185,23 @@ describe('reconnect sockets', () => {
     expect(p2.isBot).toBe(false);
     expect(p2.botReplacedAt).toBeUndefined();
     expect(conn.messages.some((m) => m.type === 'reclaim_queued')).toBe(false);
+  });
+
+  test('closing the registered socket holds the seat, and reconnecting cancels the hold', async () => {
+    const p2 = await openPlayer(p2Token);
+    const p1 = await openPlayer(p1Token);
+
+    p1.ws.close();
+    await p1.closed;
+    await sleep(200);
+
+    expect(gameSocketServer._seatHolds.has(`${ROOM_CODE}:${p1Id}`)).toBe(true);
+    expect(player(p1Id).isBot).toBe(false);
+    expect(p2.messages.some((m) => m.type === 'player_disconnected')).toBe(false);
+
+    await openPlayer(p1Token);
+
+    expect(gameSocketServer._seatHolds.size).toBe(0);
+    expect(player(p1Id).isBot).toBe(false);
   });
 });

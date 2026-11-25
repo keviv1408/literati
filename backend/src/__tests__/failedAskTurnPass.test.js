@@ -192,6 +192,7 @@ describe('AC 18 — Failed card request passes turn to the specific player who w
     if (gameSocketServer._clearAllReconnectWindows) {
       gameSocketServer._clearAllReconnectWindows();
     }
+    gameSocketServer._clearAllSeatHolds();
     if (disconnectStore) {
       disconnectStore.cancelDisconnectTimer(ROOM_CODE, p1Id);
       disconnectStore.cancelDisconnectTimer(ROOM_CODE, p2Id);
@@ -270,6 +271,7 @@ describe('AC 18 — Failed card request passes turn to the specific player who w
     if (gameSocketServer._clearAllReconnectWindows) {
       gameSocketServer._clearAllReconnectWindows();
     }
+    gameSocketServer._clearAllSeatHolds();
     jest.resetModules();
   });
 
