@@ -40,6 +40,7 @@
  * cardRemovalVariant={room.card_removal_variant}
  * gamePlayerCount={room.player_count}
  * onGoHome={handleGoHome}
+ * onRetry={retryNow}
  * />
  */
 

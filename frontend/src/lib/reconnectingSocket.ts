@@ -96,7 +96,7 @@ export function createReconnectingSocket(options: ReconnectingSocketOptions): Re
     drop(null, '', 'heartbeat');
   }
 
-  // Detach before closing from our side, so that close never reaches the socket's own handler.
+  // Detach before closing from our side, so the socket's own close handler sees a stale socket and ignores it.
   function detach(): WebSocket | null {
     const ws = current;
     current = null;

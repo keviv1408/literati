@@ -183,8 +183,7 @@ function makeParams(roomId: string): Promise<{ 'room-id': string }> {
   return Promise.resolve({ 'room-id': roomId });
 }
 
-// An async act renders only when its callback ends, so call this once after render
-// before timing anything: the room load starts in the render it flushes.
+// The room load starts in the render this flushes, so call it once after render before timing anything.
 async function _advanceTime(ms: number) {
   await act(async () => {
     await jest.advanceTimersByTimeAsync(ms);
@@ -426,7 +425,7 @@ describe('GamePage — while the backend is down', () => {
     mockGetRoomByCode.mockReturnValue(new Promise(() => {}));
     const params = makeParams('ABC123');
     const { rerender } = render(<GamePage params={params} />);
-    // Walks the statuses the real hook goes through, one render each.
+    // One render per status, as the real hook reports them, so the retry effect sees every step.
     const goThrough = (...statuses: ReconnectResult['status'][]) => {
       for (const status of statuses) {
         mockReconnect = { ...mockReconnect!, status };
