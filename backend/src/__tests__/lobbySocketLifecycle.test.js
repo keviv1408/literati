@@ -8,6 +8,7 @@
  *    lobby the same player has since rejoined.
  * 2. A socket that closes while the handler awaits the room row is not
  *    registered, and does not evict the player's live socket.
+ * 3. A spectator's earlier socket closing does not unsubscribe their newer one.
  */
 
 const http      = require('http');
@@ -16,7 +17,7 @@ const WebSocket = require('ws');
 const ROOM_CODE = 'LOBBY1';
 const ROOM_ROW  = {
   id: 'room-id-lobby1', code: ROOM_CODE, host_user_id: null, status: 'waiting',
-  player_count: 6, is_matchmaking: false,
+  player_count: 6, is_matchmaking: false, spectator_token: 'SPECTOK',
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -43,8 +44,8 @@ describe('lobby socket lifecycle', () => {
   let nextLookup = null;
   const sockets = [];
 
-  function connect(token) {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/room/${ROOM_CODE}?token=${token}`);
+  function connect(token, query = '') {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/room/${ROOM_CODE}?token=${token}${query}`);
     const client = { ws, messages: [] };
     ws.on('message', (d) => client.messages.push(JSON.parse(d.toString())));
     ws.on('error', () => {});
@@ -170,5 +171,21 @@ describe('lobby socket lifecycle', () => {
     expect(has(live, 'closing')).toBe(false);
     await until(() => roster(live).length === 2, 300);
     expect(roster(live)).toEqual(['Host', 'Friend']);
+  });
+
+  it('keeps a spectator subscribed when their earlier socket closes', async () => {
+    const watch = '&role=spectator&spectator_token=SPECTOK';
+    const first = connect(friendToken, watch);
+    await received(first, 'connected');
+    const second = connect(friendToken, watch);
+    await received(second, 'connected');
+    first.ws.close();
+    await until(() => wss.clients.size === 1);
+
+    const host = connect(hostToken);
+    await received(host, 'connected');
+
+    await until(() => roster(second).length === 1, 300);
+    expect(roster(second)).toEqual(['Host']);
   });
 });

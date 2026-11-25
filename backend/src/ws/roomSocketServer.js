@@ -1831,7 +1831,8 @@ function attachRoomSocketServer(httpServer) {
       // Spectator disconnect handler.
       ws.on('close', () => {
         const specMap = roomSpectators.get(roomCode);
-        if (specMap) {
+        // A second socket from the same spectator replaces the entry; the first one's close must leave it alone.
+        if (specMap?.get(userId)?.ws === ws) {
           specMap.delete(userId);
           if (specMap.size === 0) {
             roomSpectators.delete(roomCode);
