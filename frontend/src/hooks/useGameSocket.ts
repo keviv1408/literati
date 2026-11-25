@@ -448,8 +448,10 @@ export function useGameSocket({
     wsRef.current = ws;
     setStatus('connecting');
     setError(null);
+    let opened = false;
 
     ws.onopen = () => {
+      opened = true;
       setStatus('connected');
     };
 
@@ -465,8 +467,9 @@ export function useGameSocket({
 
       // Auto-reload on unexpected disconnect (e.g. backend redeploy).
       if (!isIntentional && !isKnownError) {
-        if (!spectatorToken) trackSocketDropped(e.code);
         reloadTimerRef.current = setTimeout(() => {
+          // Here, not at close: an unload or a failed handshake never reaches this reload.
+          if (opened && !spectatorToken) trackSocketDropped(e.code);
           window.location.reload();
         }, 2000);
       }

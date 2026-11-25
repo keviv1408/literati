@@ -56,15 +56,23 @@ beforeAll(() => {
   });
 });
 
+const _realConsoleError = console.error;
+
 beforeEach(() => {
-  // Timers never advance, so the hook's reload-after-drop never runs.
   jest.useFakeTimers();
   wsInstances.length = 0;
   jest.clearAllMocks();
+  // jsdom cannot navigate and its reload cannot be stubbed, so drop only that one report.
+  jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    const message = (args[0] as { message?: unknown } | undefined)?.message;
+    if (typeof message === 'string' && message.startsWith('Not implemented: navigation')) return;
+    _realConsoleError(...args);
+  });
 });
 
 afterEach(() => {
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 function _latestWs(): MockWsInstance {
@@ -101,6 +109,12 @@ function _serverClose(ws: MockWsInstance, code: number) {
   });
 }
 
+function _waitForReload() {
+  act(() => {
+    jest.advanceTimersByTime(2000);
+  });
+}
+
 const GAME_OVER = {
   type: 'game_over',
   winner: 1,
@@ -133,12 +147,30 @@ describe('useGameSocket tracking', () => {
     expect(trackGameOver).toHaveBeenCalledWith('ABCDEF');
   });
 
-  it('reports an abnormal close with its code', () => {
+  it('reports a drop when an open socket closes and the page reloads', () => {
     _renderPlayer();
     const ws = _latestWs();
     _open(ws);
     _serverClose(ws, 1006);
+    _waitForReload();
+    expect(trackSocketDropped).toHaveBeenCalledTimes(1);
     expect(trackSocketDropped).toHaveBeenCalledWith(1006);
+  });
+
+  it('ignores a drop when the page goes away before the reload', () => {
+    _renderPlayer();
+    const ws = _latestWs();
+    _open(ws);
+    _serverClose(ws, 1006);
+    expect(trackSocketDropped).not.toHaveBeenCalled();
+  });
+
+  it('ignores a socket that never opened', () => {
+    _renderPlayer();
+    const ws = _latestWs();
+    _serverClose(ws, 1006);
+    _waitForReload();
+    expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
   it('ignores an intentional close', () => {
@@ -146,6 +178,7 @@ describe('useGameSocket tracking', () => {
     const ws = _latestWs();
     _open(ws);
     _serverClose(ws, 1000);
+    _waitForReload();
     expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
@@ -154,6 +187,7 @@ describe('useGameSocket tracking', () => {
     const ws = _latestWs();
     _open(ws);
     _serverClose(ws, 4001);
+    _waitForReload();
     expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
@@ -162,6 +196,7 @@ describe('useGameSocket tracking', () => {
     const ws = _latestWs();
     _open(ws);
     _serverClose(ws, 1006);
+    _waitForReload();
     expect(trackSocketDropped).not.toHaveBeenCalled();
   });
 
