@@ -74,11 +74,16 @@ describe('GET /health/db', () => {
       return new Promise(() => {});
     });
 
-    const pending = request(app).get('/health/db').then((res) => res);
+    let settled = false;
+    const pending = request(app).get('/health/db').then((res) => {
+      settled = true;
+      return res;
+    });
     await Promise.race([queried, pending]);
-    jest.advanceTimersByTime(4999);
+    await jest.advanceTimersByTimeAsync(4999);
+    expect(settled).toBe(false);
     expect(consoleErrorSpy).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(1);
+    await jest.advanceTimersByTimeAsync(1);
     const res = await pending;
 
     expect(res.status).toBe(503);
