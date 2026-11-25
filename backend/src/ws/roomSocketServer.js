@@ -67,7 +67,7 @@ const { closeWithNotice } = require('./closeWs');
 const { buildGameSeats, toPublicSeat } = require('../game/gameInitService');
 const { persistGameState } = require('../game/gameState');
 const { getSupabaseClient } = require('../db/supabase');
-const { isRoomHost, hostColumns } = require('../rooms/roomHost');
+const { isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
@@ -186,15 +186,12 @@ const matchmakingTimers = new Map();
 const MATCHMAKING_LOBBY_TIMEOUT_MS = 30 * 1000;
 
 /**
- * Map<roomCode, { previousHostId: string }>
- * Tracks pending host-disconnect reconnect windows. An entry is created when
- * the current room host disconnects from the lobby; it is removed if the same
- * host reconnects before the 60-second window elapses (or when the timer fires
- * and host authority is transferred to the next player).
+ * Map<roomCode, { previousHostId: string|null }>
+ * Tracks pending host-transfer windows in private rooms. An entry exists while
+ * no connected player is flagged host; it is removed when a flagged host joins
+ * (or when the timer fires and host authority is transferred to the next player).
  *
  * NOTE: The actual timer/tick machinery is managed by hostDisconnectTimer.js.
- * This map only retains the previousHostId so that reconnects can be matched
- * to the correct original host.
  */
 const hostTransferTimers = new Map();
 
@@ -1925,20 +1922,9 @@ function attachRoomSocketServer(httpServer) {
     console.log(`[RoomWS] join room=${roomCode} user=${userId} players=${clients.size}`);
 
     // ── Cancel any pending host-transfer timer for this room ─────────────────
-    // If the ORIGINAL host reconnects before the grace window elapses, cancel
-    // the transfer timer. If a different (non-host) player joins while a timer
-    // is running, leave the timer intact — only the original host's reconnect
-    // should reset it.
-    if (!isMatchmakingRoom) {
-      const transferEntry = hostTransferTimers.get(roomCode);
-      if (transferEntry && transferEntry.previousHostId === userId) {
-        _cancelHostTransferTimer(roomCode);
-        console.log(
-          `[RoomWS] Original host "${userId}" reconnected — host-disconnect timer cancelled for room "${roomCode}".`,
-        );
-        // Notify all clients that the host is back.
-        broadcast(roomCode, { type: 'host_reconnected', roomCode });
-      }
+    if (!isMatchmakingRoom && hostTransferTimers.has(roomCode) && _hasConnectedHost(clients)) {
+      _cancelHostTransferTimer(roomCode);
+      broadcast(roomCode, { type: 'host_reconnected', roomCode });
     }
 
     // ── Confirm connection to the joining client ────────────────────────────
@@ -1950,6 +1936,11 @@ function attachRoomSocketServer(httpServer) {
       players:       getRoomPlayers(roomCode),
       isMatchmaking: isMatchmakingRoom,
     });
+
+    // A restart drops every socket without a close, so a lobby can come back with no host and no timer.
+    if (!isMatchmakingRoom && !_hasConnectedHost(clients)) {
+      _startHostTransferTimer(roomCode, storedHostId(dbRoom));
+    }
 
     // ── Notify rematch gathering countdown ─────────────────────
     // If a 30-second post-rematch gathering countdown is active for this room,
