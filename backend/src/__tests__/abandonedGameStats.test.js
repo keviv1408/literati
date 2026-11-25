@@ -270,7 +270,7 @@ describe('markStaleGamesAbandoned (AC 52)', () => {
     await markStaleGamesAbandoned(sb, 7200000);
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('3 stale in_progress room(s) as abandoned')
+      expect.stringContaining('3 stale waiting/starting/in_progress room(s) as abandoned')
     );
     logSpy.mockRestore();
   });

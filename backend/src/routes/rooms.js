@@ -153,7 +153,7 @@ router.get('/spectate/:token', async (req, res) => {
  * {
  * room: {
  * id, code, invite_code, spectator_token,
- * host_user_id, player_count, card_removal_variant,
+ * host_user_id, host_guest_id, player_count, card_removal_variant,
  * status, created_at, updated_at
  * },
  * inviteLink: string — ready-made player join URL
@@ -718,7 +718,6 @@ router.post('/:code/start', requireAuth, async (req, res) => {
 
   // ── Read live player state from in-memory room socket store ───────────────
   // roomSocketServer.roomClients maps roomCode → Map<userId, ClientEntry>.
-  // Required lazily to avoid a load-time circular-require issue.
   const {
     roomClients,
     validateStartGame,
