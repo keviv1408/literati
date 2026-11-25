@@ -274,12 +274,23 @@ const BOT_DECLARATION_TAKEOVER_MS = 30_000;
  */
 const RECONNECT_WINDOW_MS = 180_000;
 
+/** A dropped seat waits this long before the disconnect flow, so a quick reconnect finds it untouched. */
+const SEAT_HOLD_MS = 45_000;
+
 /**
  * How often tick events are emitted for both the turn timer and the reconnect
  * window. Clients use tick events to keep their countdown UI accurate without
  * having to drift-correct the initial expiresAt value on their own.
  */
 const TIMER_TICK_INTERVAL_MS = 5_000;
+
+/** Clients treat a socket that stays silent past a few heartbeats as dead. */
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
+/** @param {import('ws').WebSocketServer} wss */
+function _broadcastHeartbeat(wss) {
+  for (const ws of wss.clients) sendJson(ws, { type: 'heartbeat' });
+}
 
 /**
  * How long players from the previous game have to reconnect to the room lobby
@@ -1204,6 +1215,40 @@ function _clearAllReconnectWindows() {
   _reconnectWindows.clear();
 }
 
+/** Pending seat holds. Key: `${roomCode}:${playerId}`, value: Timeout. */
+const _seatHolds = new Map();
+
+function _startSeatHold(roomCode, playerId) {
+  const key = `${roomCode}:${playerId}`;
+  if (_seatHolds.has(key)) return;
+  const timer = setTimeout(() => {
+    _seatHolds.delete(key);
+    // Read the game at fire time: it may have ended, been replaced, or been reclaimed.
+    const gs = getGame(roomCode);
+    if (!gs || gs.status !== 'active') return;
+    if (getConnection(roomCode, playerId)) return;
+    const player = gs.players.find((p) => p.playerId === playerId);
+    if (!player || player.isBot) return;
+    _startReconnectWindow(gs, player);
+    // A bot move now would cancel the bot declaration already announced for this turn.
+    if (_botDeclarationTimers.has(roomCode) && gs.currentTurnPlayerId === playerId) cancelBotTimer(roomCode);
+  }, SEAT_HOLD_MS);
+  timer.unref();
+  _seatHolds.set(key, timer);
+}
+
+function _cancelSeatHold(roomCode, playerId) {
+  const key = `${roomCode}:${playerId}`;
+  clearTimeout(_seatHolds.get(key));
+  _seatHolds.delete(key);
+}
+
+/** Exported for test teardown only. */
+function _clearAllSeatHolds() {
+  for (const timer of _seatHolds.values()) clearTimeout(timer);
+  _seatHolds.clear();
+}
+
 /**
  * Execute a seat reclaim for an original human player at a turn boundary.
  *
@@ -1654,10 +1699,10 @@ async function executeTimedOutTurn(roomCode, playerId) {
   // treats the attempt as a failed declaration and awards the point to the
   // opposing team.
   //
-  // A DISCONNECTED player (in `_reconnectWindows`) falls through to the bot-
+  // A DISCONNECTED player (held, or in `_reconnectWindows`) falls through to the bot-
   // completion path so the seat's bot can finish the declaration instead.
   if (effectivePartial?.flow === 'declare') {
-    const isDisconnected = _reconnectWindows.has(playerId);
+    const isDisconnected = _reconnectWindows.has(playerId) || _seatHolds.has(`${roomCode}:${playerId}`);
     if (!isDisconnected) {
       const halfSuitId    = effectivePartial.halfSuitId;
       const assignment    = effectivePartial.assignment ?? {};
@@ -3277,6 +3322,12 @@ function attachGameSocketServer(httpServer) {
     });
   });
 
+  // Sent on connect too, because the client's silence check starts at the first heartbeat.
+  wss.on('connection', (ws) => sendJson(ws, { type: 'heartbeat' }));
+  const heartbeatTimer = setInterval(() => _broadcastHeartbeat(wss), HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
+  wss.on('close', () => clearInterval(heartbeatTimer));
+
   wss.on('connection', async (ws, req) => {
     const parsed         = url.parse(req.url || '', true);
     const match          = parsed.pathname.match(/^\/ws\/game\/([A-Za-z0-9]{6})$/);
@@ -3358,7 +3409,14 @@ function attachGameSocketServer(httpServer) {
           .eq('code', roomCode)
           .maybeSingle();
 
-        if (error || !room) {
+        if (error) {
+          console.error('[game-ws] Recovery read error:', error.message);
+          sendJson(ws, { type: 'error', code: 'SERVER_ERROR', message: 'Server error' });
+          closeWithNotice(ws, 4500, 'Server error');
+          return;
+        }
+
+        if (!room) {
           sendJson(ws, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Room not found' });
           closeWithNotice(ws, 4004, 'Room not found');
           return;
@@ -3377,8 +3435,12 @@ function attachGameSocketServer(httpServer) {
         }
 
         if (room.game_state) {
-          gs = recoverGame(roomCode, room.id, room.game_state);
-          console.log(`[game-ws] Recovered game state for room ${roomCode} from Supabase`);
+          // Another connection may have recovered the game while this read was in flight.
+          gs = getGame(roomCode);
+          if (!gs) {
+            gs = recoverGame(roomCode, room.id, room.game_state);
+            console.log(`[game-ws] Recovered game state for room ${roomCode} from Supabase`);
+          }
         } else {
           sendJson(ws, { type: 'error', code: 'GAME_NOT_FOUND', message: 'Game state not available' });
           closeWithNotice(ws, 4005, 'Game state not available');
@@ -3397,6 +3459,9 @@ function attachGameSocketServer(httpServer) {
       closeWithNotice(ws, 4005, 'Game abandoned');
       return;
     }
+
+    // A socket that closed during the awaits above has no close listener yet.
+    if (ws.readyState !== 1) return;
 
     // Verify this player is in the game (or is a spectator)
     let playerInGame = gs.players.find((p) => p.playerId === playerId);
@@ -3472,6 +3537,13 @@ function attachGameSocketServer(httpServer) {
     }
 
     const isSpectator  = !playerInGame;
+
+    // Holds a seat this socket took back but never registered; a superseding socket keeps it.
+    const holdIfUnclaimed = () => {
+      if (!isSpectator && !getConnection(roomCode, playerId)) _startSeatHold(roomCode, playerId);
+    };
+    // The reclaim persist below is awaited before the main close listener exists.
+    ws.once('close', holdIfUnclaimed);
 
     // ── Seat reclaim ──────────────────────────────────
     // If this player has an active reconnect window, they are reclaiming their
@@ -3550,7 +3622,17 @@ function attachGameSocketServer(httpServer) {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
+    ws.off('close', holdIfUnclaimed);
+    if (ws.readyState !== 1) {
+      // It closed during the reclaim persist, after taking the seat back.
+      holdIfUnclaimed();
+      // The reclaim cleared the bot timer, so a turn timer must drive this seat's turn.
+      if (gs.status === 'active' && !_turnTimers.has(gs.roomCode)) scheduleTurnTimerIfNeeded(gs);
+      return;
+    }
+
     // Register the connection
+    _cancelSeatHold(roomCode, playerId);
     registerConnection(roomCode, playerId, ws);
 
     if (isSpectator) {
@@ -3832,18 +3914,19 @@ function attachGameSocketServer(httpServer) {
       if (registered && registered !== ws) return; // superseded by a newer socket
       removeConnection(roomCode, playerId);
 
-      // Only human players in active games get the reconnect window treatment.
+      // Only human players in active games get a seat hold.
       // Bots and spectators are excluded.
       if (!isSpectator) {
         const currentGs = getGame(roomCode);
         if (currentGs && currentGs.status === 'active') {
           const player = currentGs.players.find((p) => p.playerId === playerId);
           if (player && !player.isBot) {
-            // Start the concurrent timer sequence: 60s turn timer + 180s reconnect window.
-            // _startReconnectWindow handles both — it starts the turn timer BEFORE
-            // marking the seat as bot, ensuring both timers run simultaneously.
-            _startReconnectWindow(currentGs, player);
-            return; // _startReconnectWindow logs the disconnect
+            _startSeatHold(roomCode, playerId);
+            console.log(
+              `[game-ws] Player ${displayName} (${playerId}) disconnected from game ${roomCode} — ` +
+              `seat held ${SEAT_HOLD_MS / 1000}s`
+            );
+            return;
           }
         }
       }
@@ -3894,6 +3977,11 @@ module.exports = {
   _startReconnectWindow,
   _cancelReconnectWindow,
   _clearAllReconnectWindows,
+  _startSeatHold,
+  _cancelSeatHold,
+  _clearAllSeatHolds,
+  _seatHolds,
+  SEAT_HOLD_MS,
   // Concurrent timer infrastructure:
   startReconnectWindow,
   cancelReconnectWindow,
@@ -3936,6 +4024,8 @@ module.exports = {
   BOT_TURN_DELAY_MS,
   RECONNECT_WINDOW_MS,
   TIMER_TICK_INTERVAL_MS,
+  HEARTBEAT_INTERVAL_MS,
+  _broadcastHeartbeat,
   DECLARATION_PHASE_TIMEOUT_MS,
   BOT_DECLARATION_TAKEOVER_MS,
   // Rematch gathering countdown:

@@ -192,6 +192,7 @@ describe('AC 18 — Failed card request passes turn to the specific player who w
     if (gameSocketServer._clearAllReconnectWindows) {
       gameSocketServer._clearAllReconnectWindows();
     }
+    gameSocketServer._clearAllSeatHolds();
     if (disconnectStore) {
       disconnectStore.cancelDisconnectTimer(ROOM_CODE, p1Id);
       disconnectStore.cancelDisconnectTimer(ROOM_CODE, p2Id);
@@ -270,14 +271,15 @@ describe('AC 18 — Failed card request passes turn to the specific player who w
     if (gameSocketServer._clearAllReconnectWindows) {
       gameSocketServer._clearAllReconnectWindows();
     }
+    gameSocketServer._clearAllSeatHolds();
     jest.resetModules();
   });
 
   /**
-   * Tear down WS connections from a test without triggering reconnect windows.
+   * Tear down WS connections from a test without triggering seat holds.
    *
    * Marks every player as a bot first (so the server's `ws.on('close')` handler
-   * skips `_startReconnectWindow`), closes the provided sockets, then awaits
+   * skips `_startSeatHold`), closes the provided sockets, then awaits
    * 50 ms for the server-side close callbacks to fire.  Using `await` here
    * guarantees the close events are fully processed BEFORE the test's async
    * function returns — which means they are processed before `beforeEach` for
