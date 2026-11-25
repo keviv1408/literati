@@ -534,6 +534,21 @@ describe('GamePage — abandoned room', () => {
     });
     expect(screen.getByText(/bot-only game was ended automatically/i)).toBeTruthy();
   });
+
+  it('switches to the abandoned state when the server rejects the socket with GAME_ABANDONED', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
+
+    render(<GamePage params={makeParams('ABC123')} />);
+    await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
+
+    act(() => openWs());
+    act(() => sendWsMessage({ type: 'error', code: 'GAME_ABANDONED', message: 'Game was abandoned' }));
+    act(() => sendWsMessage({ type: 'closing', code: 4005, reason: 'Game abandoned' }));
+
+    await waitFor(() => expect(screen.getByTestId('abandoned-view')).toBeTruthy());
+    warn.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------

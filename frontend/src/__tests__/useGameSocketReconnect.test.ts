@@ -319,6 +319,22 @@ describe('useGameSocket reconnect', () => {
     expect(wsInstances).toHaveLength(1);
   });
 
+  it('marks the room abandoned when a reconnect finds the game abandoned, and keeps it after the 4005 close', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = _renderPlayer();
+    _confirm(_latestWs());
+    _serverClose(_latestWs(), 1006);
+    _advance(1000);
+    const second = _latestWs();
+    _open(second);
+    _message(second, { type: 'error', code: 'GAME_ABANDONED', message: 'Game was abandoned' });
+    _message(second, { type: 'closing', code: 4005, reason: 'Game abandoned' });
+    expect(result.current.wsStatus).toBe('error');
+    expect(result.current.roomDissolved).toEqual({ type: 'room_dissolved', reason: 'all_bots' });
+    expect(warn).toHaveBeenCalledWith('[game-ws] Server error:', 'GAME_ABANDONED', 'Game was abandoned');
+    warn.mockRestore();
+  });
+
   it('sends nothing while reconnecting', () => {
     const { result } = _renderPlayer();
     const first = _latestWs();

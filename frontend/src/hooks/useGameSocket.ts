@@ -868,6 +868,8 @@ export function useGameSocket({
           const { message: errMsg, code } = msg as { message: string; code?: string };
           console.warn('[game-ws] Server error:', code, errMsg);
           setError(errMsg ?? 'Unknown error');
+          // A player who was offline for the room_dissolved broadcast learns of the abandonment only here.
+          if (code === 'GAME_ABANDONED') setRoomDissolved({ type: 'room_dissolved', reason: 'all_bots' });
           break;
         }
 
