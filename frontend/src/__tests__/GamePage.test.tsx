@@ -411,6 +411,29 @@ describe('GamePage — while the backend is down', () => {
     expect(mockGetRoomByCode.mock.calls.length).toBeGreaterThan(callsAt60s);
   });
 
+  it.each<ReconnectResult['status']>(['reconnecting', 'no_session'])(
+    'never retries the session check while it reports %s',
+    async (status) => {
+      const retry = jest.fn();
+      mockReconnect = {
+        status,
+        sessionId: null,
+        bearerToken: null,
+        isGuest: false,
+        displayName: null,
+        errorMessage: null,
+        retry,
+      };
+      mockGetRoomByCode.mockReturnValue(new Promise(() => {}));
+
+      render(<GamePage params={makeParams('ABC123')} />);
+      await _advanceTime(0);
+      await _advanceTime(60_000);
+
+      expect(retry).not.toHaveBeenCalled();
+    },
+  );
+
   it('retries the session check from error on the backoff schedule, and restarts the schedule after ready', async () => {
     const retry = jest.fn();
     mockReconnect = {
@@ -2362,6 +2385,28 @@ describe('GamePage — while the game socket reconnects', () => {
       expect(fake.state.sendDeclareProgress).not.toHaveBeenCalled();
     });
 
+    it('sends nothing and leaves the controls free when the declaration countdown runs out during the drop', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openDeclareTray();
+      // The countdown runs on requestAnimationFrame, so fake timers must be in place before it mounts.
+      jest.useFakeTimers();
+      try {
+        update({
+          declarationTimer: { type: 'declaration_timer', playerId: MY_PLAYER_ID, durationMs: 60_000, expiresAt: Date.now() + 1000 },
+        });
+        update({ wsStatus: 'reconnecting' });
+        act(() => jest.advanceTimersByTime(1100));
+
+        update({ wsStatus: 'connected', declarationTimer: null, myHand: [...HAND], gameState: activeState(MY_PLAYER_ID) });
+
+        expect(screen.getByTestId('toggle-declare')).toBeEnabled();
+        expect(fake.state.sendDeclare).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('keeps the highlight on its card when another card in the declare tray is tapped', async () => {
       const fake = fakeGameSocket();
       const update = await renderWithFake(fake, 'game-view');
@@ -2410,11 +2455,17 @@ describe('GamePage — while the game socket reconnects', () => {
     });
   });
 
-  it('keeps the spectator view mounted while reconnecting', async () => {
-    const fake = fakeGameSocket({ wsStatus: 'reconnecting', myPlayerId: null, myHand: [] });
-    await renderWithFake(fake, 'spectator-view');
+  it('keeps the spectator view mounted, with its God mode still on, when the socket drops', async () => {
+    const fake = fakeGameSocket({ myPlayerId: null, myHand: [] });
+    const update = await renderWithFake(fake, 'spectator-view');
+    fireEvent.click(screen.getByTestId('spectator-god-mode-toggle'));
+    const view = screen.getByTestId('spectator-view');
+
+    update({ wsStatus: 'reconnecting' });
 
     expect(screen.getByTestId('ws-reconnecting-banner')).toBeTruthy();
+    expect(screen.getByTestId('spectator-view')).toBe(view);
+    expect(screen.getByTestId('spectator-god-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   });
 
   const viewers: Array<[string, string | null, string]> = [
