@@ -3407,7 +3407,14 @@ function attachGameSocketServer(httpServer) {
           .eq('code', roomCode)
           .maybeSingle();
 
-        if (error || !room) {
+        if (error) {
+          console.error('[game-ws] Recovery read error:', error.message);
+          sendJson(ws, { type: 'error', code: 'SERVER_ERROR', message: 'Server error' });
+          closeWithNotice(ws, 4500, 'Server error');
+          return;
+        }
+
+        if (!room) {
           sendJson(ws, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Room not found' });
           closeWithNotice(ws, 4004, 'Room not found');
           return;
@@ -3426,7 +3433,8 @@ function attachGameSocketServer(httpServer) {
         }
 
         if (room.game_state) {
-          gs = recoverGame(roomCode, room.id, room.game_state);
+          // Another connection may have recovered the game while this read was in flight.
+          gs = getGame(roomCode) ?? recoverGame(roomCode, room.id, room.game_state);
           console.log(`[game-ws] Recovered game state for room ${roomCode} from Supabase`);
         } else {
           sendJson(ws, { type: 'error', code: 'GAME_NOT_FOUND', message: 'Game state not available' });
@@ -3446,6 +3454,9 @@ function attachGameSocketServer(httpServer) {
       closeWithNotice(ws, 4005, 'Game abandoned');
       return;
     }
+
+    // A socket that closed during the awaits above has no close listener yet.
+    if (ws.readyState !== 1) return;
 
     // Verify this player is in the game (or is a spectator)
     let playerInGame = gs.players.find((p) => p.playerId === playerId);
@@ -3598,6 +3609,12 @@ function attachGameSocketServer(httpServer) {
       if (getCardCount(gs, playerId) === 0) _executeReclaim(gs, playerId);
     }
     // ─────────────────────────────────────────────────────────────────────────
+
+    if (ws.readyState !== 1) {
+      // It closed during the reclaim persist, after taking the seat back.
+      if (!isSpectator) _startSeatHold(roomCode, playerId);
+      return;
+    }
 
     // Register the connection
     _cancelSeatHold(roomCode, playerId);
