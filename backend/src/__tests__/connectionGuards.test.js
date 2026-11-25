@@ -282,24 +282,38 @@ describe('connection-handler guards', () => {
       .mockImplementationOnce(() => read.promise);
     setGameSpy.mockClear();
     const logSpy = jest.spyOn(console, 'log');
+    // A restart loses every guest session, so both clients arrive with stale tokens.
+    const sessions = new Map(guestSessionStore._getRawStore());
+    guestSessionStore._clearStore();
 
-    const a = await connect(`token=${p1Token}`);
-    const b = await connect(`token=${p2Token}`);
-    await waitFor(() => supabaseMock.chain.maybeSingle.mock.calls.length === 2);
+    try {
+      const a = await connect(`token=${p1Token}&guestRecoveryKey=${P1_KEY}`);
+      const b = await connect(`token=${p2Token}&guestRecoveryKey=${P2_KEY}`);
+      await waitFor(() => supabaseMock.chain.maybeSingle.mock.calls.length === 2);
 
-    read.resolve({
-      data:  { id: ROOM_ID, status: 'in_progress', game_state: snapshot },
-      error: null,
-    });
-    await waitFor(() => (
-      a.messages.some((m) => m.type === 'game_init') &&
-      b.messages.some((m) => m.type === 'game_init')
-    ));
+      read.resolve({
+        data:  { id: ROOM_ID, status: 'in_progress', game_state: snapshot },
+        error: null,
+      });
+      await waitFor(() => (
+        a.messages.some((m) => m.type === 'game_init') &&
+        b.messages.some((m) => m.type === 'game_init')
+      ));
 
-    expect(setGameSpy).toHaveBeenCalledTimes(1);
-    const recoveredLogs = logSpy.mock.calls.filter(([line]) => String(line).includes('Recovered game state'));
-    logSpy.mockRestore();
-    expect(recoveredLogs).toHaveLength(1);
+      expect(setGameSpy).toHaveBeenCalledTimes(1);
+      const recoveredLogs = logSpy.mock.calls.filter(([line]) => String(line).includes('Recovered game state'));
+      expect(recoveredLogs).toHaveLength(1);
+
+      const aInit = a.messages.find((m) => m.type === 'game_init');
+      const bInit = b.messages.find((m) => m.type === 'game_init');
+      expect(aInit.myPlayerId).toBe(p1Id);
+      expect([...aInit.myHand].sort()).toEqual(['1_s', '2_s', '3_s']);
+      expect(bInit.myPlayerId).toBe(p2Id);
+      expect([...bInit.myHand].sort()).toEqual(['4_s', '5_s', '6_s']);
+    } finally {
+      logSpy.mockRestore();
+      for (const [token, session] of sessions) guestSessionStore._getRawStore().set(token, session);
+    }
   });
 
   test('a failed room read closes with 4500', async () => {
