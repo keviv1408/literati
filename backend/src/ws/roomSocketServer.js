@@ -1910,6 +1910,7 @@ function attachRoomSocketServer(httpServer) {
       teamId,
       ...(guestRecoveryKey ? { guestRecoveryKey } : {}),
     });
+    console.log(`[RoomWS] join room=${roomCode} user=${userId} players=${clients.size}`);
 
     // ── Cancel any pending host-transfer timer for this room ─────────────────
     // If the ORIGINAL host reconnects before the grace window elapses, cancel
@@ -2096,6 +2097,7 @@ function attachRoomSocketServer(httpServer) {
       const wasHost = entry.isHost;
 
       clients.delete(userId);
+      console.log(`[RoomWS] leave room=${roomCode} user=${userId} players=${clients.size}`);
 
       if (clients.size > 0) {
         broadcast(roomCode, {

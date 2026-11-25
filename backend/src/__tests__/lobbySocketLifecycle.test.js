@@ -9,6 +9,7 @@
  * 2. A socket that closes while the handler awaits the room row is not
  *    registered, and does not evict the player's live socket.
  * 3. A spectator's earlier socket closing does not unsubscribe their newer one.
+ * 4. Every join and leave is logged with the room size.
  */
 
 const http      = require('http');
@@ -187,5 +188,16 @@ describe('lobby socket lifecycle', () => {
 
     await until(() => roster(second).length === 1, 300);
     expect(roster(second)).toEqual(['Host']);
+  });
+
+  it('logs each join and leave with the room size', async () => {
+    const host = connect(hostToken);
+    await received(host, 'connected');
+    host.ws.close();
+    await until(() => wss.clients.size === 0);
+
+    const lines = logSpy.mock.calls.map((args) => args.join(' '));
+    expect(lines).toContain(`[RoomWS] join room=${ROOM_CODE} user=${hostId} players=1`);
+    expect(lines).toContain(`[RoomWS] leave room=${ROOM_CODE} user=${hostId} players=0`);
   });
 });
