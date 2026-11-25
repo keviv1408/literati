@@ -794,6 +794,7 @@ export default function GamePage({ params }: PageProps) {
 
   const handleDeclareDragEnd = useCallback((event: DragEndEvent) => {
     setDeclareActiveDragId(null);
+    if (!canSend) return;
     const rawId = String(event.active.id);
     // Draggable IDs are prefixed with "declare-"
     const cardId = rawId.replace(/^declare-/, '') as CardId;
@@ -812,7 +813,7 @@ export default function GamePage({ params }: PageProps) {
         return next;
       });
     }
-  }, [myHand, players, myTeamId, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
+  }, [canSend, myHand, players, myTeamId, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
 
   // ── Inline declare: tap-to-assign ────────────────────────────
   const handleDeclareTapCard = useCallback((cardId: CardId) => {
@@ -821,24 +822,24 @@ export default function GamePage({ params }: PageProps) {
   }, [myHand]);
 
   const handleDeclareTapZone = useCallback((playerId: string) => {
-    if (!declareSelectedCard || playerId === myPlayerId) return;
+    if (!canSend || !declareSelectedCard || playerId === myPlayerId) return;
     setDeclareAssignment((prev) => {
       const next = { ...prev, [declareSelectedCard]: playerId };
       if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
       return next;
     });
     setDeclareSelectedCard(null);
-  }, [declareSelectedCard, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
+  }, [canSend, declareSelectedCard, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
 
   const handleDeclareRemoveCard = useCallback((cardId: CardId) => {
-    if (myHand.includes(cardId)) return;
+    if (!canSend || myHand.includes(cardId)) return;
     setDeclareAssignment((prev) => {
       const next = { ...prev };
       delete next[cardId];
       if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
       return next;
     });
-  }, [myHand, declareSelectedSuit, sendDeclareProgress]);
+  }, [canSend, myHand, declareSelectedSuit, sendDeclareProgress]);
 
   // ── Inline declare: confirm ──────────────────────────────────
   const handleDeclareConfirm = useCallback(() => {
@@ -880,7 +881,7 @@ export default function GamePage({ params }: PageProps) {
   [declareSuitCards, declareAssignment]);
 
   const handleAskCardToggle = useCallback((cardId: CardId) => {
-    if (!selectedAskHalfSuit) return;
+    if (!canSend || !selectedAskHalfSuit) return;
     const next = selectedAskCardIds.includes(cardId)
       ? selectedAskCardIds.filter((id) => id !== cardId)
       : [...selectedAskCardIds, cardId];
@@ -892,10 +893,10 @@ export default function GamePage({ params }: PageProps) {
     } else {
       sendPartialSelection({ flow: 'ask', halfSuitId: selectedAskHalfSuit });
     }
-  }, [selectedAskCardIds, selectedAskHalfSuit, sendPartialSelection]);
+  }, [canSend, selectedAskCardIds, selectedAskHalfSuit, sendPartialSelection]);
 
   useEffect(() => {
-    if (!showAskInline || !selectedAskHalfSuit) return;
+    if (!canSend || !showAskInline || !selectedAskHalfSuit) return;
 
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target;
@@ -910,7 +911,7 @@ export default function GamePage({ params }: PageProps) {
     return () => {
       document.removeEventListener('click', handleOutsideClick, true);
     };
-  }, [resetAskMode, selectedAskCardIds.length, selectedAskHalfSuit, showAskInline]);
+  }, [canSend, resetAskMode, selectedAskCardIds.length, selectedAskHalfSuit, showAskInline]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -977,7 +978,7 @@ export default function GamePage({ params }: PageProps) {
   const showDeclareTray = declareMode && !!declareSelectedSuit && isMyTurn && !isTurnPassMode;
 
   useEffect(() => {
-    if (!showDeclareTray) return;
+    if (!canSend || !showDeclareTray) return;
 
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target;
@@ -992,7 +993,7 @@ export default function GamePage({ params }: PageProps) {
     return () => {
       document.removeEventListener('click', handleOutsideClick, true);
     };
-  }, [resetDeclareMode, showDeclareTray]);
+  }, [canSend, resetDeclareMode, showDeclareTray]);
 
   const handleAsk = useCallback((targetId: string, cardId: CardId, batchCardIds?: CardId[]) => {
     setActionLoading(true);

@@ -1994,6 +1994,10 @@ describe('GamePage — while the game socket reconnects', () => {
     return screen.getByTestId('inline-declare-tray');
   }
 
+  function teammateDropSeat(playerId: string) {
+    return screen.getAllByTestId('declare-drop-seat').find((s) => s.getAttribute('data-player-id') === playerId)!;
+  }
+
   function pressBar() {
     const text = within(screen.getByTestId('ws-reconnecting-banner')).getByText('Reconnecting…');
     fireEvent.mouseDown(text);
@@ -2150,6 +2154,51 @@ describe('GamePage — while the game socket reconnects', () => {
       update({ gameState: activeState(MY_PLAYER_ID) });
 
       expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+    });
+  });
+
+  describe('tray edits during the drop', () => {
+    it('keeps an open declare tray on an outside click and sends nothing', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openDeclareTray();
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendDeclareSelecting).mockClear();
+      jest.mocked(fake.state.sendDeclareProgress).mockClear();
+
+      fireEvent.click(document.body);
+
+      expect(screen.getByTestId('inline-declare-tray')).toBeTruthy();
+      expect(fake.state.sendDeclareSelecting).not.toHaveBeenCalled();
+      expect(fake.state.sendDeclareProgress).not.toHaveBeenCalled();
+    });
+
+    it('ignores a card toggle in an open ask tray and sends nothing', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      openAskTray(['1_h']);
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendPartialSelection).mockClear();
+
+      fireEvent.click(screen.getByTestId('inline-ask-card-2_h'));
+
+      expect(screen.getByTestId('inline-ask-card-1_h')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('inline-ask-card-2_h')).toHaveAttribute('aria-pressed', 'false');
+      expect(fake.state.sendPartialSelection).not.toHaveBeenCalled();
+    });
+
+    it('ignores a card assignment in an open declare tray and sends nothing', async () => {
+      const fake = fakeGameSocket();
+      const update = await renderWithFake(fake, 'game-view');
+      const tray = openDeclareTray();
+      update({ wsStatus: 'reconnecting' });
+      jest.mocked(fake.state.sendDeclareProgress).mockClear();
+
+      fireEvent.click(within(tray).getAllByTestId('declare-draggable-card')[0]);
+      fireEvent.click(teammateDropSeat('p2'));
+
+      expect(within(tray).getByText(/1\/6 assigned/)).toBeTruthy();
+      expect(fake.state.sendDeclareProgress).not.toHaveBeenCalled();
     });
   });
 
