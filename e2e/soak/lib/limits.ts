@@ -1,3 +1,4 @@
+// Filter check: any code change under e2e/ must run the soak.
 export const BACKEND_URL = 'http://localhost:3012';
 export const FRONTEND_URL = 'http://localhost:3011';
 export const STANDIN_URL = 'http://127.0.0.1:54321';
