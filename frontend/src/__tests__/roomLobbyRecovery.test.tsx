@@ -1,0 +1,208 @@
+/**
+ * @jest-environment jsdom
+ *
+ * The room page recovers once from a lobby socket refused with 4001: it
+ * registers the guest again and reconnects without showing Connection Error.
+ */
+
+import React from 'react';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import type { UseRoomSocketOptions, WsStatus } from '@/hooks/useRoomSocket';
+import { GuestProvider } from '@/contexts/GuestContext';
+import { saveGuestSession } from '@/lib/guestSession';
+import { saveRoomMembership } from '@/lib/roomMembership';
+import RoomLobbyPage from '@/app/room/[roomCode]/page';
+
+const mockRouter = { push: jest.fn(), replace: jest.fn() };
+jest.mock('next/navigation', () => ({
+  useRouter: () => mockRouter,
+}));
+
+const mockGetRoomByCode = jest.fn();
+const mockGetGuestBearerToken = jest.fn();
+const mockValidateSession = jest.fn();
+jest.mock('@/lib/api', () => {
+  const actual = jest.requireActual('@/lib/api');
+  return {
+    ApiError: actual.ApiError,
+    invalidateGuestToken: actual.invalidateGuestToken,
+    getRoomByCode: (...args: unknown[]) => mockGetRoomByCode(...args),
+    getGuestBearerToken: (...args: unknown[]) => mockGetGuestBearerToken(...args),
+    validateSession: (...args: unknown[]) => mockValidateSession(...args),
+  };
+});
+
+jest.mock('@/lib/socket', () => ({
+  connectSocket: () => ({ on: jest.fn(), off: jest.fn() }),
+  disconnectSocket: jest.fn(),
+}));
+
+interface SocketState {
+  wsStatus: WsStatus;
+  stopCode: number | null;
+}
+
+const mockSocketCalls: UseRoomSocketOptions[] = [];
+let mockSetSocket: (state: SocketState) => void = () => {};
+
+// Stands in for the real socket: idle without a full set of credentials, connecting
+// on each new set, and otherwise whatever status the test drives it to.
+jest.mock('@/hooks/useRoomSocket', () => {
+  const { useState, useEffect } = jest.requireActual('react');
+  // Stable across renders like the real hook's values, so the page's effects settle.
+  const fixed = {
+    players: [],
+    myPlayerId: null,
+    isKicked: false,
+    kickReason: null,
+    kickPlayer: jest.fn(),
+    changeTeam: jest.fn(),
+    setAvatar: jest.fn(),
+    emit: jest.fn(),
+    startGame: jest.fn(),
+    lobbyTimer: null,
+    lobbyStarting: false,
+    errorSeq: 0,
+    hostChangedEvent: null,
+  };
+  return {
+    useRoomSocket: (options: UseRoomSocketOptions) => {
+      mockSocketCalls.push(options);
+      const [state, setState] = useState({ wsStatus: 'idle', stopCode: null });
+      mockSetSocket = setState;
+      const { roomCode, sessionId, bearerToken } = options;
+      useEffect(() => {
+        setState({
+          wsStatus: roomCode && sessionId && bearerToken ? 'connecting' : 'idle',
+          stopCode: null,
+        });
+      }, [roomCode, sessionId, bearerToken]);
+      return {
+        ...fixed,
+        ...state,
+        lastError: state.stopCode ? `Connection closed (${state.stopCode})` : null,
+      };
+    },
+  };
+});
+
+const ROOM = {
+  id: 'room-1',
+  code: 'ABC123',
+  invite_code: '0123456789abcdef',
+  host_user_id: 'host-1',
+  player_count: 6,
+  card_removal_variant: 'remove_7s',
+  status: 'waiting',
+  players: [],
+  created_at: '2026-11-26T00:00:00Z',
+  updated_at: '2026-11-26T00:00:00Z',
+};
+
+const ERROR_SCREEN = '[data-testid="connection-error-screen"]';
+
+function _lastToken(): string | null | undefined {
+  return mockSocketCalls[mockSocketCalls.length - 1]?.bearerToken;
+}
+
+// The tokens the socket was handed from this call on, with consecutive repeats collapsed.
+function _tokenChangesSince(index: number): Array<string | null | undefined> {
+  return mockSocketCalls
+    .slice(index)
+    .map((c) => c.bearerToken)
+    .filter((token, i, all) => i === 0 || token !== all[i - 1]);
+}
+
+// Records every time the error screen enters the DOM, even for a single commit.
+function _watchErrorScreen(): { seen: () => boolean; stop: () => void } {
+  let seen = false;
+  const scan = (records: MutationRecord[]) => {
+    for (const record of records) {
+      record.addedNodes.forEach((node) => {
+        if (node instanceof Element && (node.matches(ERROR_SCREEN) || node.querySelector(ERROR_SCREEN))) {
+          seen = true;
+        }
+      });
+    }
+  };
+  const observer = new MutationObserver(scan);
+  observer.observe(document.body, { childList: true, subtree: true });
+  return {
+    seen: () => {
+      scan(observer.takeRecords());
+      return seen || document.querySelector(ERROR_SCREEN) !== null;
+    },
+    stop: () => observer.disconnect(),
+  };
+}
+
+function _drive(state: SocketState) {
+  act(() => mockSetSocket(state));
+}
+
+async function _renderConnecting() {
+  render(
+    <GuestProvider>
+      <RoomLobbyPage params={Promise.resolve({ roomCode: 'abc123' })} />
+    </GuestProvider>,
+  );
+  await waitFor(() => expect(_lastToken()).toBe('stale-room-token'));
+  await waitFor(() => expect(screen.queryByTestId('reconnecting-screen')).not.toBeInTheDocument());
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockSocketCalls.length = 0;
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  saveGuestSession('Ada');
+  saveRoomMembership('ABC123', 'stale-room-token', 'sid-1', 'player');
+  mockGetRoomByCode.mockResolvedValue({ room: ROOM });
+  mockValidateSession.mockResolvedValue({
+    isGuest: true,
+    sessionId: 'sid-1',
+    displayName: 'Ada',
+    avatarId: null,
+  });
+  mockGetGuestBearerToken.mockResolvedValueOnce('token-1');
+});
+
+describe('room lobby recovery from a refused token', () => {
+  it('registers again and reconnects with the fresh token, never showing Connection Error', async () => {
+    await _renderConnecting();
+    mockGetGuestBearerToken.mockResolvedValueOnce('token-2');
+    const watch = _watchErrorScreen();
+    const before = mockSocketCalls.length;
+
+    _drive({ wsStatus: 'error', stopCode: 4001 });
+    await waitFor(() => expect(_lastToken()).toBe('token-2'));
+    _drive({ wsStatus: 'connected', stopCode: null });
+
+    expect(watch.seen()).toBe(false);
+    watch.stop();
+    expect(_tokenChangesSince(before)).toEqual(['stale-room-token', null, 'token-2']);
+  });
+
+  it('shows Connection Error when registering again fails', async () => {
+    await _renderConnecting();
+    mockGetGuestBearerToken.mockRejectedValueOnce(new Error('Server down'));
+
+    _drive({ wsStatus: 'error', stopCode: 4001 });
+
+    expect(await screen.findByTestId('connection-error-screen')).toBeVisible();
+    expect(screen.getByTestId('connection-error-retry-btn')).toBeVisible();
+  });
+
+  it('shows Connection Error on a second 4001 with no connected in between', async () => {
+    await _renderConnecting();
+    mockGetGuestBearerToken.mockResolvedValueOnce('token-2');
+
+    _drive({ wsStatus: 'error', stopCode: 4001 });
+    await waitFor(() => expect(_lastToken()).toBe('token-2'));
+    await waitFor(() => expect(screen.queryByTestId('reconnecting-screen')).not.toBeInTheDocument());
+    _drive({ wsStatus: 'error', stopCode: 4001 });
+
+    expect(await screen.findByTestId('connection-error-screen')).toBeVisible();
+    expect(screen.getByTestId('connection-error-retry-btn')).toBeVisible();
+  });
+});

@@ -412,6 +412,59 @@ describe('useReconnect', () => {
     });
   });
 
+  describe('retry() after the cached token was dropped', () => {
+    async function _readyWithCachedToken() {
+      stubGuestSession('GuestPlayer');
+      mockGetCachedToken.mockReturnValue('old-token');
+      resolveValidateSession({
+        isGuest: true,
+        sessionId: 'server-sid',
+        displayName: 'GuestPlayer',
+        avatarId: null,
+      });
+      const hook = renderHook(() => useReconnect());
+      await waitFor(() => expect(hook.result.current.status).toBe('ready'));
+      mockGetCachedToken.mockReturnValue(null);
+      mockValidateSession.mockClear();
+      return hook;
+    }
+
+    it('registers again and returns to ready with the same id and the new token', async () => {
+      const { result } = await _readyWithCachedToken();
+      mockGetGuestBearerToken.mockResolvedValueOnce('new-token');
+      resolveValidateSession({
+        isGuest: true,
+        sessionId: 'server-sid',
+        displayName: 'GuestPlayer',
+        avatarId: null,
+      });
+
+      act(() => {
+        result.current.retry();
+      });
+
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      expect(result.current.sessionId).toBe('server-sid');
+      expect(result.current.bearerToken).toBe('new-token');
+      expect(mockValidateSession).toHaveBeenCalledWith('new-token');
+      expect(mockValidateSession).not.toHaveBeenCalledWith('old-token');
+    });
+
+    it('ends in error with no token or id when registering again fails', async () => {
+      const { result } = await _readyWithCachedToken();
+      mockGetGuestBearerToken.mockRejectedValueOnce(new Error('Server down'));
+
+      act(() => {
+        result.current.retry();
+      });
+
+      await waitFor(() => expect(result.current.status).toBe('error'));
+      expect(result.current.errorMessage).toBeTruthy();
+      expect(result.current.bearerToken).toBeNull();
+      expect(result.current.sessionId).toBeNull();
+    });
+  });
+
   // ── Cancellation ──────────────────────────────────────────────────────────
 
   describe('cancellation', () => {

@@ -53,6 +53,7 @@ import {
 import { consumeCreatedRoom } from '@/components/CreateRoomModal';
 import { useRoomSocket } from '@/hooks/useRoomSocket';
 import { useReconnect } from '@/hooks/useReconnect';
+import { useLobbyRecovery } from '@/hooks/useLobbyRecovery';
 import { useGuest } from '@/contexts/GuestContext';
 import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from '@/types/user';
 import Avatar from '@/components/Avatar';
@@ -271,6 +272,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     lobbyStarting,
     lastError: wsError,
     errorSeq,
+    stopCode,
     hostChangedEvent,
   } = useRoomSocket({
     // Pass null when already kicked so no socket is opened unnecessarily.
@@ -278,6 +280,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
     sessionId,
     bearerToken,
     onKicked: handleKickedLive,
+  });
+
+  const { recovering } = useLobbyRecovery({
+    roomCode: kickedOnEntry ? null : roomCode,
+    wsStatus,
+    stopCode,
+    retry: retryReconnect,
   });
 
   // Derive whether the current user is the host by finding their entry in the
@@ -518,7 +527,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── Reconnecting / session-validating spinner ───────────────────────────
   if (
     !kickedOnEntry && !isKicked &&
-    (reconnectStatus === 'loading' || reconnectStatus === 'reconnecting')
+    (reconnectStatus === 'loading' || reconnectStatus === 'reconnecting' || recovering)
   ) {
     return (
       <div
@@ -594,7 +603,10 @@ export default function RoomLobbyPage({ params }: PageProps) {
   }
 
   // ── Connection error (backend unreachable, or the room WS was rejected) ──
-  if (!kickedOnEntry && !isKicked && (reconnectStatus === 'error' || wsStatus === 'error')) {
+  if (
+    !kickedOnEntry && !isKicked && !recovering &&
+    (reconnectStatus === 'error' || wsStatus === 'error')
+  ) {
     const retry = reconnectStatus === 'error'
       ? retryReconnect
       : () => {
