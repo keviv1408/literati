@@ -21,7 +21,6 @@ const { createWsServer } = require('./ws/wsServer');
 const { attachRoomSocketServer } = require('./ws/roomSocketServer');
 const { attachGameSocketServer } = require('./game/gameSocketServer');
 const { attachLiveGamesSocketServer } = require('./ws/liveGamesSocketServer');
-const { initSocket } = require('./socket/server');
 const { markStaleGamesAbandoned } = require('./game/gameState');
 const { syncInProgressRoomsToLiveGamesStore } = require('./liveGames/syncLiveGamesStore');
 const { getSupabaseClient } = require('./db/supabase');
@@ -165,13 +164,17 @@ if (require.main === module) {
   // path-based handler did not claim.
   createWsServer(httpServer);
 
-  // Attach the Socket.io server (room-created, future real-time room events).
-  initSocket(httpServer);
+  // Node leaves an upgrade open when no listener answers it; every server above skips foreign paths.
+  httpServer.on('upgrade', (req, socket) => {
+    setTimeout(() => {
+      if (socket.writable && socket.bytesWritten === 0) socket.destroy();
+    }, 1000);
+  });
 
   httpServer.listen(PORT, () => {
     console.log(`Literati backend listening on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log('WebSocket (ws) and Socket.io servers active on the same port');
+    console.log('WebSocket (ws) servers active on the same port');
 
     // AC 52: On startup, sweep any rooms left in 'in_progress' from a previous
     // server instance (crash / restart) and mark them 'abandoned' in Supabase.
