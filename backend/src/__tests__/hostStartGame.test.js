@@ -394,9 +394,11 @@ describe('D. Broadcast', () => {
     expect(msgOfType(p1Ws,   'lobby-starting')).not.toBeNull();
   });
 
-  it('lets a non-host start the game', async () => {
+  it('refuses a non-host', async () => {
     const supabase = buildMockSupabase(makeWaitingRoom());
     _setSupabaseClientFactory(() => supabase);
+    const gameServer = buildMockGameServer();
+    _setGameServer(gameServer);
 
     const hostWs = createMockWs();
     const p1Ws   = createMockWs();
@@ -409,9 +411,39 @@ describe('D. Broadcast', () => {
 
     await handleStartGame({ ws: p1Ws, userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
 
-    expect(msgOfType(p1Ws, 'error')).toBeNull();
+    expect(msgOfType(p1Ws, 'error')).toEqual({
+      type:    'error',
+      code:    'HOST_ONLY',
+      message: 'Only the host can start the game',
+    });
+    expect(msgOfType(hostWs, 'lobby-starting')).toBeNull();
+    expect(msgOfType(p1Ws,   'lobby-starting')).toBeNull();
+    expect(gameServer.createGame).not.toHaveBeenCalled();
+    expect(_startingRooms.has(ROOM_CODE)).toBe(false);
+  });
+
+  it('lets the host start after a non-host was refused', async () => {
+    const supabase = buildMockSupabase(makeWaitingRoom());
+    _setSupabaseClientFactory(() => supabase);
+    const gameServer = buildMockGameServer();
+    _setGameServer(gameServer);
+
+    const hostWs = createMockWs();
+    const p1Ws   = createMockWs();
+
+    registerClients(ROOM_CODE, 6, [
+      { userId: HOST_ID,    displayName: 'Host', isGuest: false, isHost: true,  teamId: 1, ws: hostWs },
+      { userId: PLAYER1_ID, displayName: 'P1',   isGuest: false, isHost: false, teamId: 2, ws: p1Ws   },
+    ]);
+    const clients = roomClients.get(ROOM_CODE);
+
+    await handleStartGame({ ws: p1Ws,   userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
+    await handleStartGame({ ws: hostWs, userId: HOST_ID,    isHost: true,  roomCode: ROOM_CODE, clients });
+
+    expect(msgOfType(hostWs, 'error')).toBeNull();
     expect(msgOfType(hostWs, 'lobby-starting')).not.toBeNull();
     expect(msgOfType(p1Ws,   'lobby-starting')).not.toBeNull();
+    expect(gameServer.createGame).toHaveBeenCalledTimes(1);
   });
 
   it('lobby-starting payload includes roomCode', async () => {

@@ -1165,6 +1165,17 @@ async function handleStartGame(ctx) {
       return;
     }
 
+    if (!isHost) {
+      ws.send(
+        JSON.stringify({
+          type:    'error',
+          code:    'HOST_ONLY',
+          message: 'Only the host can start the game',
+        }),
+      );
+      return;
+    }
+
     const playerCount = dbRoom.player_count || 6;
     const variant     = dbRoom.card_removal_variant || 'remove_7s';
     const roomId      = dbRoom.id;
