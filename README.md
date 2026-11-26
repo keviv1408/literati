@@ -25,7 +25,7 @@ Literati is an online, real-time version of the classic Literature card game. It
 ## Tech Stack
 
 - Frontend: Next.js, React, TypeScript, Tailwind CSS
-- Backend: Express, WebSocket servers, Socket.IO
+- Backend: Express, WebSocket servers
 - Data/Auth: Supabase
 - Voice: Daily
 - Tests: Jest
@@ -162,7 +162,7 @@ If you want to run a single test file:
 
 ```bash
 cd frontend && npm test -- --testPathPattern=GamePage
-cd backend && npm test -- roomSocket
+cd backend && npm test -- rooms.test
 ```
 
 ### End-to-end tests
