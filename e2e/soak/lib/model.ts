@@ -128,10 +128,12 @@ export class Model {
       throw failure(`after restart: turn on ${turn}, but ${at} allows ${[...new Set(same.flatMap((cp) => cp.turns))].join(', ')}`);
     }
 
-    const lostMoves = tip.asks + tip.declarations - matched.asks - matched.declarations;
+    // Counted in checkpoints, because a handoff is a move of its own.
+    const index = this.history.indexOf(matched);
+    const lostMoves = this.history.length - 1 - index;
     if (lostMoves > LOST_MOVES_MAX) throw failure(`after restart: lost ${lostMoves} moves, limit ${LOST_MOVES_MAX}`);
 
-    this.history = this.history.slice(0, this.history.indexOf(matched) + 1);
+    this.history = this.history.slice(0, index + 1);
     this._restore(matched);
     this.turn = turn;
     return { lostMoves, pendingKept: false };

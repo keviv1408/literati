@@ -167,6 +167,16 @@ test('rejects three moves back', () => {
   expect(() => g.model.matchRestart(initsOf(snaps[0]), null)).toThrow(/lost 3 moves/);
 });
 
+test('a lost handoff counts, so a declaration, a handoff and an ask lost fail', () => {
+  const g = _start();
+  const before = structuredClone(g.gs);
+  _declare(g, 'low_s');
+  _handoff(g, 'p2');
+  _ask(g, 'p1', '1_h');
+  expect(g.model.history.map((cp) => cp.kind)).toEqual(['start', 'declaration', 'handoff', 'ask']);
+  expect(() => g.model.matchRestart(initsOf(before), null)).toThrow(/lost 3 moves/);
+});
+
 test('accepts the pending ask applied', () => {
   // A hit keeps the turn on the asker; a miss hands it to the target.
   for (const [targetId, holder] of [['p1', 'p0'], ['p3', 'p3']]) {
@@ -241,11 +251,11 @@ test('after a declaration accepts the saved holder and the parked holder', () =>
 });
 
 test('an eliminated declarer followed by a handoff', () => {
-  for (const [turn, kind, length] of [['p2', 'declaration', 7], ['p4', 'handoff', 8]] as const) {
+  for (const [turn, kind, length, lost] of [['p2', 'declaration', 7, 1], ['p4', 'handoff', 8, 0]] as const) {
     const g = _eliminated();
     _handoff(g, 'p4');
     g.gs.currentTurnPlayerId = turn;
-    expect(g.model.matchRestart(initsOf(g.gs), null)).toEqual({ lostMoves: 0, pendingKept: false });
+    expect(g.model.matchRestart(initsOf(g.gs), null)).toEqual({ lostMoves: lost, pendingKept: false });
     expect(g.model.history).toHaveLength(length);
     expect(g.model.history.at(-1)!.kind).toBe(kind);
     expect(g.model.turn).toBe(turn);
