@@ -203,6 +203,8 @@ beforeEach(() => {
   saveRoomMembership('ABC123', 'stale-room-token', 'sid-0', 'player');
   mockGetRoomByCode.mockResolvedValue({ room: ROOM });
   mockValidateSession.mockResolvedValue(SESSION);
+  // clearAllMocks keeps once-queues, so a value a case left unused would leak into the next.
+  mockGetGuestBearerToken.mockReset();
   mockGetGuestBearerToken.mockResolvedValueOnce('token-1');
 });
 
