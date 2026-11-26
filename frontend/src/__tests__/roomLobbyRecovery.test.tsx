@@ -1,8 +1,8 @@
 /**
  * @jest-environment jsdom
  *
- * The room page recovers once from a lobby socket refused with 4001: it
- * registers the guest again and reconnects without showing Connection Error.
+ * The real room page with the lobby socket mocked: its one recovery from a 4001,
+ * its room-token choice, and the host-only Start control.
  */
 
 import React from 'react';
