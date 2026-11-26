@@ -65,9 +65,9 @@ describe('DealAnimation — rendering', () => {
     expect(screen.getByTestId('deal-animation').className).toContain('pointer-events-none');
   });
 
-  it('has fixed positioning so it overlays the full viewport', () => {
+  it('has absolute positioning so it overlays the table area it renders inside', () => {
     renderDealAnimation();
-    expect(screen.getByTestId('deal-animation').className).toContain('fixed');
+    expect(screen.getByTestId('deal-animation').className).toContain('absolute');
     expect(screen.getByTestId('deal-animation').className).toContain('inset-0');
   });
 });
