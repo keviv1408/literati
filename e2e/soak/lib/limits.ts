@@ -19,7 +19,12 @@ export const FREEZE_AGE_MS = [21_000, 30_000] as const;
 export const FREEZE_FRESH_MS = 2_000;
 export const REFUSE_MS = [5_000, 20_000] as const;
 export const RESTART_WAIT_MS = [2_000, 15_000] as const;
-export const BACK_WITHIN_MS = { cut: 5_000, freeze: 3_000, refuse: 12_000, restart: 20_000 };
+export const BACK_WITHIN_MS = {
+  cut: 5_000, // worst seen 1.2 s
+  freeze: 3_000, // worst seen 0.6 s
+  refuse: 12_000, // worst seen 9.9 s: the page's next retry can land up to 10 s after refusals stop
+  restart: 20_000, // worst seen 7.8 s
+};
 export const DEADLINE_MARGIN_MS = 10_000;
 export const MAX_SEATS_DOWN = 2;
 export const MOVES_WHILE_DOWN = [1, 4] as const;

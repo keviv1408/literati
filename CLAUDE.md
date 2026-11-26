@@ -63,6 +63,14 @@ cd backend && npm test -- rooms.test
 
 **Key note**: Always use `--testPathPattern` or `--no-coverage` to avoid slowness. Never run `npm test` alone without flags.
 
+### End-to-end (`e2e/`, Playwright)
+
+- The five existing tests: start both dev servers, then `cd e2e && npx playwright test`.
+- `npm run soak:short` in `e2e/`: six browser players finish one game while the test cuts, freezes and refuses their sockets and restarts the backend. It starts its own backend and an in-memory Supabase stand-in, so stop the dev backend and keep the frontend on 3011. CI runs it on every PR that touches code.
+- `npm run soak` in `e2e/`: the long soak, five games on the real Supabase project from `backend/.env`. By hand only, never in CI. Run it before merging a change to `backend/src/game/gameSocketServer.js`, `gameStore.js`, `gameState.js`, `disconnectStore.js`, `backend/src/ws/`, `backend/src/sessions/`, `frontend/src/lib/reconnectingSocket.ts`, `frontend/src/hooks/useGameSocket.ts` or `useReconnect.ts`. Stop the dev backend first (kill the nodemon parent too) and keep the frontend on 3011 (`npx next dev -p 3011 --webpack`). It takes about 17 minutes. `SOAK_SEED=<n> npm run soak` replays one game.
+- `npm run soak:unit`: the soak's own unit tests, no browser.
+- `npm run soak:parts`: short diagnostic games, a few kills each, on the stand-in.
+
 ## Gotchas
 
 ### Bot Logic Fragility

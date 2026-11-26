@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { GameResult } from './driver';
 import type { Model } from './model';
-import type { Kill } from './plan';
+import { KILL_KINDS, type Kill } from './plan';
 import type { Seat } from './seats';
 
 export interface Run {
@@ -64,6 +64,30 @@ export function openRun(outDir: string, seed: number, plan: Kill[]): Run {
       console.log(line);
     },
   };
+}
+
+// Per game: the worst time back per kind, and the moves each restart lost.
+export function writeReport(outDir: string, results: GameResult[], planned: number, totalMs: number): void {
+  // Playwright makes the test's folder lazily, and a stack that refused to start never made it.
+  mkdirSync(outDir, { recursive: true });
+  const head = ['game', 'seed', 'moves', ...KILL_KINDS, 'lost'];
+  const rows = results.map((result, i) => [
+    String(i + 1),
+    String(result.seed),
+    String(result.moves),
+    ...KILL_KINDS.map((kind) => (result.kills.some((record) => record.kill.kind === kind) ? String(result.worstBackMs[kind]) : '-')),
+    result.lostMoves.join(' ') || '-',
+  ]);
+  const table = [head, ...rows];
+  const widths = head.map((_, col) => Math.max(...table.map((row) => row[col].length)));
+  const lines = [
+    `${results.length} of ${planned} game(s) finished in ${(totalMs / 60_000).toFixed(1)} min`,
+    'kinds: worst time back in ms; lost: moves lost per restart',
+    ...table.map((row) => row.map((cell, col) => cell.padEnd(widths[col])).join('  ').trimEnd()),
+  ];
+  const text = `${lines.join('\n')}\n`;
+  writeFileSync(path.join(outDir, 'report.txt'), text);
+  console.log(text);
 }
 
 function _killLine(kill: Kill): string {
