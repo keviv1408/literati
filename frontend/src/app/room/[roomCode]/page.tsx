@@ -61,6 +61,7 @@ import { connectSocket, disconnectSocket } from '@/lib/socket';
 import type { RoomCreatedPayload } from '@/lib/socket';
 import type { Room, Team } from '@/types/room';
 import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
+import { LobbyStartControl, showStartPanel } from '@/components/LobbyStartControl';
 import AvatarPicker from '@/components/AvatarPicker';
 import { buildEmptySeats } from '@/types/lobby';
 import type { LobbyPlayer } from '@/types/lobby';
@@ -1249,10 +1250,15 @@ export default function RoomLobbyPage({ params }: PageProps) {
         </div>
 
         {/* ── Start Game controls ───────────────────────
-            Any seated player may start a private room; empty seats are filled
+            Only the host may start a private room; empty seats are filled
             with bots server-side. Matchmaking rooms start automatically.
             ─────────────────────────────────────────────────────────────── */}
-        {!isSpectator && !isCancelled && !room.is_matchmaking && (
+        {showStartPanel({
+          isSpectator,
+          amIHost: amIHostLive,
+          isCancelled,
+          isMatchmaking: Boolean(room.is_matchmaking),
+        }) && (
           <div
             className="
               bg-slate-800/50 border border-slate-700/50
@@ -1350,60 +1356,65 @@ export default function RoomLobbyPage({ params }: PageProps) {
             )}
 
             {/* ── Start Game button ─────────────────────────────────────── */}
-            <button
-              type="button"
-              onClick={() => {
-                const sent = startGame();
-                if (sent) {
-                  trackEvent('lobby_game_started', { player_count: room.player_count });
-                  setIsStarting(true);
-                }
-              }}
-              disabled={isStarting || lobbyStarting || !myPlayerId}
-              aria-label="Start Game"
-              aria-busy={isStarting || lobbyStarting}
-              data-testid="start-game-btn"
-              className={`
-                w-full py-3.5 rounded-xl font-bold text-base
-                bg-emerald-600 hover:bg-emerald-500
-                disabled:bg-emerald-900/50 disabled:cursor-not-allowed
-                text-white disabled:text-emerald-400/60
-                transition-all duration-150
-                focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2
-                focus:ring-offset-slate-800
-                active:scale-[0.98]
-                shadow-lg shadow-emerald-900/30
-                ${wsPlayers.length >= room.player_count && !isStarting && !lobbyStarting ? 'animate-start-ready-pulse' : ''}
-              `}
+            <LobbyStartControl
+              isHost={amIHostLive}
+              hostName={wsPlayers.find((p) => p.isHost)?.displayName ?? null}
             >
-              {isStarting || lobbyStarting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg
-                    className="animate-spin h-4 w-4 text-emerald-300"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8z"
-                    />
-                  </svg>
-                  Starting…
-                </span>
-              ) : (
-                'Start Game'
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const sent = startGame();
+                  if (sent) {
+                    trackEvent('lobby_game_started', { player_count: room.player_count });
+                    setIsStarting(true);
+                  }
+                }}
+                disabled={isStarting || lobbyStarting || !myPlayerId}
+                aria-label="Start Game"
+                aria-busy={isStarting || lobbyStarting}
+                data-testid="start-game-btn"
+                className={`
+                  w-full py-3.5 rounded-xl font-bold text-base
+                  bg-emerald-600 hover:bg-emerald-500
+                  disabled:bg-emerald-900/50 disabled:cursor-not-allowed
+                  text-white disabled:text-emerald-400/60
+                  transition-all duration-150
+                  focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2
+                  focus:ring-offset-slate-800
+                  active:scale-[0.98]
+                  shadow-lg shadow-emerald-900/30
+                  ${wsPlayers.length >= room.player_count && !isStarting && !lobbyStarting ? 'animate-start-ready-pulse' : ''}
+                `}
+              >
+                {isStarting || lobbyStarting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg
+                      className="animate-spin h-4 w-4 text-emerald-300"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v8z"
+                      />
+                    </svg>
+                    Starting…
+                  </span>
+                ) : (
+                  'Start Game'
+                )}
+              </button>
+            </LobbyStartControl>
           </div>
         )}
 

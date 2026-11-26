@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import type { UseRoomSocketOptions, WsStatus } from '@/hooks/useRoomSocket';
+import type { LobbyPlayer, UseRoomSocketOptions, WsStatus } from '@/hooks/useRoomSocket';
 import { GuestProvider } from '@/contexts/GuestContext';
 import { ApiError } from '@/lib/api';
 import { saveToken } from '@/lib/backendSession';
@@ -47,6 +47,11 @@ interface SocketState {
 const mockSocketCalls: UseRoomSocketOptions[] = [];
 const mockRefusedTokens = new Set<string>();
 let mockSetSocket: (state: SocketState) => void = () => {};
+const mockNoPlayers: LobbyPlayer[] = [];
+let mockRoster: { players: LobbyPlayer[]; myPlayerId: string | null } = {
+  players: mockNoPlayers,
+  myPlayerId: null,
+};
 
 // Stands in for the real socket: idle without a full set of credentials, refused with
 // 4001 for a token the server forgot, connecting on any other new set, and otherwise
@@ -55,8 +60,6 @@ jest.mock('@/hooks/useRoomSocket', () => {
   const { useState, useEffect } = jest.requireActual('react');
   // Stable across renders like the real hook's values, so the page's effects settle.
   const fixed = {
-    players: [],
-    myPlayerId: null,
     isKicked: false,
     kickReason: null,
     kickPlayer: jest.fn(),
@@ -85,6 +88,7 @@ jest.mock('@/hooks/useRoomSocket', () => {
       }, [roomCode, sessionId, bearerToken]);
       return {
         ...fixed,
+        ...mockRoster,
         ...state,
         lastError: state.stopCode ? `Connection closed (${state.stopCode})` : null,
       };
@@ -191,6 +195,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockSocketCalls.length = 0;
   mockRefusedTokens.clear();
+  mockRoster = { players: mockNoPlayers, myPlayerId: null };
   window.localStorage.clear();
   window.sessionStorage.clear();
   saveGuestSession('Ada');
@@ -284,5 +289,64 @@ describe('room lobby token choice after a restart', () => {
     await waitFor(() => expect(_lastToken()).toBe('stale-room-token'));
     expect(_tokenChangesSince(0)).toEqual([null, 'stale-room-token']);
     expect(mockGetGuestBearerToken).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('room lobby start control', () => {
+  const _player = (playerId: string, displayName: string, isHost: boolean): LobbyPlayer => ({
+    playerId,
+    displayName,
+    avatarId: null,
+    isGuest: true,
+    isHost,
+  });
+
+  async function _renderLobby(players: LobbyPlayer[], query = '') {
+    window.history.replaceState({}, '', `/room/abc123${query}`);
+    mockRoster = { players, myPlayerId: 'p-ada' };
+    await _renderConnecting();
+    _drive({ wsStatus: 'connected', stopCode: null });
+  }
+
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('shows the start button to the player the server flags host', async () => {
+    await _renderLobby([_player('p-ada', 'Ada', true), _player('p-asha', 'Asha', false)]);
+
+    expect(await screen.findByTestId('start-game-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('waiting-for-host')).not.toBeInTheDocument();
+  });
+
+  it('tells a non-host which player they are waiting for', async () => {
+    await _renderLobby([_player('p-ada', 'Ada', false), _player('p-asha', 'Asha', true)]);
+
+    expect(await screen.findByTestId('waiting-for-host')).toHaveTextContent(
+      /^Waiting for Asha to start the game$/,
+    );
+    expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument();
+  });
+
+  it('tells a non-host they are waiting for a host when nobody is flagged host', async () => {
+    await _renderLobby([_player('p-ada', 'Ada', false), _player('p-asha', 'Asha', false)]);
+
+    expect(await screen.findByTestId('waiting-for-host')).toHaveTextContent(/^Waiting for a host\u2026$/);
+    expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument();
+  });
+
+  it('shows the start panel on a spectate page when the server flags this browser host', async () => {
+    await _renderLobby([_player('p-ada', 'Ada', true)], '?spectate=1');
+
+    expect(await screen.findByTestId('spectator-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('start-game-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('start-game-btn')).toBeInTheDocument();
+  });
+
+  it('hides the start panel on a spectate page without the host flag', async () => {
+    await _renderLobby([_player('p-ada', 'Ada', false), _player('p-asha', 'Asha', true)], '?spectate=1');
+
+    expect(await screen.findByTestId('spectator-banner')).toBeInTheDocument();
+    expect(screen.queryByTestId('start-game-panel')).not.toBeInTheDocument();
   });
 });
