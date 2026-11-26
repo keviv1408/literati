@@ -32,6 +32,8 @@ export const AFTER_MOVE_POLL_MS = 5_000;
 
 export const LOBBY_WAIT_MS = 30_000;
 export const FIRST_SAVE_MS = 10_000;
+// game_over goes out before the final save, so the game summary trails it.
+export const FINAL_SAVE_MS = 10_000;
 export const LOG_TAIL_LINES = 20;
 // Ten chained 100 ms timers: about 1 s on a live page, 5 s or more on a throttled background one.
 export const TIMER_CHAIN_MAX_MS = 1_500;

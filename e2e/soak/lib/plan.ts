@@ -1,7 +1,8 @@
 import { DUE_WINDOW, FREEZE_AGE_MS, KILL_COUNT, MOVES_WHILE_DOWN, REFUSE_MS, RESTART_WAIT_MS } from './limits';
 import { createRng, type Rng } from './rng';
 
-export type KillKind = 'cut' | 'freeze' | 'refuse' | 'restart';
+export const KILL_KINDS = ['cut', 'freeze', 'refuse', 'restart'] as const;
+export type KillKind = (typeof KILL_KINDS)[number];
 export type Size = 'short' | 'long';
 
 export interface Kill {
@@ -14,7 +15,6 @@ export interface Kill {
   movesWhileDown: number;
 }
 
-const KINDS: readonly KillKind[] = ['cut', 'freeze', 'refuse', 'restart'];
 const TIMINGS = ['between', 'midMove'] as const;
 const SEATS = [0, 1, 2, 3, 4, 5];
 const DOWN_MS: Record<KillKind, readonly [number, number]> = {
@@ -28,8 +28,8 @@ export function buildPlan(seed: number, size: Size): Kill[] {
   const rng = createRng(seed);
   const count = KILL_COUNT[size];
   // Every kind at least once, so the long run always has a restart.
-  const extra = Array.from({ length: count - KINDS.length }, () => rng.pick(KINDS));
-  const kinds = _shuffle(rng, [...KINDS, ...extra]);
+  const extra = Array.from({ length: count - KILL_KINDS.length }, () => rng.pick(KILL_KINDS));
+  const kinds = _shuffle(rng, [...KILL_KINDS, ...extra]);
   // Seat kills go round the table in a shuffled order: no seat gets a second before every seat has one.
   const seats = _shuffle(rng, SEATS);
   let seatKills = 0;

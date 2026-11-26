@@ -110,6 +110,10 @@ export function isUp(seat: Pick<Seat, 'wire'>): boolean {
   return liveSocket(seat) !== undefined;
 }
 
+export function nameOf(table: Pick<Table, 'seats'>, playerId: string): string {
+  return table.seats.find((seat) => seat.playerId === playerId)?.name ?? playerId;
+}
+
 export async function closeTable(table: Table): Promise<void> {
   await Promise.all(table.seats.map((seat) => seat.context.close()));
 }

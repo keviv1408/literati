@@ -1,5 +1,8 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { pageProblems } from './lib/checks';
+import { playGame } from './lib/driver';
 import { SoakFailure } from './lib/fail';
 import { BACKEND_URL, FRONTEND_URL, TIMER_CHAIN_MAX_MS } from './lib/limits';
 import { closeTable, isUp, openTable } from './lib/seats';
@@ -76,4 +79,26 @@ test('a failed room creation fails fast with the backend log', async ({ browser 
   expect(outcome).toBeInstanceOf(SoakFailure);
   expect((outcome as SoakFailure).message).toContain('lobby: room creation failed');
   expect((outcome as SoakFailure).message).toContain('--- backend.log ---');
+});
+
+test('a game with no kills finishes', async ({ browser }) => {
+  const outDir = test.info().outputDir;
+  const started = Date.now();
+  const result = await playGame({ browser, stack, seed: 1, size: 'short', plan: [], outDir });
+  console.log(`no-kill game: ${result.moves} moves in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+  expect(result.kills).toEqual([]);
+  expect(result.scores.team1 + result.scores.team2).toBe(8);
+  expect(result.moves).toBeGreaterThanOrEqual(8);
+  expect(result.moves).toBeLessThanOrEqual(400);
+
+  const files = readdirSync(outDir);
+  const frameFiles = [0, 1, 2, 3, 4, 5].map((n) => `frames-seat${n}.jsonl`);
+  expect(files).toEqual(expect.arrayContaining(['plan.json', 'run.log', 'model.json', ...frameFiles]));
+  for (const file of frameFiles) {
+    const text = readFileSync(path.join(outDir, file), 'utf8');
+    expect(text.length, file).toBeGreaterThan(0);
+    expect(text, file).not.toContain('token=');
+    expect(text, file).not.toContain('guestRecoveryKey');
+  }
+  expect(await stack.standinReport()).toEqual({ unknown: [], refused: [] });
 });
