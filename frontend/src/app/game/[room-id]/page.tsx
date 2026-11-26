@@ -149,7 +149,7 @@ export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { guestSession } = useGuest();
-  const { status: reconnectStatus, bearerToken: reconnectBearerToken, retry: retrySession } = useReconnect();
+  const { status: reconnectStatus, bearerToken: reconnectBearerToken, isGuest, retry: retrySession } = useReconnect();
   const sessionRetriesRef = useRef(0);
 
   // Only from error: a retry from any other state would drop the game token and close the socket.
@@ -1297,7 +1297,12 @@ export default function GamePage({ params }: PageProps) {
 
   if (isSpectatorMode && room) {
     return (
-      <VoiceProvider roomCode={room.code} bearerToken={gameBearerToken} canJoin={false}>
+      <VoiceProvider
+        roomCode={room.code}
+        bearerToken={gameBearerToken}
+        isGuest={isGuest}
+        canJoin={false}
+      >
         <SpectatorView
           wsStatus={wsStatus}
           players={players}
@@ -1337,6 +1342,7 @@ export default function GamePage({ params }: PageProps) {
     <VoiceProvider
       roomCode={room.code}
       bearerToken={gameBearerToken}
+      isGuest={isGuest}
       canJoin={Boolean(myPlayerId)}
     >
     <div className="flex h-[100dvh] flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden" data-testid="game-view">

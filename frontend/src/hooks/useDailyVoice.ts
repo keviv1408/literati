@@ -30,6 +30,7 @@ export interface VoiceSeatState {
 interface UseDailyVoiceOptions {
   roomCode: string | null;
   bearerToken: string | null;
+  isGuest: boolean;
   canJoin?: boolean;
 }
 
@@ -98,6 +99,7 @@ function normalizeParticipants(
 export function useDailyVoice({
   roomCode,
   bearerToken,
+  isGuest,
   canJoin = true,
 }: UseDailyVoiceOptions): UseDailyVoiceReturn {
   const { guestSession } = useGuest();
@@ -203,7 +205,7 @@ export function useDailyVoice({
       const voiceSession = await joinRoomVoice(
         roomCode,
         bearerToken,
-        guestSession
+        isGuest && guestSession
           ? { displayName: guestSession.displayName, recoveryKey: guestSession.sessionId }
           : undefined,
       );
@@ -246,6 +248,7 @@ export function useDailyVoice({
     clearVoiceState,
     ensureCallObject,
     guestSession,
+    isGuest,
     isJoined,
     isJoining,
     roomCode,

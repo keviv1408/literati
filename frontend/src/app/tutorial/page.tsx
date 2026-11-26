@@ -184,7 +184,7 @@ export default function TutorialPage() {
   }, [canAdvance]);
 
   return (
-    <VoiceProvider roomCode={null} bearerToken={null} canJoin={false}>
+    <VoiceProvider roomCode={null} bearerToken={null} isGuest={false} canJoin={false}>
       <div
         className="flex h-[100dvh] flex-col bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 overflow-hidden"
         data-testid="tutorial-view"
