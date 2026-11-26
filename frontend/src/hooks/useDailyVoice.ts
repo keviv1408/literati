@@ -7,6 +7,7 @@ import type {
   DailyParticipant,
   DailyParticipantsObject,
 } from '@daily-co/daily-js';
+import { useGuest } from '@/contexts/GuestContext';
 import { ApiError, joinRoomVoice } from '@/lib/api';
 
 export interface VoiceParticipantState {
@@ -29,6 +30,7 @@ export interface VoiceSeatState {
 interface UseDailyVoiceOptions {
   roomCode: string | null;
   bearerToken: string | null;
+  isGuest: boolean;
   canJoin?: boolean;
 }
 
@@ -97,8 +99,10 @@ function normalizeParticipants(
 export function useDailyVoice({
   roomCode,
   bearerToken,
+  isGuest,
   canJoin = true,
 }: UseDailyVoiceOptions): UseDailyVoiceReturn {
+  const { guestSession } = useGuest();
   const callObjectRef = useRef<DailyCall | null>(null);
   const [participants, setParticipants] = useState<Record<string, VoiceParticipantState>>({});
   const [activeSpeakerSessionId, setActiveSpeakerSessionId] = useState<string | null>(null);
@@ -198,7 +202,13 @@ export function useDailyVoice({
 
     try {
       const callObject = await ensureCallObject();
-      const voiceSession = await joinRoomVoice(roomCode, bearerToken);
+      const voiceSession = await joinRoomVoice(
+        roomCode,
+        bearerToken,
+        isGuest && guestSession
+          ? { displayName: guestSession.displayName, recoveryKey: guestSession.sessionId }
+          : undefined,
+      );
 
       await callObject.join({
         url: voiceSession.roomUrl,
@@ -237,6 +247,8 @@ export function useDailyVoice({
     canJoin,
     clearVoiceState,
     ensureCallObject,
+    guestSession,
+    isGuest,
     isJoined,
     isJoining,
     roomCode,

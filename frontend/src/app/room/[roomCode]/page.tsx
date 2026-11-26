@@ -53,6 +53,7 @@ import {
 import { consumeCreatedRoom } from '@/components/CreateRoomModal';
 import { useRoomSocket } from '@/hooks/useRoomSocket';
 import { useReconnect } from '@/hooks/useReconnect';
+import { useLobbyRecovery } from '@/hooks/useLobbyRecovery';
 import { useGuest } from '@/contexts/GuestContext';
 import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from '@/types/user';
 import Avatar from '@/components/Avatar';
@@ -187,7 +188,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
   //
   // Only runs once the session has been validated by useReconnect (status ===
   // 'ready'). Prefers the room-specific membership token (same identity that
-  // was used on the last visit) over the generic base session token.
+  // was used on the last visit) over the generic base session token, unless
+  // both are the same player's: the stored one may predate a backend restart.
   //
   // Setting bearerToken to null when the session is not yet ready prevents
   // useRoomSocket from opening a WebSocket connection prematurely.
@@ -201,14 +203,14 @@ export default function RoomLobbyPage({ params }: PageProps) {
     // This re-uses the exact backend session that the WS server already
     // accepted for this room, preserving seat and host status.
     const membership = loadRoomMembership(roomCode);
-    if (membership) {
+    if (membership && membership.playerId !== reconnectSessionId) {
       setBearerToken(membership.bearerToken);
       return;
     }
 
     // Priority 2: validated base session token from useReconnect.
     setBearerToken(baseToken);
-  }, [reconnectStatus, roomCode, baseToken, kickedOnEntry]);
+  }, [reconnectStatus, roomCode, baseToken, reconnectSessionId, kickedOnEntry]);
 
   // ── Socket.io connection for room-created event ───────────────────────────
   // Connects once a bearer token is available so the host can receive the
@@ -271,6 +273,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     lobbyStarting,
     lastError: wsError,
     errorSeq,
+    stopCode,
     hostChangedEvent,
   } = useRoomSocket({
     // Pass null when already kicked so no socket is opened unnecessarily.
@@ -278,6 +281,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
     sessionId,
     bearerToken,
     onKicked: handleKickedLive,
+  });
+
+  const { recovering } = useLobbyRecovery({
+    roomCode: kickedOnEntry ? null : roomCode,
+    wsStatus,
+    stopCode,
+    retry: retryReconnect,
   });
 
   // Derive whether the current user is the host by finding their entry in the
@@ -518,7 +528,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── Reconnecting / session-validating spinner ───────────────────────────
   if (
     !kickedOnEntry && !isKicked &&
-    (reconnectStatus === 'loading' || reconnectStatus === 'reconnecting')
+    (reconnectStatus === 'loading' || reconnectStatus === 'reconnecting' || recovering)
   ) {
     return (
       <div
@@ -594,7 +604,10 @@ export default function RoomLobbyPage({ params }: PageProps) {
   }
 
   // ── Connection error (backend unreachable, or the room WS was rejected) ──
-  if (!kickedOnEntry && !isKicked && (reconnectStatus === 'error' || wsStatus === 'error')) {
+  if (
+    !kickedOnEntry && !isKicked && !recovering &&
+    (reconnectStatus === 'error' || wsStatus === 'error')
+  ) {
     const retry = reconnectStatus === 'error'
       ? retryReconnect
       : () => {

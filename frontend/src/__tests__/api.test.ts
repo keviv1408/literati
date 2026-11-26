@@ -14,7 +14,13 @@ jest.mock('@/lib/backendSession', () => ({
   clearToken: () => mockClearToken(),
 }));
 
-import { ApiError, createRoom, getGuestBearerToken, getRoomByCode } from '@/lib/api';
+import {
+  ApiError,
+  createRoom,
+  getGuestBearerToken,
+  getRoomByCode,
+  joinRoomVoice,
+} from '@/lib/api';
 
 const payload: CreateRoomPayload = {
   playerCount: 6,
@@ -213,6 +219,149 @@ describe('getGuestBearerToken', () => {
     expect(viv).toBe('guest-token-viv');
     expect(ada).toBe('guest-token-ada');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('joinRoomVoice', () => {
+  const originalFetch = global.fetch;
+  const guest = { displayName: 'Viv', recoveryKey: 'rk' };
+
+  beforeEach(() => {
+    mockGetCachedToken.mockReset();
+    mockSaveToken.mockReset();
+    mockClearToken.mockReset();
+    global.fetch = jest.fn();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  const unauthorized = (error = 'Unauthorized') =>
+    ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error }),
+    }) as Response;
+
+  const guestResponse = (token: string) =>
+    ({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        token,
+        session: {
+          sessionId: 'guest-session-1',
+          displayName: 'Viv',
+          avatarId: 'avatar-1',
+          isGuest: true,
+          expiresAt: 1_900_000_000_000,
+        },
+        validAvatarIds: ['avatar-1'],
+        sessionTtlMs: 86_400_000,
+      }),
+    }) as Response;
+
+  const voiceResponse = {
+    roomName: 'room-abc123',
+    roomUrl: 'https://example.daily.co/room-abc123',
+    meetingToken: 'meeting-token',
+    expiresAt: '2026-11-26T01:00:00.000Z',
+  };
+
+  const voiceCalls = (fetchMock: jest.MockedFunction<typeof fetch>) =>
+    fetchMock.mock.calls.filter(([url]) => String(url).includes('/voice/join'));
+
+  it("sends the page's room token first, not another guest's cached one", async () => {
+    mockGetCachedToken.mockImplementation((...args: unknown[]) =>
+      args[0] === 'Viv' && args[1] === 'rk' ? 'other-guest-token' : null,
+    );
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => voiceResponse,
+    } as Response);
+
+    await expect(joinRoomVoice('abc123', 'room-member-token', guest)).resolves.toEqual(
+      voiceResponse,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(voiceCalls(fetchMock)[0][1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer room-member-token' }),
+      }),
+    );
+    expect(mockClearToken).not.toHaveBeenCalled();
+    expect(mockSaveToken).not.toHaveBeenCalled();
+  });
+
+  it('registers again and retries once with the fresh token after a guest 401', async () => {
+    mockGetCachedToken.mockReturnValue(null);
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(guestResponse('fresh-guest-token'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => voiceResponse,
+      } as Response);
+
+    await expect(joinRoomVoice('abc123', 'stale-guest-token', guest)).resolves.toEqual(
+      voiceResponse,
+    );
+
+    expect(mockClearToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/api/auth/guest'),
+      expect.objectContaining({
+        body: JSON.stringify({ displayName: 'Viv', recoveryKey: 'rk' }),
+      }),
+    );
+    const calls = voiceCalls(fetchMock);
+    expect(calls).toHaveLength(2);
+    expect(calls[0][1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer stale-guest-token' }),
+      }),
+    );
+    expect(calls[1][1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer fresh-guest-token' }),
+      }),
+    );
+  });
+
+  it('rejects with the 401 after two voice requests when the retry is refused too', async () => {
+    mockGetCachedToken.mockReturnValue(null);
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(guestResponse('fresh-guest-token'))
+      .mockResolvedValueOnce(unauthorized('Unauthorized again'));
+
+    await expect(joinRoomVoice('abc123', 'stale-guest-token', guest)).rejects.toMatchObject({
+      status: 401,
+      message: 'Unauthorized again',
+    });
+
+    expect(voiceCalls(fetchMock)).toHaveLength(2);
+  });
+
+  it('does not retry without a guest identity', async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(unauthorized());
+
+    await expect(joinRoomVoice('abc123', 'registered-user-jwt')).rejects.toEqual(
+      new ApiError(401, 'Unauthorized', { error: 'Unauthorized' }),
+    );
+
+    expect(mockGetCachedToken).not.toHaveBeenCalled();
+    expect(mockClearToken).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

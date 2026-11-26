@@ -6,6 +6,7 @@ import { useDailyVoice, type UseDailyVoiceReturn } from '@/hooks/useDailyVoice';
 interface VoiceProviderProps {
   roomCode: string | null;
   bearerToken: string | null;
+  isGuest: boolean;
   canJoin?: boolean;
   children: ReactNode;
 }
@@ -16,10 +17,11 @@ VoiceContext.displayName = 'VoiceContext';
 export function VoiceProvider({
   roomCode,
   bearerToken,
+  isGuest,
   canJoin = true,
   children,
 }: VoiceProviderProps) {
-  const voice = useDailyVoice({ roomCode, bearerToken, canJoin });
+  const voice = useDailyVoice({ roomCode, bearerToken, isGuest, canJoin });
   const value = useMemo(() => voice, [voice]);
 
   return (
