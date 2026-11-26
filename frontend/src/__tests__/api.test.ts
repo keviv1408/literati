@@ -237,11 +237,11 @@ describe('joinRoomVoice', () => {
     global.fetch = originalFetch;
   });
 
-  const unauthorized = () =>
+  const unauthorized = (error = 'Unauthorized') =>
     ({
       ok: false,
       status: 401,
-      json: async () => ({ error: 'Unauthorized' }),
+      json: async () => ({ error }),
     }) as Response;
 
   const guestResponse = (token: string) =>
@@ -339,11 +339,12 @@ describe('joinRoomVoice', () => {
     fetchMock
       .mockResolvedValueOnce(unauthorized())
       .mockResolvedValueOnce(guestResponse('fresh-guest-token'))
-      .mockResolvedValueOnce(unauthorized());
+      .mockResolvedValueOnce(unauthorized('Unauthorized again'));
 
-    await expect(joinRoomVoice('abc123', 'stale-guest-token', guest)).rejects.toEqual(
-      new ApiError(401, 'Unauthorized', { error: 'Unauthorized' }),
-    );
+    await expect(joinRoomVoice('abc123', 'stale-guest-token', guest)).rejects.toMatchObject({
+      status: 401,
+      message: 'Unauthorized again',
+    });
 
     expect(voiceCalls(fetchMock)).toHaveLength(2);
   });
