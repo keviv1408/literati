@@ -2,7 +2,11 @@
   "name": "literati-e2e",
   "private": true,
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "soak:unit": "playwright test -c playwright.soak.config.ts --project=unit",
+    "soak:parts": "playwright test -c playwright.soak.config.ts --project=parts",
+    "soak:short": "playwright test -c playwright.soak.config.ts --project=short",
+    "soak": "playwright test -c playwright.soak.config.ts --project=long"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1"
