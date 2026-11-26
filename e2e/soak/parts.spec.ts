@@ -41,6 +41,30 @@ async function _killGame(browser: Browser, seed: number, plan: Kill[], extra: { 
   return result;
 }
 
+function _restart(id: number, dueBeforeMove: number, timing: Kill['timing']): Kill {
+  return _kill(id, dueBeforeMove, 'restart', 'mover', { timing, downMs: 3_000, movesWhileDown: 0 });
+}
+
+// The kill hook hands over every seat a restart took down, so the test can read its sockets and requests afterwards.
+async function _restartGame(browser: Browser, seed: number, plan: Kill[]) {
+  const seats = new Set<Seat>();
+  const result = await _killGame(browser, seed, plan, { _afterKillStart: (seat) => seats.add(seat) });
+  expect(seats.size).toBe(6);
+  for (const seat of seats) {
+    const ids = seat.wire.sockets.flatMap((socket) =>
+      socket.frames.filter(({ msg }) => msg.type === 'game_init').map(({ msg }) => msg.myPlayerId),
+    );
+    expect(ids.length, `${seat.name}'s game_init frames`).toBeGreaterThanOrEqual(2);
+    expect(new Set(ids), `${seat.name}'s player ids`).toEqual(new Set([seat.playerId]));
+    expect(seat.authCalls, `${seat.name}'s auth calls`).toEqual([]);
+  }
+  const restarts = result.kills.filter((record) => record.kill.kind === 'restart');
+  expect(result.lostMoves).toHaveLength(restarts.length);
+  for (const lost of result.lostMoves) expect(lost).toBeLessThanOrEqual(2);
+  for (const record of restarts) expect(record.backMs).toBeLessThanOrEqual(20_000);
+  return result;
+}
+
 function _record(result: GameResult, id: number): KillRecord {
   return result.kills.find((record) => record.kill.id === id)!;
 }
@@ -174,6 +198,29 @@ test('a kill waits for its seat', async ({ browser }) => {
   const [first, second] = [_record(result, 1), _record(result, 2)];
   expect(second.dueAt).toBeLessThan(first.backAt);
   expect(second.startedAt).toBeGreaterThanOrEqual(first.backAt);
+});
+
+test('restart between moves', async ({ browser }) => {
+  const result = await _restartGame(browser, 8, [_restart(1, 5, 'between')]);
+  expect(result.lostMoves).toHaveLength(1);
+});
+
+test('restart mid-move', async ({ browser }) => {
+  const result = await _restartGame(browser, 9, [_restart(1, 6, 'midMove')]);
+  expect(result.lostMoves).toHaveLength(1);
+  const log = readFileSync(path.join(test.info().outputDir, 'run.log'), 'utf8');
+  expect(log).toMatch(/pending move (kept|lost)/);
+});
+
+// Both due before move 3: if seat 2 held the turn when refused, a restart due one move later could not come due until it was back.
+test('restart waits for a down seat', async ({ browser }) => {
+  const result = await _restartGame(browser, 10, [
+    _kill(1, 3, 'refuse', 2, { downMs: 8_000, movesWhileDown: 4 }),
+    _restart(2, 3, 'between'),
+  ]);
+  const [refuse, restart] = [_record(result, 1), _record(result, 2)];
+  expect(restart.dueAt).toBeLessThan(refuse.backAt);
+  expect(restart.startedAt).toBeGreaterThanOrEqual(refuse.backAt);
 });
 
 test('a seat that never returns fails by name', async ({ browser }) => {

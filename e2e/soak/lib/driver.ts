@@ -123,6 +123,8 @@ class _Game {
   private readonly timers: NodeJS.Timeout[] = [];
   // A failure a kill's own timer found; every wait ends on it.
   private broken: Error | null = null;
+  // Sockets opened before the last restart talked to a backend whose clocks died with it.
+  private epoch = 0;
   private moves = 0;
   private missesLeft = MISS_BUDGET;
   private choice: _Choice | null = null;
@@ -145,10 +147,10 @@ class _Game {
     try {
       while (!this.over) {
         this._checkCap();
-        // One limit for every wait in the step, so chained waits cannot add up past it.
-        const deadline = Date.now() + STEP_WAIT_MS;
         await this._recovered();
         await this._startKills();
+        // One limit for every wait in the step, so chained waits cannot add up past it; a restart above has its own.
+        const deadline = Date.now() + STEP_WAIT_MS;
         await this._waitForSeats(deadline);
         const mover = await this._waitForHolder(deadline);
         const move = pickMove(this.table.model, mover.playerId, {
@@ -157,7 +159,8 @@ class _Game {
           rng: this.rng,
         });
         const final = isFinalDeclaration(this.table.model, move);
-        if (final) await this._readyForFinal(deadline);
+        // A restart there may roll the model back or move the turn, so the move is picked again.
+        if (final && (await this._readyForFinal(deadline))) continue;
         await this._play(mover, move, final, deadline);
         if (!this.over) await this._pause(this.rng.int(...PACE_MS));
       }
@@ -175,8 +178,8 @@ class _Game {
     return seat;
   }
 
-  // Every seat gets game_over on a live socket only if every kill ran first and all six are up.
-  private async _readyForFinal(deadline: number): Promise<void> {
+  // Every seat gets game_over on a live socket only if every kill ran first and all six are up. True after a restart.
+  private async _readyForFinal(deadline: number): Promise<boolean> {
     for (;;) {
       const kill = this._waiting()[0];
       if (kill && !this.dueAt.has(kill.id)) this.dueAt.set(kill.id, Date.now());
@@ -186,7 +189,15 @@ class _Game {
         await this._until('all six seats up for the last declaration', () => (this.table.seats.every(isUp) ? true : undefined), deadline);
       }
       await this._recovered();
-      if (!kill) return;
+      if (!kill) return false;
+      if (kill.kind === 'restart') {
+        // _until's watch marks each returned seat back, so _recovered checks them all before the restart.
+        const ready = () => (this.table.seats.every(isUp) && this.down.every((d) => d.back) ? true : undefined);
+        await this._until(`${kill.kind} #${kill.id} to start before the last declaration`, ready, deadline);
+        await this._recovered();
+        await this._restart(kill, null);
+        return true;
+      }
       const seat = this._target(kill)!;
       // With all six up, only a stale last frame can still hold a kill back, and a tick comes every second.
       await this._until(`${kill.kind} #${kill.id} to start before the last declaration`, () => {
@@ -202,9 +213,8 @@ class _Game {
     const seat = this._target(kill);
     let why: string | null = null;
     if (kill.timing === 'midMove') why = 'the last declaration never carries a mid-move kill';
-    else if (!seat) why = 'no seat';
-    else if ((kill.kind === 'freeze' || kill.kind === 'refuse') && seat.playerId !== this.table.model.turn) {
-      why = `no move is left to make while ${seat.name} is down`;
+    else if ((kill.kind === 'freeze' || kill.kind === 'refuse') && seat!.playerId !== this.table.model.turn) {
+      why = `no move is left to make while ${seat!.name} is down`;
     } else if (!mayTakeHolderDown(kill, this._deadlineAt(), Date.now())) why = 'it could outlast the turn timer';
     if (why) {
       const names = this._waiting().map((k) => `${k.kind} #${k.id}`).join(', ');
@@ -219,14 +229,14 @@ class _Game {
   // In plan order: a kill that may not start yet holds back the ones after it, so a replay runs them in the same order.
   private async _startKills(): Promise<void> {
     for (const kill of this._waiting()) {
-      const seat = this._target(kill);
-      if (!seat || kill.timing === 'midMove' || !this.dueAt.has(kill.id)) return;
-      const why = this._blocker(kill, seat);
+      if (kill.timing === 'midMove' || !this.dueAt.has(kill.id)) return;
+      const why = kill.kind === 'restart' ? this._restartBlocker() : this._blocker(kill, this._target(kill)!);
       if (why) {
         this._noteWait(kill, why);
         return;
       }
-      await this._startKill(kill, seat);
+      if (kill.kind === 'restart') await this._restart(kill, null);
+      else await this._startKill(kill, this._target(kill)!);
     }
   }
 
@@ -259,6 +269,12 @@ class _Game {
       if (age >= FREEZE_FRESH_MS) return `the last frame is ${age} ms old`;
     }
     return null;
+  }
+
+  // A restart takes every seat down at once, so it waits until no seat is down or still owed its recovery check.
+  private _restartBlocker(): string | null {
+    const away = this.table.seats.filter((seat) => !isUp(seat) || this.down.some((d) => d.seat === seat));
+    return away.length === 0 ? null : `${away.map((seat) => seat.name).join(', ')} not back yet`;
   }
 
   private async _startKill(kill: Kill, seat: Seat): Promise<void> {
@@ -300,6 +316,53 @@ class _Game {
     this.afterKillStart?.(seat);
   }
 
+  // Spec section 6, after a restart. Nothing else runs meanwhile: no seat is up until the backend is back.
+  private async _restart(kill: Kill, pending: _Doubtful | null): Promise<void> {
+    const startedAt = Date.now();
+    const record: KillRecord = {
+      kill,
+      dueAt: this.dueAt.get(kill.id) ?? startedAt,
+      startedAt,
+      backAt: 0,
+      ranAtMove: this.moves + 1,
+      backMs: 0,
+      movesMadeWhileDown: 0,
+      heldTurnThroughout: false,
+    };
+    this.kills.push(record);
+    const where = { kill, move: record.ranAtMove };
+    const old = this.table.seats.map((seat) => seat.wire.sockets.at(-1)!);
+    this.epoch = startedAt;
+    await this.stack.killBackend();
+    this.run.log(`${kill.kind} #${kill.id}: backend down ${pending ? 'during' : 'before'} move ${record.ranAtMove}, ${_seconds(startedAt - record.dueAt)} s after it came due`);
+    for (const seat of this.table.seats) this.afterKillStart?.(seat);
+    await sleep(kill.downMs);
+    await this.stack.startBackend();
+    const origin = Date.now();
+    this.run.log(`${kill.kind} #${kill.id}: backend up ${origin - startedAt} ms after the kill`);
+
+    const downs: _Down[] = this.table.seats.map((seat, i) => ({ record, seat, socket: old[i], origin, back: false }));
+    this.down.push(...downs);
+    // Its own limit, so the 20 s back-within fails first, by seat name.
+    const limit = origin + STEP_WAIT_MS;
+    await this._until(`all six seats back after ${kill.kind} #${kill.id}`, () => (downs.every((d) => d.back) ? true : undefined), limit);
+    const inits = this.table.seats.map((seat) => {
+      const live = liveSocket(seat);
+      if (!live) throw failure('went down again before its recovery check', { seat, ...where });
+      return findFrame(live, 'game_init')!.msg;
+    });
+    const { model } = this.table;
+    const { lostMoves, pendingKept } = model.matchRestart(inits, pending);
+    this.lostMoves.push(lostMoves);
+    this.choice = null;
+    const tip = model.history[model.history.length - 1];
+    const kept = pending ? `; pending move ${pendingKept ? 'kept' : 'lost'}` : '';
+    this.run.log(`${kill.kind} #${kill.id}: restored at ${tip.asks} asks and ${tip.declarations} declarations, ${lostMoves} move(s) lost${kept}`);
+    // The restored game arms a fresh turn timer and sends it to each socket after its game_init.
+    await this._until(`a turn_timer for ${this._name(model.turn)} from the restarted backend`, () => this._deadlineAt() ?? undefined, limit);
+    await this._recovered();
+  }
+
   // The freeze ends the way a phone wakes: the page sees its document become visible with a stale socket.
   private async _wake(down: _Down): Promise<void> {
     const { seat, record } = down;
@@ -336,7 +399,8 @@ class _Game {
       }
       const limit = BACK_WITHIN_MS[record.kill.kind];
       const live = liveSocket(seat);
-      if (live) {
+      // A restart marks no socket cut, so the old one may look live until its close lands.
+      if (live && live !== down.socket) {
         const backAt = findFrame(live, 'game_init')!.at;
         const took = backAt - down.origin;
         if (took > limit) throw failure(`not back ${limit / 1000} s (took ${_seconds(took)} s)`, where);
@@ -364,7 +428,7 @@ class _Game {
     const holder = this.table.model.turn;
     let newest: Frame | undefined;
     for (const seat of this.table.seats) {
-      for (const socket of seat.wire.sockets) {
+      for (const socket of seat.wire.sockets.filter(({ openedAt }) => openedAt >= this.epoch)) {
         const frame = socket.frames.findLast(({ msg }) => msg.type === 'turn_timer' && msg.playerId === holder);
         if (frame && (!newest || frame.at > newest.at)) newest = frame;
       }
@@ -419,29 +483,35 @@ class _Game {
     let sentAt = Date.now();
     socket.server!.send(JSON.stringify(toWire(move)));
 
-    let settled: _Settled;
-    if (inDoubt) {
+    // After a restart the model already holds the restored game, with or without this move, and nothing is sent again.
+    let settled: _Settled | null = null;
+    if (inDoubt?.kind === 'restart') {
+      await this._restart(inDoubt, move as _Doubtful);
+    } else if (inDoubt) {
       await this._startKill(inDoubt, mover);
       ({ settled, sentAt } = await this._settleInDoubt(mover, move as _Doubtful, sent, sentAt, deadline));
     } else {
       settled = await this._settle(mover, move, socket, sent.find((s) => s.socket === socket)!.from, final, deadline);
     }
-    if (move.type === 'ask_card') {
-      model.applyAsk(mover.playerId, move.targetPlayerId, move.cardId, settled.result!.msg.success);
-      if (!move.hit) this.missesLeft -= 1;
-    } else if (move.type === 'declare_suit') {
-      model.applyDeclaration(move.halfSuitId, mover.team);
+    if (move.type === 'ask_card' && !move.hit) this.missesLeft -= 1;
+    if (settled) {
+      if (move.type === 'ask_card') {
+        model.applyAsk(mover.playerId, move.targetPlayerId, move.cardId, settled.result!.msg.success);
+      } else if (move.type === 'declare_suit') {
+        model.applyDeclaration(move.halfSuitId, mover.team);
+      }
+      model.settle(settled.kind, settled.turns);
+      this.choice = settled.choice;
     }
-    model.settle(settled.kind, settled.turns);
-    this.choice = settled.choice;
-    this.run.log(`move ${number}: ${this._describe(mover.playerId, move)}; turn ${this._name(model.turn)}`);
+    const sentAs = settled ? '' : ', sent as the backend died';
+    this.run.log(`move ${number}: ${this._describe(mover.playerId, move)}${sentAs}; turn ${this._name(model.turn)}`);
     for (const down of this.down) {
       if (down.back) continue;
       down.record.movesMadeWhileDown += 1;
       down.record.heldTurnThroughout = false;
     }
 
-    await this._checkResultCopies(settled.result, sentAt, deadline);
+    await this._checkResultCopies(settled?.result ?? null, sentAt, deadline);
     if (!final) await afterMove(this.table, number);
     this.moves = number;
     this.over = final;
@@ -452,7 +522,7 @@ class _Game {
   private _midMoveKill(mover: Seat): Kill | undefined {
     const kill = this._waiting()[0];
     if (!kill || kill.timing !== 'midMove' || !this.dueAt.has(kill.id)) return undefined;
-    const why = this._blocker(kill, mover);
+    const why = kill.kind === 'restart' ? this._restartBlocker() : this._blocker(kill, mover);
     if (why) this._noteWait(kill, why);
     return why ? undefined : kill;
   }
