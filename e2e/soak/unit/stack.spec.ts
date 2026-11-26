@@ -174,7 +174,8 @@ test('real mode leaves Supabase to backend/.env', () => {
   const real = backendEnv('real');
   expect(real).toMatchObject({ PORT: '3012', NODE_ENV: 'development' });
   expect(real.SUPABASE_URL).toBe(process.env.SUPABASE_URL);
-  expect(real.SUPABASE_SERVICE_ROLE_KEY).toBe(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  // A boolean, so a failure never prints the key.
+  expect(real.SUPABASE_SERVICE_ROLE_KEY === process.env.SUPABASE_SERVICE_ROLE_KEY).toBe(true);
 });
 
 test('a failure names the seat, the kill and the move', () => {
