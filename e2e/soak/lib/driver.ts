@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Browser } from '@playwright/test';
 import { cut, findFrame, type Frame, type GameSocket, type Msg } from '../../tests/helpers/gameWire';
-import { afterMove, afterRecovery, atEnd, scanFrames } from './checks';
+import { afterMove, afterRecovery, atEnd, scanDrops, scanFrames } from './checks';
 import { mayTakeHolderDown, mayWaitForSeats } from './deadline';
 import { failure } from './fail';
 import {
@@ -124,6 +124,8 @@ class _Game {
   private readonly kills: KillRecord[] = [];
   private readonly lostMoves: number[] = [];
   private readonly down: _Down[] = [];
+  // Per seat, the newest socket whose close a kill or a restart explains.
+  private readonly covered = new Map<Seat, number>();
   private readonly dueAt = new Map<number, number>();
   private readonly waitingFor = new Map<number, string>();
   private readonly timers: NodeJS.Timeout[] = [];
@@ -131,6 +133,7 @@ class _Game {
   private broken: Error | null = null;
   // Sockets opened before the last restart talked to a backend whose clocks died with it.
   private epoch = 0;
+  private restarting = false;
   private moves = 0;
   private missesLeft = MISS_BUDGET;
   private choice: _Choice | null = null;
@@ -147,6 +150,8 @@ class _Game {
   ) {
     this.rng = createRng(seed);
     this.capMs = GAME_CAP_MS[size];
+    // A page may open and close a socket before its first game_init, as a dev build's double mount does.
+    for (const seat of table.seats) this.covered.set(seat, (liveSocket(seat)?.index ?? 0) - 1);
   }
 
   async play(): Promise<GameResult> {
@@ -341,6 +346,7 @@ class _Game {
     const where = { kill, move: record.ranAtMove };
     const old = this.table.seats.map((seat) => seat.wire.sockets.at(-1)!);
     this.epoch = startedAt;
+    this.restarting = true;
     await this.stack.killBackend();
     this.run.log(`${kill.kind} #${kill.id}: backend down ${pending ? 'during' : 'before'} move ${record.ranAtMove}, ${_seconds(startedAt - record.dueAt)} s after it came due`);
     for (const seat of this.table.seats) this.afterKillStart?.(seat);
@@ -354,6 +360,7 @@ class _Game {
     // Its own limit, so the 20 s back-within fails first, by seat name.
     const limit = origin + STEP_WAIT_MS;
     await this._until(`all six seats back after ${kill.kind} #${kill.id}`, () => (downs.every((d) => d.back) ? true : undefined), limit);
+    this.restarting = false;
     const inits = this.table.seats.map((seat) => {
       const live = liveSocket(seat);
       if (!live) throw failure('went down again before its recovery check', { seat, ...where });
@@ -415,12 +422,19 @@ class _Game {
         const took = backAt - down.origin;
         if (took > limit) throw failure(`not back ${limit / 1000} s (took ${_seconds(took)} s)`, where);
         down.back = true;
+        this.covered.set(seat, live.index - 1);
         record.backAt = Math.max(record.backAt, backAt);
         record.backMs = Math.max(record.backMs, took);
         this.run.log(`${seat.name} back ${took} ms after ${record.kill.kind} #${record.kill.id}, ${record.movesMadeWhileDown} move(s) made while down`);
       } else if (Date.now() - down.origin > limit) {
         throw failure(`not back ${limit / 1000} s (took ${_seconds(Date.now() - down.origin)} s so far)`, where);
       }
+    }
+    // A healthy seat that drops and comes back within a second would otherwise pass unseen.
+    if (this.restarting) return;
+    for (const seat of this.table.seats) {
+      if (this.down.some((d) => d.seat === seat && !d.back)) continue;
+      scanDrops(seat, this.covered.get(seat)!, { move: this.moves + 1 });
     }
   }
 

@@ -106,6 +106,14 @@ export function scanFrames(table: { seats: _ScanSeat[] }, where: { move?: number
   }
 }
 
+// A socket closed without a cut is a dropped player unless a kill or a restart covers it.
+export function scanDrops(seat: Pick<Seat, 'index' | 'name' | 'wire'>, coveredTo: number, where: { move?: number } = {}): void {
+  const dropped = seat.wire.sockets.find((socket) => socket.index > coveredTo && socket.closed !== null && !socket.cut);
+  if (!dropped) return;
+  const { by, code, reason } = dropped.closed!;
+  throw failure(`dropped without a kill: socket #${dropped.index} closed by the ${by} with ${code}${reason ? ` ${reason}` : ''}`, { seat, ...where });
+}
+
 export async function afterMove(table: Table, move?: number): Promise<void> {
   await Promise.all(
     table.seats.filter((seat) => liveSocket(seat)).map((seat) => _poll({ seat, move }, () => _afterMoveProblems(table, seat))),
@@ -123,7 +131,7 @@ export async function afterRecovery(table: Table, seat: Seat, record: KillRecord
   }
   const problem = _initProblem(table, seat, socket, init);
   if (problem) throw failure(problem, where);
-  await _poll(where, () => _afterMoveProblems(table, seat, true));
+  await _poll(where, () => _afterMoveProblems(table, seat));
 }
 
 export async function atEnd(table: Table, stack: Stack, result: GameResult, plan: Kill[]): Promise<void> {
@@ -184,7 +192,7 @@ async function _poll(where: _Where, read: () => Promise<string[]>): Promise<void
   }
 }
 
-async function _afterMoveProblems(table: Table, seat: Seat, recovering = false): Promise<string[]> {
+async function _afterMoveProblems(table: Table, seat: Seat): Promise<string[]> {
   const { model } = table;
   const socket = liveSocket(seat);
   if (!socket) return ['its socket went down'];
@@ -215,7 +223,7 @@ async function _afterMoveProblems(table: Table, seat: Seat, recovering = false):
   if (!_same(seen.activeTurn, [model.turn])) {
     problems.push(`page marks the turn on [${seen.activeTurn.map(name).join(', ')}], model ${name(model.turn)}`);
   }
-  if (recovering && seen.reconnecting) problems.push('the page still shows ws-reconnecting-banner');
+  if (seen.reconnecting) problems.push('the page shows ws-reconnecting-banner');
   return problems;
 }
 
