@@ -328,6 +328,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
     if (errorSeq > 0) setIsStarting(false);
   }, [errorSeq]);
 
+  // A start request lost with the socket gets no error back, so the host must be able to press Start again.
+  useEffect(() => {
+    if (wsStatus !== 'connected') setIsStarting(false);
+  }, [wsStatus]);
+
   // ── Navigate to game board when the server triggers lobby-starting ──────────
   // Fires for ALL connected clients (host + players + spectators) when the
   // host starts the game. The redirect goes to /game/<CODE> which is the

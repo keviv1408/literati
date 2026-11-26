@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import type { LobbyPlayer, UseRoomSocketOptions, WsStatus } from '@/hooks/useRoomSocket';
 import { GuestProvider } from '@/contexts/GuestContext';
 import { ApiError } from '@/lib/api';
@@ -66,7 +66,7 @@ jest.mock('@/hooks/useRoomSocket', () => {
     changeTeam: jest.fn(),
     setAvatar: jest.fn(),
     emit: jest.fn(),
-    startGame: jest.fn(),
+    startGame: jest.fn(() => true),
     lobbyTimer: null,
     lobbyStarting: false,
     errorSeq: 0,
@@ -319,6 +319,17 @@ describe('room lobby start control', () => {
 
     expect(await screen.findByTestId('start-game-btn')).toBeInTheDocument();
     expect(screen.queryByTestId('waiting-for-host')).not.toBeInTheDocument();
+  });
+
+  it('lets the host press Start again after the socket drops and reconnects', async () => {
+    await _renderLobby([_player('p-ada', 'Ada', true), _player('p-asha', 'Asha', false)]);
+    fireEvent.click(await screen.findByTestId('start-game-btn'));
+    expect(screen.getByTestId('start-game-btn')).toBeDisabled();
+
+    _drive({ wsStatus: 'disconnected', stopCode: null });
+    _drive({ wsStatus: 'connected', stopCode: null });
+
+    expect(screen.getByTestId('start-game-btn')).toBeEnabled();
   });
 
   it('tells a non-host which player they are waiting for', async () => {
