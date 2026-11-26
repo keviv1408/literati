@@ -77,6 +77,11 @@ interface _Sent {
 
 type _Doubtful = Exclude<Move, { type: 'choose_next_turn' }>;
 
+interface _Pending {
+  moverId: string;
+  move: _Doubtful;
+}
+
 const _POLL_MS = 20;
 
 export async function playGame(opts: {
@@ -169,6 +174,8 @@ class _Game {
     }
     const result = this._result();
     await atEnd(this.table, this.stack, result, this.plan);
+    // A stray result after the last move has no next move's check to catch it.
+    this._checkStrayResults(null, null);
     return result;
   }
 
@@ -474,13 +481,13 @@ class _Game {
   private async _play(mover: Seat, move: Move, final: boolean, deadline: number): Promise<void> {
     const { model } = this.table;
     const number = this.moves + 1;
+    const before = model.asks + model.declarations;
     const socket = liveSocket(mover)!;
     const inDoubt = move.type === 'choose_next_turn' || final ? undefined : this._midMoveKill(mover);
     const sent: _Sent[] = this.table.seats.flatMap((seat) => {
       const live = liveSocket(seat);
       return live ? [{ seat, socket: live, from: live.frames.length }] : [];
     });
-    let sentAt = Date.now();
     socket.server!.send(JSON.stringify(toWire(move)));
 
     // After a restart the model already holds the restored game, with or without this move, and nothing is sent again.
@@ -489,7 +496,7 @@ class _Game {
       await this._restart(inDoubt, move as _Doubtful);
     } else if (inDoubt) {
       await this._startKill(inDoubt, mover);
-      ({ settled, sentAt } = await this._settleInDoubt(mover, move as _Doubtful, sent, sentAt, deadline));
+      settled = await this._settleInDoubt(mover, move as _Doubtful, sent, deadline);
     } else {
       settled = await this._settle(mover, move, socket, sent.find((s) => s.socket === socket)!.from, final, deadline);
     }
@@ -511,7 +518,8 @@ class _Game {
       down.record.heldTurnThroughout = false;
     }
 
-    await this._checkResultCopies(settled?.result ?? null, sentAt, deadline);
+    const pending = inDoubt?.kind === 'restart' ? { moverId: mover.playerId, move: move as _Doubtful } : null;
+    await this._checkResultCopies(settled?.result ?? null, before, pending, deadline);
     if (!final) await afterMove(this.table, number);
     this.moves = number;
     this.over = final;
@@ -532,9 +540,8 @@ class _Game {
     mover: Seat,
     move: _Doubtful,
     sent: _Sent[],
-    sentAt: number,
     deadline: number,
-  ): Promise<{ settled: _Settled; sentAt: number }> {
+  ): Promise<_Settled> {
     const number = this.moves + 1;
     const where = { seat: mover, move: number };
     const what = this._describe(mover.playerId, move);
@@ -552,7 +559,7 @@ class _Game {
       if (others.length === 0) throw failure(`no other seat is up to settle ${what}`, where);
       this.run.log(`move ${number} in doubt: the server kept ${what}`);
       // Another seat's socket carries the result and the clock.
-      return { settled: await this._settle(mover, move, others[0].socket, others[0].from, false, deadline), sentAt };
+      return this._settle(mover, move, others[0].socket, others[0].from, false, deadline);
     }
 
     if (heard.length > 0) {
@@ -561,9 +568,8 @@ class _Game {
     this.run.log(`move ${number} in doubt: the server dropped ${what}; sending it again`);
     const socket = liveSocket(mover)!;
     const from = socket.frames.length;
-    const resentAt = Date.now();
     socket.server!.send(JSON.stringify(toWire(move)));
-    return { settled: await this._settle(mover, move, socket, from, false, deadline), sentAt: resentAt };
+    return this._settle(mover, move, socket, from, false, deadline);
   }
 
   private _kept(init: Msg, mover: Seat, move: _Doubtful): boolean {
@@ -679,26 +685,38 @@ class _Game {
     }, deadline);
   }
 
-  // An extra or foreign result means a bot or a server clock played; a seat back after the send may lack the result.
-  private async _checkResultCopies(result: _Found | null, sentAt: number, deadline: number): Promise<void> {
+  // The server applies a move and broadcasts its result in one tick, so a socket whose game_init predates the move is owed a copy.
+  private async _checkResultCopies(result: _Found | null, before: number, pending: _Pending | null, deadline: number): Promise<void> {
     // Scanned first, so a bot's move fails as the bot_takeover before it fails as a foreign result.
     scanFrames(this.table, { move: this.moves + 1 });
     for (const seat of this.table.seats) {
-      const socket = liveSocket(seat);
-      if (!socket) continue;
-      const mark = this.marks.get(socket) ?? 0;
-      if (result && findFrame(socket, 'game_init')!.at <= sentAt) {
-        await this._until(`${seat.name}'s copy of the ${result.msg.type}`, () => _find(socket, mark, (m) => _sameResult(m, result.msg)), deadline);
+      const live = liveSocket(seat);
+      if (!result || !live || _movesIn(findFrame(live, 'game_init')!.msg) > before) continue;
+      const mark = this.marks.get(live) ?? 0;
+      await this._until(`${seat.name}'s copy of the ${result.msg.type}`, () => _find(live, mark, (m) => _sameResult(m, result.msg)), deadline);
+    }
+    this._checkStrayResults(result?.msg ?? null, pending);
+  }
+
+  // Every socket, closed ones too, so a stray result on a socket that dies before the next check is still caught.
+  private _checkStrayResults(result: Msg | null, pending: _Pending | null): void {
+    for (const seat of this.table.seats) {
+      for (const socket of seat.wire.sockets) {
+        const mark = this.marks.get(socket) ?? 0;
+        // A socket from before a mid-move restart may have heard the move the restart then kept or lost.
+        const known = (msg: Msg) =>
+          (result !== null && _sameResult(msg, result)) ||
+          (pending !== null && socket.openedAt < this.epoch && _isResultOf(msg, pending.moverId, pending.move));
+        const results = socket.frames.slice(mark).filter(({ msg }) => msg.type === 'ask_result' || msg.type === 'declaration_result');
+        const stray = results.find(({ msg }) => !known(msg));
+        if (stray || results.length > 1) {
+          const what = stray
+            ? `a ${stray.msg.type} the driver did not send: ${this._describe(..._resultAsMove(stray.msg))}`
+            : `${results.length} copies of its result`;
+          throw failure(`socket #${socket.index} got ${what}`, { seat, move: this.moves + 1 });
+        }
+        this.marks.set(socket, socket.frames.length);
       }
-      const results = socket.frames.slice(mark).filter(({ msg }) => msg.type === 'ask_result' || msg.type === 'declaration_result');
-      const stray = results.find(({ msg }) => !result || !_sameResult(msg, result.msg));
-      if (stray || results.length > 1) {
-        const what = stray
-          ? `a ${stray.msg.type} the driver did not send: ${this._describe(..._resultAsMove(stray.msg))}`
-          : `${results.length} copies of its result`;
-        throw failure(`socket #${socket.index} got ${what}`, { seat, move: this.moves + 1 });
-      }
-      this.marks.set(socket, socket.frames.length);
     }
   }
 
@@ -777,6 +795,10 @@ function _isResultOf(msg: Msg, moverId: string, move: _Doubtful): boolean {
     return msg.type === 'ask_result' && msg.askerId === moverId && msg.targetId === move.targetPlayerId && msg.cardId === move.cardId;
   }
   return msg.type === 'declaration_result' && msg.declarerId === moverId && msg.halfSuitId === move.halfSuitId;
+}
+
+function _movesIn(init: Msg): number {
+  return init.askHistory.length + init.gameState.declaredSuits.length;
 }
 
 function _seconds(ms: number): string {
