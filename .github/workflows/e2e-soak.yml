@@ -43,6 +43,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -69,7 +71,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: soak-results
-          path: e2e/test-results
+          path: |
+            e2e/test-results
+            frontend.log
           retention-days: 7
           # The trace is already a zip.
           compression-level: 0
