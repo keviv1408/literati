@@ -65,6 +65,8 @@ interface _Down {
   socket: GameSocket;
   // Where the kind's back-within clock starts: the cut, the visibility event, the end of refusals.
   origin: number | null;
+  // Set before the visibility event goes out, so the socket the event opens is not taken for one opened before it.
+  waking: boolean;
   back: boolean;
 }
 
@@ -296,7 +298,7 @@ class _Game {
       movesMadeWhileDown: 0,
       heldTurnThroughout: this.table.model.turn === seat.playerId,
     };
-    const down: _Down = { record, seat, socket, origin: null, back: false };
+    const down: _Down = { record, seat, socket, origin: null, waking: false, back: false };
     this.kills.push(record);
     this.down.push(down);
     if (kill.kind === 'freeze') {
@@ -347,7 +349,7 @@ class _Game {
     const origin = Date.now();
     this.run.log(`${kill.kind} #${kill.id}: backend up ${origin - startedAt} ms after the kill`);
 
-    const downs: _Down[] = this.table.seats.map((seat, i) => ({ record, seat, socket: old[i], origin, back: false }));
+    const downs: _Down[] = this.table.seats.map((seat, i) => ({ record, seat, socket: old[i], origin, waking: false, back: false }));
     this.down.push(...downs);
     // Its own limit, so the 20 s back-within fails first, by seat name.
     const limit = origin + STEP_WAIT_MS;
@@ -376,14 +378,16 @@ class _Game {
     try {
       if (seat.wire.sockets.at(-1) !== down.socket) throw failure('the page opened a new socket before the visibility event', where);
       const lastAt = down.socket.frames[down.socket.frames.length - 1].at;
-      // Set before the event, so a socket the event opens is never taken for one opened before it.
-      down.origin = Date.now();
-      const state = await seat.page.evaluate(() => {
+      down.waking = true;
+      // The page stamps the event, so the trip into the page does not count against the seat.
+      const { visibility, at } = await seat.page.evaluate(() => {
         const visibility = document.visibilityState;
+        const at = Date.now();
         if (visibility === 'visible') document.dispatchEvent(new Event('visibilitychange'));
-        return visibility;
+        return { visibility, at };
       });
-      if (state !== 'visible') throw failure(`the page was ${state} at the visibility event, so it would ignore it`, where);
+      if (visibility !== 'visible') throw failure(`the page was ${visibility} at the visibility event, so it would ignore it`, where);
+      down.origin = at;
       this.run.log(`${record.kill.kind} #${record.kill.id}: visibility event at ${_seconds(down.origin - lastAt)} s since the last frame`);
     } catch (err) {
       this.broken ??= err instanceof Error ? err : new Error(String(err));
@@ -398,7 +402,7 @@ class _Game {
       const { seat, record } = down;
       const where = { seat, kill: record.kill, move: this.moves + 1 };
       if (down.origin === null) {
-        if (record.kill.kind === 'freeze' && seat.wire.sockets.at(-1) !== down.socket) {
+        if (record.kill.kind === 'freeze' && !down.waking && seat.wire.sockets.at(-1) !== down.socket) {
           throw failure('the page opened a new socket before the visibility event', where);
         }
         continue;
