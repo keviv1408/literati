@@ -84,9 +84,26 @@ test('a host whose session the server forgot comes back as the same player', asy
   await page.evaluate(() => {
     window.__e2e = 1;
     window.__errorShownAt = [];
-    new MutationObserver(() => {
-      if (document.querySelector('[data-testid="connection-error-screen"]')) window.__errorShownAt!.push(Date.now());
-    }).observe(document.body, { childList: true, subtree: true });
+    const id = 'connection-error-screen';
+    const selector = `[data-testid="${id}"]`;
+    // React reuses the page's root div and swaps its data-testid, and a screen can come and
+    // go before the callback runs, so read the records rather than the live DOM.
+    new MutationObserver((records) => {
+      const shown = records.some((record) =>
+        record.type === 'attributes'
+          ? record.oldValue === id || (record.target as Element).getAttribute('data-testid') === id
+          : Array.from(record.addedNodes).some(
+              (node) => node instanceof Element && (node.matches(selector) || node.querySelector(selector) !== null),
+            ),
+      );
+      if (shown) window.__errorShownAt!.push(Date.now());
+    }).observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-testid'],
+      attributeOldValue: true,
+    });
   });
 
   // The token stays in the page: Playwright's request log would record the Authorization header.

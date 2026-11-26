@@ -112,7 +112,8 @@ const SESSION = {
   avatarId: null,
 };
 
-const ERROR_SCREEN = '[data-testid="connection-error-screen"]';
+const ERROR_SCREEN_ID = 'connection-error-screen';
+const ERROR_SCREEN = `[data-testid="${ERROR_SCREEN_ID}"]`;
 
 function _lastToken(): string | null | undefined {
   return mockSocketCalls[mockSocketCalls.length - 1]?.bearerToken;
@@ -126,11 +127,19 @@ function _tokenChangesSince(index: number): Array<string | null | undefined> {
     .filter((token, i, all) => i === 0 || token !== all[i - 1]);
 }
 
-// Records every time the error screen enters the DOM, even for a single commit.
+// Records every time the error screen enters the DOM, even for a single commit. React
+// reuses the page's root div and swaps its data-testid, so attribute records count too.
 function _watchErrorScreen(): { seen: () => boolean; stop: () => void } {
   let seen = false;
   const scan = (records: MutationRecord[]) => {
     for (const record of records) {
+      if (record.type === 'attributes') {
+        const target = record.target as Element;
+        if (record.oldValue === ERROR_SCREEN_ID || target.getAttribute('data-testid') === ERROR_SCREEN_ID) {
+          seen = true;
+        }
+        continue;
+      }
       record.addedNodes.forEach((node) => {
         if (node instanceof Element && (node.matches(ERROR_SCREEN) || node.querySelector(ERROR_SCREEN))) {
           seen = true;
@@ -139,11 +148,17 @@ function _watchErrorScreen(): { seen: () => boolean; stop: () => void } {
     }
   };
   const observer = new MutationObserver(scan);
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-testid'],
+    attributeOldValue: true,
+  });
   return {
     seen: () => {
       scan(observer.takeRecords());
-      return seen || document.querySelector(ERROR_SCREEN) !== null;
+      return seen;
     },
     stop: () => observer.disconnect(),
   };
