@@ -57,8 +57,6 @@ import { useLobbyRecovery } from '@/hooks/useLobbyRecovery';
 import { useGuest } from '@/contexts/GuestContext';
 import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from '@/types/user';
 import Avatar from '@/components/Avatar';
-import { connectSocket, disconnectSocket } from '@/lib/socket';
-import type { RoomCreatedPayload } from '@/lib/socket';
 import type { Room, Team } from '@/types/room';
 import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
 import { LobbyStartControl, showStartPanel } from '@/components/LobbyStartControl';
@@ -152,17 +150,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
    */
   const [bearerToken, setBearerToken] = useState<string | null>(null);
 
-  /**
-   * Server-authoritative links delivered by the 'room-created' Socket.io event.
-   *
-   * When the host's socket is connected at the moment the room is created the
-   * backend emits these links (using the server-side FRONTEND_URL env var).
-   * If the socket was not connected during creation these stay null and the
-   * page falls back to computing links from window.location.origin.
-   */
-  const [socketRoomLinks, setSocketRoomLinks] =
-    useState<Pick<RoomCreatedPayload, 'inviteLink' | 'spectatorLink'> | null>(null);
-
   useEffect(() => {
     params.then(({ roomCode: code }) => {
       setRoomCode(code.toUpperCase());
@@ -210,37 +197,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
     // Priority 2: validated base session token from useReconnect.
     setBearerToken(baseToken);
   }, [reconnectStatus, roomCode, baseToken, reconnectSessionId, kickedOnEntry]);
-
-  // ── Socket.io connection for room-created event ───────────────────────────
-  // Connects once a bearer token is available so the host can receive the
-  // 'room-created' event if they happened to be connected when the room was
-  // created (e.g. they opened the socket before submitting the create-room
-  // form). The server emits this event with server-authoritative links
-  // (using the FRONTEND_URL env var) which may differ from window.location.origin
-  // in production.
-  useEffect(() => {
-    if (!bearerToken || kickedOnEntry) return;
-
-    const socket = connectSocket(bearerToken);
-
-    const onRoomCreated = (payload: RoomCreatedPayload) => {
-      // Only update if the event is for the room we are currently viewing.
-      if (!roomCode) return;
-      if (payload.room?.code?.toUpperCase() !== roomCode) return;
-      setSocketRoomLinks({
-        inviteLink: payload.inviteLink,
-        spectatorLink: payload.spectatorLink,
-      });
-    };
-
-    socket.on('room-created', onRoomCreated);
-
-    return () => {
-      socket.off('room-created', onRoomCreated);
-      disconnectSocket();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bearerToken, kickedOnEntry]);
 
   // ── Live kick listener ────────────────────────────────────────────────────
   //
@@ -877,13 +833,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── Room lobby ───────────────────────────────────────────────────────────
   const origin =
     typeof window !== 'undefined' ? window.location.origin : '';
-  // Prefer server-authoritative links from 'room-created' socket event
-  // (they use the server-side FRONTEND_URL env var). Fall back to computing
-  // from window.location.origin when the socket event was not received.
-  const inviteUrl =
-    socketRoomLinks?.inviteLink ?? `${origin}/room/${room.code}`;
-  const spectatorUrl =
-    socketRoomLinks?.spectatorLink ?? `${origin}/room/${room.code}?spectate=1`;
+  const inviteUrl = `${origin}/room/${room.code}`;
+  const spectatorUrl = `${origin}/room/${room.code}?spectate=1`;
 
   const isCancelled =
     room.status === 'cancelled' || room.status === 'completed';

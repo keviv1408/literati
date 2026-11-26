@@ -34,11 +34,6 @@ jest.mock('@/lib/api', () => {
   };
 });
 
-jest.mock('@/lib/socket', () => ({
-  connectSocket: () => ({ on: jest.fn(), off: jest.fn() }),
-  disconnectSocket: jest.fn(),
-}));
-
 interface SocketState {
   wsStatus: WsStatus;
   stopCode: number | null;
