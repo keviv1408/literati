@@ -350,6 +350,20 @@ describe('room lobby start control', () => {
     expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument();
   });
 
+  it('shows no host line and no button until the roster holds this player', async () => {
+    await _renderLobby([]);
+
+    expect(await screen.findByTestId('start-game-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('waiting-for-host')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument();
+
+    mockRoster = { players: [_player('p-ada', 'Ada', false), _player('p-asha', 'Asha', true)], myPlayerId: 'p-ada' };
+    _drive({ wsStatus: 'connected', stopCode: null });
+
+    expect(await screen.findByTestId('waiting-for-host')).toHaveTextContent(/^Waiting for Asha to start the game$/);
+    expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument();
+  });
+
   it('shows a non-host only the starting notice once the game is starting', async () => {
     mockLobbyStarting = true;
     await _renderLobby([_player('p-ada', 'Ada', false), _player('p-asha', 'Asha', true)]);

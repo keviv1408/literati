@@ -1361,8 +1361,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
             )}
 
             {/* ── Start Game button ─────────────────────────────────────── */}
+            {/* Before the roster has this player, the host would read "Waiting for a host…". */}
             {/* A non-host would otherwise read "Waiting for…" right above the starting notice. */}
-            {(amIHostLive || !lobbyStarting) && (
+            {myWsPlayer && (amIHostLive || !lobbyStarting) && (
               <LobbyStartControl
                 isHost={amIHostLive}
                 hostName={wsPlayers.find((p) => p.isHost)?.displayName ?? null}
