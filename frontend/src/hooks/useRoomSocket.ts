@@ -212,6 +212,8 @@ export interface UseRoomSocketResult {
   lastError: string | null;
   /** Increments on every server error frame, including repeats of the same message. */
   errorSeq: number;
+  /** Close code the server stopped the socket with. Null on every new connection and while not in 'error'. */
+  stopCode: number | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -244,6 +246,7 @@ export function useRoomSocket({
   const [lobbyStarting, setLobbyStarting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [errorSeq, setErrorSeq] = useState(0);
+  const [stopCode, setStopCode] = useState<number | null>(null);
   const [hostChangedEvent, setHostChangedEvent] = useState<HostChangedEvent | null>(null);
 
   // Stable ref to the live socket so emit/kickPlayer don't need re-creation.
@@ -289,11 +292,13 @@ export function useRoomSocket({
     setLobbyTimer(null);
     setLobbyStarting(false);
     setLastError(null);
+    setStopCode(null);
     setHostChangedEvent(null);
 
     const failWith = (code: number, reason: string) => {
       setLastError(reason || `Connection closed (${code})`);
       setErrorSeq((n) => n + 1);
+      setStopCode(code);
       setWsStatus('error');
     };
 
@@ -484,7 +489,10 @@ export function useRoomSocket({
       onMessage,
       onStatus: (status, stop) => {
         if (status === 'error' && stop) failWith(stop.code, stop.reason);
-        else setWsStatus(status === 'reconnecting' ? 'disconnected' : status);
+        else {
+          setStopCode(null);
+          setWsStatus(status === 'reconnecting' ? 'disconnected' : status);
+        }
       },
     });
     socketRef.current = socket;
@@ -494,6 +502,7 @@ export function useRoomSocket({
       socketRef.current = null;
       // close() is silent, so nothing else marks the hook as unconnected.
       setWsStatus('idle');
+      setStopCode(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, sessionId, bearerToken]);
@@ -559,6 +568,7 @@ export function useRoomSocket({
     lobbyStarting,
     lastError,
     errorSeq,
+    stopCode,
     hostChangedEvent,
   };
 }

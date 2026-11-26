@@ -785,6 +785,24 @@ describe('useRoomSocket', () => {
       expect(result.current.wsStatus).toBe('error');
       expect(result.current.lastError).toBe('Unauthorized');
     });
+
+    it('reports the stop code and clears it on a new connection', () => {
+      const { result, rerender } = renderHook(
+        ({ token }: { token: string }) =>
+          useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1', bearerToken: token }),
+        { initialProps: { token: 'old-token' } }
+      );
+      expect(result.current.stopCode).toBeNull();
+      openSocket(wsInstances[0]);
+      sendMessage(wsInstances[0], { type: 'closing', code: 4001, reason: 'Unauthorized' });
+      expect(result.current.wsStatus).toBe('error');
+      expect(result.current.stopCode).toBe(4001);
+
+      rerender({ token: 'new-token' });
+      expect(wsInstances).toHaveLength(2);
+      openSocket(wsInstances[1]);
+      expect(result.current.stopCode).toBeNull();
+    });
   });
 
   describe('kickPlayer', () => {
