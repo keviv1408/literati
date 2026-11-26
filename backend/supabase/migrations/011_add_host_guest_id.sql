@@ -8,6 +8,10 @@
 --
 -- The stale sweep now also catches lobbies left in 'waiting' or 'starting',
 -- so a host who walks away is not stuck behind the one-active-room check.
+--
+-- The sweep is SECURITY DEFINER and takes its interval from the caller, so
+-- only the service role may run it. Otherwise anyone holding the public anon
+-- key could abandon every active room.
 
 ALTER TABLE rooms ALTER COLUMN host_user_id DROP NOT NULL;
 
@@ -41,3 +45,6 @@ END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = public;
+
+REVOKE EXECUTE ON FUNCTION public.mark_stale_games_abandoned(INTERVAL) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_stale_games_abandoned(INTERVAL) TO service_role;
