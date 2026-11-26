@@ -143,7 +143,7 @@ function getSupabase() {
  * userId — backend identity (Supabase UUID or guest sessionId)
  * displayName — player display name
  * isGuest — true for guest sessions
- * isHost — true for the room creator
+ * isHost — live host flag: seeded from host_user_id or host_guest_id, moved by a host transfer
  * teamId — 1 or 2 (auto-assigned on join, changeable by player)
  *
  * NOTE: spectators are NOT stored here — see roomSpectators below.
@@ -1120,6 +1120,18 @@ function buildOccupiedSeats(clients, playerCount) {
  */
 async function handleStartGame(ctx) {
   const { ws, isHost, roomCode, clients } = ctx;
+
+  // Before the lock and the room read, so a non-host cannot hold the lock against the host.
+  if (!isHost) {
+    ws.send(
+      JSON.stringify({
+        type:    'error',
+        code:    'HOST_ONLY',
+        message: 'Only the host can start the game',
+      }),
+    );
+    return;
+  }
 
   // ── Idempotency guard ──────────────────────────────────────────────────────
   // Prevent duplicate game-start sequences from concurrent calls.

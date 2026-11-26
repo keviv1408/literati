@@ -154,3 +154,33 @@ test('a host whose session the server forgot comes back as the same player', asy
   expect(await page.evaluate(() => window.__e2e), 'the page reloaded').toBe(1);
   expect(loads, 'the page reloaded').toBe(0);
 });
+
+test('only the host sees Start', async ({ page, browser }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Private Room/ }).click();
+  await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
+  await page.getByRole('button', { name: 'Continue as Guest' }).click();
+  await page.getByRole('button', { name: 'Create Room', exact: true }).click();
+  await page.getByTestId('enter-room-btn').click();
+  await expect(page.getByTestId('lobby-player-count')).toHaveText(/^1\//, { timeout: 30_000 });
+
+  const guestContext = await browser.newContext();
+  const guest = await guestContext.newPage();
+  await guest.goto(page.url());
+  await guest.getByTestId('join-name-input').fill('E2E Guest');
+  await guest.getByTestId('join-room-btn').click();
+  await expect(page.getByTestId('lobby-player-count')).toHaveText(/^2\//, { timeout: 30_000 });
+  await expect(guest.getByTestId('lobby-player-count')).toHaveText(/^2\//, { timeout: 30_000 });
+
+  const start = page.getByTestId('start-game-btn');
+  await expect(start).toBeVisible();
+  await expect(start).toBeEnabled();
+  // The guest can see "Waiting for a host…" for a moment if the host's socket is reconnecting.
+  await expect(guest.getByTestId('waiting-for-host')).toHaveText('Waiting for E2E Host to start the game');
+  await expect(guest.getByTestId('start-game-btn')).toHaveCount(0);
+
+  await start.click();
+  await expect(page).toHaveURL(/\/game\//, { timeout: 30_000 });
+  await expect(guest).toHaveURL(/\/game\//, { timeout: 30_000 });
+  await guestContext.close();
+});

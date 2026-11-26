@@ -61,6 +61,7 @@ import { connectSocket, disconnectSocket } from '@/lib/socket';
 import type { RoomCreatedPayload } from '@/lib/socket';
 import type { Room, Team } from '@/types/room';
 import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
+import { LobbyStartControl, showStartPanel } from '@/components/LobbyStartControl';
 import AvatarPicker from '@/components/AvatarPicker';
 import { buildEmptySeats } from '@/types/lobby';
 import type { LobbyPlayer } from '@/types/lobby';
@@ -139,12 +140,12 @@ export default function RoomLobbyPage({ params }: PageProps) {
   /**
    * Bearer token used for WebSocket authentication.
    *
-   * Derived from two sources (first available wins):
-   * 1. loadRoomMembership(roomCode).bearerToken — the exact token that was
-   * accepted by the WS server on a previous visit to this room URL.
-   * Re-using it ensures the server recognises the same player identity.
+   * Derived from two sources:
+   * 1. loadRoomMembership(roomCode).bearerToken — the token from a previous
+   * visit, used only when that membership belongs to another player.
    * 2. useReconnect().bearerToken — the validated base session token
-   * (guest bearer or Supabase JWT) when no room membership is stored.
+   * (guest bearer or Supabase JWT), used otherwise, including when the
+   * stored membership is this same player's (it may predate a restart).
    *
    * Only populated once reconnectStatus === 'ready' so the WebSocket hook
    * never attempts to connect with an unvalidated or expired token.
@@ -199,9 +200,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
       return;
     }
 
-    // Priority 1: room-specific membership token from a previous visit.
-    // This re-uses the exact backend session that the WS server already
-    // accepted for this room, preserving seat and host status.
+    // Priority 1: the stored membership token, only when it is another player's.
     const membership = loadRoomMembership(roomCode);
     if (membership && membership.playerId !== reconnectSessionId) {
       setBearerToken(membership.bearerToken);
@@ -291,9 +290,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
   });
 
   // Derive whether the current user is the host by finding their entry in the
-  // live WebSocket player list returned by the server. The `isHost` flag is
-  // set server-side based on the Supabase rooms.host_user_id field, so no
-  // client-side spoofing is possible.
+  // live WebSocket player list returned by the server. The `isHost` flag is the
+  // server's live lobby flag (seeded from either host column, moved by a host
+  // transfer), so no client-side spoofing is possible.
   const myWsPlayer = wsPlayers.find((p) => p.playerId === myPlayerId);
   const amIHostLive = myWsPlayer?.isHost ?? false;
 
@@ -326,6 +325,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
   useEffect(() => {
     if (errorSeq > 0) setIsStarting(false);
   }, [errorSeq]);
+
+  // A start request lost with the socket gets no error back, so the host must be able to press Start again.
+  useEffect(() => {
+    if (wsStatus !== 'connected') setIsStarting(false);
+  }, [wsStatus]);
 
   // ── Navigate to game board when the server triggers lobby-starting ──────────
   // Fires for ALL connected clients (host + players + spectators) when the
@@ -1249,10 +1253,15 @@ export default function RoomLobbyPage({ params }: PageProps) {
         </div>
 
         {/* ── Start Game controls ───────────────────────
-            Any seated player may start a private room; empty seats are filled
+            Only the host may start a private room; empty seats are filled
             with bots server-side. Matchmaking rooms start automatically.
             ─────────────────────────────────────────────────────────────── */}
-        {!isSpectator && !isCancelled && !room.is_matchmaking && (
+        {showStartPanel({
+          isSpectator,
+          amIHost: amIHostLive,
+          isCancelled,
+          isMatchmaking: Boolean(room.is_matchmaking),
+        }) && (
           <div
             className="
               bg-slate-800/50 border border-slate-700/50
@@ -1350,60 +1359,69 @@ export default function RoomLobbyPage({ params }: PageProps) {
             )}
 
             {/* ── Start Game button ─────────────────────────────────────── */}
-            <button
-              type="button"
-              onClick={() => {
-                const sent = startGame();
-                if (sent) {
-                  trackEvent('lobby_game_started', { player_count: room.player_count });
-                  setIsStarting(true);
-                }
-              }}
-              disabled={isStarting || lobbyStarting || !myPlayerId}
-              aria-label="Start Game"
-              aria-busy={isStarting || lobbyStarting}
-              data-testid="start-game-btn"
-              className={`
-                w-full py-3.5 rounded-xl font-bold text-base
-                bg-emerald-600 hover:bg-emerald-500
-                disabled:bg-emerald-900/50 disabled:cursor-not-allowed
-                text-white disabled:text-emerald-400/60
-                transition-all duration-150
-                focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2
-                focus:ring-offset-slate-800
-                active:scale-[0.98]
-                shadow-lg shadow-emerald-900/30
-                ${wsPlayers.length >= room.player_count && !isStarting && !lobbyStarting ? 'animate-start-ready-pulse' : ''}
-              `}
-            >
-              {isStarting || lobbyStarting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg
-                    className="animate-spin h-4 w-4 text-emerald-300"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8z"
-                    />
-                  </svg>
-                  Starting…
-                </span>
-              ) : (
-                'Start Game'
-              )}
-            </button>
+            {/* Before the roster has this player, the host would read "Waiting for a host…". */}
+            {/* A non-host would otherwise read "Waiting for…" right above the starting notice. */}
+            {myWsPlayer && (amIHostLive || !lobbyStarting) && (
+              <LobbyStartControl
+                isHost={amIHostLive}
+                hostName={wsPlayers.find((p) => p.isHost)?.displayName ?? null}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sent = startGame();
+                    if (sent) {
+                      trackEvent('lobby_game_started', { player_count: room.player_count });
+                      setIsStarting(true);
+                    }
+                  }}
+                  disabled={isStarting || lobbyStarting || !myPlayerId}
+                  aria-label="Start Game"
+                  aria-busy={isStarting || lobbyStarting}
+                  data-testid="start-game-btn"
+                  className={`
+                    w-full py-3.5 rounded-xl font-bold text-base
+                    bg-emerald-600 hover:bg-emerald-500
+                    disabled:bg-emerald-900/50 disabled:cursor-not-allowed
+                    text-white disabled:text-emerald-400/60
+                    transition-all duration-150
+                    focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2
+                    focus:ring-offset-slate-800
+                    active:scale-[0.98]
+                    shadow-lg shadow-emerald-900/30
+                    ${wsPlayers.length >= room.player_count && !isStarting && !lobbyStarting ? 'animate-start-ready-pulse' : ''}
+                  `}
+                >
+                  {isStarting || lobbyStarting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg
+                        className="animate-spin h-4 w-4 text-emerald-300"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8z"
+                        />
+                      </svg>
+                      Starting…
+                    </span>
+                  ) : (
+                    'Start Game'
+                  )}
+                </button>
+              </LobbyStartControl>
+            )}
           </div>
         )}
 

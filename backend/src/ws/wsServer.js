@@ -405,7 +405,7 @@ async function handleMessage(ws, connectionId, user, rawData) {
  *
  * Steps:
  * 1. Validate roomCode format
- * 2. Look up room in DB (must exist and be in 'waiting' status)
+ * 2. Look up room in DB (must exist, be in 'waiting' status and be a matchmaking room)
  * 3. Add player to in-memory lobby (lobbyStore + lobbyManager)
  * 4. Confirm to the joining player ('room-joined')
  * 5. Notify all other players in the room ('player-joined')
@@ -434,7 +434,7 @@ async function handleJoinRoom(ws, connectionId, user, msg) {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('rooms')
-      .select('id, code, host_user_id, player_count, card_removal_variant, status')
+      .select('id, code, host_user_id, player_count, card_removal_variant, status, is_matchmaking')
       .eq('code', upperCode)
       .maybeSingle();
 
@@ -448,6 +448,16 @@ async function handleJoinRoom(ws, connectionId, user, msg) {
         type: 'error',
         code: 'ROOM_NOT_WAITING',
         message: 'Room is not accepting players',
+      });
+      return;
+    }
+
+    // This socket's lobby timer starts games with no host check, so private rooms stay on /ws/room/:code.
+    if (data.is_matchmaking !== true) {
+      sendJson(ws, {
+        type: 'error',
+        code: 'NOT_MATCHMAKING_ROOM',
+        message: 'Room is not a matchmaking room',
       });
       return;
     }
