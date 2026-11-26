@@ -263,9 +263,11 @@ async function _savedSummary(table: Table, where: { move: number }): Promise<voi
   let last = 'no answer';
   for (;;) {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/stats/game-summary/${table.roomCode}`);
+      // A hung backend then fails here with the summary message, not at the test's timeout.
+      const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+      const res = await fetch(`${BACKEND_URL}/api/stats/game-summary/${table.roomCode}`, { signal });
       const body = await res.json();
-      if (res.ok && _score(body.scores) === want) return;
+      if (res.ok && _score(body.scores) === want && Date.now() <= deadline) return;
       last = res.ok ? `score ${_score(body.scores)}` : `status ${res.status}`;
     } catch (err) {
       last = String(err instanceof Error ? err.message : err);
