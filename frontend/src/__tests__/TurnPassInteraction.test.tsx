@@ -220,7 +220,8 @@ async function setupActiveGame(opts: { currentTurnPlayerId?: string } = {}) {
   await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
   act(() => openWs());
   act(() => sendWsMessage(makeGameInit(opts)));
-  await waitFor(() => expect(screen.getByTestId('turn-indicator')).toBeTruthy());
+  // The turn-indicator banner only renders in turn-pass mode, so wait on the dealt hand instead.
+  await waitFor(() => expect(screen.getByTestId('card-hand')).toBeTruthy());
 }
 
 beforeEach(() => {
@@ -244,13 +245,11 @@ describe('TurnPassInteraction — normal turn state', () => {
     });
   });
 
-  it('shows normal "Your turn" indicator text when it is my turn', async () => {
+  it('shows no turn-indicator banner on a normal turn (the seat highlight conveys it)', async () => {
     await setupActiveGame();
 
-    await waitFor(() => {
-      const indicator = screen.getByTestId('turn-indicator');
-      expect(indicator.textContent).toContain('Your turn');
-    });
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
+    expect(screen.queryByTestId('turn-indicator')).toBeNull();
   });
 
   it('does NOT show turn-pass prompt in normal turn state', async () => {
@@ -291,12 +290,13 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
 
   it('turn indicator shows "Tap a highlighted seat" instruction', async () => {
     await setupActiveGame();
-    await waitFor(() => expect(screen.getByTestId('turn-indicator')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
     await waitFor(() => {
-      expect(screen.getByTestId('turn-pass-select-label')).toBeTruthy();
+      const indicator = screen.getByTestId('turn-indicator');
+      expect(indicator).toContainElement(screen.getByTestId('turn-pass-select-label'));
     });
   });
 
