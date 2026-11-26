@@ -1,9 +1,19 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Browser } from '@playwright/test';
-import { findFrame, type GameSocket, type Msg } from '../../tests/helpers/gameWire';
-import { afterMove, atEnd, scanFrames } from './checks';
+import { cut, findFrame, type Frame, type GameSocket, type Msg } from '../../tests/helpers/gameWire';
+import { afterMove, afterRecovery, atEnd, scanFrames } from './checks';
+import { mayTakeHolderDown, mayWaitForSeats } from './deadline';
 import { failure } from './fail';
-import { AFTER_MOVE_POLL_MS, GAME_CAP_MS, MISS_BUDGET, PACE_MS, STEP_WAIT_MS } from './limits';
+import {
+  AFTER_MOVE_POLL_MS,
+  BACK_WITHIN_MS,
+  FREEZE_FRESH_MS,
+  GAME_CAP_MS,
+  MAX_SEATS_DOWN,
+  MISS_BUDGET,
+  PACE_MS,
+  STEP_WAIT_MS,
+} from './limits';
 import type { Checkpoint } from './model';
 import { buildPlan, KILL_KINDS, type Kill, type KillKind, type Size } from './plan';
 import { halfSuits, isFinalDeclaration, pickMove, toWire, type Move } from './policy';
@@ -50,6 +60,23 @@ interface _Settled {
   choice: _Choice | null;
 }
 
+interface _Down {
+  record: KillRecord;
+  seat: Seat;
+  socket: GameSocket;
+  // Where the kind's back-within clock starts: the cut, the visibility event, the end of refusals.
+  origin: number | null;
+  back: boolean;
+}
+
+interface _Sent {
+  seat: Seat;
+  socket: GameSocket;
+  from: number;
+}
+
+type _Doubtful = Exclude<Move, { type: 'choose_next_turn' }>;
+
 const _POLL_MS = 20;
 
 export async function playGame(opts: {
@@ -59,13 +86,14 @@ export async function playGame(opts: {
   size: Size;
   plan?: Kill[];
   outDir: string;
+  _afterKillStart?: (seat: Seat) => void;
 }): Promise<GameResult> {
   const plan = opts.plan ?? buildPlan(opts.seed, opts.size);
   const run = openRun(opts.outDir, opts.seed, plan);
   let table: Table | null = null;
   try {
     table = await openTable(opts.browser, opts.stack);
-    const result = await new _Game(table, opts.stack, opts.seed, opts.size, plan, run).play();
+    const result = await new _Game(table, opts.stack, opts.seed, opts.size, plan, run, opts._afterKillStart).play();
     run.model(table.model);
     run.close(result);
     return result;
@@ -89,6 +117,12 @@ class _Game {
   private readonly marks = new Map<GameSocket, number>();
   private readonly kills: KillRecord[] = [];
   private readonly lostMoves: number[] = [];
+  private readonly down: _Down[] = [];
+  private readonly dueAt = new Map<number, number>();
+  private readonly waitingFor = new Map<number, string>();
+  private readonly timers: NodeJS.Timeout[] = [];
+  // A failure a kill's own timer found; every wait ends on it.
+  private broken: Error | null = null;
   private moves = 0;
   private missesLeft = MISS_BUDGET;
   private choice: _Choice | null = null;
@@ -101,26 +135,34 @@ class _Game {
     size: Size,
     private readonly plan: Kill[],
     private readonly run: Run,
+    private readonly afterKillStart?: (seat: Seat) => void,
   ) {
     this.rng = createRng(seed);
     this.capMs = GAME_CAP_MS[size];
   }
 
   async play(): Promise<GameResult> {
-    while (!this.over) {
-      this._checkCap();
-      // One limit for every wait in the step, so chained waits cannot add up past it.
-      const deadline = Date.now() + STEP_WAIT_MS;
-      const mover = await this._waitForHolder(deadline);
-      const move = pickMove(this.table.model, mover.playerId, {
-        openChoice: this.choice?.eligible ?? null,
-        missesLeft: this.missesLeft,
-        rng: this.rng,
-      });
-      const final = isFinalDeclaration(this.table.model, move);
-      if (final) await this._readyForFinal(deadline);
-      await this._play(mover, move, final, deadline);
-      if (!this.over) await sleep(this.rng.int(...PACE_MS));
+    try {
+      while (!this.over) {
+        this._checkCap();
+        // One limit for every wait in the step, so chained waits cannot add up past it.
+        const deadline = Date.now() + STEP_WAIT_MS;
+        await this._recovered();
+        await this._startKills();
+        await this._waitForSeats(deadline);
+        const mover = await this._waitForHolder(deadline);
+        const move = pickMove(this.table.model, mover.playerId, {
+          openChoice: this.choice?.eligible ?? null,
+          missesLeft: this.missesLeft,
+          rng: this.rng,
+        });
+        const final = isFinalDeclaration(this.table.model, move);
+        if (final) await this._readyForFinal(deadline);
+        await this._play(mover, move, final, deadline);
+        if (!this.over) await this._pause(this.rng.int(...PACE_MS));
+      }
+    } finally {
+      for (const timer of this.timers) clearTimeout(timer);
     }
     const result = this._result();
     await atEnd(this.table, this.stack, result, this.plan);
@@ -133,24 +175,257 @@ class _Game {
     return seat;
   }
 
+  // Every seat gets game_over on a live socket only if every kill ran first and all six are up.
   private async _readyForFinal(deadline: number): Promise<void> {
-    const waiting = this.plan.filter((kill) => !this.kills.some((record) => record.kill.id === kill.id));
-    if (waiting.length > 0) {
-      const names = waiting.map((kill) => `${kill.kind} #${kill.id}`).join(', ');
-      throw failure(`the game ended before the plan (seed ${this.seed}): ${names} had not run`, { move: this.moves + 1 });
+    for (;;) {
+      const kill = this._waiting()[0];
+      if (kill && !this.dueAt.has(kill.id)) this.dueAt.set(kill.id, Date.now());
+      if (kill) this._finalGate(kill);
+      if (!this.table.seats.every(isUp)) {
+        if (!this._mayWait()) throw this._endedEarly(`the last declaration cannot wait for ${this._downNames()}: the turn could time out first`);
+        await this._until('all six seats up for the last declaration', () => (this.table.seats.every(isUp) ? true : undefined), deadline);
+      }
+      await this._recovered();
+      if (!kill) return;
+      const seat = this._target(kill)!;
+      // With all six up, only a stale last frame can still hold a kill back, and a tick comes every second.
+      await this._until(`${kill.kind} #${kill.id} to start before the last declaration`, () => {
+        this._finalGate(kill);
+        return this._blocker(kill, seat) === null ? true : undefined;
+      }, deadline);
+      await this._startKill(kill, seat);
     }
-    await this._until('all six seats up for the last declaration', () => (this.table.seats.every(isUp) ? true : undefined), deadline);
+  }
+
+  // A kill the last declaration could never see through: the deal ran out of moves before the plan did.
+  private _finalGate(kill: Kill): void {
+    const seat = this._target(kill);
+    let why: string | null = null;
+    if (kill.timing === 'midMove') why = 'the last declaration never carries a mid-move kill';
+    else if (!seat) why = 'no seat';
+    else if ((kill.kind === 'freeze' || kill.kind === 'refuse') && seat.playerId !== this.table.model.turn) {
+      why = `no move is left to make while ${seat.name} is down`;
+    } else if (!mayTakeHolderDown(kill, this._deadlineAt(), Date.now())) why = 'it could outlast the turn timer';
+    if (why) {
+      const names = this._waiting().map((k) => `${k.kind} #${k.id}`).join(', ');
+      throw this._endedEarly(`${names} had not run (${kill.kind} #${kill.id}: ${why})`);
+    }
+  }
+
+  private _endedEarly(detail: string): Error {
+    return failure(`the game ended before the plan (seed ${this.seed}): ${detail}`, { move: this.moves + 1 });
+  }
+
+  // In plan order: a kill that may not start yet holds back the ones after it, so a replay runs them in the same order.
+  private async _startKills(): Promise<void> {
+    for (const kill of this._waiting()) {
+      const seat = this._target(kill);
+      if (!seat || kill.timing === 'midMove' || !this.dueAt.has(kill.id)) return;
+      const why = this._blocker(kill, seat);
+      if (why) {
+        this._noteWait(kill, why);
+        return;
+      }
+      await this._startKill(kill, seat);
+    }
+  }
+
+  // Step 3: a seat whose moves-while-down are used up is waited for, unless the holder's clock could run out first.
+  private async _waitForSeats(deadline: number): Promise<void> {
+    const used = this.down.filter((d) => !d.back && d.record.movesMadeWhileDown >= d.record.kill.movesWhileDown);
+    if (used.length === 0 || !this._mayWait()) return;
+    const names = used.map((d) => d.seat.name).join(' and ');
+    await this._until(`${names} to come back`, () => (used.every((d) => d.back) ? true : undefined), deadline);
+  }
+
+  private _mayWait(): boolean {
+    const inProgress = this.down.filter((d) => !d.back).map(({ record }) => ({ kill: record.kill, startedAt: record.startedAt }));
+    return mayWaitForSeats(inProgress, this._deadlineAt(), this.choice !== null, Date.now());
+  }
+
+  private _blocker(kill: Kill, seat: Seat): string | null {
+    const socket = liveSocket(seat);
+    if (!socket || this.down.some((d) => d.seat === seat)) return `${seat.name} is down`;
+    const downNow = this.table.seats.filter((s) => !isUp(s)).length;
+    if (downNow >= MAX_SEATS_DOWN) return `${downNow} seats are down`;
+    if (this.choice && (kill.kind === 'freeze' || kill.kind === 'refuse')) return 'a choice is open, and a freeze or a refuse outlasts it';
+    if (this.table.model.turn === seat.playerId && !mayTakeHolderDown(kill, this._deadlineAt(), Date.now())) {
+      return `${seat.name} holds the turn and its clock is too short`;
+    }
+    if (kill.kind === 'freeze') {
+      if (!findFrame(socket, 'heartbeat')) return 'no heartbeat yet';
+      // The page's clocks count from its last frame, so a stale one would end the freeze early.
+      const age = Date.now() - socket.frames[socket.frames.length - 1].at;
+      if (age >= FREEZE_FRESH_MS) return `the last frame is ${age} ms old`;
+    }
+    return null;
+  }
+
+  private async _startKill(kill: Kill, seat: Seat): Promise<void> {
+    const socket = liveSocket(seat)!;
+    const startedAt = Date.now();
+    const record: KillRecord = {
+      kill,
+      dueAt: this.dueAt.get(kill.id) ?? startedAt,
+      startedAt,
+      backAt: 0,
+      ranAtMove: this.moves + 1,
+      backMs: 0,
+      movesMadeWhileDown: 0,
+      heldTurnThroughout: this.table.model.turn === seat.playerId,
+    };
+    const down: _Down = { record, seat, socket, origin: null, back: false };
+    this.kills.push(record);
+    this.down.push(down);
+    if (kill.kind === 'freeze') {
+      await cut(socket, 'server');
+      // Nothing reaches a cut socket, so its last recorded frame is the last the page received.
+      const lastAt = socket.frames[socket.frames.length - 1].at;
+      this._later(lastAt + kill.downMs - Date.now(), () => this._wake(down));
+    } else {
+      await cut(socket, 'both');
+      if (kill.kind === 'refuse') {
+        seat.wire.refusing = true;
+        this._later(kill.downMs, () => {
+          seat.wire.refusing = false;
+          down.origin = Date.now();
+          this.run.log(`${kill.kind} #${kill.id}: refusals stopped`);
+        });
+      } else {
+        down.origin = startedAt;
+      }
+    }
+    const waited = _seconds(startedAt - record.dueAt);
+    this.run.log(`${kill.kind} #${kill.id}: ${seat.name} down ${kill.timing === 'midMove' ? 'during' : 'before'} move ${record.ranAtMove}, ${waited} s after it came due`);
+    this.afterKillStart?.(seat);
+  }
+
+  // The freeze ends the way a phone wakes: the page sees its document become visible with a stale socket.
+  private async _wake(down: _Down): Promise<void> {
+    const { seat, record } = down;
+    const where = { seat, kill: record.kill, move: this.moves + 1 };
+    try {
+      if (seat.wire.sockets.at(-1) !== down.socket) throw failure('the page opened a new socket before the visibility event', where);
+      const lastAt = down.socket.frames[down.socket.frames.length - 1].at;
+      // Set before the event, so a socket the event opens is never taken for one opened before it.
+      down.origin = Date.now();
+      const state = await seat.page.evaluate(() => {
+        const visibility = document.visibilityState;
+        if (visibility === 'visible') document.dispatchEvent(new Event('visibilitychange'));
+        return visibility;
+      });
+      if (state !== 'visible') throw failure(`the page was ${state} at the visibility event, so it would ignore it`, where);
+      this.run.log(`${record.kill.kind} #${record.kill.id}: visibility event at ${_seconds(down.origin - lastAt)} s since the last frame`);
+    } catch (err) {
+      this.broken ??= err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  // Runs on every poll of every wait, so a seat that is not back fails when its limit passes, whatever the driver waits for.
+  private _watch(): void {
+    if (this.broken) throw this.broken;
+    for (const down of this.down) {
+      if (down.back) continue;
+      const { seat, record } = down;
+      const where = { seat, kill: record.kill, move: this.moves + 1 };
+      if (down.origin === null) {
+        if (record.kill.kind === 'freeze' && seat.wire.sockets.at(-1) !== down.socket) {
+          throw failure('the page opened a new socket before the visibility event', where);
+        }
+        continue;
+      }
+      const limit = BACK_WITHIN_MS[record.kill.kind];
+      const live = liveSocket(seat);
+      if (live) {
+        const backAt = findFrame(live, 'game_init')!.at;
+        const took = backAt - down.origin;
+        if (took > limit) throw failure(`not back ${limit / 1000} s (took ${_seconds(took)} s)`, where);
+        down.back = true;
+        record.backAt = Math.max(record.backAt, backAt);
+        record.backMs = Math.max(record.backMs, took);
+        this.run.log(`${seat.name} back ${took} ms after ${record.kill.kind} #${record.kill.id}, ${record.movesMadeWhileDown} move(s) made while down`);
+      } else if (Date.now() - down.origin > limit) {
+        throw failure(`not back ${limit / 1000} s (took ${_seconds(Date.now() - down.origin)} s so far)`, where);
+      }
+    }
+  }
+
+  // The page checks need a settled table, so a seat that came back is checked between moves.
+  private async _recovered(): Promise<void> {
+    for (const down of this.down.filter((d) => d.back)) {
+      await afterRecovery(this.table, down.seat, down.record, this.moves + 1);
+      this.down.splice(this.down.indexOf(down), 1);
+    }
+  }
+
+  // The holder's open clock: the choice's while one is open, whatever turn_timer a reconnect sends meanwhile.
+  private _deadlineAt(): number | null {
+    if (this.choice) return this.choice.expiresAt;
+    const holder = this.table.model.turn;
+    let newest: Frame | undefined;
+    for (const seat of this.table.seats) {
+      for (const socket of seat.wire.sockets) {
+        const frame = socket.frames.findLast(({ msg }) => msg.type === 'turn_timer' && msg.playerId === holder);
+        if (frame && (!newest || frame.at > newest.at)) newest = frame;
+      }
+    }
+    return newest ? newest.msg.expiresAt : null;
+  }
+
+  private _waiting(): Kill[] {
+    return this.plan.filter((kill) => !this.kills.some((record) => record.kill.id === kill.id));
+  }
+
+  private _target(kill: Kill): Seat | undefined {
+    return typeof kill.seat === 'number' ? this.table.seats[kill.seat] : undefined;
+  }
+
+  // Kills come due once the first move has settled, never before.
+  private _markDue(): void {
+    for (const kill of this.plan) {
+      if (!this.dueAt.has(kill.id) && this.moves >= Math.max(1, kill.dueBeforeMove - 1)) this.dueAt.set(kill.id, Date.now());
+    }
+  }
+
+  private _noteWait(kill: Kill, why: string): void {
+    if (this.waitingFor.get(kill.id) === why) return;
+    this.waitingFor.set(kill.id, why);
+    this.run.log(`${kill.kind} #${kill.id} waits before move ${this.moves + 1}: ${why}`);
+  }
+
+  private _downNames(): string {
+    return this.table.seats.filter((seat) => !isUp(seat)).map((seat) => seat.name).join(', ');
+  }
+
+  private _later(ms: number, run: () => void): void {
+    this.timers.push(setTimeout(run, Math.max(0, ms)));
+  }
+
+  // Through _until, so a recovery limit still fails on time during the pause.
+  private async _pause(ms: number): Promise<void> {
+    const end = Date.now() + ms;
+    await this._until('the pause between moves', () => (Date.now() >= end ? true : undefined), end + STEP_WAIT_MS);
   }
 
   private async _play(mover: Seat, move: Move, final: boolean, deadline: number): Promise<void> {
     const { model } = this.table;
     const number = this.moves + 1;
     const socket = liveSocket(mover)!;
-    const from = socket.frames.length;
-    const sentAt = Date.now();
+    const inDoubt = move.type === 'choose_next_turn' || final ? undefined : this._midMoveKill(mover);
+    const sent: _Sent[] = this.table.seats.flatMap((seat) => {
+      const live = liveSocket(seat);
+      return live ? [{ seat, socket: live, from: live.frames.length }] : [];
+    });
+    let sentAt = Date.now();
     socket.server!.send(JSON.stringify(toWire(move)));
 
-    const settled = await this._settle(mover, move, socket, from, final, deadline);
+    let settled: _Settled;
+    if (inDoubt) {
+      await this._startKill(inDoubt, mover);
+      ({ settled, sentAt } = await this._settleInDoubt(mover, move as _Doubtful, sent, sentAt, deadline));
+    } else {
+      settled = await this._settle(mover, move, socket, sent.find((s) => s.socket === socket)!.from, final, deadline);
+    }
     if (move.type === 'ask_card') {
       model.applyAsk(mover.playerId, move.targetPlayerId, move.cardId, settled.result!.msg.success);
       if (!move.hit) this.missesLeft -= 1;
@@ -160,11 +435,84 @@ class _Game {
     model.settle(settled.kind, settled.turns);
     this.choice = settled.choice;
     this.run.log(`move ${number}: ${this._describe(mover.playerId, move)}; turn ${this._name(model.turn)}`);
+    for (const down of this.down) {
+      if (down.back) continue;
+      down.record.movesMadeWhileDown += 1;
+      down.record.heldTurnThroughout = false;
+    }
 
     await this._checkResultCopies(settled.result, sentAt, deadline);
     if (!final) await afterMove(this.table, number);
     this.moves = number;
     this.over = final;
+    this._markDue();
+  }
+
+  // A handoff's result is only a state frame, so a mid-move kill rides an ask or a declaration, never the last one.
+  private _midMoveKill(mover: Seat): Kill | undefined {
+    const kill = this._waiting()[0];
+    if (!kill || kill.timing !== 'midMove' || !this.dueAt.has(kill.id)) return undefined;
+    const why = this._blocker(kill, mover);
+    if (why) this._noteWait(kill, why);
+    return why ? undefined : kill;
+  }
+
+  // Spec section 4, a move in doubt: the mover's next game_init says whether the server kept the move.
+  private async _settleInDoubt(
+    mover: Seat,
+    move: _Doubtful,
+    sent: _Sent[],
+    sentAt: number,
+    deadline: number,
+  ): Promise<{ settled: _Settled; sentAt: number }> {
+    const number = this.moves + 1;
+    const where = { seat: mover, move: number };
+    const what = this._describe(mover.playerId, move);
+    const init = await this._until(`${mover.name}'s game_init after the mid-move cut`, () => {
+      const live = liveSocket(mover);
+      return live && findFrame(live, 'game_init')!.msg;
+    }, deadline);
+
+    const others = sent.filter(({ seat, socket }) => seat !== mover && liveSocket(seat) === socket);
+    const heard = others.filter(({ socket, from }) => _find(socket, from, (m) => _isResultOf(m, mover.playerId, move)));
+    if (this._kept(init, mover, move)) {
+      // The server broadcast the result before it saw the cut, so every other seat up at the send has it by now.
+      const deaf = others.filter((other) => !heard.includes(other));
+      if (deaf.length > 0) throw failure(`the server kept ${what}, but ${deaf.map(({ seat }) => seat.name).join(', ')} never got its result`, where);
+      if (others.length === 0) throw failure(`no other seat is up to settle ${what}`, where);
+      this.run.log(`move ${number} in doubt: the server kept ${what}`);
+      // Another seat's socket carries the result and the clock.
+      return { settled: await this._settle(mover, move, others[0].socket, others[0].from, false, deadline), sentAt };
+    }
+
+    if (heard.length > 0) {
+      throw failure(`the server dropped ${what}, but ${heard.map(({ seat }) => seat.name).join(', ')} got its result`, where);
+    }
+    this.run.log(`move ${number} in doubt: the server dropped ${what}; sending it again`);
+    const socket = liveSocket(mover)!;
+    const from = socket.frames.length;
+    const resentAt = Date.now();
+    socket.server!.send(JSON.stringify(toWire(move)));
+    return { settled: await this._settle(mover, move, socket, from, false, deadline), sentAt: resentAt };
+  }
+
+  private _kept(init: Msg, mover: Seat, move: _Doubtful): boolean {
+    const { model } = this.table;
+    const asks: Msg[] = init.askHistory;
+    const declared: Msg[] = init.gameState.declaredSuits;
+    if (move.type === 'ask_card') {
+      if (asks.length === model.asks) return false;
+      const last = asks[asks.length - 1];
+      if (asks.length === model.asks + 1 && _isResultOf({ ...last, type: 'ask_result' }, mover.playerId, move)) return true;
+    } else {
+      if (declared.length === model.declarations) return false;
+      if (declared.length === model.declarations + 1 && declared.some((d) => d.halfSuitId === move.halfSuitId)) return true;
+    }
+    throw failure(
+      `after the mid-move cut, game_init shows ${asks.length} asks and ${declared.length} declarations; ` +
+        `the model had ${model.asks} and ${model.declarations} before ${this._describe(mover.playerId, move)}`,
+      { seat: mover, move: this.moves + 1 },
+    );
   }
 
   // The next holder comes from the clock after the result: a declaration can still park the turn after its first state.
@@ -301,6 +649,7 @@ class _Game {
   private async _until<T>(what: string, probe: () => T | undefined, deadline: number): Promise<T> {
     for (;;) {
       scanFrames(this.table, { move: this.moves + 1 });
+      this._watch();
       const found = probe();
       if (found !== undefined) return found;
       this._checkCap();
@@ -351,6 +700,17 @@ function _find(socket: GameSocket, from: number, match: (msg: Msg) => boolean): 
     if (match(socket.frames[index].msg)) return { index, msg: socket.frames[index].msg };
   }
   return undefined;
+}
+
+function _isResultOf(msg: Msg, moverId: string, move: _Doubtful): boolean {
+  if (move.type === 'ask_card') {
+    return msg.type === 'ask_result' && msg.askerId === moverId && msg.targetId === move.targetPlayerId && msg.cardId === move.cardId;
+  }
+  return msg.type === 'declaration_result' && msg.declarerId === moverId && msg.halfSuitId === move.halfSuitId;
+}
+
+function _seconds(ms: number): string {
+  return (ms / 1000).toFixed(1);
 }
 
 function _sameResult(a: Msg, b: Msg): boolean {

@@ -1,11 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Browser, type Page, type Route } from '@playwright/test';
 import { pageProblems } from './lib/checks';
-import { playGame } from './lib/driver';
+import { playGame, type GameResult, type KillRecord } from './lib/driver';
 import { SoakFailure } from './lib/fail';
 import { BACKEND_URL, FRONTEND_URL, TIMER_CHAIN_MAX_MS } from './lib/limits';
-import { closeTable, isUp, openTable } from './lib/seats';
+import type { Kill } from './lib/plan';
+import { closeTable, isUp, openTable, type Seat } from './lib/seats';
 import { startStack, type Stack } from './lib/stack';
 
 let stack: Stack;
@@ -24,6 +25,29 @@ async function _pageClock(page: Page) {
     for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 100));
     return { visibility: document.visibilityState, chainMs: Math.round(performance.now() - started) };
   });
+}
+
+function _kill(id: number, dueBeforeMove: number, kind: Kill['kind'], seat: Kill['seat'], extra: Partial<Kill> = {}): Kill {
+  return { id, dueBeforeMove, kind, seat, timing: 'between', downMs: 0, movesWhileDown: 2, ...extra };
+}
+
+async function _killGame(browser: Browser, seed: number, plan: Kill[], extra: { _afterKillStart?: (seat: Seat) => void } = {}) {
+  const outDir = test.info().outputDir;
+  const started = Date.now();
+  const result = await playGame({ browser, stack, seed, size: 'short', plan, outDir, ...extra });
+  console.log(`${result.moves} moves in ${((Date.now() - started) / 1000).toFixed(1)} s; ${result.kills.map(_recordLine).join('; ')}`);
+  expect(result.scores.team1 + result.scores.team2).toBe(8);
+  expect(result.kills.map((record) => record.kill.id).sort()).toEqual(plan.map((kill) => kill.id).sort());
+  return result;
+}
+
+function _record(result: GameResult, id: number): KillRecord {
+  return result.kills.find((record) => record.kill.id === id)!;
+}
+
+function _recordLine(record: KillRecord): string {
+  const waited = ((record.startedAt - record.dueAt) / 1000).toFixed(1);
+  return `${record.kill.kind} #${record.kill.id} back in ${record.backMs} ms, waited ${waited} s to start, ${record.movesMadeWhileDown} move(s) while down`;
 }
 
 async function _refuseRoom(route: Route) {
@@ -101,4 +125,79 @@ test('a game with no kills finishes', async ({ browser }) => {
     expect(text, file).not.toContain('guestRecoveryKey');
   }
   expect(await stack.standinReport()).toEqual({ unknown: [], refused: [] });
+});
+
+test('cut between moves and mid-move', async ({ browser }) => {
+  const result = await _killGame(browser, 2, [
+    _kill(1, 3, 'cut', 2),
+    _kill(2, 6, 'cut', 'mover', { timing: 'midMove', movesWhileDown: 0 }),
+  ]);
+  for (const record of result.kills) expect(record.backMs).toBeLessThanOrEqual(5_000);
+});
+
+test('freeze', async ({ browser }) => {
+  const result = await _killGame(browser, 3, [_kill(1, 3, 'freeze', 4, { downMs: 22_000 })]);
+  const freeze = _record(result, 1);
+  expect(freeze.backMs).toBeLessThanOrEqual(3_000);
+  expect(freeze.movesMadeWhileDown >= 1 || freeze.heldTurnThroughout).toBe(true);
+  const eventAt = freeze.backAt - freeze.backMs;
+  const opened = readFileSync(path.join(test.info().outputDir, 'frames-seat4.jsonl'), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((line) => line.opened && line.at > freeze.startedAt && line.at < eventAt);
+  expect(opened, 'sockets the page opened between the freeze and the event').toEqual([]);
+});
+
+test('refuse', async ({ browser }) => {
+  const result = await _killGame(browser, 4, [_kill(1, 3, 'refuse', 1, { downMs: 6_000 })]);
+  const refuse = _record(result, 1);
+  expect(refuse.backMs).toBeLessThanOrEqual(12_000);
+  expect(refuse.movesMadeWhileDown >= 1 || refuse.heldTurnThroughout).toBe(true);
+});
+
+// Both due before move 3: if the refused seat held the turn, a kill due one move later could not come due until it was back.
+test('two seats down together', async ({ browser }) => {
+  const result = await _killGame(browser, 5, [
+    _kill(1, 3, 'refuse', 1, { downMs: 15_000 }),
+    _kill(2, 3, 'freeze', 5, { downMs: 22_000 }),
+  ]);
+  const [a, b] = [_record(result, 1), _record(result, 2)];
+  expect(b.startedAt < a.backAt && a.startedAt < b.backAt, 'the two down intervals overlap').toBe(true);
+});
+
+test('a kill waits for its seat', async ({ browser }) => {
+  const result = await _killGame(browser, 6, [
+    _kill(1, 3, 'refuse', 3, { downMs: 10_000, movesWhileDown: 4 }),
+    _kill(2, 3, 'cut', 3),
+  ]);
+  const [first, second] = [_record(result, 1), _record(result, 2)];
+  expect(second.dueAt).toBeLessThan(first.backAt);
+  expect(second.startedAt).toBeGreaterThanOrEqual(first.backAt);
+});
+
+test('a seat that never returns fails by name', async ({ browser }) => {
+  let cutAt = 0;
+  const outDir = test.info().outputDir;
+  const outcome = await playGame({
+    browser,
+    stack,
+    seed: 7,
+    size: 'short',
+    plan: [_kill(1, 3, 'cut', 2)],
+    outDir,
+    _afterKillStart: (seat) => {
+      seat.wire.refusing = true;
+      cutAt = Date.now();
+    },
+  }).then(
+    () => null,
+    (err: unknown) => err,
+  );
+  const failedAt = Date.now();
+  expect(outcome).toBeInstanceOf(SoakFailure);
+  console.log(`failed ${((failedAt - cutAt) / 1000).toFixed(1)} s after the cut: ${(outcome as Error).message}`);
+  expect((outcome as Error).message).toMatch(/^seat 2 \(Soak 3\) not back 5 s \(took .* s so far\) after cut #1/);
+  expect(cutAt).toBeGreaterThan(0);
+  expect(failedAt - cutAt).toBeLessThan(15_000);
 });

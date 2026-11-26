@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Page } from '@playwright/test';
-import type { GameSocket, Msg } from '../../tests/helpers/gameWire';
-import type { GameResult } from './driver';
+import { findFrame, type Frame, type GameSocket, type Msg } from '../../tests/helpers/gameWire';
+import type { GameResult, KillRecord } from './driver';
 import { failure } from './fail';
 import { AFTER_MOVE_POLL_MS, BACKEND_URL, FINAL_SAVE_MS } from './limits';
 import type { Team } from './model';
@@ -35,6 +35,13 @@ interface _PageRead {
   books: { team1: string[]; team2: string[] };
   activeTurn: string[];
   gameOver: { team1: string; team2: string } | null;
+  reconnecting: boolean;
+}
+
+interface _Where {
+  seat: Seat;
+  kill?: Kill;
+  move?: number;
 }
 
 // Each means a bot or a server clock acted for a human, which a six-human game with no lost clock never needs.
@@ -101,8 +108,22 @@ export function scanFrames(table: { seats: _ScanSeat[] }, where: { move?: number
 
 export async function afterMove(table: Table, move?: number): Promise<void> {
   await Promise.all(
-    table.seats.filter((seat) => liveSocket(seat)).map((seat) => _poll(seat, move, () => _afterMoveProblems(table, seat))),
+    table.seats.filter((seat) => liveSocket(seat)).map((seat) => _poll({ seat, move }, () => _afterMoveProblems(table, seat))),
   );
+}
+
+export async function afterRecovery(table: Table, seat: Seat, record: KillRecord, move?: number): Promise<void> {
+  const where = { seat, kill: record.kill, move };
+  const socket = liveSocket(seat);
+  if (!socket) throw failure('went down again before its recovery check', where);
+  const init = findFrame(socket, 'game_init')!;
+  const me = init.msg.players.find((p: Msg) => p.playerId === init.msg.myPlayerId);
+  if (init.msg.myPlayerId !== seat.playerId || me?.seatIndex !== seat.seatIndex) {
+    throw failure(`came back as ${init.msg.myPlayerId} in seat ${me?.seatIndex}, expected ${seat.playerId} in seat ${seat.seatIndex}`, where);
+  }
+  const problem = _initProblem(table, seat, socket, init);
+  if (problem) throw failure(problem, where);
+  await _poll(where, () => _afterMoveProblems(table, seat, true));
 }
 
 export async function atEnd(table: Table, stack: Stack, result: GameResult, plan: Kill[]): Promise<void> {
@@ -116,7 +137,7 @@ export async function atEnd(table: Table, stack: Stack, result: GameResult, plan
   if (team1 + team2 !== _HALF_SUITS || team1 !== model.scores.team1 || team2 !== model.scores.team2) {
     throw failure(`end: result scores ${team1}-${team2}, model ${_score(model.scores)}`, where);
   }
-  await Promise.all(table.seats.map((seat) => _poll(seat, result.moves, () => _endProblems(table, seat))));
+  await Promise.all(table.seats.map((seat) => _poll({ seat, move: result.moves }, () => _endProblems(table, seat))));
   await _savedSummary(table, where);
 
   const ran = new Set(result.kills.map((record) => record.kill.id));
@@ -153,17 +174,17 @@ function _isStopCode(code: number): boolean {
   return code >= 4000 && code <= 4999 && code !== _SERVER_ERROR_CODE;
 }
 
-async function _poll(seat: Seat, move: number | undefined, read: () => Promise<string[]>): Promise<void> {
+async function _poll(where: _Where, read: () => Promise<string[]>): Promise<void> {
   const deadline = Date.now() + AFTER_MOVE_POLL_MS;
   for (;;) {
     const problems = await read();
     if (problems.length === 0) return;
-    if (Date.now() >= deadline) throw failure(`${problems.join('; ')} (still after ${AFTER_MOVE_POLL_MS / 1000} s)`, { seat, move });
+    if (Date.now() >= deadline) throw failure(`${problems.join('; ')} (still after ${AFTER_MOVE_POLL_MS / 1000} s)`, where);
     await sleep(_POLL_MS);
   }
 }
 
-async function _afterMoveProblems(table: Table, seat: Seat): Promise<string[]> {
+async function _afterMoveProblems(table: Table, seat: Seat, recovering = false): Promise<string[]> {
   const { model } = table;
   const socket = liveSocket(seat);
   if (!socket) return ['its socket went down'];
@@ -194,7 +215,27 @@ async function _afterMoveProblems(table: Table, seat: Seat): Promise<string[]> {
   if (!_same(seen.activeTurn, [model.turn])) {
     problems.push(`page marks the turn on [${seen.activeTurn.map(name).join(', ')}], model ${name(model.turn)}`);
   }
+  if (recovering && seen.reconnecting) problems.push('the page still shows ws-reconnecting-banner');
   return problems;
+}
+
+// A game_init sent while a move was in flight shows the table before it; that move's result then follows on the same socket.
+function _initProblem(table: Table, seat: Seat, socket: GameSocket, init: Frame): string | null {
+  const { history } = table.model;
+  const tip = history[history.length - 1];
+  const asks: number = init.msg.askHistory.length;
+  const declarations: number = init.msg.gameState.declaredSuits.length;
+  const behind = tip.asks + tip.declarations - asks - declarations;
+  const resultAfter = socket.frames
+    .slice(socket.frames.indexOf(init) + 1)
+    .some(({ msg }) => msg.type === 'ask_result' || msg.type === 'declaration_result');
+  const checkpoint = history.findLast((cp) => cp.asks === asks && cp.declarations === declarations);
+  if (!checkpoint || !(behind === 0 || (behind === 1 && resultAfter))) {
+    return `game_init shows ${asks} asks and ${declarations} declarations, the model ${tip.asks} and ${tip.declarations}`;
+  }
+  const hand = [...init.msg.myHand].sort();
+  const want = checkpoint.hands[seat.playerId] ?? [];
+  return _same(hand, want) ? null : `game_init hand ${_list(hand)}, model ${_list(want)}`;
 }
 
 async function _endProblems(table: Table, seat: Seat): Promise<string[]> {
@@ -257,6 +298,7 @@ async function _readPage(page: Page): Promise<_PageRead | string> {
           (el) => el.getAttribute('data-player-id') ?? '',
         ).sort(),
         gameOver: over ? { team1: score(1), team2: score(2) } : null,
+        reconnecting: byId('ws-reconnecting-banner') !== null,
       };
     });
   } catch (err) {
