@@ -64,10 +64,10 @@ const url = require('url');
 const { getGuestSession, updateGuestAvatar, VALID_AVATAR_IDS } = require('../sessions/guestSessionStore');
 const rateLimiter = require('./rateLimiter');
 const { closeWithNotice } = require('./closeWs');
-const { buildGameSeats } = require('../game/gameInitService');
+const { buildGameSeats, toPublicSeat } = require('../game/gameInitService');
 const { persistGameState } = require('../game/gameState');
 const { getSupabaseClient } = require('../db/supabase');
-const { guestHostMap } = require('../routes/rooms');
+const { isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
@@ -186,15 +186,12 @@ const matchmakingTimers = new Map();
 const MATCHMAKING_LOBBY_TIMEOUT_MS = 30 * 1000;
 
 /**
- * Map<roomCode, { previousHostId: string }>
- * Tracks pending host-disconnect reconnect windows. An entry is created when
- * the current room host disconnects from the lobby; it is removed if the same
- * host reconnects before the 60-second window elapses (or when the timer fires
- * and host authority is transferred to the next player).
+ * Map<roomCode, { previousHostId: string|null }>
+ * Tracks pending host-transfer windows in private rooms. An entry exists while
+ * no connected player is flagged host; it is removed when a flagged host joins
+ * (or when the timer fires and host authority is transferred to the next player).
  *
  * NOTE: The actual timer/tick machinery is managed by hostDisconnectTimer.js.
- * This map only retains the previousHostId so that reconnects can be matched
- * to the correct original host.
  */
 const hostTransferTimers = new Map();
 
@@ -255,6 +252,13 @@ function getRoomSpectatorMap(roomCode) {
     roomSpectators.set(roomCode, new Map());
   }
   return roomSpectators.get(roomCode);
+}
+
+function _hasConnectedHost(clients) {
+  for (const entry of clients.values()) {
+    if (entry.isHost) return true;
+  }
+  return false;
 }
 
 /**
@@ -397,7 +401,7 @@ function _cancelHostTransferTimer(roomCode) {
  * 1. Select the first remaining player in Map insertion order as new host.
  * 2. Set `isHost = false` on every existing in-memory entry.
  * 3. Set `isHost = true` on the selected entry.
- * 4. Persist the new `host_user_id` to Supabase (best-effort).
+ * 4. Persist the new host to `host_user_id` or `host_guest_id` (best-effort).
  * 5. Broadcast `host_changed` to notify all clients of the new authority.
  * 6. Broadcast `room_players` so all isHost badges refresh.
  *
@@ -432,8 +436,9 @@ async function _executeHostTransfer(roomCode) {
     const supabase = getSupabase();
     const { error } = await supabase
       .from('rooms')
-      .update({ host_user_id: newHostId })
-      .eq('code', roomCode);
+      .update(hostColumns(newHostId, newHostEntry.isGuest))
+      .eq('code', roomCode)
+      .eq('status', 'waiting');
     if (error) {
       console.error(`[RoomWS] Supabase host-transfer update failed for room "${roomCode}":`, error.message);
     }
@@ -586,14 +591,14 @@ async function fetchRoomMetaWithToken(roomCode) {
 /**
  * Fetch minimal room metadata from Supabase (connection-time check).
  * @param {string} roomCode
- * @returns {Promise<{id: string, host_user_id: string, status: string, player_count: number, is_matchmaking: boolean}|null>}
+ * @returns {Promise<{id: string, host_user_id: string|null, host_guest_id: string|null, status: string, player_count: number, is_matchmaking: boolean}|null>}
  */
 async function fetchRoomMeta(roomCode) {
   try {
     const supabase = getSupabase();
     const { data: room, error } = await supabase
       .from('rooms')
-      .select('id, host_user_id, status, player_count, is_matchmaking')
+      .select('id, host_user_id, host_guest_id, status, player_count, is_matchmaking')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -1256,7 +1261,7 @@ async function handleStartGame(ctx) {
     broadcast(roomCode, {
       type:      'lobby-starting',
       roomCode,
-      seats:     allSeats,
+      seats:     allSeats.map(toPublicSeat),
       botsAdded: bots.map((b) => b.playerId),
     });
 
@@ -1384,7 +1389,7 @@ async function handleAutoStartMatchmaking(roomCode, clients, playerCount) {
   broadcast(roomCode, {
     type:          'lobby-starting',
     roomCode,
-    seats:         allSeats,
+    seats:         allSeats.map(toPublicSeat),
     botsAdded:     bots.map((b) => b.playerId),
     isMatchmaking: true,
   });
@@ -1649,7 +1654,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
     broadcast(code, {
       type:      'lobby-starting',
       roomCode:  code,
-      seats:     allSeats,
+      seats:     allSeats.map(toPublicSeat),
       botsAdded: botSeats.map((b) => b.playerId),
       isRematch: true,
     });
@@ -1872,22 +1877,27 @@ function attachRoomSocketServer(httpServer) {
     // PLAYER BRANCH (normal join)
     // ── ─────────────────────────────────────────────────────────────────────
 
-    // ── Determine host status ───────────────────────────────────────────────
-    // Matchmaking rooms have no designated host — all players are peers.
-    // For guests, host_user_id is null in DB; check the in-memory guestHostMap instead.
-    const isHost = isMatchmakingRoom
-      ? false
-      : (dbRoom.host_user_id === userId || guestHostMap.get(dbRoom.id) === userId);
-
-    // ── Auto-assign team ────────────────────────────────────────────────────
     const clients = getRoomClientMap(roomCode);
     const playerCount = meta ? meta.playerCount : 6;
+    const existingEntry = clients.get(userId);
 
+    // ── Determine host status ───────────────────────────────────────────────
+    // Matchmaking rooms have no designated host — all players are peers.
+    // A reconnecting player keeps the crown the lobby gave them, even after a transfer the row may not reflect yet.
+    let isHost;
+    if (isMatchmakingRoom) {
+      isHost = false;
+    } else if (existingEntry) {
+      isHost = existingEntry.isHost;
+    } else {
+      isHost = isRoomHost(dbRoom, userId) && !_hasConnectedHost(clients);
+    }
+
+    // ── Auto-assign team ────────────────────────────────────────────────────
     // Team assignment priority:
     // 1. Existing in-memory entry (reconnect / tab refresh) — preserves current teamId.
     // 2. Pending rematch entry — restores the player's team from the previous game.
     // 3. Auto-assign — for fresh joins with no prior context.
-    const existingEntry = clients.get(userId);
     let teamId;
     if (existingEntry) {
       teamId = existingEntry.teamId;
@@ -1913,20 +1923,9 @@ function attachRoomSocketServer(httpServer) {
     console.log(`[RoomWS] join room=${roomCode} user=${userId} players=${clients.size}`);
 
     // ── Cancel any pending host-transfer timer for this room ─────────────────
-    // If the ORIGINAL host reconnects before the grace window elapses, cancel
-    // the transfer timer. If a different (non-host) player joins while a timer
-    // is running, leave the timer intact — only the original host's reconnect
-    // should reset it.
-    if (!isMatchmakingRoom) {
-      const transferEntry = hostTransferTimers.get(roomCode);
-      if (transferEntry && transferEntry.previousHostId === userId) {
-        _cancelHostTransferTimer(roomCode);
-        console.log(
-          `[RoomWS] Original host "${userId}" reconnected — host-disconnect timer cancelled for room "${roomCode}".`,
-        );
-        // Notify all clients that the host is back.
-        broadcast(roomCode, { type: 'host_reconnected', roomCode });
-      }
+    if (!isMatchmakingRoom && hostTransferTimers.has(roomCode) && _hasConnectedHost(clients)) {
+      _cancelHostTransferTimer(roomCode);
+      broadcast(roomCode, { type: 'host_reconnected', roomCode });
     }
 
     // ── Confirm connection to the joining client ────────────────────────────
@@ -1938,6 +1937,11 @@ function attachRoomSocketServer(httpServer) {
       players:       getRoomPlayers(roomCode),
       isMatchmaking: isMatchmakingRoom,
     });
+
+    // A restart drops every socket without a close, so a lobby can come back with no host and no timer.
+    if (!isMatchmakingRoom && !_hasConnectedHost(clients)) {
+      _startHostTransferTimer(roomCode, storedHostId(dbRoom));
+    }
 
     // ── Notify rematch gathering countdown ─────────────────────
     // If a 30-second post-rematch gathering countdown is active for this room,

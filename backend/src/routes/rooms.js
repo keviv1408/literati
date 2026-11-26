@@ -34,21 +34,11 @@ const {
   getPlayerIdentifier,
 } = require('../rooms/roomBlocklist');
 const { getIO, getConnectedUsers } = require('../socket/server');
+const { toPublicSeat } = require('../game/gameInitService');
+const roomHost = require('../rooms/roomHost');
 
-// In-memory map: roomId → guest sessionId (for guest-hosted rooms).
-// Guest sessions are already ephemeral/in-memory, so this is consistent.
-const guestHostMap = new Map();
-
-/**
- * Check if the current user is the host of a room.
- * For registered users, compares against host_user_id in DB.
- * For guests, compares against the in-memory guestHostMap.
- */
 function isRoomHost(room, user) {
-  if (user.isGuest) {
-    return guestHostMap.get(room.id) === user.sessionId;
-  }
-  return room.host_user_id === user.id;
+  return roomHost.isRoomHost(room, user.isGuest ? user.sessionId : user.id);
 }
 
 /**
@@ -78,12 +68,6 @@ const ROOM_STATUS = {
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
 };
-
-const ACTIVE_ROOM_STATUSES = new Set([
-  ROOM_STATUS.WAITING,
-  ROOM_STATUS.STARTING,
-  ROOM_STATUS.IN_PROGRESS,
-]);
 
 /**
  * GET /api/rooms/spectate/:token
@@ -169,7 +153,7 @@ router.get('/spectate/:token', async (req, res) => {
  * {
  * room: {
  * id, code, invite_code, spectator_token,
- * host_user_id, player_count, card_removal_variant,
+ * host_user_id, host_guest_id, player_count, card_removal_variant,
  * status, created_at, updated_at
  * },
  * inviteLink: string — ready-made player join URL
@@ -188,8 +172,7 @@ router.get('/spectate/:token', async (req, res) => {
 router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
   const { playerCount, cardRemovalVariant } = req.body;
   const hostUserId = req.user.isGuest ? req.user.sessionId : req.user.id;
-  // For DB writes, guests don't exist in the users table so host_user_id must be null.
-  const hostUserIdForDb = req.user.isGuest ? null : req.user.id;
+  const hostIds = roomHost.hostColumns(hostUserId, req.user.isGuest);
 
   // ── Input validation ────────────────────────────────────────────────────────
 
@@ -223,75 +206,40 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
   // ── Enforce one active game per account ─────────────────────────────────────
   // A host may not create a new room while they have an existing room that is
   // waiting, starting, or in progress.
-  if (req.user.isGuest) {
-    // For guests, check the in-memory map (host_user_id is null in DB).
-    for (const [roomId, guestId] of guestHostMap.entries()) {
-      if (guestId !== hostUserId) continue;
+  try {
+    const hostColumn = Object.keys(hostIds).find((column) => hostIds[column] !== null);
+    // A list query, not maybeSingle: two active rows must still yield 409, not an error.
+    const { data: activeRooms, error: existingError } = await supabase
+      .from('rooms')
+      .select('id, code, status')
+      .eq(hostColumn, hostUserId)
+      .in('status', [
+        ROOM_STATUS.WAITING,
+        ROOM_STATUS.STARTING,
+        ROOM_STATUS.IN_PROGRESS,
+      ])
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-      let existingRoom = { id: roomId };
+    if (existingError) {
+      console.error('Error checking existing rooms:', existingError);
+      return res.status(500).json({ error: 'Failed to validate room eligibility' });
+    }
 
-      try {
-        const { data: roomRecord, error: roomLookupError } = await supabase
-          .from('rooms')
-          .select('id, code, status')
-          .eq('id', roomId)
-          .maybeSingle();
-
-        if (roomLookupError) {
-          console.error('Error looking up existing guest room:', roomLookupError);
-        } else if (!roomRecord || !ACTIVE_ROOM_STATUSES.has(roomRecord.status)) {
-          // Stale guest-host binding: the room was removed or has already
-          // reached a terminal state, so it should not block new room creation.
-          guestHostMap.delete(roomId);
-          continue;
-        } else {
-          existingRoom = {
-            id: roomRecord.id,
-            code: roomRecord.code,
-            status: roomRecord.status,
-          };
-        }
-      } catch (err) {
-        console.error('Unexpected error looking up existing guest room:', err);
-      }
-
+    const existingRoom = activeRooms && activeRooms[0];
+    if (existingRoom) {
       return res.status(409).json({
         error: 'You already have an active game room',
-        existingRoom,
+        existingRoom: {
+          id: existingRoom.id,
+          code: existingRoom.code,
+          status: existingRoom.status,
+        },
       });
     }
-  } else {
-    try {
-      const { data: existingRoom, error: existingError } = await supabase
-        .from('rooms')
-        .select('id, code, status')
-        .eq('host_user_id', hostUserIdForDb)
-        .in('status', [
-          ROOM_STATUS.WAITING,
-          ROOM_STATUS.STARTING,
-          ROOM_STATUS.IN_PROGRESS,
-        ])
-        .maybeSingle();
-
-      if (existingError) {
-        console.error('Error checking existing rooms:', existingError);
-        return res.status(500).json({ error: 'Failed to validate room eligibility' });
-      }
-
-      if (existingRoom) {
-        return res.status(409).json({
-          error: 'You already have an active game room',
-          existingRoom: {
-            id: existingRoom.id,
-            code: existingRoom.code,
-            status: existingRoom.status,
-          },
-        });
-      }
-    } catch (err) {
-      console.error('Unexpected error checking existing rooms:', err);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+  } catch (err) {
+    console.error('Unexpected error checking existing rooms:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 
   // ── Generate unique room code + secure tokens ────────────────────────────────
@@ -315,7 +263,7 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
         code: roomCode,
         invite_code: inviteCode,
         spectator_token: spectatorToken,
-        host_user_id: hostUserIdForDb,
+        ...hostIds,
         player_count: Number(playerCount),
         card_removal_variant: cardRemovalVariant,
         status: ROOM_STATUS.WAITING,
@@ -326,11 +274,6 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
     if (insertError) {
       console.error('Error inserting room:', insertError);
       return res.status(500).json({ error: 'Failed to create room' });
-    }
-
-    // Track guest host in memory so authorization checks work later.
-    if (req.user.isGuest) {
-      guestHostMap.set(room.id, hostUserId);
     }
 
     // ── Build convenience URLs for the host ────────────────────────────────────
@@ -462,7 +405,6 @@ router.get('/:code', async (req, res) => {
       return res.status(404).json({ error: 'Room not found' });
     }
 
-    // Lazy require: roomSocketServer imports this module (guestHostMap).
     const { getRoomPlayers } = require('../ws/roomSocketServer');
     return res.status(200).json({ room: { ...room, players: getRoomPlayers(room.code) } });
   } catch (err) {
@@ -595,7 +537,7 @@ router.post('/:code/kick', requireAuth, async (req, res) => {
   try {
     const { data: room, error } = await supabase
       .from('rooms')
-      .select('id, code, host_user_id, status')
+      .select('id, code, host_user_id, host_guest_id, status')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -663,7 +605,7 @@ router.get('/:code/blocklist', requireAuth, async (req, res) => {
   try {
     const { data: room, error } = await supabase
       .from('rooms')
-      .select('id, host_user_id')
+      .select('id, host_user_id, host_guest_id')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -740,7 +682,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('rooms')
-      .select('id, status, player_count, card_removal_variant, host_user_id')
+      .select('id, status, player_count, card_removal_variant, host_user_id, host_guest_id')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -776,7 +718,6 @@ router.post('/:code/start', requireAuth, async (req, res) => {
 
   // ── Read live player state from in-memory room socket store ───────────────
   // roomSocketServer.roomClients maps roomCode → Map<userId, ClientEntry>.
-  // Required lazily to avoid a load-time circular-require issue.
   const {
     roomClients,
     validateStartGame,
@@ -854,7 +795,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
   broadcastToRoomClients(roomCode, {
     type:      'game_starting',
     roomCode,
-    seats:     allSeats,
+    seats:     allSeats.map(toPublicSeat),
     botsAdded: bots.map((b) => b.playerId),
   });
 
@@ -878,7 +819,7 @@ router.post('/:code/start', requireAuth, async (req, res) => {
   return res.status(200).json({
     started:   true,
     roomCode,
-    seats:     allSeats,
+    seats:     allSeats.map(toPublicSeat),
     botsAdded: bots.map((b) => b.playerId),
   });
 });
@@ -887,4 +828,3 @@ module.exports = router;
 module.exports.VALID_PLAYER_COUNTS = VALID_PLAYER_COUNTS;
 module.exports.VALID_CARD_REMOVAL_VARIANTS = VALID_CARD_REMOVAL_VARIANTS;
 module.exports.ROOM_STATUS = ROOM_STATUS;
-module.exports.guestHostMap = guestHostMap;

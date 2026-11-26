@@ -126,6 +126,11 @@ app.use((_req, res) => {
 // ── Global error handler ──────────────────────────────────────────────────────
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
+  // The parse error carries the raw body, which can hold a guest's recovery key.
+  if (err.type === 'entity.parse.failed') {
+    console.error('Rejected request body:', err.type);
+    return res.status(400).json({ error: 'Invalid JSON' });
+  }
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });

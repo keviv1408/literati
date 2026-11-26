@@ -18,6 +18,8 @@
  * subject to team-balance validation (no team may exceed playerCount 2).
  */
 
+const { toPublicSeat } = require('../game/gameInitService');
+
 // ---------------------------------------------------------------------------
 // Type definitions (JSDoc)
 // ---------------------------------------------------------------------------
@@ -328,9 +330,11 @@ function _findSeatByPlayerId(room, playerId) {
   return null;
 }
 
-/** Convert the seats Map to a sorted array (ascending seatIndex). */
+/** Sorted seats for sending; stored seats keep their recovery keys. */
 function _seatsArray(room) {
-  return Array.from(room.seats.values()).sort((a, b) => a.seatIndex - b.seatIndex);
+  return Array.from(room.seats.values())
+    .sort((a, b) => a.seatIndex - b.seatIndex)
+    .map(toPublicSeat);
 }
 
 // ---------------------------------------------------------------------------

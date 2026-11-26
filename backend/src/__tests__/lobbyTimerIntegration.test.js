@@ -529,6 +529,44 @@ describe('D. _handleGameStart', () => {
     }
   });
 
+  it('keeps a guest recovery key out of lobby-starting', async () => {
+    const supabase = buildMockSupabase(makeWaitingRoom6());
+    _setSupabaseClient(supabase);
+
+    const key     = 'k'.repeat(32);
+    const hostWs  = createMockWs();
+    const guestWs = createMockWs();
+
+    getOrCreateLobby(ROOM_CODE, HOST_ID);
+    addToLobbyStore(ROOM_CODE, {
+      connectionId: 'conn-h', playerId: HOST_ID,    displayName: 'Host',
+      avatarId: null, isGuest: false, ws: hostWs,
+    });
+    addToLobbyStore(ROOM_CODE, {
+      connectionId: 'conn-p1', playerId: PLAYER1_ID, displayName: 'Guest',
+      avatarId: null, isGuest: true, guestRecoveryKey: key, ws: guestWs,
+    });
+
+    initLobbyRoom({ roomId: ROOM_ID, roomCode: ROOM_CODE, hostPlayerId: HOST_ID, playerCount: 6 });
+    addSeatToLobbyManager(ROOM_CODE, {
+      seatIndex: 0, playerId: HOST_ID, displayName: 'Host',
+      teamId: 1, isBot: false, isGuest: false,
+    });
+    addSeatToLobbyManager(ROOM_CODE, {
+      seatIndex: 1, playerId: PLAYER1_ID, displayName: 'Guest',
+      teamId: 2, isBot: false, isGuest: true, guestRecoveryKey: key,
+    });
+
+    await _handleGameStart(ROOM_CODE, 6);
+
+    for (const ws of [hostWs, guestWs]) {
+      expect(msgOfType(ws, 'lobby-starting')).not.toBeNull();
+      const raw = JSON.stringify(ws.send.mock.calls);
+      expect(raw).not.toContain('guestRecoveryKey');
+      expect(raw).not.toContain(key);
+    }
+  });
+
   it('is safe to call when lobbyManager has no room entry', async () => {
     const supabase = buildMockSupabase(makeWaitingRoom6());
     _setSupabaseClient(supabase);

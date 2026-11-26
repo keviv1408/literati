@@ -488,11 +488,12 @@ async function markRoomAbandoned(roomCode, supabase, snapshotSource = null) {
 }
 
 /**
- * Sweep all stale 'in_progress' rooms in Supabase and mark them 'abandoned'.
+ * Sweep all stale 'waiting', 'starting' and 'in_progress' rooms in Supabase
+ * and mark them 'abandoned'.
  *
- * Intended to be called once at server startup so rooms that were left in
- * 'in_progress' by a previous server instance (crash / graceful restart) are
- * correctly classified. Only rooms whose updated_at is older than
+ * Intended to be called once at server startup so rooms that were left open
+ * by a previous server instance (crash / graceful restart) are correctly
+ * classified. Only rooms whose updated_at is older than
  * `staleAfterMs` are touched — this preserves any room that was updated
  * very recently and whose players might still be reconnecting.
  *
@@ -518,7 +519,7 @@ async function markStaleGamesAbandoned(supabase, staleAfterMs = 2 * 60 * 60 * 10
     } else {
       const count = typeof data === 'number' ? data : 0;
       if (count > 0) {
-        console.log(`[gameState] Startup cleanup: marked ${count} stale in_progress room(s) as abandoned`);
+        console.log(`[gameState] Startup cleanup: marked ${count} stale waiting/starting/in_progress room(s) as abandoned`);
       }
     }
   } catch (err) {

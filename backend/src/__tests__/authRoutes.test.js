@@ -11,6 +11,7 @@
  * Supabase; guest paths use the in-memory store directly.
  */
 
+const util = require('util');
 const request = require('supertest');
 
 // We need a fresh module state for each describe block so that env vars and
@@ -72,6 +73,29 @@ describe('POST /api/auth/guest', () => {
     expect(Array.isArray(res.body.validAvatarIds)).toBe(true);
     expect(res.body.validAvatarIds.length).toBeGreaterThan(0);
     expect(typeof res.body.sessionTtlMs).toBe('number');
+  });
+
+  it('answers 400 to malformed JSON without logging the body', async () => {
+    const recoveryKey = 'k'.repeat(16) + 'SECRETRECOVERY16';
+    const spies = ['error', 'log', 'warn'].map((level) =>
+      jest.spyOn(console, level).mockImplementation(() => {})
+    );
+    try {
+      const res = await request(app)
+        .post('/api/auth/guest')
+        .set('Content-Type', 'application/json')
+        .send(`{"displayName":"Alice","recoveryKey":"${recoveryKey}"`);
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: 'Invalid JSON' });
+      for (const spy of spies) {
+        for (const args of spy.mock.calls) {
+          expect(util.format(...args)).not.toContain(recoveryKey);
+        }
+      }
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
   });
 
   it('accepts a valid avatarId and reflects it in the session', async () => {
@@ -180,6 +204,35 @@ describe('POST /api/auth/guest', () => {
       .send({ displayName: 42 });
 
     expect(res.status).toBe(400);
+  });
+
+  // ── Recovery key ───────────────────────────────────────────────────────────
+
+  it('returns 400 naming recoveryKey when the key is 31 characters', async () => {
+    const res = await request(app)
+      .post('/api/auth/guest')
+      .send({ displayName: 'Rita', recoveryKey: 'r'.repeat(31) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.details.some((d) => /recoveryKey/.test(d))).toBe(true);
+  });
+
+  it('accepts a 32-character recoveryKey', async () => {
+    const res = await request(app)
+      .post('/api/auth/guest')
+      .send({ displayName: 'Rita', recoveryKey: 'r'.repeat(32) });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('returns the same sessionId for two posts with the same recoveryKey', async () => {
+    const body = { displayName: 'Rita', recoveryKey: 'r'.repeat(32) };
+    const first = await request(app).post('/api/auth/guest').send(body);
+    const second = await request(app).post('/api/auth/guest').send(body);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.session.sessionId).toBe(first.body.session.sessionId);
   });
 });
 

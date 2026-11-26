@@ -831,6 +831,47 @@ describe('POST /api/rooms/:code/start', () => {
     expect(res.body.botsAdded).toHaveLength(5); // 1 human + 5 bots
   });
 
+  it('keeps a guest recovery key out of game_starting and the response but passes it to createGame', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'host-id', email: 'host@test.com', user_metadata: {} } },
+      error: null,
+    });
+    mockSupabase._chain.maybeSingle.mockResolvedValue({
+      data: makeFakeRoom({ host_user_id: 'host-id', player_count: 6 }),
+      error: null,
+    });
+    const createGameSpy = jest.spyOn(require('../game/gameSocketServer'), 'createGame');
+
+    const key     = 'k'.repeat(32);
+    const hostWs  = createMockWs();
+    const guestWs = createMockWs();
+    const spectWs = createMockWs();
+    const rss = require('../ws/roomSocketServer');
+    rss._resetRoomState();
+    rss.roomClients.set('ABCDEF', new Map([
+      ['host-id', { userId: 'host-id', displayName: 'Host',  isGuest: false, isHost: true,  teamId: 1, ws: hostWs }],
+      ['guest-1', { userId: 'guest-1', displayName: 'Guest', isGuest: true,  isHost: false, teamId: 2, ws: guestWs, guestRecoveryKey: key }],
+    ]));
+    rss.roomSpectators.set('ABCDEF', new Map([['spect-1', { ws: spectWs, userId: 'spect-1', role: 'spectator' }]]));
+
+    const res = await request(app)
+      .post('/api/rooms/ABCDEF/start')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain('guestRecoveryKey');
+    expect(res.text).not.toContain(key);
+    expect(allSent(spectWs).some((m) => m.type === 'game_starting')).toBe(true);
+    for (const ws of [hostWs, guestWs, spectWs]) {
+      const raw = JSON.stringify(ws.send.mock.calls);
+      expect(raw).not.toContain('guestRecoveryKey');
+      expect(raw).not.toContain(key);
+    }
+    const { seats } = createGameSpy.mock.calls[0][0];
+    expect(seats.find((s) => s.playerId === 'guest-1').guestRecoveryKey).toBe(key);
+    createGameSpy.mockRestore();
+  });
+
   it('returns 200 and 8 seats for an 8-player room', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({
       data: { user: { id: 'host-id', email: 'host@test.com', user_metadata: {} } },

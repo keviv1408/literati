@@ -10,12 +10,18 @@
  *    registered, and does not evict the player's live socket.
  * 3. A spectator's earlier socket closing does not unsubscribe their newer one.
  * 4. Every join and leave is logged with the room size.
+ * 5. The host flag comes from the room row, and a reconnecting player keeps
+ *    the crown they hold in the lobby.
+ * 6. In a private room the host transfer timer runs exactly while no
+ *    connected player is flagged host.
  */
 
 const http      = require('http');
 const WebSocket = require('ws');
 
 const ROOM_CODE = 'LOBBY1';
+const MEMBER_TOKEN = 'registered-member-token';
+const MEMBER_ID    = 'registered-member-id';
 const ROOM_ROW  = {
   id: 'room-id-lobby1', code: ROOM_CODE, host_user_id: null, status: 'waiting',
   player_count: 6, is_matchmaking: false, spectator_token: 'SPECTOK',
@@ -42,6 +48,7 @@ describe('lobby socket lifecycle', () => {
   let httpServer, port, wss, room, logSpy;
   let hostToken, hostId, friendToken;
   let lookups = 0;
+  let chain;
   let nextLookup = null;
   const sockets = [];
 
@@ -56,6 +63,12 @@ describe('lobby socket lifecycle', () => {
 
   const has = (client, type) => client.messages.some((m) => m.type === type);
   const received = (client, type) => until(() => has(client, type));
+  const players = (client) => {
+    const snapshots = client.messages.filter((m) => m.type === 'room_players');
+    return snapshots.length ? snapshots[snapshots.length - 1].players : [];
+  };
+  const hostFlags = (client) => Object.fromEntries(players(client).map((p) => [p.displayName, p.isHost]));
+  const serveRow = (row) => { nextLookup = () => Promise.resolve({ data: row, error: null }); };
   const roster = (client) => {
     const snapshots = client.messages.filter((m) => m.type === 'room_players');
     return snapshots.length ? snapshots[snapshots.length - 1].players.map((p) => p.displayName) : null;
@@ -65,16 +78,21 @@ describe('lobby socket lifecycle', () => {
     jest.resetModules();
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
-    const chain = {};
+    chain = {};
     chain.select      = jest.fn(() => chain);
     chain.eq          = jest.fn(() => chain);
+    chain.update      = jest.fn(() => chain);
     chain.maybeSingle = jest.fn(() => {
       lookups += 1;
       return nextLookup ? nextLookup() : Promise.resolve({ data: ROOM_ROW, error: null });
     });
     const supabase = {
       from: jest.fn(() => chain),
-      auth: { getUser: jest.fn().mockResolvedValue({ data: { user: null }, error: 'no-user' }) },
+      auth: {
+        getUser: jest.fn(async (token) => (token === MEMBER_TOKEN
+          ? { data: { user: { id: MEMBER_ID, user_metadata: { display_name: 'Member' } } }, error: null }
+          : { data: { user: null }, error: 'no-user' })),
+      },
     };
     require('../db/supabase')._setSupabaseClient(supabase);
 
@@ -83,7 +101,7 @@ describe('lobby socket lifecycle', () => {
     hostToken    = host.token;
     hostId       = host.session.sessionId;
     friendToken  = guests.createGuestSession('Friend').token;
-    require('../routes/rooms').guestHostMap.set(ROOM_ROW.id, hostId);
+    ROOM_ROW.host_guest_id = hostId;
 
     room = require('../ws/roomSocketServer');
     room._setSupabaseClientFactory(() => supabase);
@@ -101,6 +119,8 @@ describe('lobby socket lifecycle', () => {
     for (const ws of sockets.splice(0)) ws.terminate();
     await until(() => wss.clients.size === 0);
     room._resetRoomState();
+    jest.useRealTimers();
+    chain.update.mockClear();
     logSpy.mockClear();
   });
 
@@ -199,5 +219,180 @@ describe('lobby socket lifecycle', () => {
     const lines = logSpy.mock.calls.map((args) => args.join(' '));
     expect(lines).toContain(`[RoomWS] join room=${ROOM_CODE} user=${hostId} players=1`);
     expect(lines).toContain(`[RoomWS] leave room=${ROOM_CODE} user=${hostId} players=0`);
+  });
+
+  it('flags the guest named in host_guest_id as host', async () => {
+    const host = connect(hostToken);
+    await received(host, 'room_players');
+
+    expect(hostFlags(host)).toEqual({ Host: true });
+    expect(chain.select.mock.calls.some(([cols]) => cols.includes('host_guest_id'))).toBe(true);
+  });
+
+  it('flags the registered user named in host_user_id as host', async () => {
+    serveRow({ ...ROOM_ROW, host_user_id: MEMBER_ID, host_guest_id: null });
+    const member = connect(MEMBER_TOKEN);
+    await received(member, 'room_players');
+
+    expect(hostFlags(member)).toEqual({ Member: true });
+  });
+
+  it('does not flag a second player the room row names while the host is connected', async () => {
+    const host = connect(hostToken);
+    await received(host, 'connected');
+
+    serveRow({ ...ROOM_ROW, host_user_id: MEMBER_ID });
+    const member = connect(MEMBER_TOKEN);
+    await received(member, 'room_players');
+
+    expect(hostFlags(member)).toEqual({ Host: true, Member: false });
+  });
+
+  it('keeps the crown a transfer gave when that player reconnects', async () => {
+    const first = connect(friendToken);
+    await received(first, 'connected');
+    const friendId = first.messages.find((m) => m.type === 'connected').userId;
+    room.roomClients.get(ROOM_CODE).get(friendId).isHost = true;
+
+    const second = connect(friendToken);
+    await received(second, 'room_players');
+    await received(first, 'closing');
+    await until(() => wss.clients.size === 1);
+    await sleep(30);
+
+    expect(hostFlags(second)).toEqual({ Friend: true });
+    expect(has(second, 'host_disconnected')).toBe(false);
+  });
+
+  it('keeps the host flagged when the host opens a second socket', async () => {
+    const first = connect(hostToken);
+    await received(first, 'connected');
+
+    const second = connect(hostToken);
+    await received(second, 'room_players');
+    await received(first, 'closing');
+    await until(() => wss.clients.size === 1);
+    await sleep(30);
+
+    expect(first.messages.find((m) => m.type === 'closing').code).toBe(4006);
+    expect(hostFlags(second)).toEqual({ Host: true });
+    expect(players(second)).toHaveLength(1);
+    expect(players(second)[0]).toMatchObject({ userId: hostId, isHost: true });
+    expect(has(second, 'host_disconnected')).toBe(false);
+  });
+
+  describe('host transfer timer while no host is connected', () => {
+    // ws and Node streams need real nextTick and setImmediate.
+    const fakeClock = () => jest.useFakeTimers({
+      advanceTimers: true,
+      doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'],
+    });
+    const indexOf = (client, type) => client.messages.findIndex((m) => m.type === type);
+    const count = (client, type) => client.messages.filter((m) => m.type === type).length;
+    const userIdOf = (client) => client.messages.find((m) => m.type === 'connected').userId;
+
+    it('starts the timer when a non-host joins an empty private lobby', async () => {
+      const friend = connect(friendToken);
+      await received(friend, 'host_disconnected');
+
+      expect(indexOf(friend, 'connected')).toBeLessThan(indexOf(friend, 'room_players'));
+      expect(indexOf(friend, 'room_players')).toBeLessThan(indexOf(friend, 'host_disconnected'));
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(true);
+    });
+
+    it('cancels the timer when the stored host joins', async () => {
+      const friend = connect(friendToken);
+      await received(friend, 'host_disconnected');
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(true);
+
+      const host = connect(hostToken);
+      await received(friend, 'host_reconnected');
+      await received(host, 'room_players');
+
+      expect(has(friend, 'host_reconnected')).toBe(true);
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(false);
+      expect(hostFlags(host)).toEqual({ Friend: false, Host: true });
+    });
+
+    it('promotes the first player when the stored host does not join within 60 seconds', async () => {
+      fakeClock();
+      const friend = connect(friendToken);
+      await received(friend, 'host_disconnected');
+      const friendId = userIdOf(friend);
+
+      await jest.advanceTimersByTimeAsync(60_000);
+      await received(friend, 'host_changed');
+      await until(() => hostFlags(friend).Friend === true, 300);
+
+      expect(friend.messages.find((m) => m.type === 'host_changed').newHostId).toBe(friendId);
+      expect(hostFlags(friend)).toEqual({ Friend: true });
+      expect(chain.update).toHaveBeenCalledWith({ host_user_id: null, host_guest_id: friendId });
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(false);
+    });
+
+    it('starts the timer for a room row with no host in either column', async () => {
+      serveRow({ ...ROOM_ROW, host_user_id: null, host_guest_id: null });
+      const friend = connect(friendToken);
+      await received(friend, 'host_disconnected');
+
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(true);
+      expect(hostFlags(friend)).toEqual({ Friend: false });
+    });
+
+    it('cancels a timer armed for a former host when a different flagged host joins', async () => {
+      serveRow({ ...ROOM_ROW, host_guest_id: 'former-host-id' });
+      const friend = connect(friendToken);
+      await received(friend, 'host_disconnected');
+      expect(room.hostTransferTimers.get(ROOM_CODE).previousHostId).toBe('former-host-id');
+
+      serveRow(ROOM_ROW);
+      const host = connect(hostToken);
+      await received(friend, 'host_reconnected');
+      await received(host, 'room_players');
+
+      expect(has(friend, 'host_reconnected')).toBe(true);
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(false);
+      expect(hostFlags(host)).toEqual({ Friend: false, Host: true });
+    });
+
+    it('starts no timer in a matchmaking room', async () => {
+      serveRow({ ...ROOM_ROW, is_matchmaking: true });
+      const friend = connect(friendToken);
+      await received(friend, 'room_players');
+      await sleep(30);
+
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(false);
+      expect(has(friend, 'host_disconnected')).toBe(false);
+    });
+
+    it('starts no timer on a spectator join, and starts one on the next player join', async () => {
+      const watcher = connect(friendToken, '&role=spectator&spectator_token=SPECTOK');
+      await received(watcher, 'room_players');
+      await sleep(30);
+      expect(room.hostTransferTimers.has(ROOM_CODE)).toBe(false);
+
+      const member = connect(MEMBER_TOKEN);
+      await received(member, 'host_disconnected');
+      await sleep(30);
+
+      expect(count(watcher, 'host_disconnected')).toBe(1);
+    });
+
+    it('does not restart the timer when a second non-host joins', async () => {
+      fakeClock();
+      const friend = connect(friendToken);
+      await received(friend, 'host_disconnected');
+      const { expiresAt } = friend.messages.find((m) => m.type === 'host_disconnected');
+
+      await jest.advanceTimersByTimeAsync(1_000);
+      const member = connect(MEMBER_TOKEN);
+      await received(member, 'room_players');
+      await jest.advanceTimersByTimeAsync(5_000);
+      await received(member, 'host_disconnect_tick');
+
+      expect(count(friend, 'host_disconnected')).toBe(1);
+      expect(has(member, 'host_disconnected')).toBe(false);
+      expect(member.messages.find((m) => m.type === 'host_disconnect_tick').expiresAt).toBe(expiresAt);
+    });
   });
 });

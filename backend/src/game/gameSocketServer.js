@@ -1299,6 +1299,37 @@ function _executeReclaim(gs, playerId) {
   });
 }
 
+function _restoreHumanSeat(gs, player, displayName) {
+  const { roomCode } = gs;
+  const { playerId } = player;
+  player.isBot = false;
+  player.botReplacedAt = undefined;
+
+  if (gs.currentTurnPlayerId === playerId) {
+    const botTimer = _botTimers.get(roomCode);
+    if (botTimer) {
+      clearTimeout(botTimer);
+      _botTimers.delete(roomCode);
+    }
+  }
+
+  if (isInReclaimQueue(roomCode, playerId)) {
+    removeFromReclaimQueue(roomCode, playerId);
+  }
+
+  broadcastToGame(roomCode, {
+    type:        'player_reconnected',
+    playerId,
+    displayName,
+  }, playerId);
+
+  broadcastStateUpdate(gs);
+
+  persistGameState(gs, getSupabaseClient()).catch((err) => {
+    console.warn('[game-ws] Failed to persist after restoring a returning player:', err.message);
+  });
+}
+
 /**
  * Start the reconnect window for a disconnected human player.
  *
@@ -3480,41 +3511,20 @@ function attachGameSocketServer(httpServer) {
 
         // Restore human control if the seat was bot-controlled (e.g. server
         // restart wiped _reconnectWindows so the normal reclaim path won't fire).
-        if (recoveredGuestPlayer.isBot) {
-          recoveredGuestPlayer.isBot = false;
-          recoveredGuestPlayer.botReplacedAt = undefined;
-
-          // Cancel a pending bot turn for this seat.
-          if (gs.currentTurnPlayerId === playerId) {
-            const botTimer = _botTimers.get(roomCode);
-            if (botTimer) {
-              clearTimeout(botTimer);
-              _botTimers.delete(roomCode);
-            }
-          }
-
-          // Remove from reclaim queue if queued.
-          if (isInReclaimQueue(roomCode, playerId)) {
-            removeFromReclaimQueue(roomCode, playerId);
-          }
-
-          broadcastToGame(roomCode, {
-            type:        'player_reconnected',
-            playerId,
-            displayName,
-          }, playerId);
-
-          broadcastStateUpdate(gs);
-
-          persistGameState(gs, getSupabaseClient()).catch((err) => {
-            console.warn('[game-ws] Failed to persist after recovery-key reclaim:', err.message);
-          });
-        }
+        if (recoveredGuestPlayer.isBot) _restoreHumanSeat(gs, recoveredGuestPlayer, displayName);
 
         console.log(
           `[game-ws] Rebound guest recovery key to player ${playerId} in room ${roomCode}`,
         );
       }
+    } else if (
+      playerInGame &&
+      playerInGame.isBot &&
+      !playerInGame.botReplacedAt &&
+      !_reconnectWindows.has(playerId)
+    ) {
+      // A restart wiped the reconnect window, so neither reclaim path below would fire.
+      _restoreHumanSeat(gs, playerInGame, displayName);
     }
     const isExplicitSpectator = Boolean(spectatorToken);
 
