@@ -178,7 +178,7 @@ class _Game {
     return seat;
   }
 
-  // Every seat gets game_over on a live socket only if every kill ran first and all six are up. True after a restart.
+  // Every seat gets game_over on a live socket only if every kill ran first and all six are up.
   private async _readyForFinal(deadline: number): Promise<boolean> {
     for (;;) {
       const kill = this._waiting()[0];
@@ -240,7 +240,7 @@ class _Game {
     }
   }
 
-  // Step 3: a seat whose moves-while-down are used up is waited for, unless the holder's clock could run out first.
+  // Waiting caps the moves a seat misses, but never for so long that the holder's clock runs out.
   private async _waitForSeats(deadline: number): Promise<void> {
     const used = this.down.filter((d) => !d.back && d.record.movesMadeWhileDown >= d.record.kill.movesWhileDown);
     if (used.length === 0 || !this._mayWait()) return;
@@ -316,7 +316,7 @@ class _Game {
     this.afterKillStart?.(seat);
   }
 
-  // Spec section 6, after a restart. Nothing else runs meanwhile: no seat is up until the backend is back.
+  // Nothing else runs meanwhile: no seat is up until the backend is back.
   private async _restart(kill: Kill, pending: _Doubtful | null): Promise<void> {
     const startedAt = Date.now();
     const record: KillRecord = {
@@ -527,7 +527,7 @@ class _Game {
     return why ? undefined : kill;
   }
 
-  // Spec section 4, a move in doubt: the mover's next game_init says whether the server kept the move.
+  // Silence proves nothing after a mid-move cut, so the mover's next game_init says whether the server kept the move.
   private async _settleInDoubt(
     mover: Seat,
     move: _Doubtful,

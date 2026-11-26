@@ -66,7 +66,6 @@ export function openRun(outDir: string, seed: number, plan: Kill[]): Run {
   };
 }
 
-// Per game: the worst time back per kind, and the moves each restart lost.
 export function writeReport(outDir: string, results: GameResult[], planned: number, totalMs: number): void {
   // Playwright makes the test's folder lazily, and a stack that refused to start never made it.
   mkdirSync(outDir, { recursive: true });
