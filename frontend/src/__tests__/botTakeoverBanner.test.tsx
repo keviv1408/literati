@@ -246,7 +246,8 @@ describe('Bot-takeover banner ', () => {
     act(() => openWs());
     act(() => sendWsMessage(makeGameInit(MY_PLAYER_ID)));
 
-    await waitFor(() => expect(screen.getByTestId('turn-indicator')).toBeTruthy());
+    // The turn-indicator banner only renders in turn-pass mode, so wait on the dealt hand instead.
+    await waitFor(() => expect(screen.getByTestId('card-hand')).toBeTruthy());
 
     // Banner should NOT appear initially
     expect(screen.queryByTestId('bot-takeover-banner')).toBeNull();
