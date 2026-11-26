@@ -35,7 +35,10 @@ const _AUTH_PATHS = ['/api/auth/guest', '/api/auth/me'];
 export async function openTable(
   browser: Browser,
   stack: Stack,
-  opts: { onContext?: (context: BrowserContext, index: number) => Promise<void> } = {},
+  opts: {
+    onContext?: (context: BrowserContext, index: number) => Promise<void>;
+    onFail?: (seats: Pick<Seat, 'index' | 'wire'>[]) => void;
+  } = {},
 ): Promise<Table> {
   const contexts: BrowserContext[] = [];
   const drafts: _Draft[] = [];
@@ -95,6 +98,8 @@ export async function openTable(
     });
     return { seats, roomCode, gameUrl, model };
   } catch (err) {
+    // The deal and the first save fail after the game sockets opened, and their frames show why.
+    opts.onFail?.(drafts);
     await Promise.all(contexts.map((context) => context.close().catch(() => {})));
     throw err;
   }

@@ -7,7 +7,7 @@ import type { Seat } from './seats';
 
 export interface Run {
   log(line: string): void;
-  frames(seat: Seat): void;
+  frames(seat: Pick<Seat, 'index' | 'wire'>): void;
   model(model: Model): void;
   close(result: GameResult | Error): void;
 }

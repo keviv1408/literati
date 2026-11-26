@@ -98,7 +98,7 @@ export async function playGame(opts: {
   const run = openRun(opts.outDir, opts.seed, plan);
   let table: Table | null = null;
   try {
-    table = await openTable(opts.browser, opts.stack);
+    table = await openTable(opts.browser, opts.stack, { onFail: (seats) => seats.forEach((seat) => run.frames(seat)) });
     const result = await new _Game(table, opts.stack, opts.seed, opts.size, plan, run, opts._afterKillStart).play();
     run.model(table.model);
     run.close(result);
