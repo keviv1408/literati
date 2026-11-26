@@ -31,12 +31,12 @@ jest.mock('@/components/CircularGameTable', () => ({
   __esModule: true,
   default: ({
     players,
-    onSeatClick,
+    onDirectSeatClick,
     declarationSeatRevealByPlayerId,
     children,
   }: {
     players: { playerId: string; displayName: string }[];
-    onSeatClick?: (playerId: string) => void;
+    onDirectSeatClick?: (playerId: string) => void;
     declarationSeatRevealByPlayerId?: Map<string, { cardId: string }[]> | null;
     children?: React.ReactNode;
   }) => (
@@ -47,7 +47,7 @@ jest.mock('@/components/CircularGameTable', () => ({
           <button
             key={p.playerId}
             data-testid={`spectator-player-button-${p.playerId}`}
-            onClick={() => onSeatClick?.(p.playerId)}
+            onClick={() => onDirectSeatClick?.(p.playerId)}
           >
             <div data-testid="mock-player-seat" data-player-id={p.playerId}>
               {p.displayName}
