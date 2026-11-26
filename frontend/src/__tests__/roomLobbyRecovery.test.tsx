@@ -52,6 +52,7 @@ let mockRoster: { players: LobbyPlayer[]; myPlayerId: string | null } = {
   players: mockNoPlayers,
   myPlayerId: null,
 };
+let mockLobbyStarting = false;
 
 // Stands in for the real socket: idle without a full set of credentials, refused with
 // 4001 for a token the server forgot, connecting on any other new set, and otherwise
@@ -68,7 +69,6 @@ jest.mock('@/hooks/useRoomSocket', () => {
     emit: jest.fn(),
     startGame: jest.fn(() => true),
     lobbyTimer: null,
-    lobbyStarting: false,
     errorSeq: 0,
     hostChangedEvent: null,
   };
@@ -89,6 +89,7 @@ jest.mock('@/hooks/useRoomSocket', () => {
       return {
         ...fixed,
         ...mockRoster,
+        lobbyStarting: mockLobbyStarting,
         ...state,
         lastError: state.stopCode ? `Connection closed (${state.stopCode})` : null,
       };
@@ -196,6 +197,7 @@ beforeEach(() => {
   mockSocketCalls.length = 0;
   mockRefusedTokens.clear();
   mockRoster = { players: mockNoPlayers, myPlayerId: null };
+  mockLobbyStarting = false;
   window.localStorage.clear();
   window.sessionStorage.clear();
   saveGuestSession('Ada');
@@ -346,6 +348,14 @@ describe('room lobby start control', () => {
 
     expect(await screen.findByTestId('waiting-for-host')).toHaveTextContent(/^Waiting for a host\u2026$/);
     expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument();
+  });
+
+  it('shows a non-host only the starting notice once the game is starting', async () => {
+    mockLobbyStarting = true;
+    await _renderLobby([_player('p-ada', 'Ada', false), _player('p-asha', 'Asha', true)]);
+
+    expect(await screen.findByTestId('game-starting-notice')).toBeInTheDocument();
+    expect(screen.queryByTestId('waiting-for-host')).not.toBeInTheDocument();
   });
 
   it('shows the start panel on a spectate page when the server flags this browser host', async () => {
