@@ -140,12 +140,12 @@ export default function RoomLobbyPage({ params }: PageProps) {
   /**
    * Bearer token used for WebSocket authentication.
    *
-   * Derived from two sources (first available wins):
-   * 1. loadRoomMembership(roomCode).bearerToken — the exact token that was
-   * accepted by the WS server on a previous visit to this room URL.
-   * Re-using it ensures the server recognises the same player identity.
+   * Derived from two sources:
+   * 1. loadRoomMembership(roomCode).bearerToken — the token from a previous
+   * visit, used only when that membership belongs to another player.
    * 2. useReconnect().bearerToken — the validated base session token
-   * (guest bearer or Supabase JWT) when no room membership is stored.
+   * (guest bearer or Supabase JWT), used otherwise, including when the
+   * stored membership is this same player's (it may predate a restart).
    *
    * Only populated once reconnectStatus === 'ready' so the WebSocket hook
    * never attempts to connect with an unvalidated or expired token.
@@ -200,9 +200,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
       return;
     }
 
-    // Priority 1: room-specific membership token from a previous visit.
-    // This re-uses the exact backend session that the WS server already
-    // accepted for this room, preserving seat and host status.
+    // Priority 1: the stored membership token, only when it is another player's.
     const membership = loadRoomMembership(roomCode);
     if (membership && membership.playerId !== reconnectSessionId) {
       setBearerToken(membership.bearerToken);
