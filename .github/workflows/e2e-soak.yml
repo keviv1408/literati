@@ -1,0 +1,79 @@
+name: e2e-soak
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: e2e-soak-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - id: filter
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          run=true
+          if [ "$EVENT" = "pull_request" ]; then
+            if files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)'); then
+              count=$(printf '%s\n' "$files" | grep -c . || true)
+              hits=$(printf '%s\n' "$files" \
+                | grep -E '^(backend/|frontend/|e2e/|\.github/workflows/e2e-soak\.yml$)' \
+                | grep -v -E '(\.md$|/__tests__/|\.test\.[^/]+$|^backend/supabase/)' || true)
+              # The files API stops at 3000, so a full list may hide a code file.
+              if [ -z "$hits" ] && [ "$count" -lt 3000 ]; then run=false; fi
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+  e2e-soak:
+    needs: changes
+    # The filter's step timeout fails the job instead of cancelling it, so the output is empty and the soak runs.
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npm ci
+        working-directory: e2e
+      - run: npm run build
+        working-directory: frontend
+      - run: |
+          npx next start -p 3011 > ../frontend.log 2>&1 &
+          for _ in $(seq 1 60); do curl -sf http://localhost:3011 > /dev/null && exit 0; sleep 1; done
+          cat ../frontend.log; exit 1
+        working-directory: frontend
+      - run: npm run soak:unit
+        working-directory: e2e
+      - run: npm run soak:short
+        working-directory: e2e
+        # Stops the soak before the job timeout does, because a cancelled job skips the upload.
+        timeout-minutes: 9
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: soak-results
+          path: |
+            e2e/test-results
+            frontend.log
+          retention-days: 7
+          # The trace is already a zip.
+          compression-level: 0
