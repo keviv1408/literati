@@ -486,6 +486,7 @@ export function useGameSocket({
       switch (msg.type) {
         case 'game_init': {
           confirmSocket();
+          setLastAskResult(null);
           const payload = msg as unknown as {
             myPlayerId: string;
             myHand: CardId[];
@@ -522,6 +523,7 @@ export function useGameSocket({
 
         case 'spectator_init': {
           confirmSocket();
+          setLastAskResult(null);
           const payload = msg as unknown as {
             players: GamePlayer[];
             hands: SpectatorHands;
@@ -606,8 +608,6 @@ export function useGameSocket({
         case 'declaration_result': {
           const payload = msg as unknown as DeclarationResultPayload;
           setLastDeclareResult(payload);
-          // Clear the last ask result so its animation doesn't replay when
-          // game_players arrives and invalidates the callback dependencies.
           setLastAskResult(null);
           // Declaration completed; clear the previous turn timer immediately.
           setTurnTimer(null);

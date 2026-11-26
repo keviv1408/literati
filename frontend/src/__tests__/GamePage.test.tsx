@@ -813,14 +813,15 @@ describe('GamePage — in_progress game view', () => {
     });
 
     act(() => openWs());
-    act(() => sendWsMessage(makeGameInit('player-me', [
+    const roster = [
       makePlayer('player-me', 'Me', 1, 0),
       makePlayer('p2', 'Alice', 1, 2),
       makePlayer('p3', 'Bob', 1, 4),
       makePlayer('p4', 'Carol', 2, 1),
       makePlayer('p5', 'Dave', 2, 3),
       makePlayer('p6', 'Eve', 2, 5),
-    ])));
+    ];
+    act(() => sendWsMessage(makeGameInit('player-me', roster)));
 
     await waitFor(() => {
       expect(screen.getAllByTestId('game-player-seat').length).toBeGreaterThan(0);
@@ -870,6 +871,19 @@ describe('GamePage — in_progress game view', () => {
       });
 
       expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
+
+      act(() => sendWsMessage({ type: 'game_players', players: [...roster] }));
+      act(() => { jest.advanceTimersByTime(20); });
+      expect(screen.queryByTestId('ask-denied-animation')).toBeNull();
+
+      act(() => sendWsMessage({
+        type: 'ask_result', askerId: 'player-me', targetId: 'p4', cardId: '9_h',
+        success: false, newTurnPlayerId: 'p4', lastMove: 'Me asked Carol for 9♥',
+      }));
+      act(() => { jest.advanceTimersByTime(20); });
+      expect(screen.getByTestId('ask-denied-card').querySelector('[aria-label="9 of Hearts"] [data-rank]')).toHaveAttribute('data-rank', '9');
+      act(() => sendWsMessage(makeGameInit('player-me', roster)));
+      expect(screen.queryByTestId('ask-denied-animation')).toBeNull();
     } finally {
       jest.useRealTimers();
     }

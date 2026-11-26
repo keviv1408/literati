@@ -30,6 +30,7 @@ import {
 } from '@/lib/declarationSeatReveal';
 import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
 import { useGuest } from '@/contexts/GuestContext';
+import { useCardDeck } from '@/hooks/useCardDeck';
 import { useReconnect } from '@/hooks/useReconnect';
 import { useGameSocket, type PartialSelectionPayload } from '@/hooks/useGameSocket';
 import { useAudio } from '@/hooks/useAudio';
@@ -59,7 +60,7 @@ import RematchVotePanel from '@/components/RematchVotePanel';
 import ReconnectBar from '@/components/ReconnectBar';
 import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
-import DealAnimation from '@/components/DealAnimation';
+import { takeOpeningDeal } from '@/lib/openingDeal';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
@@ -146,6 +147,7 @@ function buildAskBatchSummary(
 }
 
 export default function GamePage({ params }: PageProps) {
+  const canShowCards = useCardDeck();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { guestSession } = useGuest();
@@ -229,13 +231,8 @@ export default function GamePage({ params }: PageProps) {
   // When a declaration_result arrives, briefly highlight the scoring team's
   // score in the header (1 | 2 | null). Cleared after 2 s.
 
-  // ── Deal animation ────────────────────────────────────────────
-  //
-  // `isDealAnimating` controls the DealAnimation overlay.
-  // `hasDealtRef` prevents the animation from re-firing on reconnect/refresh:
-  // only the first `game_init` that brings a non-empty hand triggers it.
-  const [isDealAnimating, setIsDealAnimating]   = useState(false);
-  const hasDealtRef                             = useRef(false);
+  const [isDealAnimating, setIsDealAnimating] = useState(false);
+  const finishOpeningDeal = useCallback(() => setIsDealAnimating(false), []);
 
   // ── Card flip animation (AC 33) ─────────────────────────────────
   //
@@ -300,7 +297,7 @@ export default function GamePage({ params }: PageProps) {
     setVoteStartedAt(undefined);
     setRematchStarted(false);
     setRoom((prev) => prev ? { ...prev, status: 'in_progress' } : prev);
-    hasDealtRef.current = false;
+    setIsDealAnimating(false);
   }
 
   const {
@@ -639,22 +636,12 @@ export default function GamePage({ params }: PageProps) {
     };
   }, []);
 
-  // ── Trigger deal animation on first game_init ─────────────────────────────
-  //
-  // Fire once when `myHand` first arrives with cards (i.e., the player just
-  // received their dealt hand for the first time this session). The
-  // `hasDealtRef` guard prevents it from re-triggering on:
-  // • WebSocket reconnect (same session, hand already dealt)
-  // • Page refresh (new session, hasDealtRef resets to false — animation plays again,
-  // which is acceptable since the player sees their hand "arrive" on reconnect)
   useEffect(() => {
-    if (myHand.length > 0 && !hasDealtRef.current) {
-      hasDealtRef.current = true;
-      setIsDealAnimating(true);
-      // ── Deal sound: play once when cards first arrive ───────────────────
-      playDealSound();
-    }
-  }, [myHand.length, playDealSound]);
+    if (!roomCode || !canShowCards || !myPlayerId || !myHand.length || !takeOpeningDeal(roomCode)) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    setIsDealAnimating(true);
+    playDealSound();
+  }, [roomCode, canShowCards, myPlayerId, myHand.length, playDealSound]);
 
   // Redirect to room lobby when rematch is accepted
   useEffect(() => {
@@ -1292,6 +1279,7 @@ export default function GamePage({ params }: PageProps) {
   // This must only trigger after `spectator_init` is actually received — NOT
   // during the initial connection phase when both players[] and myPlayerId are
   // still empty (that state is shared with legitimate players pre-game_init).
+  if (!canShowCards) return <LoadingView label="Loading card art…" />;
   const isSpectatorMode =
     (wsStatus === 'connected' || wsStatus === 'reconnecting') && players.length > 0 && !myPlayerId;
 
@@ -1566,12 +1554,6 @@ export default function GamePage({ params }: PageProps) {
         const mainContent = (
           <>
           <main className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center overflow-hidden px-2 py-2 sm:px-3 sm:py-3 lg:px-5 xl:px-6">
-            {isDealAnimating && (
-              <DealAnimation
-                playerCount={(effectivePlayerCount === 8 ? 8 : 6) as 6 | 8}
-                onComplete={() => setIsDealAnimating(false)}
-              />
-            )}
             <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem] flex flex-col justify-center">
               <CircularGameTable
                 players={players}
@@ -1584,6 +1566,7 @@ export default function GamePage({ params }: PageProps) {
                 askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
                 onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
                 declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
+                onOpeningDealComplete={isDealAnimating ? finishOpeningDeal : undefined}
                 renderSeatWrapper={declareSeatWrapper}
               >
                 <DeclaredBooksTable
@@ -1848,13 +1831,13 @@ export default function GamePage({ params }: PageProps) {
   );
 }
 
-function LoadingView({ wakingUp }: { wakingUp: boolean }) {
+function LoadingView({ wakingUp = false, label = 'Loading game…' }: { wakingUp?: boolean; label?: string }) {
   return (
     <div
       className="animate-delayed-reveal flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
       data-testid="game-loading"
       role="status"
-      aria-label="Loading game…"
+      aria-label={label}
     >
       <div className="flex flex-col items-center gap-5 text-slate-400">
         <div className="flex gap-2" aria-hidden="true">
@@ -1871,7 +1854,7 @@ function LoadingView({ wakingUp }: { wakingUp: boolean }) {
             style={{ animationDelay: '360ms' }}
           />
         </div>
-        <span className="text-sm tracking-wide">Loading game…</span>
+        <span className="text-sm tracking-wide">{label}</span>
         {wakingUp && <span className="text-sm text-amber-200">Waking up the table… this can take up to a minute.</span>}
       </div>
     </div>

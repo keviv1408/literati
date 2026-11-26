@@ -52,6 +52,8 @@ import {
 } from '@/lib/roomMembership';
 import { consumeCreatedRoom } from '@/components/CreateRoomModal';
 import { useRoomSocket } from '@/hooks/useRoomSocket';
+import { queueOpeningDeal } from '@/lib/openingDeal';
+import { useCardDeck } from '@/hooks/useCardDeck';
 import { useReconnect } from '@/hooks/useReconnect';
 import { useLobbyRecovery } from '@/hooks/useLobbyRecovery';
 import { useGuest } from '@/contexts/GuestContext';
@@ -79,6 +81,7 @@ interface PageProps {
 }
 
 export default function RoomLobbyPage({ params }: PageProps) {
+  useCardDeck();
   const router = useRouter();
 
   // ── Session validation / auto-reconnect ────────────────────────
@@ -293,8 +296,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // main game board page.
   useEffect(() => {
     if (!lobbyStarting || !roomCode) return;
+    if (!isSpectator) queueOpeningDeal(roomCode);
     router.push(`/game/${roomCode}`);
-  }, [lobbyStarting, roomCode, router]);
+  }, [lobbyStarting, roomCode, router, isSpectator]);
 
   /**
    * The current player's team assignment as reported by the server.

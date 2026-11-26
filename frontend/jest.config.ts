@@ -5,6 +5,7 @@ const config: Config = {
   testEnvironment: "jsdom",
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   moduleNameMapper: {
+    "\\.webp$": "<rootDir>/test/image.cjs",
     "^@/(.*)$": "<rootDir>/src/$1",
   },
   transform: {
