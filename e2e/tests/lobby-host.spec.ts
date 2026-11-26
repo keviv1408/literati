@@ -96,7 +96,12 @@ test('a host whose session the server forgot comes back as the same player', asy
   expect(forgotten.ok(), `DELETE /api/auth/guest returned ${forgotten.status()}`).toBe(true);
 
   const attempts = sockets.length;
+  const reregistered = page.waitForRequest(
+    (request) => request.method() === 'POST' && request.url() === `${API_URL}/api/auth/guest`,
+    { timeout: 30_000 },
+  );
   await _cut(sockets[attempts - 1]);
+  await reregistered;
 
   await expect
     .poll(() => Boolean(_recoveredSocket(sockets, attempts)), {
@@ -105,8 +110,16 @@ test('a host whose session the server forgot comes back as the same player', asy
     })
     .toBe(true);
   const back = _recoveredSocket(sockets, attempts)!;
-  expect(_frames(back, 'connected').at(-1)!.msg.userId, 'the player came back with a new id').toBe(userId);
+  const connected = _frames(back, 'connected').at(-1)!;
+  expect(connected.msg.userId, 'the player came back with a new id').toBe(userId);
+  const refusals = sockets
+    .filter((s) => s.index >= attempts)
+    .flatMap((s) => _frames(s, 'closing'))
+    .filter((frame) => frame.msg.code === 4001 && frame.at < connected.at);
+  expect(refusals.length, 'the server never refused the forgotten token with 4001').toBeGreaterThan(0);
   await expect(page.getByTestId('lobby-player-count')).toHaveText(/^1\//);
+  await expect(page.getByTestId('host-kick-panel'), 'the host controls did not come back').toBeVisible();
+  await expect(page.getByTestId('start-game-btn'), 'the Start button did not come back').toBeVisible();
   const players = _frames(back, 'room_players').at(-1)!.msg.players as Msg[];
   expect(players.find((p) => p.userId === userId)?.isHost, 'the player is not the host').toBe(true);
   expect(
