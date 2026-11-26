@@ -23,7 +23,7 @@ export const BACK_WITHIN_MS = {
   cut: 5_000, // worst seen 1.2 s
   freeze: 3_000, // worst seen 0.6 s
   refuse: 12_000, // worst seen 9.9 s: the page's next retry can land up to 10 s after refusals stop
-  restart: 20_000, // worst seen 7.8 s
+  restart: 20_000, // worst seen 10.0 s, on real Supabase: the first socket back reads the game from the database
 };
 export const DEADLINE_MARGIN_MS = 10_000;
 export const MAX_SEATS_DOWN = 2;
