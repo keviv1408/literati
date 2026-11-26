@@ -1,28 +1,7 @@
-import { expect, test, type Page, type WebSocketRoute } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { cut, findFrame, routeGameSocket, type Frame, type GameSocket, type Msg, type Wire } from './helpers/gameWire';
 
 const SILENT_MS = 30_000;
-const CUT = { code: 3001, reason: 'e2e cut' };
-
-type Msg = { type: string; [key: string]: any };
-
-interface Frame {
-  at: number;
-  msg: Msg;
-}
-
-interface GameSocket {
-  index: number;
-  openedAt: number;
-  page: WebSocketRoute;
-  server: WebSocketRoute | null;
-  cut: boolean;
-  frames: Frame[];
-}
-
-interface Wire {
-  sockets: GameSocket[];
-  refusing: boolean;
-}
 
 interface Connected {
   socket: GameSocket;
@@ -38,52 +17,8 @@ declare global {
   }
 }
 
-async function _routeGameSocket(page: Page): Promise<Wire> {
-  const wire: Wire = { sockets: [], refusing: false };
-  await page.routeWebSocket(/\/ws\/game\//, (ws) => {
-    const socket: GameSocket = {
-      index: wire.sockets.length,
-      openedAt: Date.now(),
-      page: ws,
-      server: null,
-      cut: false,
-      frames: [],
-    };
-    wire.sockets.push(socket);
-    if (wire.refusing) {
-      void ws.close({ code: 1006, reason: 'refused' });
-      return;
-    }
-    const server = ws.connectToServer();
-    socket.server = server;
-    // A message handler on each side turns off auto-forwarding, so a cut can stop the traffic.
-    ws.onMessage((message) => {
-      if (!socket.cut) server.send(message);
-    });
-    server.onMessage((message) => {
-      if (socket.cut) return;
-      socket.frames.push({ at: Date.now(), msg: JSON.parse(String(message)) });
-      ws.send(message);
-    });
-  });
-  return wire;
-}
-
-async function _cut(socket: GameSocket, sides: 'both' | 'server') {
-  socket.cut = true;
-  // An onClose handler stops Playwright from forwarding a close to the other side.
-  socket.page.onClose(() => {});
-  socket.server!.onClose(() => {});
-  await socket.server!.close(CUT);
-  if (sides === 'both') await socket.page.close(CUT);
-}
-
-function _frame(socket: GameSocket, type: string, match: (msg: Msg) => boolean = () => true) {
-  return socket.frames.find((frame) => frame.msg.type === type && match(frame.msg));
-}
-
 function _initedSocket(wire: Wire, fromIndex: number) {
-  return wire.sockets.filter((s) => s.index >= fromIndex && !s.cut && _frame(s, 'game_init')).at(-1);
+  return wire.sockets.filter((s) => s.index >= fromIndex && !s.cut && findFrame(s, 'game_init')).at(-1);
 }
 
 async function _connected(wire: Wire, fromIndex: number): Promise<Connected> {
@@ -91,14 +26,14 @@ async function _connected(wire: Wire, fromIndex: number): Promise<Connected> {
     .poll(() => Boolean(_initedSocket(wire, fromIndex)), { message: 'no game_init forwarded', timeout: 20_000 })
     .toBe(true);
   const socket = _initedSocket(wire, fromIndex)!;
-  const init = _frame(socket, 'game_init')!;
+  const init = findFrame(socket, 'game_init')!;
   const me = init.msg.myPlayerId as string;
   expect(init.msg.gameState.currentTurnPlayerId, "the turn is no longer the player's").toBe(me);
   const isMine = (msg: Msg) => msg.playerId === me;
   await expect
-    .poll(() => Boolean(_frame(socket, 'turn_timer', isMine)), { message: "no turn_timer for the player's turn" })
+    .poll(() => Boolean(findFrame(socket, 'turn_timer', isMine)), { message: "no turn_timer for the player's turn" })
     .toBe(true);
-  return { socket, me, init, timer: _frame(socket, 'turn_timer', isMine)! };
+  return { socket, me, init, timer: findFrame(socket, 'turn_timer', isMine)! };
 }
 
 async function _startGame(page: Page) {
@@ -190,7 +125,7 @@ async function _askAndSeeResult(page: Page, socket: GameSocket, me: string): Pro
 }
 
 test('socket killed mid-game', async ({ page }) => {
-  const wire = await _routeGameSocket(page);
+  const wire = await routeGameSocket(page);
   await _startGame(page);
   const gameUrl = page.url();
   const { socket, me } = await _connected(wire, 0);
@@ -199,12 +134,14 @@ test('socket killed mid-game', async ({ page }) => {
   expect(seat.playerId).toBe(me);
 
   const attempts = wire.sockets.length;
-  await _cut(socket, 'both');
+  await cut(socket, 'both');
 
   const bar = page.getByTestId('ws-reconnecting-banner');
   await expect(bar).toBeVisible();
   await expect(bar).toBeHidden({ timeout: 15_000 });
   const back = await _connected(wire, attempts);
+  expect(socket.closed, 'a deliberate cut is not a real close').toBeNull();
+  expect(back.socket.closed).toBeNull();
   expect(back.me).toBe(me);
   await expect(page).toHaveURL(gameUrl);
   expect(await page.evaluate(() => window.__e2e)).toBe(1);
@@ -215,12 +152,12 @@ test('socket killed mid-game', async ({ page }) => {
 });
 
 test("30 seconds of silence on the player's turn", async ({ page }) => {
-  const wire = await _routeGameSocket(page);
+  const wire = await routeGameSocket(page);
   await _startGame(page);
   const gameUrl = page.url();
   const { socket, me, init, timer } = await _connected(wire, 0);
   await expect
-    .poll(() => Boolean(_frame(socket, 'heartbeat')), { message: 'no heartbeat frame forwarded', timeout: 5_000 })
+    .poll(() => Boolean(findFrame(socket, 'heartbeat')), { message: 'no heartbeat frame forwarded', timeout: 5_000 })
     .toBe(true);
   const seat = await _mySeat(page);
 
@@ -237,7 +174,7 @@ test("30 seconds of silence on the player's turn", async ({ page }) => {
   // The silence deadline counts from the page's last message, so a stale one moves it earlier.
   expect(cutAt - lastFrameAt, 'frames stopped flowing before the cut').toBeLessThan(1_500);
   wire.refusing = true;
-  await _cut(socket, 'server');
+  await cut(socket, 'server');
   log('server side closed, page side left open', cutAt);
 
   await page.waitForTimeout(SILENT_MS);
