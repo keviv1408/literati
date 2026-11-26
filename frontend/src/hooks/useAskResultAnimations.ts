@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import type {
   AskSpeechBubbleState,
   SpeechBubbleVariant,
@@ -159,8 +159,11 @@ export function useAskResultAnimations(
   lastAskResult: AskResultPayload | null,
   options: UseAskResultAnimationsOptions = {},
 ) {
-  const getAskBubbleCardIds = options.getAskBubbleCardIds;
-  const getPlayerDisplayName = options.getPlayerDisplayName;
+  const readAskContext = useEffectEvent((result: AskResultPayload) => ({
+    overrideBubbleCardIds: options.getAskBubbleCardIds?.(result),
+    targetName: options.getPlayerDisplayName?.(result.targetId),
+  }));
+  const [shownResult, setShownResult] = useState<AskResultPayload | null>(null);
   const [cardFlight, setCardFlight] = useState<CardFlightState | null>(null);
   const [askDeniedCue, setAskDeniedCue] = useState<AskDeniedCueState | null>(null);
   const [askSpeechBubble, setAskSpeechBubble] = useState<AskSpeechBubbleState | null>(null);
@@ -168,10 +171,10 @@ export function useAskResultAnimations(
   useEffect(() => {
     if (!lastAskResult) return;
 
-    const overrideBubbleCardIds = getAskBubbleCardIds?.(lastAskResult);
-    const targetName = getPlayerDisplayName?.(lastAskResult.targetId);
+    const { overrideBubbleCardIds, targetName } = readAskContext(lastAskResult);
     let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
     const frameId = requestAnimationFrame(() => {
+      setShownResult(lastAskResult);
       const askerEl = getPlayerSeatElement(lastAskResult.askerId);
       if (askerEl) {
         const bubbleCardIds =
@@ -238,15 +241,15 @@ export function useAskResultAnimations(
       cancelAnimationFrame(frameId);
       if (bubbleTimer) clearTimeout(bubbleTimer);
     };
-  }, [getAskBubbleCardIds, getPlayerDisplayName, lastAskResult]);
+  }, [lastAskResult]);
 
   const clearCardFlight = useCallback(() => setCardFlight(null), []);
   const clearAskDeniedCue = useCallback(() => setAskDeniedCue(null), []);
 
   return {
-    cardFlight,
-    askDeniedCue,
-    askSpeechBubble,
+    cardFlight: shownResult === lastAskResult ? cardFlight : null,
+    askDeniedCue: shownResult === lastAskResult ? askDeniedCue : null,
+    askSpeechBubble: shownResult === lastAskResult ? askSpeechBubble : null,
     clearCardFlight,
     clearAskDeniedCue,
   };

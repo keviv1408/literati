@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
             // A 404 during a deploy switch must not be cached, or the asset stays broken forever.
             if (res.ok) {
               const clone = res.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+              event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)));
             }
             return res;
           })

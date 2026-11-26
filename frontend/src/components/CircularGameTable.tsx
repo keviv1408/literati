@@ -8,7 +8,7 @@
  * T1, T2, T1, T2, T1, T2 (6-player) or T1, T2, T1, T2 × 4 (8-player).
  *
  * The local player is always anchored at the bottom (6 o'clock), with
- * opponents and teammates alternating clockwise around the felt.
+ * opponents and teammates alternating around the felt.
  *
  * ### Geometry
  * Seats are positioned along an ellipse using the clockwise-from-top formula:
@@ -16,7 +16,7 @@
  *   y = 50 - ry × cos(angleDeg)
  *
  * Starting at 180° (bottom) and decrementing by `step = 360 / count` each
- * seat produces a visually clockwise progression.
+ * seat puts the next server seat to the right of the local player.
  *
  * ### Responsive
  * - Mobile  (<sm): container uses `aspect-[5/4]`, tighter radii (32%)
@@ -27,6 +27,7 @@
  */
 
 import React from 'react';
+import DealAnimation from './DealAnimation';
 import GamePlayerSeat from './GamePlayerSeat';
 import type { GamePlayer } from '@/types/game';
 import type { DeclarationSeatRevealCard } from '@/lib/declarationSeatReveal';
@@ -50,7 +51,6 @@ function getCircularPositions(count: 6 | 8): SeatXY[] {
   const r = count === 8 ? 33 : 34; // slightly tighter for 8-player
 
   return Array.from({ length: count }, (_, i) => {
-    // Clockwise visually: subtract step each seat from the starting angle.
     const angleDeg = ((180 - i * step) + 360) % 360;
     const rad = (angleDeg * Math.PI) / 180;
     // Rounded so server and client render identical style strings when SSR'd.
@@ -91,6 +91,7 @@ export interface CircularGameTableProps {
   playerCount: 6 | 8;
   currentTurnPlayerId: string | null;
   indicatorActive: boolean;
+  onOpeningDealComplete?: () => void;
   highlightedPlayerIds?: Set<string>;
   onSeatClick?: (playerId: string) => void;
   /** When provided, ALL player seats become directly tappable regardless of highlight state. Used by god-mode spectators. */
@@ -118,6 +119,7 @@ export default function CircularGameTable({
   playerCount,
   currentTurnPlayerId,
   indicatorActive,
+  onOpeningDealComplete,
   highlightedPlayerIds,
   onSeatClick,
   onDirectSeatClick,
@@ -230,6 +232,12 @@ export default function CircularGameTable({
           </div>
         );
       })}
+      {onOpeningDealComplete && (
+        <DealAnimation
+          seats={displaySlots.flatMap((player, i) => player ? [{ ...positions[i], seatIndex: player.seatIndex }] : [])}
+          onComplete={onOpeningDealComplete}
+        />
+      )}
     </div>
   );
 }
