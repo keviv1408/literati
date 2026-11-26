@@ -292,9 +292,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
   });
 
   // Derive whether the current user is the host by finding their entry in the
-  // live WebSocket player list returned by the server. The `isHost` flag is
-  // set server-side based on the Supabase rooms.host_user_id field, so no
-  // client-side spoofing is possible.
+  // live WebSocket player list returned by the server. The `isHost` flag is the
+  // server's live lobby flag (seeded from either host column, moved by a host
+  // transfer), so no client-side spoofing is possible.
   const myWsPlayer = wsPlayers.find((p) => p.playerId === myPlayerId);
   const amIHostLive = myWsPlayer?.isHost ?? false;
 
