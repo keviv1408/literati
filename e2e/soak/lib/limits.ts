@@ -29,3 +29,9 @@ export const STEP_WAIT_MS = 50_000;
 export const GAME_CAP_MS = { short: 360_000, long: 600_000 };
 export const LOST_MOVES_MAX = 2;
 export const AFTER_MOVE_POLL_MS = 5_000;
+
+export const LOBBY_WAIT_MS = 30_000;
+export const FIRST_SAVE_MS = 10_000;
+export const LOG_TAIL_LINES = 20;
+// Ten chained 100 ms timers: about 1 s on a live page, 5 s or more on a throttled background one.
+export const TIMER_CHAIN_MAX_MS = 1_500;
