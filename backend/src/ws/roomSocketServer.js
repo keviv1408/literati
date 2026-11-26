@@ -1121,6 +1121,18 @@ function buildOccupiedSeats(clients, playerCount) {
 async function handleStartGame(ctx) {
   const { ws, isHost, roomCode, clients } = ctx;
 
+  // Before the lock and the room read, so a non-host cannot hold the lock against the host.
+  if (!isHost) {
+    ws.send(
+      JSON.stringify({
+        type:    'error',
+        code:    'HOST_ONLY',
+        message: 'Only the host can start the game',
+      }),
+    );
+    return;
+  }
+
   // ── Idempotency guard ──────────────────────────────────────────────────────
   // Prevent duplicate game-start sequences from concurrent calls.
   if (_startingRooms.has(roomCode)) {
@@ -1160,17 +1172,6 @@ async function handleStartGame(ctx) {
           type:    'error',
           code:    'MATCHMAKING_ROOM',
           message: 'Matchmaking games start automatically',
-        }),
-      );
-      return;
-    }
-
-    if (!isHost) {
-      ws.send(
-        JSON.stringify({
-          type:    'error',
-          code:    'HOST_ONLY',
-          message: 'Only the host can start the game',
         }),
       );
       return;

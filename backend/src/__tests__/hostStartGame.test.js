@@ -446,6 +446,57 @@ describe('D. Broadcast', () => {
     expect(gameServer.createGame).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses a non-host without reading the room or taking the start lock', async () => {
+    const supabase = buildMockSupabase(makeWaitingRoom());
+    _setSupabaseClientFactory(() => supabase);
+    const lockSpy = jest.spyOn(_startingRooms, 'add');
+
+    const hostWs = createMockWs();
+    const p1Ws   = createMockWs();
+
+    registerClients(ROOM_CODE, 6, [
+      { userId: HOST_ID,    displayName: 'Host', isGuest: false, isHost: true,  teamId: 1, ws: hostWs },
+      { userId: PLAYER1_ID, displayName: 'P1',   isGuest: false, isHost: false, teamId: 2, ws: p1Ws   },
+    ]);
+    const clients = roomClients.get(ROOM_CODE);
+
+    try {
+      await handleStartGame({ ws: p1Ws, userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
+
+      expect(msgOfType(p1Ws, 'error').code).toBe('HOST_ONLY');
+      expect(supabase.from).not.toHaveBeenCalled();
+      expect(supabase._chain.maybeSingle).not.toHaveBeenCalled();
+      expect(lockSpy).not.toHaveBeenCalledWith(ROOM_CODE);
+    } finally {
+      lockSpy.mockRestore();
+    }
+  });
+
+  it('lets the host start while a non-host request is in flight', async () => {
+    const supabase = buildMockSupabase(makeWaitingRoom());
+    _setSupabaseClientFactory(() => supabase);
+    const gameServer = buildMockGameServer();
+    _setGameServer(gameServer);
+
+    const hostWs = createMockWs();
+    const p1Ws   = createMockWs();
+
+    registerClients(ROOM_CODE, 6, [
+      { userId: HOST_ID,    displayName: 'Host', isGuest: false, isHost: true,  teamId: 1, ws: hostWs },
+      { userId: PLAYER1_ID, displayName: 'P1',   isGuest: false, isHost: false, teamId: 2, ws: p1Ws   },
+    ]);
+    const clients = roomClients.get(ROOM_CODE);
+
+    const nonHostCall = handleStartGame({ ws: p1Ws, userId: PLAYER1_ID, isHost: false, roomCode: ROOM_CODE, clients });
+    const hostCall    = handleStartGame({ ws: hostWs, userId: HOST_ID, isHost: true, roomCode: ROOM_CODE, clients });
+    await Promise.all([nonHostCall, hostCall]);
+
+    expect(msgOfType(p1Ws, 'error').code).toBe('HOST_ONLY');
+    expect(msgOfType(hostWs, 'error')).toBeNull();
+    expect(msgOfType(hostWs, 'lobby-starting')).not.toBeNull();
+    expect(gameServer.createGame).toHaveBeenCalledTimes(1);
+  });
+
   it('lobby-starting payload includes roomCode', async () => {
     const supabase = buildMockSupabase(makeWaitingRoom());
     _setSupabaseClientFactory(() => supabase);
