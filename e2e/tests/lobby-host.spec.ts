@@ -89,11 +89,16 @@ test('a host whose session the server forgot comes back as the same player', asy
     }).observe(document.body, { childList: true, subtree: true });
   });
 
-  const token = await page.evaluate(() => JSON.parse(localStorage.getItem('literati_backend_token')!).token as string);
-  const forgotten = await page.request.delete(`${API_URL}/api/auth/guest`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  expect(forgotten.ok(), `DELETE /api/auth/guest returned ${forgotten.status()}`).toBe(true);
+  // The token stays in the page: Playwright's request log would record the Authorization header.
+  const forgottenStatus = await page.evaluate(async (api) => {
+    const { token } = JSON.parse(localStorage.getItem('literati_backend_token')!);
+    const res = await fetch(`${api}/api/auth/guest`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.status;
+  }, API_URL);
+  expect(forgottenStatus >= 200 && forgottenStatus < 300, `DELETE /api/auth/guest returned ${forgottenStatus}`).toBe(true);
 
   const attempts = sockets.length;
   const reregistered = page.waitForRequest(
