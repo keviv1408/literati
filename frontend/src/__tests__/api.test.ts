@@ -272,6 +272,29 @@ describe('joinRoomVoice', () => {
   const voiceCalls = (fetchMock: jest.MockedFunction<typeof fetch>) =>
     fetchMock.mock.calls.filter(([url]) => String(url).includes('/voice/join'));
 
+  it("sends the guest's cached token first and does not register", async () => {
+    mockGetCachedToken.mockReturnValue('cached-guest-token');
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => voiceResponse,
+    } as Response);
+
+    await expect(joinRoomVoice('abc123', 'stale-guest-token', guest)).resolves.toEqual(
+      voiceResponse,
+    );
+
+    expect(mockGetCachedToken).toHaveBeenCalledWith('Viv', 'rk');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(voiceCalls(fetchMock)[0][1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer cached-guest-token' }),
+      }),
+    );
+    expect(mockClearToken).not.toHaveBeenCalled();
+  });
+
   it('registers again and retries once with the fresh token after a guest 401', async () => {
     mockGetCachedToken.mockReturnValue(null);
     const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
@@ -333,6 +356,7 @@ describe('joinRoomVoice', () => {
       new ApiError(401, 'Unauthorized', { error: 'Unauthorized' }),
     );
 
+    expect(mockGetCachedToken).not.toHaveBeenCalled();
     expect(mockClearToken).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
