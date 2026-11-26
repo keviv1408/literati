@@ -33,7 +33,6 @@ const {
   getBlockedPlayers,
   getPlayerIdentifier,
 } = require('../rooms/roomBlocklist');
-const { getIO, getConnectedUsers } = require('../socket/server');
 const { toPublicSeat } = require('../game/gameInitService');
 const roomHost = require('../rooms/roomHost');
 
@@ -282,29 +281,6 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
     // Private rooms use the token-based spectator URL so the link is not
     // guessable from the room code alone.
     const spectatorLink = `${frontendUrl}/spectate/${room.spectator_token}`;
-
-    // ── Emit room-created socket event to host ─────────────────────────────────
-    // Non-fatal: the REST response is the source of truth. The socket event is
-    // a supplemental real-time notification that delivers the same data along
-    // with ready-made links to any connected socket client.
-    try {
-      const io = getIO();
-      if (io && hostUserId) {
-        const connectedUsers = getConnectedUsers();
-        const socketId = connectedUsers.get(hostUserId);
-        if (socketId) {
-          io.to(socketId).emit('room-created', {
-            room,
-            inviteCode:    room.invite_code,
-            inviteLink,
-            spectatorLink,
-          });
-        }
-      }
-    } catch (emitErr) {
-      // Never let a socket error abort the successful HTTP response.
-      console.warn('[socket] room-created emit failed:', emitErr.message);
-    }
 
     // Return room details plus convenience links so the host page can display
     // them immediately without a second round-trip.

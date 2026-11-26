@@ -58,7 +58,7 @@ cd backend && npm test
 cd backend && npm test:watch
 
 # Backend: Single file
-cd backend && npm test -- roomSocket
+cd backend && npm test -- rooms.test
 ```
 
 **Key note**: Always use `--testPathPattern` or `--no-coverage` to avoid slowness. Never run `npm test` alone without flags.
@@ -112,7 +112,6 @@ literati/
 | File | Purpose |
 |------|---------|
 | `src/lib/api.ts` | All HTTP calls to backend (`API_URL = process.env.NEXT_PUBLIC_API_URL`) |
-| `src/lib/socket.ts` | WebSocket connection factory |
 | `src/lib/backendSession.ts` | Bearer token cache (localStorage) |
 | `src/lib/guestSession.ts` | Guest session management |
 | `src/lib/roomMembership.ts` | Track which rooms user has joined |

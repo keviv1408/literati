@@ -30,11 +30,6 @@ jest.mock('../matchmaking/matchmakingQueue', () => ({
   stopQueueCleanupTimer:  jest.fn(),
   getQueueSnapshot:       jest.fn(() => ({ queues: {}, totalWaiting: 0 })),
 }));
-jest.mock('../socket/server', () => ({
-  initSocket:         jest.fn(() => ({ on: jest.fn() })),
-  getIO:              jest.fn(() => null),
-  getConnectedUsers:  jest.fn(() => new Map()),
-}));
 jest.mock('../ws/wsServer',           () => ({ createWsServer:          jest.fn() }));
 jest.mock('../ws/roomSocketServer',    () => ({ attachRoomSocketServer:  jest.fn() }));
 jest.mock('../game/gameSocketServer',  () => ({ attachGameSocketServer:  jest.fn() }));
