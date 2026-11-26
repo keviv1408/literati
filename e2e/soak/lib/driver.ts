@@ -5,7 +5,6 @@ import { afterMove, afterRecovery, atEnd, scanFrames } from './checks';
 import { mayTakeHolderDown, mayWaitForSeats } from './deadline';
 import { failure } from './fail';
 import {
-  AFTER_MOVE_POLL_MS,
   BACK_WITHIN_MS,
   FREEZE_FRESH_MS,
   GAME_CAP_MS,
@@ -668,21 +667,11 @@ class _Game {
     return { kind: 'handoff', result: null, turns: [chosen], choice: null };
   }
 
-  // A reconnect during the save sends a turn_timer before the park, so a turn_timer means no choice only once no park follows it in time.
+  // A reconnect during the save sends a turn_timer before the park, and the save has no time limit, so only the deadline says no choice opened.
   private async _choiceOpened(socket: GameSocket, from: number, declaration: string, deadline: number): Promise<_Found> {
-    const where = { move: this.moves + 1 };
-    return this._until(`the choice after ${declaration}: the model expects one, the server opened none`, () => {
-      const opened = _find(socket, from, (m) => m.type === 'post_declaration_timer');
-      if (opened) return opened;
-      const timer = _find(socket, from, (m) => m.type === 'turn_timer');
-      if (timer && Date.now() - socket.frames[timer.index].at > AFTER_MOVE_POLL_MS) {
-        throw failure(
-          `the model expects a choice after ${declaration}, but the server sent a turn_timer for ${this._name(timer.msg.playerId)} and opened none`,
-          where,
-        );
-      }
-      return undefined;
-    }, deadline);
+    return this._frame(socket, from, `the choice after ${declaration}: the model expects one, the server opened none`, deadline, (m) =>
+      m.type === 'post_declaration_timer',
+    );
   }
 
   // The server applies a move and broadcasts its result in one tick, so a socket whose game_init predates the move is owed a copy.
