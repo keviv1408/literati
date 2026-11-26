@@ -142,6 +142,22 @@ export function invalidateGuestToken(): void {
   clearToken();
 }
 
+// A guest 401 usually means the backend restarted and forgot the session, so register again once.
+async function _withGuestRetry<T>(
+  token: string,
+  guest: { displayName: string; recoveryKey?: string | null },
+  send: (token: string) => Promise<T>,
+): Promise<T> {
+  try {
+    return await send(token);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    clearToken();
+    const retryToken = await getGuestBearerToken(guest.displayName, guest.recoveryKey);
+    return send(retryToken);
+  }
+}
+
 // ── Registered-user auth ──────────────────────────────────────────────────────
 
 export interface RegisterPayload {
@@ -270,21 +286,9 @@ export async function createRoom(
     });
 
   // Registered users supply their own Supabase JWT; guests need a backend token.
-  const token = bearerToken ?? (await getGuestBearerToken(displayName, recoveryKey));
-
-  try {
-    return await submitCreateRoom(token);
-  } catch (err) {
-    // Guest 401s usually mean the backend restarted and lost its in-memory
-    // session store. Clear the stale cache, mint a fresh guest token, and
-    // retry once transparently so the user does not need to refresh.
-    if (err instanceof ApiError && err.status === 401 && !bearerToken) {
-      clearToken();
-      const retryToken = await getGuestBearerToken(displayName, recoveryKey);
-      return submitCreateRoom(retryToken);
-    }
-    throw err;
-  }
+  if (bearerToken) return submitCreateRoom(bearerToken);
+  const token = await getGuestBearerToken(displayName, recoveryKey);
+  return _withGuestRetry(token, { displayName, recoveryKey }, submitCreateRoom);
 }
 
 /**
@@ -343,16 +347,21 @@ export async function getRoomByInviteCode(
  */
 export async function joinRoomVoice(
   roomCode: string,
-  bearerToken: string
+  bearerToken: string,
+  guest?: { displayName: string; recoveryKey: string | null },
 ): Promise<VoiceJoinResponse> {
-  return apiFetch<VoiceJoinResponse>(
-    `/api/rooms/${roomCode.toUpperCase()}/voice/join`,
-    {
-      method: 'POST',
-      token: bearerToken,
-      body: JSON.stringify({}),
-    }
-  );
+  const submitVoiceJoin = (token: string) =>
+    apiFetch<VoiceJoinResponse>(
+      `/api/rooms/${roomCode.toUpperCase()}/voice/join`,
+      {
+        method: 'POST',
+        token,
+        body: JSON.stringify({}),
+      }
+    );
+
+  if (!guest) return submitVoiceJoin(bearerToken);
+  return _withGuestRetry(bearerToken, guest, submitVoiceJoin);
 }
 
 // ── Matchmaking ───────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import type {
   DailyParticipant,
   DailyParticipantsObject,
 } from '@daily-co/daily-js';
+import { useGuest } from '@/contexts/GuestContext';
 import { ApiError, joinRoomVoice } from '@/lib/api';
 
 export interface VoiceParticipantState {
@@ -99,6 +100,7 @@ export function useDailyVoice({
   bearerToken,
   canJoin = true,
 }: UseDailyVoiceOptions): UseDailyVoiceReturn {
+  const { guestSession } = useGuest();
   const callObjectRef = useRef<DailyCall | null>(null);
   const [participants, setParticipants] = useState<Record<string, VoiceParticipantState>>({});
   const [activeSpeakerSessionId, setActiveSpeakerSessionId] = useState<string | null>(null);
@@ -198,7 +200,13 @@ export function useDailyVoice({
 
     try {
       const callObject = await ensureCallObject();
-      const voiceSession = await joinRoomVoice(roomCode, bearerToken);
+      const voiceSession = await joinRoomVoice(
+        roomCode,
+        bearerToken,
+        guestSession
+          ? { displayName: guestSession.displayName, recoveryKey: guestSession.sessionId }
+          : undefined,
+      );
 
       await callObject.join({
         url: voiceSession.roomUrl,
@@ -237,6 +245,7 @@ export function useDailyVoice({
     canJoin,
     clearVoiceState,
     ensureCallObject,
+    guestSession,
     isJoined,
     isJoining,
     roomCode,
