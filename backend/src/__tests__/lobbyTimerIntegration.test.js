@@ -43,6 +43,7 @@ const { _setSupabaseClient } = require('../db/supabase');
 const {
   _clearAll:    clearLobbyStore,
   getOrCreateLobby,
+  getLobby,
   addPlayerToLobby: addToLobbyStore,
 } = require('../lobby/lobbyStore');
 const {
@@ -50,6 +51,7 @@ const {
   initLobbyRoom,
   addPlayerToLobby: addSeatToLobbyManager,
   getLobbySnapshot,
+  getLobbyRoom,
 } = require('../ws/lobbyManager');
 const {
   _clearAllTimers,
@@ -146,6 +148,7 @@ function makeWaitingRoom6(overrides = {}) {
     player_count:         6,
     card_removal_variant: 'remove_7s',
     status:               'waiting',
+    is_matchmaking:       true,
     ...overrides,
   };
 }
@@ -749,5 +752,40 @@ describe('F. Bot name generation', () => {
       expect(bot.isBot).toBe(true);
       expect(bot.isGuest).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G. Only matchmaking rooms can be joined through /ws
+// ---------------------------------------------------------------------------
+
+describe('G. handleJoinRoom refuses rooms that are not matchmaking rooms', () => {
+  it.each([
+    ['is_matchmaking false', { is_matchmaking: false }],
+    ['is_matchmaking null', { is_matchmaking: null }],
+    ['is_matchmaking missing', { is_matchmaking: undefined }],
+  ])('refuses a room with %s and touches no lobby store', async (_label, overrides) => {
+    const supabase = buildMockSupabase(makeWaitingRoom6(overrides));
+    _setSupabaseClient(supabase);
+
+    const hostWs = createMockWs();
+    await handleJoinRoom(hostWs, 'conn-host', hostUser, { type: 'join-room', roomCode: ROOM_CODE });
+
+    expect(lastSent(hostWs)).toMatchObject({ type: 'error', code: 'NOT_MATCHMAKING_ROOM' });
+    expect(msgOfType(hostWs, 'room-joined')).toBeNull();
+    expect(isLobbyTimerActive(ROOM_CODE)).toBe(false);
+    expect(getLobbyRoom(ROOM_CODE)).toBeNull();
+    expect(getLobby(ROOM_CODE)).toBeNull();
+  });
+
+  it('joins a matchmaking room as before', async () => {
+    const supabase = buildMockSupabase(makeWaitingRoom6({ is_matchmaking: true }));
+    _setSupabaseClient(supabase);
+
+    const hostWs = createMockWs();
+    await handleJoinRoom(hostWs, 'conn-host', hostUser, { type: 'join-room', roomCode: ROOM_CODE });
+
+    expect(msgOfType(hostWs, 'room-joined')).not.toBeNull();
+    expect(msgOfType(hostWs, 'error')).toBeNull();
   });
 });
