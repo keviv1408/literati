@@ -13,7 +13,8 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
   },
   projects: [
-    { name: 'unit', testMatch: /unit\/.*\.spec\.ts/ },
+    // Its own folder, so a unit run never wipes a game's folder mid-run.
+    { name: 'unit', testMatch: /unit\/.*\.spec\.ts/, outputDir: 'test-results/unit' },
     { name: 'parts', testMatch: /parts\.spec\.ts/, timeout: 600_000 },
     { name: 'short', testMatch: /short\.spec\.ts/, timeout: 480_000 },
     { name: 'long', testMatch: /long\.spec\.ts/, timeout: 3_300_000 },
