@@ -239,6 +239,25 @@ describe('room lobby recovery from a refused token', () => {
     expect(await screen.findByTestId('connection-error-screen')).toBeVisible();
     expect(screen.getByTestId('connection-error-retry-btn')).toBeVisible();
   });
+
+  it('drops the stale cached token, so a network error cannot leave the lobby idle', async () => {
+    await _renderConnecting();
+    _cacheStaleToken();
+    mockValidateSession.mockImplementation(async (token: string) => {
+      if (token === 'cached-stale') throw new TypeError('Failed to fetch');
+      return SESSION;
+    });
+    mockGetGuestBearerToken.mockResolvedValueOnce('token-2');
+    const before = mockSocketCalls.length;
+
+    _drive({ wsStatus: 'error', stopCode: 4001 });
+    await waitFor(() => expect(_lastToken()).toBe('token-2'));
+
+    expect(mockSocketCalls[mockSocketCalls.length - 1].sessionId).toBe('sid-1');
+    expect(_tokenChangesSince(before)).toEqual(['stale-room-token', null, 'token-2']);
+    expect(mockValidateSession).not.toHaveBeenCalledWith('cached-stale');
+    expect(screen.queryByTestId('connection-error-screen')).not.toBeInTheDocument();
+  });
 });
 
 describe('room lobby token choice after a restart', () => {
