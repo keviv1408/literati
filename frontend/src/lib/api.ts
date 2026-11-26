@@ -361,9 +361,7 @@ export async function joinRoomVoice(
     );
 
   if (!guest) return submitVoiceJoin(bearerToken);
-  // After a restart the page still holds its old token, while the cache holds the one a retry minted.
-  const token = getCachedToken(guest.displayName, guest.recoveryKey) ?? bearerToken;
-  return _withGuestRetry(token, guest, submitVoiceJoin);
+  return _withGuestRetry(bearerToken, guest, submitVoiceJoin);
 }
 
 // ── Matchmaking ───────────────────────────────────────────────────────────────

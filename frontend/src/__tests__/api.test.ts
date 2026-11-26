@@ -272,8 +272,10 @@ describe('joinRoomVoice', () => {
   const voiceCalls = (fetchMock: jest.MockedFunction<typeof fetch>) =>
     fetchMock.mock.calls.filter(([url]) => String(url).includes('/voice/join'));
 
-  it("sends the guest's cached token first and does not register", async () => {
-    mockGetCachedToken.mockReturnValue('cached-guest-token');
+  it("sends the page's room token first, not another guest's cached one", async () => {
+    mockGetCachedToken.mockImplementation((...args: unknown[]) =>
+      args[0] === 'Viv' && args[1] === 'rk' ? 'other-guest-token' : null,
+    );
     const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -281,18 +283,18 @@ describe('joinRoomVoice', () => {
       json: async () => voiceResponse,
     } as Response);
 
-    await expect(joinRoomVoice('abc123', 'stale-guest-token', guest)).resolves.toEqual(
+    await expect(joinRoomVoice('abc123', 'room-member-token', guest)).resolves.toEqual(
       voiceResponse,
     );
 
-    expect(mockGetCachedToken).toHaveBeenCalledWith('Viv', 'rk');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(voiceCalls(fetchMock)[0][1]).toEqual(
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer cached-guest-token' }),
+        headers: expect.objectContaining({ Authorization: 'Bearer room-member-token' }),
       }),
     );
     expect(mockClearToken).not.toHaveBeenCalled();
+    expect(mockSaveToken).not.toHaveBeenCalled();
   });
 
   it('registers again and retries once with the fresh token after a guest 401', async () => {
