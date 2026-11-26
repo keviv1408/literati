@@ -8,7 +8,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:3011',
     channel: 'chrome',
-    trace: 'retain-on-failure',
+    // No screencast: a failed game's trace was 257 MB with it.
+    trace: { mode: 'retain-on-failure', screenshots: false },
     viewport: { width: 1280, height: 720 },
   },
   projects: [
