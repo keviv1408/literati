@@ -787,5 +787,7 @@ describe('G. handleJoinRoom refuses rooms that are not matchmaking rooms', () =>
 
     expect(msgOfType(hostWs, 'room-joined')).not.toBeNull();
     expect(msgOfType(hostWs, 'error')).toBeNull();
+    // The mock returns the whole fixture, so only the select shows the join reads the flag.
+    expect(supabase._chain.select).toHaveBeenCalledWith(expect.stringMatching(/\bis_matchmaking\b/));
   });
 });
