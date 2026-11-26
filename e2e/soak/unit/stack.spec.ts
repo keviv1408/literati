@@ -130,7 +130,10 @@ for (const host of ['127.0.0.1', '::1']) {
 }
 
 test('killChildren ends every child', async () => {
-  const children = [0, 1].map(() => spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }));
+  // Leashed, so a worker killed before killChildren runs leaves no child behind.
+  const children = [0, 1].map(() =>
+    spawn(process.execPath, ['--require', LEASH, '-e', 'setInterval(() => {}, 1000)'], { stdio: ['pipe', 'ignore', 'ignore'] }),
+  );
   await Promise.all(children.map((child) => new Promise((resolve) => child.once('spawn', resolve))));
   const started = Date.now();
   await killChildren(children);
@@ -140,19 +143,22 @@ test('killChildren ends every child', async () => {
 });
 
 test('a leashed child dies with a parent that was killed without cleanup', async () => {
-  // String(): Playwright sets FORCE_COLOR, which would colour a logged number.
+  // String(): Playwright sets FORCE_COLOR, which would colour a logged number. The parent is leashed too, so a timed-out test leaves neither.
   const parent = spawn(
     process.execPath,
     [
+      '--require',
+      LEASH,
       '-e',
       `const child = require('node:child_process').spawn(process.execPath, ['--require', ${JSON.stringify(LEASH)}, '-e', 'setInterval(() => {}, 1000)'], { stdio: ['pipe', 'ignore', 'inherit'] });
        child.once('spawn', () => console.log(String(child.pid)));
        setInterval(() => {}, 1000);`,
     ],
-    { stdio: ['ignore', 'pipe', 'inherit'] },
+    { stdio: ['pipe', 'pipe', 'inherit'] },
   );
-  const pid = Number(await new Promise<string>((resolve) => parent.stdout.once('data', (chunk) => resolve(String(chunk)))));
+  let pid = 0;
   try {
+    pid = Number(await new Promise<string>((resolve) => parent.stdout.once('data', (chunk) => resolve(String(chunk)))));
     expect(_alive(pid)).toBe(true);
     await killChildren([parent]);
     const deadline = Date.now() + 2_000;
@@ -160,7 +166,8 @@ test('a leashed child dies with a parent that was killed without cleanup', async
     expect(_alive(pid)).toBe(false);
   } finally {
     await killChildren([parent]);
-    if (_alive(pid)) process.kill(pid, 'SIGKILL');
+    // Pid 0 would signal this whole process group.
+    if (pid > 0 && _alive(pid)) process.kill(pid, 'SIGKILL');
   }
 });
 
