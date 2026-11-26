@@ -188,7 +188,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
   //
   // Only runs once the session has been validated by useReconnect (status ===
   // 'ready'). Prefers the room-specific membership token (same identity that
-  // was used on the last visit) over the generic base session token.
+  // was used on the last visit) over the generic base session token, unless
+  // both are the same player's: the stored one may predate a backend restart.
   //
   // Setting bearerToken to null when the session is not yet ready prevents
   // useRoomSocket from opening a WebSocket connection prematurely.
@@ -202,14 +203,14 @@ export default function RoomLobbyPage({ params }: PageProps) {
     // This re-uses the exact backend session that the WS server already
     // accepted for this room, preserving seat and host status.
     const membership = loadRoomMembership(roomCode);
-    if (membership) {
+    if (membership && membership.playerId !== reconnectSessionId) {
       setBearerToken(membership.bearerToken);
       return;
     }
 
     // Priority 2: validated base session token from useReconnect.
     setBearerToken(baseToken);
-  }, [reconnectStatus, roomCode, baseToken, kickedOnEntry]);
+  }, [reconnectStatus, roomCode, baseToken, reconnectSessionId, kickedOnEntry]);
 
   // ── Socket.io connection for room-created event ───────────────────────────
   // Connects once a bearer token is available so the host can receive the

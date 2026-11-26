@@ -9,7 +9,9 @@ import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import type { UseRoomSocketOptions, WsStatus } from '@/hooks/useRoomSocket';
 import { GuestProvider } from '@/contexts/GuestContext';
-import { saveGuestSession } from '@/lib/guestSession';
+import { ApiError } from '@/lib/api';
+import { saveToken } from '@/lib/backendSession';
+import { loadGuestSession, saveGuestSession } from '@/lib/guestSession';
 import { saveRoomMembership } from '@/lib/roomMembership';
 import RoomLobbyPage from '@/app/room/[roomCode]/page';
 
@@ -43,10 +45,12 @@ interface SocketState {
 }
 
 const mockSocketCalls: UseRoomSocketOptions[] = [];
+const mockRefusedTokens = new Set<string>();
 let mockSetSocket: (state: SocketState) => void = () => {};
 
-// Stands in for the real socket: idle without a full set of credentials, connecting
-// on each new set, and otherwise whatever status the test drives it to.
+// Stands in for the real socket: idle without a full set of credentials, refused with
+// 4001 for a token the server forgot, connecting on any other new set, and otherwise
+// whatever status the test drives it to.
 jest.mock('@/hooks/useRoomSocket', () => {
   const { useState, useEffect } = jest.requireActual('react');
   // Stable across renders like the real hook's values, so the page's effects settle.
@@ -72,9 +76,11 @@ jest.mock('@/hooks/useRoomSocket', () => {
       mockSetSocket = setState;
       const { roomCode, sessionId, bearerToken } = options;
       useEffect(() => {
+        const complete = Boolean(roomCode && sessionId && bearerToken);
+        const refused = complete && mockRefusedTokens.has(bearerToken!);
         setState({
-          wsStatus: roomCode && sessionId && bearerToken ? 'connecting' : 'idle',
-          stopCode: null,
+          wsStatus: refused ? 'error' : complete ? 'connecting' : 'idle',
+          stopCode: refused ? 4001 : null,
         });
       }, [roomCode, sessionId, bearerToken]);
       return {
@@ -97,6 +103,13 @@ const ROOM = {
   players: [],
   created_at: '2026-11-26T00:00:00Z',
   updated_at: '2026-11-26T00:00:00Z',
+};
+
+const SESSION = {
+  isGuest: true,
+  sessionId: 'sid-1',
+  displayName: 'Ada',
+  avatarId: null,
 };
 
 const ERROR_SCREEN = '[data-testid="connection-error-screen"]';
@@ -140,12 +153,21 @@ function _drive(state: SocketState) {
   act(() => mockSetSocket(state));
 }
 
-async function _renderConnecting() {
+// A token from before the backend restarted, still in the guest token cache.
+function _cacheStaleToken() {
+  saveToken('cached-stale', Date.now() + 60 * 60_000, 'Ada', loadGuestSession()!.sessionId);
+}
+
+function _renderPage() {
   render(
     <GuestProvider>
       <RoomLobbyPage params={Promise.resolve({ roomCode: 'abc123' })} />
     </GuestProvider>,
   );
+}
+
+async function _renderConnecting() {
+  _renderPage();
   await waitFor(() => expect(_lastToken()).toBe('stale-room-token'));
   await waitFor(() => expect(screen.queryByTestId('reconnecting-screen')).not.toBeInTheDocument());
 }
@@ -153,17 +175,14 @@ async function _renderConnecting() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockSocketCalls.length = 0;
+  mockRefusedTokens.clear();
   window.localStorage.clear();
   window.sessionStorage.clear();
   saveGuestSession('Ada');
-  saveRoomMembership('ABC123', 'stale-room-token', 'sid-1', 'player');
+  // Another player's id, so the page keeps preferring this token over the fresh one.
+  saveRoomMembership('ABC123', 'stale-room-token', 'sid-0', 'player');
   mockGetRoomByCode.mockResolvedValue({ room: ROOM });
-  mockValidateSession.mockResolvedValue({
-    isGuest: true,
-    sessionId: 'sid-1',
-    displayName: 'Ada',
-    avatarId: null,
-  });
+  mockValidateSession.mockResolvedValue(SESSION);
   mockGetGuestBearerToken.mockResolvedValueOnce('token-1');
 });
 
@@ -204,5 +223,32 @@ describe('room lobby recovery from a refused token', () => {
 
     expect(await screen.findByTestId('connection-error-screen')).toBeVisible();
     expect(screen.getByTestId('connection-error-retry-btn')).toBeVisible();
+  });
+});
+
+describe('room lobby token choice after a restart', () => {
+  it("connects with the fresh token when the stored room token is the same player's", async () => {
+    saveRoomMembership('ABC123', 'stale-room-token', 'sid-1', 'player');
+    mockRefusedTokens.add('stale-room-token');
+    _cacheStaleToken();
+    mockValidateSession.mockImplementation(async (token: string) => {
+      if (token === 'cached-stale') throw new ApiError(401, 'Unauthorized');
+      return SESSION;
+    });
+    mockGetGuestBearerToken.mockResolvedValueOnce('token-2');
+
+    _renderPage();
+
+    await waitFor(() => expect(_lastToken()).toBe('token-1'));
+    expect(_tokenChangesSince(0)).toEqual([null, 'token-1']);
+    expect(mockGetGuestBearerToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the stored room token when it is another player's", async () => {
+    _renderPage();
+
+    await waitFor(() => expect(_lastToken()).toBe('stale-room-token'));
+    expect(_tokenChangesSince(0)).toEqual([null, 'stale-room-token']);
+    expect(mockGetGuestBearerToken).toHaveBeenCalledTimes(1);
   });
 });
