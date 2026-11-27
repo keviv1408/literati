@@ -50,7 +50,6 @@ import CircularGameTable from '@/components/CircularGameTable';
 import CardHand from '@/components/CardHand';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
-import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import type {
@@ -189,8 +188,7 @@ export default function SpectatorView({
     askDeniedCue,
     askSpeechBubble,
     speechResult,
-    clearCardFlight,
-    clearAskDeniedCue,
+    clearAskAnimation,
   } = useAskResultAnimations(lastVisibleAskResult, {
     nextAskAnimation,
     finishAskAnimation,
@@ -516,7 +514,7 @@ export default function SpectatorView({
               playerCount={effectivePlayerCount === 8 ? 8 : 6}
             />
           </CircularGameTable>
-          <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearCardFlight} />
+          <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearAskAnimation} />
         </div>
       </main>
 
@@ -661,16 +659,6 @@ export default function SpectatorView({
 
       {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
 
-      {askDeniedCue && (
-        <AskDeniedAnimation
-          cardId={askDeniedCue.cardId}
-          seatLeft={askDeniedCue.seatLeft}
-          seatTop={askDeniedCue.seatTop}
-          seatWidth={askDeniedCue.seatWidth}
-          seatHeight={askDeniedCue.seatHeight}
-          onComplete={clearAskDeniedCue}
-        />
-      )}
 
     </div>
   );

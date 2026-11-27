@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
-import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import Avatar from '@/components/Avatar';
 import CircularGameTable from '@/components/CircularGameTable';
@@ -58,7 +57,7 @@ export default function AvatarPreviewPage() {
     setRound(current => current.frames[current.index]?.result === result
       ? { ...current, index: current.index + 1 } : current);
   }, []);
-  const { cardFlight, clearCardFlight, askDeniedCue, clearAskDeniedCue, askSpeechBubble } =
+  const { cardFlight, clearAskAnimation, askDeniedCue, askSpeechBubble } =
     useAskResultAnimations(frame?.result ?? null, {
       getPlayerDisplayName: _name, nextAskAnimation: active, finishAskAnimation,
     });
@@ -95,7 +94,7 @@ export default function AvatarPreviewPage() {
             currentTurnPlayerId={active?.askerId ?? table.turn} indicatorActive={false}>
             <DeclaredBooksTable declaredSuits={table.declared} playerCount={6} />
           </CircularGameTable>
-          <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearCardFlight} />
+          <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearAskAnimation} />
         </div>
         <footer className={styles.controls}>
           <div className={styles.tools}>
@@ -115,7 +114,6 @@ export default function AvatarPreviewPage() {
           </p>
         </footer>
         {askSpeechBubble && <AskSpeechBubbleOverlay bubble={askSpeechBubble} />}
-        {askDeniedCue && <AskDeniedAnimation {...askDeniedCue} onComplete={clearAskDeniedCue} />}
       </main>
     </VoiceProvider>
   );

@@ -174,7 +174,7 @@ describe('useGameSocket reconnect', () => {
       _message(ws, { ...ask, cardId: '3_h' });
       _advance(20);
       expect(result.current.animation.cardFlight?.cardId).toBe('2_h');
-      const staleComplete = result.current.animation.clearCardFlight;
+      const staleComplete = result.current.animation.clearAskAnimation;
       hidden.mockReturnValue(true);
       act(() => { document.dispatchEvent(new Event('visibilitychange')); });
       expect(result.current.socket.lastAskResult?.cardId).toBe('3_h');
@@ -227,7 +227,7 @@ describe('useGameSocket reconnect', () => {
       _advance(20);
       _advance(20);
       expect(result.current.cardFlight?.cardId).toBe('3_h');
-      const completeOldFlight = result.current.clearCardFlight;
+      const completeOldFlight = result.current.clearAskAnimation;
       _serverClose(_latestWs(), 1006);
       expect(result.current.cardFlight).toBeNull();
       _advance(1000);

@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import CardHand from '@/components/CardHand';
@@ -132,7 +131,7 @@ export default function TutorialPage() {
     () => declarationRevealFor(step, before, players),
     [step, before, players],
   );
-  const { cardFlight, askDeniedCue, askSpeechBubble, clearCardFlight, clearAskDeniedCue } =
+  const { cardFlight, askDeniedCue, askSpeechBubble, clearAskAnimation } =
     useAskResultAnimations(askPayload, { getPlayerDisplayName });
 
   const pickedOption = step.kind === 'choice' && picked !== null ? step.options[picked] : null;
@@ -228,7 +227,7 @@ export default function TutorialPage() {
             >
               <DeclaredBooksTable declaredSuits={state.declared} playerCount={6} />
             </CircularGameTable>
-            <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearCardFlight} />
+            <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearAskAnimation} />
           </div>
 
           {step.kind === 'intro' && (
@@ -348,16 +347,6 @@ export default function TutorialPage() {
         </footer>
 
         {askSpeechBubble && <AskSpeechBubbleOverlay bubble={askSpeechBubble} />}
-        {askDeniedCue && (
-          <AskDeniedAnimation
-            cardId={askDeniedCue.cardId}
-            seatLeft={askDeniedCue.seatLeft}
-            seatTop={askDeniedCue.seatTop}
-            seatWidth={askDeniedCue.seatWidth}
-            seatHeight={askDeniedCue.seatHeight}
-            onComplete={clearAskDeniedCue}
-          />
-        )}
       </div>
     </VoiceProvider>
   );

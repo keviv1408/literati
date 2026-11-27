@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import type { CardId } from '@/types/game';
 import PlayingCard from './PlayingCard';
 
@@ -26,12 +26,11 @@ export default function AskDeniedAnimation({
   seatHeight,
   onComplete,
 }: AskDeniedAnimationProps) {
+  const finish = useEffectEvent(onComplete);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onComplete();
-    }, ASK_DENIED_ANIMATION_MS);
+    const timer = setTimeout(finish, ASK_DENIED_ANIMATION_MS);
     return () => clearTimeout(timer);
-  }, [onComplete]);
+  }, [cardId, seatLeft, seatTop]);
 
   const left = Math.max(2, Math.min(window.innerWidth - CARD_W - 10, seatLeft + seatWidth - CARD_W));
   const top = Math.max(2, seatTop + Math.min(8, seatHeight * 0.08));

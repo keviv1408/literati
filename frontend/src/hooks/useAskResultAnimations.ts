@@ -203,7 +203,6 @@ export function useAskResultAnimations(
     askDeniedCue: visual?.result === animationResult ? visual.denial ?? null : null,
     askSpeechBubble: speech?.result === speechResult ? speech.bubble : null,
     speechResult,
-    clearCardFlight: clearAnimation,
-    clearAskDeniedCue: clearAnimation,
+    clearAskAnimation: clearAnimation,
   };
 }

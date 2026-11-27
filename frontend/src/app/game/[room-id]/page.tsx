@@ -58,7 +58,6 @@ import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import { takeOpeningDeal } from '@/lib/openingDeal';
 import TableCardTransfer from '@/components/creatures/TableCardTransfer';
-import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
@@ -388,8 +387,7 @@ export default function GamePage({ params }: PageProps) {
     askDeniedCue,
     askSpeechBubble,
     speechResult,
-    clearCardFlight,
-    clearAskDeniedCue,
+    clearAskAnimation,
   } = useAskResultAnimations(myPlayerId ? lastVisibleAskResult : null, {
     nextAskAnimation: myPlayerId ? nextAskAnimation : null,
     finishAskAnimation,
@@ -1342,7 +1340,7 @@ export default function GamePage({ params }: PageProps) {
                   playerCount={effectivePlayerCount === 8 ? 8 : 6}
                 />
               </CircularGameTable>
-              <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearCardFlight} />
+              <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearAskAnimation} />
             </div>
           </main>
           </>
@@ -1537,16 +1535,6 @@ export default function GamePage({ params }: PageProps) {
 
       {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
 
-      {askDeniedCue && (
-        <AskDeniedAnimation
-          cardId={askDeniedCue.cardId}
-          seatLeft={askDeniedCue.seatLeft}
-          seatTop={askDeniedCue.seatTop}
-          seatWidth={askDeniedCue.seatWidth}
-          seatHeight={askDeniedCue.seatHeight}
-          onComplete={clearAskDeniedCue}
-        />
-      )}
 
     </div>
     </VoiceProvider>

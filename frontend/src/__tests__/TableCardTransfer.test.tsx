@@ -50,9 +50,12 @@ it('lets the active creature finish and cancels the previous grab without cleari
     }));
     expect(view.container.querySelectorAll('[data-creature="frog"][data-denial-role]')).toHaveLength(2);
     expect(view.queryByTestId('card-flight-card')).toBeNull();
+    expect(view.getByTestId('ask-denied-card')).toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(2000));
+    expect(complete).toHaveBeenCalledTimes(1);
     act(stop);
     expect(view.container.querySelectorAll('[data-denial-role]')).toHaveLength(0);
-    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete).toHaveBeenCalledTimes(2);
   } finally {
     view.unmount();
     jest.restoreAllMocks();
