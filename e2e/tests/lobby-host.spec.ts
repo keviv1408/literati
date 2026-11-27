@@ -66,7 +66,7 @@ function _recoveredSocket(sockets: RoomSocket[], fromIndex: number) {
 test('a host whose session the server forgot comes back as the same player', async ({ page }) => {
   const sockets = await _routeRoomSocket(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Private Room/ }).click();
+  await page.getByRole('button', { name: /Play now!/ }).click();
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
   await page.getByRole('button', { name: 'Continue as Guest' }).click();
   await page.getByRole('button', { name: 'Create Room', exact: true }).click();
@@ -156,7 +156,7 @@ test('a host whose session the server forgot comes back as the same player', asy
 
 test('only the host sees Start and starting brings a practicing guest into the game', async ({ page, browser }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /Private Room/ }).click();
+  await page.getByRole('button', { name: /Play now!/ }).click();
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
   await page.getByRole('button', { name: 'Continue as Guest' }).click();
   await page.getByRole('button', { name: 'Create Room', exact: true }).click();

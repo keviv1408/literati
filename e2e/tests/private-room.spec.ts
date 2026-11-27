@@ -5,7 +5,7 @@ test('a host can replace a waiting 3v3 lobby with a new 4v4 lobby', async ({ pag
   try {
     const guest = await guestContext.newPage();
     await host.goto('/');
-    await host.getByRole('button', { name: /Private Room/ }).click();
+    await host.getByRole('button', { name: /Play now!/ }).click();
     await host.getByPlaceholder('e.g. CardShark99').fill('Lobby Host');
     await host.getByRole('button', { name: 'Continue as Guest' }).click();
     await host.getByRole('button', { name: 'Create Room', exact: true }).click();
@@ -30,17 +30,28 @@ test('a host can replace a waiting 3v3 lobby with a new 4v4 lobby', async ({ pag
       await expect(player.getByTestId('lobby-player-count')).toHaveText(/^2\/6/);
     }
 
-    await host.getByRole('button', { name: 'Abandon lobby', exact: true }).click();
+    const abandon = host.getByRole('button', { name: 'Abandon lobby', exact: true });
+    await abandon.focus();
+    await host.keyboard.press('Enter');
     const confirmation = host.getByRole('alertdialog');
+    await expect(confirmation).toHaveAccessibleName('Abandon this lobby?');
+    await expect(confirmation).toHaveAccessibleDescription('This closes the lobby for everyone. Its invite link will stop working.');
+    await expect(confirmation.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    expect(await confirmation.evaluate(dialog => dialog.matches(':modal'))).toBe(true);
+    await host.keyboard.press('Escape');
+    await expect(confirmation).toBeHidden();
+    await expect(abandon).toBeFocused();
+    await abandon.click();
     await confirmation.getByRole('button', { name: 'Cancel' }).click();
+    await expect(abandon).toBeFocused();
     await expect(host.getByTestId('lobby-player-count')).toHaveText(/^2\/6/);
-    await host.getByRole('button', { name: 'Abandon lobby', exact: true }).click();
+    await abandon.click();
     await confirmation.getByRole('button', { name: 'Confirm abandon' }).click();
     await expect(guest.getByRole('heading', { name: 'Lobby closed' })).toBeVisible();
 
     await expect(host.getByRole('heading', { name: 'Lobby closed' })).toBeVisible();
     await host.getByRole('button', { name: 'Back to Home' }).click();
-    await host.getByRole('button', { name: /Private Room/ }).click();
+    await host.getByRole('button', { name: /Play now!/ }).click();
     await host.getByText('4v4', { exact: true }).click();
     await host.getByRole('button', { name: 'Create Room', exact: true }).click();
     await expect(host.getByTestId('lobby-player-count')).toHaveText(/^1\/8/);

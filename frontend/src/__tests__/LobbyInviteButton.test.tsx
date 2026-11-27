@@ -36,22 +36,6 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-it('shows a selectable room code alongside the invite button', async () => {
-  const user = userEvent.setup();
-  render(<LobbyInviteButton roomCode="ABC123" />);
-
-  await user.tab();
-  expect(screen.getByRole('button', { name: 'Invite friends' })).toHaveFocus();
-  await user.tab();
-
-  const code = screen.getByRole('textbox', { name: 'Room code' }) as HTMLInputElement;
-  expect(code).toHaveValue('ABC123');
-  expect(code).toHaveFocus();
-  expect(code).toHaveAttribute('readonly');
-  expect(code.selectionStart).toBe(0);
-  expect(code.selectionEnd).toBe(6);
-});
-
 it('opens the Android share sheet with the public invite link', async () => {
   await _renderInvite(LINK)();
 

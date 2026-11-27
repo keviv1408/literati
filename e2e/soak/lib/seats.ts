@@ -127,7 +127,7 @@ async function _host(draft: _Draft, stack: Stack): Promise<string> {
   const { page } = draft;
   await _step(stack, `${draft.name}: home page`, async () => {
     await page.goto(FRONTEND_URL);
-    await page.getByRole('button', { name: /Private Room/ }).click();
+    await page.getByRole('button', { name: /Play now!/ }).click();
     await page.getByPlaceholder('e.g. CardShark99').fill(draft.name);
     await page.getByRole('button', { name: 'Continue as Guest' }).click();
     await page.getByRole('button', { name: 'Create Room', exact: true }).click();
