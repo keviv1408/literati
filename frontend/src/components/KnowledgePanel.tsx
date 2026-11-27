@@ -65,6 +65,7 @@ export default function KnowledgePanel({
       <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/60 sticky top-0 bg-slate-900/95">
         <span className="font-semibold text-white">What I know</span>
         <button
+          autoFocus
           onClick={onClose}
           aria-label="Close what I know"
           className="text-slate-400 hover:text-white px-1 rounded focus:outline-none focus:ring-2 focus:ring-emerald-400"

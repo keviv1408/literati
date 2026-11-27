@@ -58,8 +58,10 @@ async function _startGame(page: Page) {
       window.__bar!.push({ shown, at: Date.now() });
     }).observe(document.body, { childList: true, subtree: true });
   });
+  await page.getByTestId('game-menu-toggle').click();
   await page.getByTestId('bot-speed-slider').fill('3000');
   await expect(page.getByTestId('bot-speed-value')).toHaveText('3s');
+  await page.getByTestId('game-menu-toggle').click();
 }
 
 async function _mySeat(page: Page) {
@@ -85,7 +87,7 @@ async function _ask(page: Page) {
     await expect(tray).toBeVisible();
     const askable = tray.locator('[data-testid^="inline-ask-card-"]');
     if ((await askable.count()) === 0) {
-      await page.getByTestId('game-room-code').click();
+      await page.getByTestId('game-score').click();
       continue;
     }
     const cardId = (await askable.first().getAttribute('data-testid'))!.replace('inline-ask-card-', '');
