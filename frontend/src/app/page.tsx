@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
 import { API_URL } from '@/lib/api';
+import { tutorialPath } from '@/lib/appPaths';
 import ShortTutorial from '@/components/ShortTutorial';
 import CreateRoomModal from '@/components/CreateRoomModal';
 
@@ -141,7 +142,7 @@ export default function Home() {
             </span>
           ))}
         </div>
-        <a href="/tutorial" className="rounded px-3 py-2 text-sm text-emerald-200 underline underline-offset-4 hover:text-white focus-visible:outline-2">
+        <a href={tutorialPath()} className="rounded px-3 py-2 text-sm text-emerald-200 underline underline-offset-4 hover:text-white focus-visible:outline-2">
           Play the full interactive tutorial
         </a>
       </main>

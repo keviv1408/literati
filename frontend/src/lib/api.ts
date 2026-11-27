@@ -18,6 +18,7 @@ import type {
   CreateRoomPayload,
   CreateRoomResponse,
   InviteCodeResponse,
+  Room,
 } from '@/types/room';
 import type { GameSummaryResponse } from '@/types/game';
 
@@ -309,7 +310,7 @@ export async function getGameSummary(roomCode: string): Promise<GameSummaryRespo
 export async function getRoomByCode(
   code: string,
   signal?: AbortSignal
-): Promise<{ room: import('@/types/room').Room }> {
+): Promise<{ room: Room; inviteLink?: string }> {
   return apiFetch(`/api/rooms/${code.toUpperCase()}`, { method: 'GET', signal });
 }
 

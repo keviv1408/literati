@@ -32,13 +32,17 @@ function removeServiceWorker() {
 
 describe('ServiceWorkerRegistrar', () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalBuildTarget = process.env.NEXT_PUBLIC_BUILD_TARGET;
 
   beforeEach(() => {
     process.env.NODE_ENV = 'test';
+    delete process.env.NEXT_PUBLIC_BUILD_TARGET;
   });
 
   afterEach(() => {
     process.env.NODE_ENV = originalNodeEnv;
+    if (originalBuildTarget === undefined) delete process.env.NEXT_PUBLIC_BUILD_TARGET;
+    else process.env.NEXT_PUBLIC_BUILD_TARGET = originalBuildTarget;
     jest.restoreAllMocks();
   });
 
@@ -64,6 +68,16 @@ describe('ServiceWorkerRegistrar', () => {
 
     expect(mockRegister).toHaveBeenCalledTimes(1);
     expect(mockRegister).toHaveBeenCalledWith('/sw.js', { scope: '/' });
+  });
+
+  it('does not register a service worker in the production Android build', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.NEXT_PUBLIC_BUILD_TARGET = 'android';
+    mockServiceWorker(() => Promise.resolve({ scope: '/' }));
+
+    render(<ServiceWorkerRegistrar />);
+
+    expect(navigator.serviceWorker.register).not.toHaveBeenCalled();
   });
 
   it('does not register service worker outside production', async () => {

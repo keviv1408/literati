@@ -21,6 +21,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
+import { roomPath } from '@/lib/appPaths';
 import { backoffDelayMs, retryWithBackoff } from '@/lib/backoff';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
 import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
@@ -247,7 +248,7 @@ export default function GamePage({ params }: PageProps) {
         const { room: fetched } = await getRoomByCode(roomCode, signal);
         if (signal.aborted) return false;
         clearTimeout(unreachableTimer);
-        if (fetched.status === 'waiting' || fetched.status === 'starting') { router.replace(`/room/${fetched.code}`); return true; }
+        if (fetched.status === 'waiting' || fetched.status === 'starting') { router.replace(roomPath(fetched.code)); return true; }
         setRoom(fetched);
         setLoading(false);
         return true;
@@ -576,7 +577,7 @@ export default function GamePage({ params }: PageProps) {
   // Redirect to room lobby when rematch is accepted
   useEffect(() => {
     if (rematchStarted && roomCode) {
-      router.replace(`/room/${roomCode}`);
+      router.replace(roomPath(roomCode));
     }
   }, [rematchStarted, roomCode, router]);
 
