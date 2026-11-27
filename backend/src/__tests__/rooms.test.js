@@ -45,7 +45,7 @@ describe('POST /api/rooms', () => {
     const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [] });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ room: { code: 'ABC123', destination: 'lobby', hosting: true } });
+    expect(response.body).toEqual({ room: { code: 'ABC123', destination: 'lobby' }, hosting: true });
     expect(mockSupabase._chain.eq).toHaveBeenCalledWith('host_user_id', 'owner');
   });
 
@@ -61,9 +61,29 @@ describe('POST /api/rooms', () => {
     });
     const lookup = () => request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: ['ABC123'] });
 
-    expect((await lookup()).body).toEqual({ room: { code: 'ABC123', destination: 'game', hosting: false } });
+    expect((await lookup()).body).toEqual({ room: { code: 'ABC123', destination: 'game' }, hosting: false });
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'stranger' } } });
     expect((await lookup()).body).toEqual({ room: null, hosting: false });
+  });
+
+  it('keeps creation blocked when a host can only return to another game', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
+    const hosted = { code: 'HOST01', status: 'in_progress' };
+    const joined = { code: 'JOIN02', status: 'in_progress' };
+    const chain = mockSupabase._chain;
+    chain.limit.mockResolvedValue({ data: [hosted] });
+    chain.eq.mockImplementation((column) => {
+      if (column === 'is_matchmaking') return Promise.resolve({ data: [hosted, joined] });
+      if (column === 'status') return Promise.resolve({ data: [
+        { code: hosted.code, game_state: { status: 'active', players: [{ playerId: 'other' }] } },
+        { code: joined.code, game_state: { status: 'active', players: [{ playerId: 'owner' }] } },
+      ] });
+      return chain;
+    });
+
+    const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [joined.code] });
+
+    expect(response.body).toEqual({ room: { code: joined.code, destination: 'game' }, hosting: true });
   });
 
   it('rejects a waiting lobby hint without current or previous seating', async () => {

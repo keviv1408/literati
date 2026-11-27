@@ -42,7 +42,7 @@ export default function Home() {
     let active = true;
     getReturningRoom(displayName, identity, recentPlayerRoomCodes().filter(code => !isKickedFromRoom(code)))
       .then(({ room, hosting }) => {
-        if (active) setCheck({ identity, room, hosting: Boolean(room?.hosting || hosting) });
+        if (active) setCheck({ identity, room, hosting });
       })
       .catch(() => {
         if (active) setCheck({ identity, room: null, hosting: false, failed: true });

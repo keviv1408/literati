@@ -179,7 +179,7 @@ describe('Home room recovery', () => {
     mockGetReturningRoom.mockReturnValue(new Promise(done => { resolve = done; }));
     render(<Home />);
     expect(screen.getByRole('button', { name: /Checking your room/ })).toBeDisabled();
-    await act(async () => resolve({ room: { code: 'ABC123', destination: 'game', hosting: true } }));
+    await act(async () => resolve({ room: { code: 'ABC123', destination: 'game' }, hosting: true }));
     expect(screen.queryByRole('button', { name: /Create Private Room/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Return to game/ }));
     expect(mockPush).toHaveBeenCalledWith('/game/ABC123');
@@ -187,7 +187,7 @@ describe('Home room recovery', () => {
 
   it('can retry a failed lookup and rejects a cancelled switch from a guest lobby', async () => {
     mockGetReturningRoom.mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ room: { code: 'ABC123', destination: 'lobby', hosting: false } });
+      .mockResolvedValueOnce({ room: { code: 'ABC123', destination: 'lobby' }, hosting: false });
     render(<Home />);
     fireEvent.click(await screen.findByRole('button', { name: /Retry/ }));
     expect(await screen.findByRole('button', { name: /Return to lobby/ })).toBeVisible();

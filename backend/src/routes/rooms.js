@@ -96,11 +96,12 @@ router.post('/return', requireAuth, async (req, res) => {
     const { data, error } = await _activeHostedRoom(db, req.user);
     if (error) throw error;
     const hosted = data?.[0];
+    const hosting = Boolean(hosted);
     if (hosted && !isBlocked(hosted.code, playerId) && hosted.status !== ROOM_STATUS.IN_PROGRESS) {
-      return res.json({ room: { code: hosted.code, destination: 'lobby', hosting: true } });
+      return res.json({ room: { code: hosted.code, destination: 'lobby' }, hosting });
     }
     const candidates = [...new Set(hosted ? [hosted.code, ...codes] : codes)].filter(code => !isBlocked(code, playerId));
-    if (!candidates.length) return res.json({ room: null, hosting: Boolean(hosted) });
+    if (!candidates.length) return res.json({ room: null, hosting });
 
     const rooms = await db.from('rooms').select('code, status, player_count')
       .in('code', candidates).in('status', [ROOM_STATUS.WAITING, ROOM_STATUS.STARTING, ROOM_STATUS.IN_PROGRESS])
@@ -125,20 +126,19 @@ router.post('/return', requireAuth, async (req, res) => {
     for (const code of candidates) {
       const room = byCode.get(code);
       if (!room) continue;
-      const hosting = hosted?.code === code;
       if (room.status === ROOM_STATUS.IN_PROGRESS) {
         const game = games.get(code);
         if (game?.status === 'active' && findReturningSeat(game.players, playerId, recoveryKey)) {
-          return res.json({ room: { code, destination: 'game', hosting } });
+          return res.json({ room: { code, destination: 'game' }, hosting });
         }
       } else {
         const clients = roomClients.get(code);
         if (clients?.has(playerId) || (recentlyLeftLobby(playerId, code) && (clients?.size ?? 0) < room.player_count)) {
-          return res.json({ room: { code, destination: 'lobby', hosting } });
+          return res.json({ room: { code, destination: 'lobby' }, hosting });
         }
       }
     }
-    return res.json({ room: null, hosting: Boolean(hosted) });
+    return res.json({ room: null, hosting });
   } catch {
     return res.status(500).json({ error: 'Could not check your room' });
   }
