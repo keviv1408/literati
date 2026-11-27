@@ -6,14 +6,14 @@ import { render, screen } from "@testing-library/react";
 import Avatar from "@/components/Avatar";
 
 describe("Avatar component", () => {
-  it("renders the glyph for a valid avatarId", () => {
-    render(<Avatar displayName="Alice Johnson" avatarId="avatar-2" />);
-    expect(screen.getByText("🐼")).toBeDefined();
+  it("renders the portrait for a valid avatarId", () => {
+    render(<Avatar displayName="Alice Johnson" avatarId="avatar-8" />);
+    expect(document.querySelector('img[src="/creatures/penguin.webp"]')).toBeInTheDocument();
   });
 
-  it("renders a bot's fixed glyph when avatarId is null", () => {
+  it("renders a bot's fixed portrait when avatarId is null", () => {
     render(<Avatar displayName="Mochi" avatarId={null} />);
-    expect(screen.getByText("🍡")).toBeDefined();
+    expect(document.querySelector('img[src="/creatures/penguin.webp"]')).toBeInTheDocument();
   });
 
   it("uses the frog portrait when the name-derived avatar is a frog", () => {
@@ -35,7 +35,7 @@ describe("Avatar component", () => {
 
   it("renders without errors for an empty display name", () => {
     const { container } = render(<Avatar displayName="" />);
-    expect(container.textContent).toMatch(/\S/);
+    expect(container.querySelector('img')).toBeInTheDocument();
   });
 
   it("shows a title tooltip when showTooltip is true", () => {

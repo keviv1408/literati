@@ -2,8 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
-import { creatureForEmoji } from "./creatures/kind";
-import { getAvatarColor, getAvatarEmoji } from "@/utils/avatar";
+import { getAvatarColor, getAvatarCreature } from "@/utils/avatar";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
 
@@ -16,9 +15,9 @@ const SIZE_STYLES: Record<AvatarSize, string> = {
 };
 
 export interface AvatarProps {
-  /** The player's display name — drives the background colour and the fallback glyph. */
+  /** The player's display name — drives the background colour and the fallback portrait. */
   displayName: string;
-  /** One of the backend's `avatar-1..12` ids. Falls back to a name-derived glyph. */
+  /** One of the backend's `avatar-1..12` ids. Falls back to a name-derived portrait. */
   avatarId?: string | null;
   /** Visual size of the avatar.  Defaults to "md". */
   size?: AvatarSize;
@@ -30,13 +29,6 @@ export interface AvatarProps {
   showTooltip?: boolean;
 }
 
-/**
- * `Avatar` — an emoji glyph on a name-coloured circle.
- *
- * @example
- * <Avatar displayName="Alice" avatarId="avatar-3" size="lg" />
- * <Avatar displayName="Mochi" avatarId={null} size="sm" />
- */
 const Avatar: React.FC<AvatarProps> = ({
   displayName,
   avatarId,
@@ -47,8 +39,7 @@ const Avatar: React.FC<AvatarProps> = ({
 }) => {
   const color = getAvatarColor(displayName);
   const label = ariaLabel ?? `Avatar for ${displayName}`;
-  const emoji = getAvatarEmoji(avatarId, displayName);
-  const creature = creatureForEmoji(emoji);
+  const creature = getAvatarCreature(avatarId, displayName);
 
   return (
     <div
@@ -69,14 +60,8 @@ const Avatar: React.FC<AvatarProps> = ({
         boxShadow: "inset 0 0 0 1.5px rgba(255,255,255,0.15)",
       }}
     >
-      {creature ? (
-        <Image unoptimized width={128} height={128} src={`/creatures/${creature}.webp`}
-          alt="" className="h-full w-full" draggable={false} />
-      ) : <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
-        <text x="50" y="54" fontSize="80" textAnchor="middle" dominantBaseline="central">
-          {emoji}
-        </text>
-      </svg>}
+      <Image unoptimized width={192} height={192} src={`/creatures/${creature}.webp`}
+        alt="" className="h-full w-full" draggable={false} />
     </div>
   );
 };

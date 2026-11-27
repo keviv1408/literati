@@ -135,14 +135,14 @@ describe('ProfilePage — /profile/[username]', () => {
     expect(screen.getByRole('heading', { name: 'Alice' })).toBeTruthy();
   });
 
-  it('6. renders the chosen avatar glyph', async () => {
+  it('6. renders the chosen avatar portrait', async () => {
     mockGetProfileByUsername.mockResolvedValue({
       profile: buildProfile({ avatarId: 'avatar-2', displayName: 'Alice' }),
     });
     await renderProfile('Alice');
 
     await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
-    expect(screen.getByText('🐼')).toBeTruthy();
+    expect(document.querySelector('img[src="/creatures/crab.webp"]')).toBeInTheDocument();
   });
 
   it('7. renders Games Completed stat', async () => {

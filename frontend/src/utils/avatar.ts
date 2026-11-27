@@ -1,51 +1,22 @@
-/**
- * Avatar utility
- *
- * Maps the backend's `avatar-1..12` ids to emoji glyphs and derives a
- * deterministic background colour from the display name's hash. Players
- * without a valid id (bots, legacy accounts) get a glyph from their name.
- */
+import type { CreatureKind } from '@/components/creatures/kind';
 
-export const AVATAR_IDS = Array.from({ length: 12 }, (_, i) => `avatar-${i + 1}`);
-
-const AVATAR_EMOJI: Record<string, string> = {
-  "avatar-1": "🦊",
-  "avatar-2": "🐼",
-  "avatar-3": "🐸",
-  "avatar-4": "🐙",
-  "avatar-5": "🦉",
-  "avatar-6": "🐯",
-  "avatar-7": "🦄",
-  "avatar-8": "🐧",
-  "avatar-9": "🦁",
-  "avatar-10": "🐨",
-  "avatar-11": "🐝",
-  "avatar-12": "🦋",
+const CREATURES_BY_ID: Record<string, CreatureKind> = {
+  'avatar-1': 'raccoon', 'avatar-2': 'crab', 'avatar-3': 'frog',
+  'avatar-4': 'octopus', 'avatar-5': 'toucan', 'avatar-6': 'elephant',
+  'avatar-7': 'kangaroo', 'avatar-8': 'penguin', 'avatar-9': 'spider',
+  'avatar-10': 'gecko', 'avatar-11': 'beetle', 'avatar-12': 'butterfly',
 };
+export const AVATAR_IDS = Object.keys(CREATURES_BY_ID);
 
-// Bot name pool lives in backend/src/matchmaking/botFiller.js.
-const BOT_EMOJI: Record<string, string> = {
-  ziggy: "⚡",
-  mochi: "🍡",
-  nova: "🌟",
-  tango: "💃",
-  pebble: "🪨",
-  echo: "🔊",
-  jinx: "🃏",
-  vega: "🔭",
-};
+const BOT_CREATURES = new Map<string, CreatureKind>([
+  ['ziggy', 'gecko'], ['mochi', 'penguin'], ['nova', 'butterfly'], ['tango', 'crab'],
+  ['pebble', 'elephant'], ['echo', 'toucan'], ['jinx', 'raccoon'], ['vega', 'spider'],
+]);
 
-/**
- * Glyph for a player: their chosen avatar when valid, otherwise one derived
- * from the display name (fixed for bot names, hashed for anything else).
- */
-export function getAvatarEmoji(
-  avatarId: string | null | undefined,
-  displayName: string,
-): string {
-  if (avatarId && AVATAR_EMOJI[avatarId]) return AVATAR_EMOJI[avatarId];
-  const key = (displayName ?? "").trim().toLowerCase().split(/\s+/)[0];
-  return BOT_EMOJI[key] ?? AVATAR_EMOJI[AVATAR_IDS[hashString(key) % AVATAR_IDS.length]];
+export function getAvatarCreature(avatarId: string | null | undefined, displayName: string): CreatureKind {
+  if (avatarId && Object.hasOwn(CREATURES_BY_ID, avatarId)) return CREATURES_BY_ID[avatarId];
+  const name = (displayName ?? '').trim().toLowerCase().split(/\s+/)[0];
+  return BOT_CREATURES.get(name) ?? CREATURES_BY_ID[AVATAR_IDS[hashString(name) % AVATAR_IDS.length]];
 }
 
 // ---------------------------------------------------------------------------

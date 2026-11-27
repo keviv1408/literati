@@ -150,6 +150,9 @@ export interface UseGameSocketReturn {
   variant: 'remove_2s' | 'remove_7s' | 'remove_8s' | null;
   playerCount: 6 | 8 | null;
   lastAskResult: AskResultPayload | null;
+  lastVisibleAskResult: AskResultPayload | null;
+  nextAskAnimation: AskResultPayload | null;
+  finishAskAnimation: (result: AskResultPayload) => void;
   lastDeclareResult: DeclarationResultPayload | null;
   declarationReveal: DeclarationReveal | null;
   turnTimer: TurnTimerPayload | null;
@@ -402,6 +405,11 @@ export function useGameSocket({
   const [variant, setVariant]            = useState<'remove_2s' | 'remove_7s' | 'remove_8s' | null>(null);
   const [playerCount, setPlayerCount]    = useState<6 | 8 | null>(null);
   const [lastAskResult, setLastAskResult] = useState<AskResultPayload | null>(null);
+  const [lastVisibleAskResult, setLastVisibleAskResult] = useState<AskResultPayload | null>(null);
+  const [askAnimations, setAskAnimations] = useState<AskResultPayload[]>([]);
+  const finishAskAnimation = useCallback((result: AskResultPayload) => {
+    setAskAnimations(pending => pending[0] === result ? pending.slice(1) : pending);
+  }, []);
   const [lastDeclareResult, setLastDeclareResult] = useState<DeclarationResultPayload | null>(null);
   const [declarationReveal, setDeclarationReveal] = useState<DeclarationReveal | null>(null);
   const [turnTimer, setTurnTimer]        = useState<TurnTimerPayload | null>(null);
@@ -444,14 +452,28 @@ export function useGameSocket({
     let lost: { drop: SocketDrop; at: number } | null = null;
     let countTimer: ReturnType<typeof setTimeout> | undefined;
 
+    function _discardAskAnimations() {
+      setAskAnimations([]);
+      setLastVisibleAskResult(null);
+    }
+
+    function _onVisibilityChange() {
+      if (document.hidden) _discardAskAnimations();
+    }
+
+    function _resetAskPlayback() {
+      _discardAskAnimations();
+      setLastAskResult(null);
+    }
+
     function confirmSocket() {
       socket.confirm();
+      _resetAskPlayback();
       setDeclarationReveal(null);
       if (!lost) return;
       const { drop, at } = lost;
       lost = null;
       // A reload would not show these, so a reconnect must not either.
-      setLastAskResult(null);
       setLastDeclareResult(null);
       setDeclarationTimer(null);
       setBotTakeover(null);
@@ -478,7 +500,6 @@ export function useGameSocket({
       switch (msg.type) {
         case 'game_init': {
           confirmSocket();
-          setLastAskResult(null);
           setLastDeclareResult(null);
           const payload = msg as unknown as {
             myPlayerId: string;
@@ -516,7 +537,6 @@ export function useGameSocket({
 
         case 'spectator_init': {
           confirmSocket();
-          setLastAskResult(null);
           setLastDeclareResult(null);
           const payload = msg as unknown as {
             players: GamePlayer[];
@@ -572,6 +592,7 @@ export function useGameSocket({
           const { state } = msg as { state: PublicGameState };
           if (state) {
             setGameState(state);
+            if (state.status === 'completed') _resetAskPlayback();
           }
           break;
         }
@@ -579,6 +600,10 @@ export function useGameSocket({
         case 'ask_result': {
           const payload = msg as unknown as AskResultPayload;
           setLastAskResult(payload);
+          if (!document.hidden) {
+            setLastVisibleAskResult(payload);
+            setAskAnimations(pending => [...pending, payload]);
+          }
           const { askerId, targetId, cardId, success } = payload;
           setAskHistory((prev) => [...prev, { askerId, targetId, cardId, success }]);
           // The active turn action completed; old turn timer is no longer valid.
@@ -602,6 +627,7 @@ export function useGameSocket({
           const payload = msg as unknown as DeclarationResultPayload;
           setLastDeclareResult(payload);
           setLastAskResult(null);
+          setLastVisibleAskResult(null);
           // Declaration completed; clear the previous turn timer immediately.
           setTurnTimer(null);
           // update eligible next-turn players list from the server payload
@@ -720,6 +746,7 @@ export function useGameSocket({
         }
 
         case 'game_over': {
+          _resetAskPlayback();
           const payload = msg as unknown as GameOverPayload;
           if (!spectatorToken) trackGameOver(roomCode);
           onGameOver?.(payload);
@@ -760,6 +787,7 @@ export function useGameSocket({
         }
 
         case 'room_dissolved': {
+          _resetAskPlayback();
           const payload = msg as unknown as RoomDissolvedPayload;
           setRoomDissolved(payload);
           // Keep rematchDeclined set so the decline reason remains visible
@@ -874,6 +902,7 @@ export function useGameSocket({
       onMessage,
       onStatus: (status, stop) => {
         setWsStatus(status);
+        if (status === 'reconnecting' || status === 'error') _resetAskPlayback();
         if (status === 'connecting') setError(null);
         if (status !== 'error') return;
         setError(stop
@@ -890,13 +919,16 @@ export function useGameSocket({
       },
     });
     socketRef.current = socket;
+    document.addEventListener('visibilitychange', _onVisibilityChange);
 
     return () => {
+      document.removeEventListener('visibilitychange', _onVisibilityChange);
       clearTimeout(countTimer);
       socket.close();
       socketRef.current = null;
       // close() is silent, so nothing else marks the hook as unconnected.
       setWsStatus('idle');
+      _resetAskPlayback();
     };
   }, [roomCode, bearerToken, spectatorToken, guestRecoveryKey]);
 
@@ -1036,6 +1068,9 @@ export function useGameSocket({
     variant,
     playerCount,
     lastAskResult,
+    lastVisibleAskResult,
+    nextAskAnimation: askAnimations[0] ?? null,
+    finishAskAnimation,
     lastDeclareResult,
     declarationReveal,
     declareProgress,

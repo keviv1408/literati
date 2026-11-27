@@ -228,7 +228,7 @@ export default function TutorialPage() {
             >
               <DeclaredBooksTable declaredSuits={state.declared} playerCount={6} />
             </CircularGameTable>
-            <TableCardTransfer flight={cardFlight} onComplete={clearCardFlight} />
+            <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearCardFlight} />
           </div>
 
           {step.kind === 'intro' && (

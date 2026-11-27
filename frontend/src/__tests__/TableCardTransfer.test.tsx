@@ -3,7 +3,7 @@ import { act, render } from '@testing-library/react';
 import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import { createRetrievalScene } from '@/components/creatures/retrievalScene';
 import { FLIGHT_DURATION_MS } from '@/components/CardFlightAnimation';
-import type { CardFlightState } from '@/hooks/useAskResultAnimations';
+import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAnimations';
 
 jest.mock('@/components/creatures/retrievalScene', () => ({ createRetrievalScene: jest.fn() }));
 
@@ -25,12 +25,13 @@ it('lets the active creature finish and cancels the previous grab without cleari
   let finish: (() => void) | undefined;
   const stop = () => { const callback = finish; finish = undefined; callback?.(); };
   jest.mocked(createRetrievalScene).mockReturnValue({
-    warm: jest.fn(), play: (_args, onStop) => { finish = onStop; }, stop, dispose: stop,
+    warm: jest.fn(), deny: (_seats, _duration, onStop) => { finish = onStop; }, play: (_args, onStop) => { finish = onStop; }, stop, dispose: stop,
   });
   const complete = jest.fn();
-  const content = (flight: CardFlightState | null) => <div>
+  const content = (flight: CardFlightState | null, denial?: AskDeniedCueState) => <div>
     <div data-player-id="asker"><span className="speech-avatar" data-creature="frog" /></div>
-    <TableCardTransfer flight={flight} onComplete={complete} />
+    <div data-player-id="other"><span className="speech-avatar" data-creature="frog" /></div>
+    <TableCardTransfer denial={denial} flight={flight} onComplete={complete} />
   </div>;
   const view = render(content(null));
   try {
@@ -42,6 +43,15 @@ it('lets the active creature finish and cancels the previous grab without cleari
     act(() => jest.advanceTimersByTime(FLIGHT_DURATION_MS + 100));
     expect(complete).not.toHaveBeenCalled();
     act(stop);
+    expect(complete).toHaveBeenCalledTimes(1);
+    view.rerender(content(null, {
+      askerId: 'asker', targetId: 'other', cardId: '4_d',
+      seatLeft: 0, seatTop: 0, seatWidth: 48, seatHeight: 48,
+    }));
+    expect(view.container.querySelectorAll('[data-creature="frog"][data-denial-role]')).toHaveLength(2);
+    expect(view.queryByTestId('card-flight-card')).toBeNull();
+    act(stop);
+    expect(view.container.querySelectorAll('[data-denial-role]')).toHaveLength(0);
     expect(complete).toHaveBeenCalledTimes(1);
   } finally {
     view.unmount();

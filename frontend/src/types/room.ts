@@ -24,6 +24,7 @@ export type RoomStatus =
 /** A player currently connected to the lobby, as returned by GET /api/rooms/:code. */
 export interface RoomLobbyPlayer {
   userId: string;
+  avatarId?: string | null;
   displayName: string;
   isGuest: boolean;
   isHost: boolean;

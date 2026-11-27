@@ -6,8 +6,8 @@ import PlayingCard from './PlayingCard';
 
 export const ASK_DENIED_ANIMATION_MS = 1250;
 
-const CARD_W = 72;
-const CARD_H = 108;
+const CARD_W = 24;
+const CARD_H = 36;
 
 export interface AskDeniedAnimationProps {
   cardId: CardId;
@@ -18,13 +18,6 @@ export interface AskDeniedAnimationProps {
   onComplete: () => void;
 }
 
-/**
- * AskDeniedAnimation
- *
- * Shows the requested card over the asked player's seat and flashes a bold
- * red X over their avatar area so the denial reads instantly without relying
- * on the last-move text.
- */
 export default function AskDeniedAnimation({
   cardId,
   seatLeft,
@@ -40,66 +33,18 @@ export default function AskDeniedAnimation({
     return () => clearTimeout(timer);
   }, [onComplete]);
 
-  const cardLeft = seatLeft + seatWidth / 2 - CARD_W / 2;
-  const cardTop = seatTop + Math.max(4, seatHeight * 0.06);
-  const cardCenterX = cardLeft + CARD_W / 2;
-  const cardCenterY = cardTop + CARD_H / 2;
-  const xSize = Math.max(56, Math.min(90, seatWidth * 0.75));
-
+  const left = Math.max(2, Math.min(window.innerWidth - CARD_W - 10, seatLeft + seatWidth - CARD_W));
+  const top = Math.max(2, seatTop + Math.min(8, seatHeight * 0.08));
   return (
-    <div
-      className="fixed inset-0 z-50 pointer-events-none"
-      aria-hidden="true"
-      data-testid="ask-denied-animation"
-    >
-      <div
-        className="absolute animate-ask-denied-card"
-        style={{
-          left: cardLeft,
-          top: cardTop,
-          width: CARD_W,
-          height: CARD_H,
-          animationDuration: `${ASK_DENIED_ANIMATION_MS}ms`,
-        }}
-        data-testid="ask-denied-card"
-      >
-        <PlayingCard
-          cardId={cardId}
-          size="xl"
-          className="shadow-2xl shadow-rose-950/60"
-        />
+    <div className="fixed z-50 pointer-events-none" aria-hidden="true" data-testid="ask-denied-animation"
+      style={{ left, top, width: CARD_W, height: CARD_H }}>
+      <div data-testid="ask-denied-card" className="origin-top-left scale-50">
+        <PlayingCard cardId={cardId} size="md" />
       </div>
-
-      <div
-        className="absolute"
-        style={{
-          left: cardCenterX,
-          top: cardCenterY,
-          transform: 'translate(-50%, -50%)',
-        }}
-        data-testid="ask-denied-x-anchor"
-      >
-        <span
-          className="absolute left-1/2 top-1/2 animate-ask-denied-pulse rounded-full border-4 border-rose-400/30 bg-rose-500/5"
-          style={{
-            width: xSize,
-            height: xSize,
-            transform: 'translate(-50%, -50%)',
-            animationDuration: `${ASK_DENIED_ANIMATION_MS}ms`,
-          }}
-        />
-        <span
-          className="relative block animate-ask-denied-x font-black leading-none text-rose-500/45 drop-shadow-[0_0_12px_rgba(244,63,94,0.28)]"
-          style={{
-            fontSize: `${xSize}px`,
-            animationDuration: `${ASK_DENIED_ANIMATION_MS}ms`,
-            textShadow: '0 0 6px rgba(255,255,255,0.18)',
-          }}
-          data-testid="ask-denied-x"
-        >
-          X
-        </span>
-      </div>
+      <span data-testid="ask-denied-x"
+        className="absolute -bottom-1 -right-1 rounded-full bg-rose-800 px-1 text-xs font-bold leading-4 text-white">
+        ×
+      </span>
     </div>
   );
 }

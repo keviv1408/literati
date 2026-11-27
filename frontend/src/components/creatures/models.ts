@@ -1,119 +1,9 @@
-import {
-  BufferGeometry,
-  CatmullRomCurve3,
-  Color,
-  ExtrudeGeometry,
-  Float32BufferAttribute,
-  Group,
-  LatheGeometry,
-  Mesh,
-  MeshStandardMaterial,
-  Shape,
-  ShapeGeometry,
-  SphereGeometry,
-  Vector2,
-  Vector3,
-} from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-
-export type CreatureKind = 'frog' | 'octopus' | 'butterfly';
-
-type Point = [number, number, number];
-type Curve = [number, number, number, number, number, number];
-type Pose = (activity: number, phase: number) => void;
-type Part = BufferGeometry[];
-
-function _path(start: [number, number], curves: Curve[]) {
-  const shape = new Shape();
-  shape.moveTo(...start);
-  for (const curve of curves) shape.bezierCurveTo(...curve);
-  shape.closePath();
-  return shape;
-}
-
-function _color(part: Part, geometry: BufferGeometry, hex: number) {
-  const color = new Color(hex);
-  const count = geometry.getAttribute('position').count;
-  const colors = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) color.toArray(colors, i * 3);
-  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
-  geometry.deleteAttribute('uv');
-  if (!geometry.index) geometry.setIndex(Array.from({ length: count }, (_, i) => i));
-  part.push(geometry);
-}
-
-// Each moving part draws once, including all its different paint colors.
-class Model {
-  root = new Group();
-  private sphere = new SphereGeometry(1, 20, 14);
-  private smallSphere = new SphereGeometry(1, 12, 8);
-  private material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.52 });
-  private geometries: BufferGeometry[] = [];
-
-  oval(part: Part, color: number, center: Point, radius: Point, roll = 0, yaw = 0) {
-    const geometry = (Math.max(...radius) > 0.12 ? this.sphere : this.smallSphere).clone();
-    geometry.scale(...radius).rotateZ(roll).rotateY(yaw).translate(...center);
-    _color(part, geometry, color);
-  }
-
-  stroke(part: Part, color: number, points: Point[], startRadius: number, endRadius: number) {
-    const curve = new CatmullRomCurve3(points.map(([x, y, z]) => new Vector3(x, y, z)));
-    const segments = points.length * 4;
-    const sides = 10;
-    const frames = curve.computeFrenetFrames(segments, false);
-    const positions: number[] = [];
-    const normals: number[] = [];
-    const indices: number[] = [];
-    const normal = new Vector3();
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments;
-      const center = curve.getPointAt(t);
-      const radius = startRadius + (endRadius - startRadius) * t;
-      for (let j = 0; j < sides; j++) {
-        const angle = 2 * Math.PI * j / sides;
-        normal.copy(frames.normals[i]).multiplyScalar(Math.cos(angle))
-          .addScaledVector(frames.binormals[i], Math.sin(angle));
-        positions.push(center.x + radius * normal.x, center.y + radius * normal.y, center.z + radius * normal.z);
-        normals.push(normal.x, normal.y, normal.z);
-        if (i < segments) {
-          const a = i * sides + j;
-          const b = i * sides + (j + 1) % sides;
-          indices.push(a, b, a + sides, b, b + sides, a + sides);
-        }
-      }
-    }
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
-    geometry.setIndex(indices);
-    _color(part, geometry, color);
-    this.oval(part, color, points[points.length - 1], [endRadius, endRadius, endRadius]);
-  }
-
-  finish(part: Part, parent = this.root) {
-    const geometry = mergeGeometries(part)!;
-    for (const piece of part) piece.dispose();
-    this.geometries.push(geometry);
-    const mesh = new Mesh(geometry, this.material);
-    parent.add(mesh);
-    return mesh;
-  }
-
-  dispose() {
-    this.sphere.dispose();
-    this.smallSphere.dispose();
-    this.material.dispose();
-    for (const geometry of this.geometries) geometry.dispose();
-  }
-}
-
-function _eye(model: Model, part: Part, center: Point, radius: number, iris = 0x213840) {
-  const [x, y, z] = center;
-  model.oval(part, 0xfff6db, center, [radius, 1.07 * radius, 0.68 * radius]);
-  model.oval(part, iris, [x, y + 0.005, z + 0.58 * radius], [0.52 * radius, 0.66 * radius, 0.22 * radius]);
-  model.oval(part, 0xffffff, [x - 0.16 * radius, y + 0.22 * radius, z + 0.79 * radius],
-    [0.17 * radius, 0.19 * radius, 0.06 * radius]);
-}
+import { BufferGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, LatheGeometry, ShapeGeometry, Vector2 } from 'three';
+import { Model, _color, _eye, _path, type Curve, type Part, type Point, type Pose } from './geometry';
+import type { CreatureKind } from './kind';
+import { coastModels } from './trioCoast';
+import { wildModels } from './trioWild';
+import { forestModels } from './trioForest';
 
 function _frogMouth(part: Part, tongue: boolean) {
   const positions: number[] = [];
@@ -175,7 +65,9 @@ function _frog(model: Model): Pose {
   _frogMouth(mouth, true);
   const lips = model.finish(mouth, body);
   lips.position.y = 0.018;
-  return (activity) => {
+  return (activity, phase, reaction) => {
+    body.rotation.z = reaction === 'giver' ? Math.sin(phase * Math.PI * 6) * activity * 0.23 : 0;
+    body.position.y = reaction === 'asker' ? -activity * 0.22 : 0;
     lips.scale.y = 0.43 + 0.77 * activity;
     body.scale.set(1 + 0.055 * activity, 1 - 0.09 * activity, 1 + 0.04 * activity);
   };
@@ -226,11 +118,12 @@ function _octopus(model: Model): Pose {
   model.oval(part, 0xffc695, [-0.215, 0.618, 0.313], [0.083, 0.034, 0.020], 0.56, -0.42);
   model.oval(part, 0xffc695, [-0.089, 0.665, 0.352], [0.033, 0.022, 0.014]);
   const head = model.finish(part);
-  return (activity, phase) => {
+  return (activity, phase, reaction) => {
+    head.rotation.z = reaction === 'asker' ? activity * 0.28 : 0;
     head.scale.set(1 - 0.055 * activity, 1 + 0.065 * activity, 1);
     for (const { pivot, side, number } of arms) {
       const wave = Math.sin(phase * Math.PI * 3 + number * 0.78 + side * 0.32);
-      pivot.rotation.z = side * activity * (0.12 + wave * 0.34);
+      pivot.rotation.z = side * activity * (reaction === 'giver' ? 0.85 + wave * 0.20 : 0.12 + wave * 0.34);
       pivot.rotation.x = activity * wave * 0.17;
     }
   };
@@ -292,8 +185,8 @@ function _butterfly(model: Model): Pose {
   }
   model.stroke(part, 0x76454c, [[-0.047, 0.142, 0.29], [0, 0.121, 0.30], [0.047, 0.142, 0.29]], 0.010, 0.010);
   model.finish(part);
-  return (activity, phase) => {
-    const sweep = -0.16 + activity * (0.70 - 0.57 * Math.cos(phase * Math.PI * 10));
+  return (activity, phase, reaction) => {
+    const sweep = -0.16 + activity * (reaction === 'asker' ? 1.28 : 0.70 - 0.57 * Math.cos(phase * Math.PI * (reaction === 'giver' ? 6 : 10)));
     right.rotation.y = sweep;
     left.rotation.y = -sweep;
   };
@@ -301,7 +194,7 @@ function _butterfly(model: Model): Pose {
 
 export function createCreature(kind: CreatureKind): { root: Group; pose: Pose; dispose: () => void } {
   const model = new Model();
-  const pose = { frog: _frog, octopus: _octopus, butterfly: _butterfly }[kind](model);
+  const pose = { frog: _frog, octopus: _octopus, butterfly: _butterfly, ...coastModels, ...wildModels, ...forestModels }[kind](model);
   pose(0, 0);
   return { root: model.root, pose, dispose: () => model.dispose() };
 }

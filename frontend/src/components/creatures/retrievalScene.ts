@@ -1,8 +1,11 @@
 import {
-  DirectionalLight, Group, HemisphereLight, OrthographicCamera, Scene, Vector2,
+  DirectionalLight, Group, HemisphereLight, Mesh, type Material, OrthographicCamera, Scene, Vector2,
   Vector3, WebGLRenderer,
 } from 'three';
-import { createCreature, type CreatureKind } from './models';
+import { createCreature } from './models';
+import type { CreatureKind } from './kind';
+import type { Reaction } from './geometry';
+import { createPickupMotion } from './pickup';
 import { createRetrievalLimb } from './retrievalLimb';
 
 interface RetrievalArgs {
@@ -24,10 +27,20 @@ function _createActor(kind: CreatureKind) {
     : kind === 'octopus' ? [createRetrievalLimb('arm'), createRetrievalLimb('arm')] : [];
   const idleArms = ['retrieval-arm-left', 'retrieval-arm-right'].map(name => creature.root.getObjectByName(name));
   const group = new Group();
-  group.add(creature.root, ...limbs.map(limb => limb.group));
+  const effects = new Group();
+  group.add(effects, creature.root, ...limbs.map(limb => limb.group));
   return {
-    group, creature, limbs, idleArms,
+    group, effects, creature, limbs, idleArms,
     dispose() {
+      const geometries = new Set<Mesh['geometry']>();
+      const materials = new Set<Material>();
+      effects.traverse(object => {
+        if (!(object instanceof Mesh)) return;
+        geometries.add(object.geometry);
+        for (const material of [object.material].flat()) materials.add(material);
+      });
+      geometries.forEach(geometry => geometry.dispose());
+      materials.forEach(material => material.dispose());
       creature.dispose();
       limbs.forEach(limb => limb.dispose());
     },
@@ -41,6 +54,9 @@ function _createMotion(args: RetrievalArgs, actor: ReturnType<typeof _createActo
   const frog = kind === 'frog';
   const start = new Vector2(home.x, -home.y);
   const end = new Vector2(source.x, -source.y);
+  if (kind !== 'frog' && kind !== 'octopus' && kind !== 'butterfly') {
+    return createPickupMotion(kind, start, end, home.size, root, actor.creature.pose, actor.effects, card);
+  }
   const distance = Math.max(start.distanceTo(end), 1);
   const direction = end.clone().sub(start).divideScalar(distance);
   const normal = new Vector2(-direction.y, direction.x);
@@ -156,35 +172,39 @@ export function createRetrievalScene(canvas: HTMLCanvasElement) {
   key.position.set(-3, 5, 6);
   scene.add(key);
   renderer.setClearColor(0x000000, 0);
-  const actors = new Map<CreatureKind, ReturnType<typeof _createActor>>();
+  const actors = new Map<string, ReturnType<typeof _createActor>>();
   let finish: (() => void) | null = null;
   let frameId = 0;
   let disposed = false;
   canvas.style.visibility = 'hidden';
 
+  let warmTimer = 0;
   function warm(kinds: Iterable<CreatureKind>) {
-    if (disposed || finish || renderer.getContext().isContextLost()) return;
-    const batch = new Group();
-    for (const kind of kinds) {
-      if (actors.has(kind)) continue;
-      const actor = _createActor(kind);
-      actors.set(kind, actor);
+    const pending = [...kinds];
+    function next() {
+      const kind = pending.shift();
+      if (!kind || disposed || renderer.getContext().isContextLost()) return;
+      warmTimer = window.setTimeout(next, 32);
+      if (finish || actors.has(kind)) return;
+      const actor = _actor(kind);
+      const batch = new Group();
       batch.add(actor.group);
+      // Build one seat between paints so the lobby-to-game transition stays responsive.
+      renderer.compileAsync(batch, camera, scene).then(() => {
+        if (disposed || finish || renderer.getContext().isContextLost() || !batch.children.length) return;
+        scene.add(batch);
+        try {
+          renderer.setDrawingBufferSize(4, 4, 1);
+          renderer.render(scene, camera);
+        } finally {
+          scene.remove(batch);
+        }
+      }).catch(() => {
+        // A restored context uploads the mesh on its next transfer.
+      });
     }
-    if (!batch.children.length) return;
-    // Upload the meshes once before the first pickup, while the canvas is hidden.
-    renderer.compileAsync(batch, camera, scene).then(() => {
-      if (disposed || finish || renderer.getContext().isContextLost() || !batch.children.length) return;
-      scene.add(batch);
-      try {
-        renderer.setDrawingBufferSize(4, 4, 1);
-        renderer.render(scene, camera);
-      } finally {
-        scene.remove(batch);
-      }
-    }).catch(() => {
-      // A restored context can upload the meshes again on its next transfer.
-    });
+    window.clearTimeout(warmTimer);
+    warmTimer = window.setTimeout(next, 0);
   }
 
   function stop() {
@@ -196,45 +216,93 @@ export function createRetrievalScene(canvas: HTMLCanvasElement) {
     notify?.();
   }
 
-  function play(args: RetrievalArgs, onStop: () => void) {
+  function _actor(kind: CreatureKind, key: string = kind) {
+    let actor = actors.get(key);
+    if (!actor) {
+      actor = _createActor(kind);
+      actors.set(key, actor);
+    }
+    return actor;
+  }
+
+  function _run(duration: number, onStop: () => void,
+    prepare: (width: number, height: number) => { draw: (t: number) => void; clean: () => void }) {
     stop();
     const { width, height } = canvas.getBoundingClientRect();
-    if (disposed || !width || !height || renderer.getContext().isContextLost() || args.duration <= 0) {
+    if (disposed || !width || !height || renderer.getContext().isContextLost() || duration <= 0) {
       onStop();
       return;
     }
-    const actor = actors.get(args.kind) ?? _createActor(args.kind);
-    actors.set(args.kind, actor);
-    scene.add(actor.group);
     camera.right = width;
     camera.bottom = -height;
     camera.updateProjectionMatrix();
     renderer.setDrawingBufferSize(width, height, Math.min(window.devicePixelRatio || 1, 2));
-    renderer.compile(actor.group, camera, scene);
-    const { transform, opacity } = args.card.style;
-    finish = () => {
-      scene.remove(actor.group);
-      args.card.style.transform = transform;
-      args.card.style.opacity = opacity;
-      onStop();
-    };
-    const draw = _createMotion(args, actor, width, height);
+    const { draw, clean } = prepare(width, height);
+    finish = () => { clean(); onStop(); };
     canvas.style.visibility = 'visible';
     draw(0);
     renderer.render(scene, camera);
     let started: number | undefined;
     function tick(now: number) {
       started ??= now;
-      const t = (now - started) / args.duration;
-      if (t >= 1) {
-        stop();
-        return;
-      }
+      const t = (now - started) / duration;
+      if (t >= 1) return stop();
       draw(t);
       renderer.render(scene, camera);
       frameId = requestAnimationFrame(tick);
     }
     frameId = requestAnimationFrame(tick);
+  }
+
+  function play(args: RetrievalArgs, onStop: () => void) {
+    _run(args.duration, onStop, (width, height) => {
+      const actor = _actor(args.kind);
+      actor.effects.visible = true;
+      scene.add(actor.group);
+      const { transform, opacity } = args.card.style;
+      return {
+        draw: _createMotion(args, actor, width, height),
+        clean() {
+          scene.remove(actor.group);
+          args.card.style.transform = transform;
+          args.card.style.opacity = opacity;
+        },
+      };
+    });
+  }
+
+  function deny(seats: { kind: CreatureKind; seat: RetrievalArgs['home']; role: Reaction }[],
+    duration: number, onStop: () => void) {
+    _run(duration, onStop, () => {
+      const performers = seats.map(({ kind, seat, role }, index) => {
+        const actor = _actor(kind, index && kind === seats[0].kind ? kind + '-second' : kind);
+        actor.effects.visible = false;
+        actor.limbs.forEach(limb => { limb.group.visible = false; });
+        actor.idleArms.forEach(arm => { if (arm) arm.visible = true; });
+        scene.add(actor.group);
+        return { actor, seat, role };
+      });
+      return {
+        draw(t: number) {
+          for (const { actor, seat, role } of performers) {
+            const giver = role === 'giver';
+            const phase = Math.min(1, Math.max(0, (t - (giver ? 0 : 0.23)) / (giver ? 0.80 : 0.77)));
+            const activity = Math.sin(Math.PI * phase);
+            const root = actor.creature.root;
+            root.position.set(seat.x, -seat.y + (giver ? 0.06 : -0.07) * seat.size * activity, 0);
+            root.rotation.set(0, (giver ? 0.25 * Math.sin(phase * Math.PI * 4) : -0.15) * activity, 0);
+            root.scale.setScalar(seat.size / 2.28 * (1 + 0.21 * activity));
+            actor.creature.pose(activity, phase, role);
+          }
+        },
+        clean() {
+          for (const { actor } of performers) {
+            scene.remove(actor.group);
+            actor.limbs.forEach(limb => { limb.group.visible = true; });
+          }
+        },
+      };
+    });
   }
 
   function onContextLost(event: Event) {
@@ -245,6 +313,7 @@ export function createRetrievalScene(canvas: HTMLCanvasElement) {
   function dispose() {
     if (disposed) return;
     disposed = true;
+    window.clearTimeout(warmTimer);
     stop();
     canvas.removeEventListener('webglcontextlost', onContextLost);
     actors.forEach(actor => actor.dispose());
@@ -252,5 +321,5 @@ export function createRetrievalScene(canvas: HTMLCanvasElement) {
     renderer.dispose();
     renderer.forceContextLoss();
   }
-  return { play, stop, dispose, warm };
+  return { play, deny, stop, dispose, warm };
 }

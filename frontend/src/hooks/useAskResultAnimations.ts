@@ -14,6 +14,8 @@ export interface CardFlightState {
 }
 
 export interface AskDeniedCueState {
+  askerId: string;
+  targetId: string;
   cardId: CardId;
   seatLeft: number;
   seatTop: number;
@@ -26,6 +28,8 @@ export type { AskSpeechBubbleState };
 const ASKER_BUBBLE_MS = 2400;
 
 interface UseAskResultAnimationsOptions {
+  nextAskAnimation?: AskResultPayload | null;
+  finishAskAnimation?: (result: AskResultPayload) => void;
   getAskBubbleCardIds?: (lastAskResult: AskResultPayload) => CardId[] | undefined;
   getPlayerDisplayName?: (playerId: string) => string | undefined;
 }
@@ -86,115 +90,120 @@ export function useAskResultAnimations(
     overrideBubbleCardIds: options.getAskBubbleCardIds?.(result),
     targetName: options.getPlayerDisplayName?.(result.targetId),
   }));
-  const [shownResult, setShownResult] = useState<AskResultPayload | null>(null);
-  const [cardFlight, setCardFlight] = useState<CardFlightState | null>(null);
-  const [askDeniedCue, setAskDeniedCue] = useState<AskDeniedCueState | null>(null);
-  const [askSpeechBubble, setAskSpeechBubble] = useState<AskSpeechBubbleState | null>(null);
+  const { nextAskAnimation, finishAskAnimation } = options;
+  const animationResult = nextAskAnimation === undefined ? lastAskResult : nextAskAnimation;
+  const speechResult = nextAskAnimation ?? lastAskResult;
+  const [visual, setVisual] = useState<{
+    result: AskResultPayload;
+    flight?: CardFlightState;
+    denial?: AskDeniedCueState;
+  } | null>(null);
+  const [speech, setSpeech] = useState<{ result: AskResultPayload; bubble: AskSpeechBubbleState } | null>(null);
 
   const batchStart = useRef<{ key: string; time: number } | null>(null);
   useEffect(() => {
-    if (!lastAskResult) {
+    if (!speechResult) {
       batchStart.current = null;
       return;
     }
 
-    const { overrideBubbleCardIds, targetName } = readAskContext(lastAskResult);
+    const { overrideBubbleCardIds, targetName } = readAskContext(speechResult);
     const receivedAt = Date.now();
-    let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
+    let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
     const frameId = requestAnimationFrame(() => {
-      setShownResult(lastAskResult);
-      const askerEl = getPlayerSeatElement(lastAskResult.askerId);
+      const askerEl = getPlayerSeatElement(speechResult.askerId);
       if (askerEl) {
         const bubbleCardIds =
           overrideBubbleCardIds?.length
             ? overrideBubbleCardIds
-            : lastAskResult.batchCardIds?.length
-              ? lastAskResult.batchCardIds
-              : [lastAskResult.cardId];
-        const leadIn = bubbleCardIds.length === 1 && !lastAskResult.batchCardIds?.length
-          ? _botAskLeadIn(lastAskResult)
+            : speechResult.batchCardIds?.length
+              ? speechResult.batchCardIds
+              : [speechResult.cardId];
+        const leadIn = bubbleCardIds.length === 1 && !speechResult.batchCardIds?.length
+          ? _botAskLeadIn(speechResult)
           : '';
         const question = targetName ? `${targetName}, can I have the` : 'Can I have the';
         // A multi-card ask receives a separate result for each card.
         const batchKey = bubbleCardIds.length > 1
-          ? JSON.stringify([lastAskResult.askerId, lastAskResult.targetId, ...bubbleCardIds])
+          ? JSON.stringify([speechResult.askerId, speechResult.targetId, ...bubbleCardIds])
           : null;
         if (!batchKey) {
           batchStart.current = null;
-        } else if (batchStart.current?.key !== batchKey || lastAskResult.cardId === bubbleCardIds[0]) {
+        } else if (batchStart.current?.key !== batchKey || speechResult.cardId === bubbleCardIds[0]) {
           batchStart.current = { key: batchKey, time: receivedAt };
         }
         const expiresAt = (batchStart.current?.time ?? receivedAt) + ASKER_BUBBLE_MS;
         const remaining = expiresAt - Date.now();
         if (remaining > 0) {
-          setAskSpeechBubble({
-            seat: askerEl, variant: 'ask', text: leadIn + question, cards: bubbleCardIds,
+          setSpeech({
+            result: speechResult,
+            bubble: { seat: askerEl, variant: 'ask', text: leadIn + question, cards: bubbleCardIds },
           });
-          bubbleTimer = setTimeout(() => setAskSpeechBubble(null), remaining);
+          bubbleTimer = setTimeout(() => setSpeech(null), remaining);
         } else {
-          setAskSpeechBubble(null);
+          setSpeech(null);
         }
       } else {
-        setAskSpeechBubble(null);
+        setSpeech(null);
       }
-
-      if (lastAskResult.success) {
-        const fromEl = getPlayerSeatElement(lastAskResult.targetId);
-        const toEl = getPlayerSeatElement(lastAskResult.askerId);
-        const table = fromEl?.closest('.game-table-space');
-        if (!fromEl || !toEl || !table) {
-          setCardFlight(null);
-          setAskDeniedCue(null);
-          return;
-        }
-
-        const bounds = table.getBoundingClientRect();
-        const fromRect = fromEl.getBoundingClientRect();
-        const toRect = toEl.getBoundingClientRect();
-        setCardFlight({
-          askerId: lastAskResult.askerId,
-          cardId: lastAskResult.cardId,
-          fromX: fromRect.left - bounds.left + fromRect.width / 2,
-          fromY: fromRect.top - bounds.top + fromRect.height / 2,
-          toX: toRect.left - bounds.left + toRect.width / 2,
-          toY: toRect.top - bounds.top + toRect.height / 2,
-        });
-        setAskDeniedCue(null);
-        return;
-      }
-
-      const targetEl = getPlayerSeatElement(lastAskResult.targetId);
-      if (!targetEl) {
-        setCardFlight(null);
-        setAskDeniedCue(null);
-        return;
-      }
-
-      const targetRect = targetEl.getBoundingClientRect();
-      setCardFlight(null);
-      setAskDeniedCue({
-        cardId: lastAskResult.cardId,
-        seatLeft: targetRect.left,
-        seatTop: targetRect.top,
-        seatWidth: targetRect.width,
-        seatHeight: targetRect.height,
-      });
     });
-
     return () => {
       cancelAnimationFrame(frameId);
-      if (bubbleTimer) clearTimeout(bubbleTimer);
+      clearTimeout(bubbleTimer);
     };
-  }, [lastAskResult]);
+  }, [speechResult]);
 
-  const clearCardFlight = useCallback(() => setCardFlight(null), []);
-  const clearAskDeniedCue = useCallback(() => setAskDeniedCue(null), []);
+  useEffect(() => {
+    if (!animationResult) return;
+    const frameId = requestAnimationFrame(() => {
+      const fromEl = getPlayerSeatElement(animationResult.targetId);
+      const toEl = getPlayerSeatElement(animationResult.askerId);
+      const table = fromEl?.closest('.game-table-space');
+      if (!fromEl || !toEl || !table) {
+        finishAskAnimation?.(animationResult);
+        return;
+      }
+
+      const { cardId, askerId, targetId } = animationResult;
+      const fromRect = fromEl.getBoundingClientRect();
+      if (animationResult.success) {
+        const bounds = table.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+        setVisual({
+          result: animationResult,
+          flight: {
+            askerId, cardId,
+            fromX: fromRect.left - bounds.left + fromRect.width / 2,
+            fromY: fromRect.top - bounds.top + fromRect.height / 2,
+            toX: toRect.left - bounds.left + toRect.width / 2,
+            toY: toRect.top - bounds.top + toRect.height / 2,
+          },
+        });
+      } else {
+        setVisual({
+          result: animationResult,
+          denial: {
+            askerId, targetId, cardId, seatLeft: fromRect.left, seatTop: fromRect.top,
+            seatWidth: fromRect.width, seatHeight: fromRect.height,
+          },
+        });
+      }
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [animationResult, finishAskAnimation]);
+
+  const clearAnimation = useCallback(() => {
+    if (!animationResult) return;
+    setVisual(current => current?.result === animationResult ? null : current);
+    finishAskAnimation?.(animationResult);
+  }, [animationResult, finishAskAnimation]);
 
   return {
-    cardFlight: shownResult === lastAskResult ? cardFlight : null,
-    askDeniedCue: shownResult === lastAskResult ? askDeniedCue : null,
-    askSpeechBubble: shownResult === lastAskResult ? askSpeechBubble : null,
-    clearCardFlight,
-    clearAskDeniedCue,
+    cardFlight: visual?.result === animationResult ? visual.flight ?? null : null,
+    askDeniedCue: visual?.result === animationResult ? visual.denial ?? null : null,
+    askSpeechBubble: speech?.result === speechResult ? speech.bubble : null,
+    speechResult,
+    clearCardFlight: clearAnimation,
+    clearAskDeniedCue: clearAnimation,
   };
 }

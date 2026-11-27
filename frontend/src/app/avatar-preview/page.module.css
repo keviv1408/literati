@@ -2,7 +2,8 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100dvh;
-  min-height: 20rem;
+  min-height: 22rem;
+  overflow-x: clip;
   background: radial-gradient(ellipse at 50% 48%, #193732, #0e2424 55%, #0b191c);
   color: #f2eee6;
 }
@@ -35,78 +36,99 @@
 .table {
   width: min(100%, 72rem);
   justify-self: center;
-  padding-block: .4rem;
 }
 
 .controls {
   display: grid;
   justify-items: center;
-  gap: .65rem;
+  gap: .5rem;
+  padding: .75rem .75rem max(.75rem, env(safe-area-inset-bottom));
   border-top: 1px solid #354743;
-  padding: .8rem .75rem max(1rem, env(safe-area-inset-bottom));
   background: #0a171b;
 }
 
-.controls p {
-  color: #d0ded7;
-  font-size: .875rem;
-}
-
-.examples {
+.tools {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(.35rem, 1.2vw, .75rem);
-  width: min(100%, 34rem);
+  gap: .65rem;
+  width: min(100%, 55rem);
 }
 
-.examples button {
-  display: flex;
+.pickers, .actions {
+  display: grid;
+  align-items: stretch;
+  gap: .5rem;
+}
+
+.pickers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.picker {
+  position: relative;
+  display: grid;
+  grid-template: auto auto / auto minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
-  gap: clamp(.375rem, 1.2vw, .75rem);
-  padding: .6rem .25rem;
+  gap: 0 .5rem;
+  padding: .3rem .5rem;
   border: 1px solid #435650;
-  border-radius: .65rem;
+  border-radius: .55rem;
   background: #1a2a29;
-  color: #f4f0e8;
+}
+
+.portrait { grid-row: span 2; display: grid; place-items: center; }
+.pickerLabel { color: #bccfc2; font-size: .7rem; line-height: 1.25; }
+
+.picker select {
+  width: 100%;
   cursor: pointer;
-  touch-action: manipulation;
+  background-color: #1a2a29;
+  color: #f4f0e8;
+  font-size: .83rem;
+  font-weight: 650;
 }
 
-.examples button[data-active='true'] {
-  border-color: #d8b67a;
-  background: #353329;
-}
-
-@media (hover: hover) {
-  .examples button:hover { border-color: #e3cb9c; }
-}
-
-.back:focus-visible, .examples button:focus-visible {
+.picker:focus-within, .back:focus-visible, .actions button:focus-visible {
   outline: 2px solid #f2d198;
   outline-offset: 2px;
 }
 
-.card {
-  display: grid;
-  place-items: center;
-  width: clamp(1.2rem, 3vw, 1.65rem);
-  aspect-ratio: 2 / 3;
-  border-radius: 3px;
-  background: #f1e6cf;
-  box-shadow: 0 2px 2px #0005;
-  color: #233238;
-  font-size: clamp(.68rem, 1.6vw, .84rem);
-  font-weight: 700;
-  transform: rotate(-6deg);
+.picker select:focus { outline: 0; }
+
+.actions button {
+  min-height: 2.75rem;
+  padding: .35rem .2rem;
+  border: 1px solid #536963;
+  border-radius: .55rem;
+  background: #253833;
+  color: #f4f0e8;
+  font-size: clamp(.75rem, 2.8vw, .88rem);
+  font-weight: 650;
+  line-height: 1.1;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
-.card[data-red='true'] { color: #9d3640; }
-.labels { display: grid; text-align: left; line-height: 1.2; }
-.labels strong { font-size: clamp(.8rem, 1.8vw, .95rem); }
-.labels small { color: #a9bcb2; font-size: .7rem; }
+.actions button:first-child { color: #1f3024; background: #dfc392; border-color: #e6ce9c; }
+.actions button:disabled, .picker select:disabled { opacity: .65; cursor: default; }
+.controls p { color: #cfdfd5; font-size: .8rem; text-align: center; }
+
+@media (hover: hover) {
+  .actions button:enabled:hover, .picker:has(select:enabled):hover { border-color: #e3cb9c; }
+}
+
+@media (max-width: 23rem) {
+  .picker { grid-template-columns: minmax(0, 1fr); }
+  .portrait { display: none; }
+}
+
+@media (min-width: 49rem) {
+  .tools { grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .controls { padding-block: .85rem; }
+}
 
 @media (orientation: landscape) and (max-height: 30rem) {
   .table :global(.seats-6) { --seat-y-scale: .65; }
-  .controls { gap: .25rem; padding-block: .4rem; }
+  .preview { min-height: 18rem; }
+  .tools { grid-template-columns: 1fr 1fr; }
+  .controls { padding-block: .25rem; gap: .1rem; }
+  .header { padding-block: 0; }
 }

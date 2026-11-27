@@ -213,7 +213,7 @@ function PracticeHand({ returnTo, onExit }: PracticeHandProps) {
                 askTargetPlayerIds={requested.length ? opponents : undefined} onAskTargetClick={askSeat}>
                 <DeclaredBooksTable declaredSuits={table.declared} playerCount={6} />
               </CircularGameTable>
-              <TableCardTransfer flight={showAskAnimation ? cardFlight : null} onComplete={clearCardFlight} />
+              <TableCardTransfer denial={showAskAnimation ? askDeniedCue : null} flight={showAskAnimation ? cardFlight : null} onComplete={clearCardFlight} />
             </div>
           </div>
           <footer className="hand-tray relative z-20 border-t px-3 py-2.5 lg:px-5 lg:py-3" data-testid="practice-hand-area">

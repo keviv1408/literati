@@ -1,17 +1,15 @@
 'use client';
 
 import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
-import type { CardFlightState } from '@/hooks/useAskResultAnimations';
+import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAnimations';
 import CardFlightAnimation, { FLIGHT_DURATION_MS } from '../CardFlightAnimation';
 import type { createRetrievalScene } from './retrievalScene';
-import type { CreatureKind } from './models';
+import { isCreatureKind } from './kind';
+import { ASK_DENIED_ANIMATION_MS } from '../AskDeniedAnimation';
 
-function _kind(value?: string): value is CreatureKind {
-  return value === 'frog' || value === 'octopus' || value === 'butterfly';
-}
-
-export default function TableCardTransfer({ flight, onComplete }: {
+export default function TableCardTransfer({ flight, denial, onComplete }: {
   flight: CardFlightState | null;
+  denial?: AskDeniedCueState | null;
   onComplete: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,7 +30,7 @@ export default function TableCardTransfer({ flight, onComplete }: {
       if (avatars?.length && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         const scene = createRetrievalScene(canvas);
         sceneRef.current = scene;
-        scene?.warm(new Set(Array.from(avatars, avatar => avatar.dataset.creature).filter(_kind)));
+        scene?.warm(new Set(Array.from(avatars, avatar => avatar.dataset.creature).filter(isCreatureKind)));
       }
     }).catch(() => {
       // The normal card transfer also works when graphics are unavailable.
@@ -49,34 +47,53 @@ export default function TableCardTransfer({ flight, onComplete }: {
     ownedFlight.current = null;
     const canvas = canvasRef.current;
     const card = cardRef.current;
-    if (!flight || !canvas || !card || !factoryRef.current) return;
+    if ((!flight && !denial) || !canvas || !factoryRef.current) return;
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (motion.matches) return;
-    const avatar = canvas.parentElement?.querySelector<HTMLElement>(
-      `[data-player-id="${CSS.escape(flight.askerId)}"] .speech-avatar[data-creature]`,
-    );
-    const kind = avatar?.dataset.creature;
-    if (!avatar || !_kind(kind)) return;
+    const bounds = canvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    function findSeat(playerId: string) {
+      const avatar = canvas?.parentElement?.querySelector<HTMLElement>(
+        `[data-player-id="${CSS.escape(playerId)}"] .speech-avatar[data-creature]`,
+      );
+      const kind = avatar?.dataset.creature;
+      if (!avatar || !isCreatureKind(kind)) return;
+      const rect = avatar.getBoundingClientRect();
+      if (!rect.width) return;
+      return { avatar, kind, seat: {
+        x: rect.left - bounds.left + rect.width / 2,
+        y: rect.top - bounds.top + rect.height / 2,
+        size: rect.width,
+      } };
+    }
     const scene = sceneRef.current ??= factoryRef.current(canvas);
     if (!scene) return;
-    const bounds = canvas.getBoundingClientRect();
-    const seat = avatar.getBoundingClientRect();
-    if (!bounds.width || !bounds.height || !seat.width) return;
-
-    avatar.dataset.retrieving = '';
-    card.dataset.retrieving = kind;
     let cancelled = false;
-    scene.play({
-      kind, card, duration: FLIGHT_DURATION_MS,
-      source: { x: flight.fromX, y: flight.fromY },
-      home: { x: seat.left - bounds.left + seat.width / 2, y: seat.top - bounds.top + seat.height / 2, size: seat.width },
-    }, () => {
-      delete avatar.dataset.retrieving;
-      delete card.dataset.retrieving;
-      if (!cancelled && ownedFlight.current === flight) finish();
-    });
-    if (card.hasAttribute('data-retrieving')) ownedFlight.current = flight;
-
+    if (denial) {
+      const giver = findSeat(denial.targetId);
+      const asker = findSeat(denial.askerId);
+      if (!giver || !asker) return;
+      giver.avatar.dataset.denialRole = 'giver';
+      asker.avatar.dataset.denialRole = 'asker';
+      scene.deny([{ ...giver, role: 'giver' }, { ...asker, role: 'asker' }], ASK_DENIED_ANIMATION_MS, () => {
+        delete giver.avatar.dataset.denialRole;
+        delete asker.avatar.dataset.denialRole;
+      });
+    } else if (flight && card) {
+      const asker = findSeat(flight.askerId);
+      if (!asker) return;
+      asker.avatar.dataset.retrieving = '';
+      card.dataset.retrieving = asker.kind;
+      scene.play({
+        kind: asker.kind, card, duration: FLIGHT_DURATION_MS,
+        source: { x: flight.fromX, y: flight.fromY }, home: asker.seat,
+      }, () => {
+        delete asker.avatar.dataset.retrieving;
+        delete card.dataset.retrieving;
+        if (!cancelled && ownedFlight.current === flight) finish();
+      });
+      if (card.hasAttribute('data-retrieving')) ownedFlight.current = flight;
+    }
     const stop = () => scene.stop();
     const observer = new ResizeObserver(() => {
       const now = canvas.getBoundingClientRect();
@@ -90,7 +107,7 @@ export default function TableCardTransfer({ flight, onComplete }: {
       motion.removeEventListener('change', stop);
       stop();
     };
-  }, [flight]);
+  }, [flight, denial]);
 
   return <>
     <canvas ref={canvasRef} className="creature-retrieval" aria-hidden="true" />

@@ -270,7 +270,7 @@ export default function GamePage({ params }: PageProps) {
 
   const {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, askHistory, players, gameState, variant, playerCount,
-    lastAskResult, lastDeclareResult, declarationReveal, turnTimer, declarationTimer,
+    lastAskResult, lastVisibleAskResult, nextAskAnimation, finishAskAnimation, lastDeclareResult, declarationReveal, turnTimer, declarationTimer,
     botTakeover, reclaimQueued, rematchVote, rematchDeclined, roomDissolved,
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting,
@@ -387,13 +387,16 @@ export default function GamePage({ params }: PageProps) {
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
+    speechResult,
     clearCardFlight,
     clearAskDeniedCue,
-  } = useAskResultAnimations(lastAskResult, {
+  } = useAskResultAnimations(myPlayerId ? lastVisibleAskResult : null, {
+    nextAskAnimation: myPlayerId ? nextAskAnimation : null,
+    finishAskAnimation,
     getAskBubbleCardIds,
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult, players);
+  const reactionBubble = useReactionBubble(speechResult, lastAskResult ? null : lastDeclareResult, players);
   const speechBubble = reactionBubble ?? askSpeechBubble;
 
   const publishMoveMessage = useCallback((message: string, persistentMessage: string | null = null) => {
@@ -1167,6 +1170,9 @@ export default function GamePage({ params }: PageProps) {
           turnTimer={turnTimer}
           declarationTimer={declarationTimer}
           lastAskResult={lastAskResult}
+          lastVisibleAskResult={lastVisibleAskResult}
+          nextAskAnimation={nextAskAnimation}
+          finishAskAnimation={finishAskAnimation}
           lastDeclareResult={lastDeclareResult}
           declareProgress={declareProgress ?? null}
           declarationReveal={declarationReveal}
@@ -1336,7 +1342,7 @@ export default function GamePage({ params }: PageProps) {
                   playerCount={effectivePlayerCount === 8 ? 8 : 6}
                 />
               </CircularGameTable>
-              <TableCardTransfer flight={cardFlight} onComplete={clearCardFlight} />
+              <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearCardFlight} />
             </div>
           </main>
           </>

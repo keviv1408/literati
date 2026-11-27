@@ -145,6 +145,7 @@ body:has([role="dialog"]) {
   visibility: hidden;
 }
 
+.speech-avatar[data-denial-role] img,
 .speech-avatar[data-retrieving] img { visibility: hidden; }
 
 .animate-card-flight-table[data-retrieving],
@@ -203,77 +204,6 @@ body:has([role="dialog"]) {
 
   .animate-card-flight-table .card-flight-face { animation: none; }
   .animate-card-flight-table::before { content: none; }
-}
-
-/* ── Ask denied overlay animation ─────────────────────────────────────────── */
-
-@keyframes ask-denied-card {
-  0% {
-    opacity: 0;
-    transform: translateY(10px) scale(0.72) rotate(-10deg);
-  }
-  18% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1.02) rotate(-3deg);
-  }
-  65% {
-    opacity: 1;
-    transform: translateY(0) scale(1) rotate(0deg);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.9) rotate(6deg);
-  }
-}
-
-.animate-ask-denied-card {
-  animation: ask-denied-card 2s ease-out forwards;
-}
-
-@keyframes ask-denied-x {
-  0% {
-    opacity: 0;
-    transform: scale(0.45);
-  }
-  18% {
-    opacity: 1;
-    transform: scale(1.18);
-  }
-  42% {
-    opacity: 1;
-    transform: scale(0.96);
-  }
-  72% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.84);
-  }
-}
-
-.animate-ask-denied-x {
-  animation: ask-denied-x 2s ease-out forwards;
-}
-
-@keyframes ask-denied-pulse {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.35);
-  }
-  18% {
-    opacity: 0.95;
-    transform: translate(-50%, -50%) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1.25);
-  }
-}
-
-.animate-ask-denied-pulse {
-  animation: ask-denied-pulse 2s ease-out forwards;
 }
 
 /* ── Card flip reveal animation ────────────────────────── */
