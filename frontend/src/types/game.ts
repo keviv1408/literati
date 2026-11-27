@@ -320,10 +320,10 @@ export interface RematchStartingPayload {
   roomCode: string;
 }
 
-/** Broadcast when the vote window expired or majority voted no. */
+/** Final outcome when the vote ends without starting another game. */
 export interface RematchDeclinedPayload {
   type: 'rematch_declined';
-  reason: 'timeout' | 'majority_no';
+  reason: 'timeout' | 'majority_no' | 'room_unavailable';
 }
 
 /**

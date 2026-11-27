@@ -72,7 +72,11 @@ function VoteRound({
 
   // ── Declined state ──────────────────────────────────────────────────────
   if (rematchDeclined) {
-    const reason = rematchDeclined.reason === 'timeout' ? 'Vote timed out' : 'Majority voted no';
+    const reason = {
+      timeout: 'Vote timed out',
+      majority_no: 'Majority voted no',
+      room_unavailable: 'This room is unavailable for a rematch.',
+    }[rematchDeclined.reason];
     return (
       <div
         className="flex flex-col items-center gap-3 px-4 py-4 rounded-2xl border border-slate-700/60 bg-slate-800/70 backdrop-blur-sm w-full max-w-sm"

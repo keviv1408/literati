@@ -208,15 +208,41 @@ it('starts a new vote round after a failed claim and deals when the same humans 
   expect(messages).toContainEqual(expect.objectContaining({ type: 'game_init' }));
 });
 
-it('preserves a closed lobby when a majority vote loses the completed-room claim', async () => {
+it('tells all voters when the room no longer matches the completed game', async () => {
   const gs = makeGame('ABC123');
   gs.status = 'completed';
   setGame('ABC123', gs);
+  const inboxes = gs.players.map(({ playerId }) => {
+    const messages = [];
+    registerConnection(gs.roomCode, playerId, { readyState: 1, send: json => messages.push(JSON.parse(json)) });
+    return messages;
+  });
   _openRematchVote(gs);
   mockClaim.mockResolvedValueOnce({ data: null });
   for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote('ABC123', id, true);
-  expect(mockClaim).toHaveBeenCalled();
+  for (const messages of inboxes) {
+    expect(messages.at(-1)).toEqual({ type: 'rematch_declined', reason: 'room_unavailable' });
+  }
+  jest.advanceTimersByTime(REMATCH_VOTE_TIMEOUT_MS);
+  expect(hasRematch(gs.roomCode)).toBe(false);
   expect(getGame('ABC123')).toBe(gs);
+});
+
+it('leaves the replacement game alone when the old majority claim returns', async () => {
+  const gs = makeGame('ABC123');
+  gs.status = 'completed';
+  setGame(gs.roomCode, gs);
+  _openRematchVote(gs);
+  const replacement = makeGame(gs.roomCode);
+  const messages = [];
+  mockClaim.mockImplementationOnce(async () => {
+    setGame(gs.roomCode, replacement);
+    registerConnection(gs.roomCode, 'p1', { readyState: 1, send: json => messages.push(JSON.parse(json)) });
+    return { data: null };
+  });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote(gs.roomCode, id, true);
+  expect(getGame(gs.roomCode)).toBe(replacement);
+  expect(messages).toEqual([]);
 });
 
 describe('REMATCH_VOTE_TIMEOUT_MS constant', () => {

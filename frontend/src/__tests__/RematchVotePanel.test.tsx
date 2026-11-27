@@ -113,6 +113,18 @@ describe('RematchVotePanel rendering states', () => {
     expect(screen.getByText(/majority voted no/i)).toBeDefined();
   });
 
+  test('explains when the server could not start a rematch for the finished game', () => {
+    render(
+      <RematchVotePanel
+        rematchVote={null}
+        rematchDeclined={{ type: 'rematch_declined', reason: 'room_unavailable' }}
+        myPlayerId="h1"
+        onVote={noop}
+      />
+    );
+    expect(screen.getByText('This room is unavailable for a rematch.')).toBeInTheDocument();
+  });
+
   test('4. renders the vote panel when rematchVote is provided', () => {
     render(
       <RematchVotePanel

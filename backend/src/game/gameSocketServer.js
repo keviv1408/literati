@@ -68,7 +68,7 @@
  * { type: 'rematch_starting', roomCode }
  * — majority yes reached; new game created with same teams/seats; clients
  * should clear post-game state and render the incoming game_init.
- * { type: 'rematch_declined', reason: 'timeout'|'majority_no' }
+ * { type: 'rematch_declined', reason: 'timeout'|'majority_no'|'room_unavailable' }
  * { type: 'room_dissolved', reason: 'timeout'|'majority_no' }
  * — broadcast shortly after rematch_declined; signals that the room has been
  * permanently closed and clients should stop attempting reconnections.
@@ -3124,17 +3124,24 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
         `missing config (roomId=${rematchRoomId}, variant=${rematchVariant}, ` +
         `playerCount=${rematchPlayerCount}, seats=${seats.length})`
       );
-      broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
+      broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'room_unavailable' });
       return;
     }
 
-    if (_startingRooms.has(roomCode)) return;
+    if (_startingRooms.has(roomCode)) {
+      broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'room_unavailable' });
+      return;
+    }
     _startingRooms.add(roomCode);
     const supabase = getSupabaseClient();
     let claimed = false;
     try {
       claimed = await _claimRoomStart(supabase, roomCode, 'completed');
-      if (!claimed) return;
+      if (getGame(roomCode) !== finishedGs) return;
+      if (!claimed) {
+        broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'room_unavailable' });
+        return;
+      }
       clearRoomPartialSelections(roomCode);
       clearDisconnectRoom(roomCode);
       // Spin up a new game instance with the same team assignments and seat
