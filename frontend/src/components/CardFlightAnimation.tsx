@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useEffectEvent, type CSSProperties } from 'react';
-import { isAndroidBuild } from '@/lib/appPaths';
 import type { CardId } from '@/types/game';
 import PlayingCard from './PlayingCard';
 
@@ -34,9 +33,8 @@ export default function CardFlightAnimation({
   const dx = toX - fromX;
   const dy = toY - fromY;
   const distance = Math.hypot(dx, dy);
-  const android = isAndroidBuild();
-  const width = android ? 40 : 48;
-  const height = android ? 64 : 72;
+  const width = 48;
+  const height = 72;
   const style = {
     left: fromX - width / 2,
     top: fromY - height / 2,
@@ -58,14 +56,14 @@ export default function CardFlightAnimation({
     >
       <div
         key={flightKey}
-        className={android ? 'absolute animate-card-flight' : 'absolute animate-card-flight-table'}
+        className="absolute animate-card-flight-table"
         style={style}
         data-testid="card-flight-card"
       >
         <PlayingCard
           cardId={cardId}
           size="md"
-          className={android ? 'w-10 h-16 shadow-xl' : 'card-flight-face'}
+          className="card-flight-face"
         />
       </div>
     </div>

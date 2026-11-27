@@ -12,7 +12,7 @@
  * • The flying card element is present on mount
  * • Card carries the transferred card face so players can identify it
  * • CSS custom properties --flight-dx and --flight-dy are set from props
- * • animate-card-flight class is applied to the flying card element
+ * • The table transfer animation is applied to the flying card element
  * • onComplete fires after FLIGHT_DURATION_MS
  * • onComplete does NOT fire before FLIGHT_DURATION_MS elapses
  * • Component is driven by timer not DOM events — cleanup cancels timer on unmount
@@ -85,10 +85,10 @@ describe('CardFlightAnimation — rendering', () => {
 // ── Face-up card visual ──────────────────────────────────────────────────────
 
 describe('CardFlightAnimation — face-up card style', () => {
-  it('the flying card has animate-card-flight class', () => {
+  it('uses the table transfer animation', () => {
     renderFlight();
     const card = screen.getByTestId('card-flight-card');
-    expect(card.className).toContain('animate-card-flight');
+    expect(card).toHaveClass('animate-card-flight-table');
   });
 
   it('renders the transferred card face-up instead of a face-down card back', () => {
@@ -175,15 +175,13 @@ describe('CardFlightAnimation — card positioning', () => {
     },
   );
 
-  it('keeps the original flat flight on Android', () => {
+  it('uses the tilted card face and table transfer on Android', () => {
     const env = jest.replaceProperty(process, 'env', { ...process.env, NEXT_PUBLIC_BUILD_TARGET: 'android' });
     try {
       renderFlight();
       const card = screen.getByTestId('card-flight-card');
-      expect(card.classList.contains('animate-card-flight')).toBe(true);
-      expect(card.classList.contains('animate-card-flight-table')).toBe(false);
-      expect(card.style.width).toBe('40px');
-      expect(card.style.height).toBe('64px');
+      expect(card).toHaveClass('animate-card-flight-table');
+      expect(card.querySelector('[role="img"]')).toHaveClass('card-flight-face');
     } finally {
       env.restore();
     }
