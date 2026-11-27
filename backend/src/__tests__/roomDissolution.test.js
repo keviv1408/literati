@@ -34,6 +34,7 @@ jest.useFakeTimers();
 
 // Capture broadcast calls so we can assert on them
 const broadcastedMessages = [];
+const mockClaim = jest.fn();
 
 // We need to intercept broadcastToGame. Since it is an internal function in
 // gameSocketServer.js we cannot mock it directly; instead we spy on the
@@ -47,7 +48,7 @@ jest.mock('../db/supabase', () => ({
         eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
         single:   async () => ({ data: null, error: null }),
       }),
-      update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      update: () => ({ eq: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), maybeSingle: mockClaim }),
       rpc:    () => Promise.resolve({ error: null }),
     }),
     auth: { getUser: async () => ({ data: null, error: new Error('mock') }) },
@@ -82,7 +83,7 @@ jest.mock('../game/botLogic', () => ({
 // ---------------------------------------------------------------------------
 
 const {
-  _handleRematchTimeout,
+  _handleRematchTimeout, handleRematchVote, _openRematchVote,
 } = require('../game/gameSocketServer');
 
 const {
@@ -90,6 +91,7 @@ const {
   getGame,
   hasGame,
   deleteGame,
+  registerConnection,
   _clearAll: clearGameStore,
 } = require('../game/gameStore');
 
@@ -174,6 +176,74 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+it('discards late stats completion from a previous game', () => {
+  const oldGame = makeGame('ABC123');
+  oldGame.status = 'completed';
+  setGame('ABC123', makeGame('ABC123'));
+  _openRematchVote(oldGame);
+  expect(hasRematch('ABC123')).toBe(false);
+});
+
+it('starts a new vote round after a failed claim and deals when the same humans vote again', async () => {
+  const gs = makeGame('ABC123');
+  gs.status = 'completed';
+  setGame(gs.roomCode, gs);
+  const messages = [];
+  registerConnection(gs.roomCode, 'p1', { readyState: 1, send: json => messages.push(JSON.parse(json)) });
+  _openRematchVote(gs);
+  const firstRound = messages[0];
+  jest.advanceTimersByTime(10_000);
+  mockClaim.mockResolvedValueOnce({ error: new Error('write timeout') });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote(gs.roomCode, id, true);
+  expect(messages.at(-1)).toMatchObject({
+    type: 'rematch_vote_update', yesCount: 0, roundId: expect.any(String), expiresAt: Date.now() + REMATCH_VOTE_TIMEOUT_MS,
+  });
+  expect(messages.at(-1).roundId).not.toBe(firstRound.roundId);
+  expect(messages[4].roundId).toBe(firstRound.roundId);
+
+  mockClaim.mockResolvedValueOnce({ data: { code: gs.roomCode } });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote(gs.roomCode, id, true);
+  expect(getGame(gs.roomCode).status).toBe('active');
+  expect(messages).toContainEqual(expect.objectContaining({ type: 'game_init' }));
+});
+
+it('tells all voters when the room no longer matches the completed game', async () => {
+  const gs = makeGame('ABC123');
+  gs.status = 'completed';
+  setGame('ABC123', gs);
+  const inboxes = gs.players.map(({ playerId }) => {
+    const messages = [];
+    registerConnection(gs.roomCode, playerId, { readyState: 1, send: json => messages.push(JSON.parse(json)) });
+    return messages;
+  });
+  _openRematchVote(gs);
+  mockClaim.mockResolvedValueOnce({ data: null });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote('ABC123', id, true);
+  for (const messages of inboxes) {
+    expect(messages.at(-1)).toEqual({ type: 'rematch_declined', reason: 'room_unavailable' });
+  }
+  jest.advanceTimersByTime(REMATCH_VOTE_TIMEOUT_MS);
+  expect(hasRematch(gs.roomCode)).toBe(false);
+  expect(getGame('ABC123')).toBe(gs);
+});
+
+it('leaves the replacement game alone when the old majority claim returns', async () => {
+  const gs = makeGame('ABC123');
+  gs.status = 'completed';
+  setGame(gs.roomCode, gs);
+  _openRematchVote(gs);
+  const replacement = makeGame(gs.roomCode);
+  const messages = [];
+  mockClaim.mockImplementationOnce(async () => {
+    setGame(gs.roomCode, replacement);
+    registerConnection(gs.roomCode, 'p1', { readyState: 1, send: json => messages.push(JSON.parse(json)) });
+    return { data: null };
+  });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote(gs.roomCode, id, true);
+  expect(getGame(gs.roomCode)).toBe(replacement);
+  expect(messages).toEqual([]);
+});
 
 describe('REMATCH_VOTE_TIMEOUT_MS constant', () => {
   test('1. timer duration is exactly 30 000 ms (30 seconds)', () => {

@@ -728,6 +728,7 @@ export function useGameSocket({
 
         case 'rematch_vote_update': {
           const payload = msg as unknown as RematchVoteUpdatePayload;
+          setRematchDeclined(null);
           setRematchVote(payload);
           break;
         }

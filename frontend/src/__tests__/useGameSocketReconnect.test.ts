@@ -320,6 +320,17 @@ describe('useGameSocket reconnect', () => {
     expect(wsInstances).toHaveLength(1);
   });
 
+  it('shows the new vote if the host retries after an uncertain reset', () => {
+    const { result } = _renderPlayer();
+    const ws = _latestWs();
+    _confirm(ws);
+    _message(ws, { type: 'rematch_declined', reason: 'room_unavailable' });
+    expect(result.current.rematchDeclined?.reason).toBe('room_unavailable');
+    _message(ws, { type: 'rematch_vote_update', roundId: 'retry', yesCount: 0 });
+    expect(result.current.rematchDeclined).toBeNull();
+    expect(result.current.rematchVote?.roundId).toBe('retry');
+  });
+
   it('marks the room abandoned when a reconnect finds the game abandoned, and keeps it after the 4005 close', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const { result } = _renderPlayer();

@@ -113,6 +113,18 @@ describe('RematchVotePanel rendering states', () => {
     expect(screen.getByText(/majority voted no/i)).toBeDefined();
   });
 
+  test('explains when the server could not start a rematch for the finished game', () => {
+    render(
+      <RematchVotePanel
+        rematchVote={null}
+        rematchDeclined={{ type: 'rematch_declined', reason: 'room_unavailable' }}
+        myPlayerId="h1"
+        onVote={noop}
+      />
+    );
+    expect(screen.getByText('This room is unavailable for a rematch.')).toBeInTheDocument();
+  });
+
   test('4. renders the vote panel when rematchVote is provided', () => {
     render(
       <RematchVotePanel
@@ -238,6 +250,26 @@ describe('RematchVotePanel rendering states', () => {
 });
 
 describe('RematchVotePanel interactions', () => {
+  test('a new round unlocks a previous voter and shows the new deadline', () => {
+    const now = Date.now();
+    const onVote = jest.fn();
+    const props = { myPlayerId: 'h1', rematchDeclined: null, onVote, voteStartedAt: now - 60_000 };
+    const { rerender } = render(
+      <RematchVotePanel {...props} rematchVote={makeVotePayload({ roundId: 'first', expiresAt: now + 5_000 })} />
+    );
+    fireEvent.click(screen.getByTestId('rematch-yes-btn'));
+    rerender(
+      <RematchVotePanel {...props} rematchVote={makeVotePayload({ roundId: 'first', expiresAt: now + 5_000 })} />
+    );
+    expect(screen.getByTestId('rematch-yes-btn')).toBeDisabled();
+    rerender(
+      <RematchVotePanel {...props} rematchVote={makeVotePayload({ roundId: 'retry', expiresAt: now + 30_000 })} />
+    );
+    expect(screen.getByTestId('rematch-countdown')).toHaveTextContent('30s remaining');
+    fireEvent.click(screen.getByTestId('rematch-yes-btn'));
+    expect(onVote).toHaveBeenCalledTimes(2);
+  });
+
   test('13. clicking Yes button calls onVote(true)', () => {
     const onVote = jest.fn();
     render(

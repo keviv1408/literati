@@ -35,7 +35,11 @@ interface RematchVotePanelProps {
   disabled?:       boolean;
 }
 
-export default function RematchVotePanel({
+export default function RematchVotePanel(props: RematchVotePanelProps) {
+  return <VoteRound key={props.rematchVote?.roundId} {...props} />;
+}
+
+function VoteRound({
   rematchVote,
   rematchDeclined,
   myPlayerId,
@@ -46,7 +50,7 @@ export default function RematchVotePanel({
 }: RematchVotePanelProps) {
   const [mountedAt] = useState(Date.now);
   const startTime      = voteStartedAt ?? mountedAt;
-  const expiresAt      = startTime + voteTimeoutMs;
+  const expiresAt      = rematchVote?.expiresAt ?? startTime + voteTimeoutMs;
 
   const [secondsLeft, setSecondsLeft] = useState<number>(
     () => Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
@@ -68,7 +72,11 @@ export default function RematchVotePanel({
 
   // ── Declined state ──────────────────────────────────────────────────────
   if (rematchDeclined) {
-    const reason = rematchDeclined.reason === 'timeout' ? 'Vote timed out' : 'Majority voted no';
+    const reason = {
+      timeout: 'Vote timed out',
+      majority_no: 'Majority voted no',
+      room_unavailable: 'This room is unavailable for a rematch.',
+    }[rematchDeclined.reason];
     return (
       <div
         className="flex flex-col items-center gap-3 px-4 py-4 rounded-2xl border border-slate-700/60 bg-slate-800/70 backdrop-blur-sm w-full max-w-sm"

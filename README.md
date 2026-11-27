@@ -89,6 +89,7 @@ Notes:
 - The frontend runs on `http://localhost:3011`
 - The backend runs on `http://localhost:3012`
 - Voice routes are unavailable unless `DAILY_API_KEY` and `DAILY_DOMAIN` are set
+- Build Android with the same `FRONTEND_URL` the backend uses for player invites. It defaults to `https://literati-ochre.vercel.app` in the app. Rebuild the app if the public web origin changes.
 
 ### 3. Run the apps
 

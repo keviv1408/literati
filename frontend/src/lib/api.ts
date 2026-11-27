@@ -303,6 +303,10 @@ export async function getGameSummary(roomCode: string): Promise<GameSummaryRespo
   });
 }
 
+export async function abandonLobby(code: string, token: string): Promise<void> {
+  await apiFetch(`/api/rooms/${code}/abandon`, { method: 'POST', token });
+}
+
 /**
  * GET /api/rooms/:code — Fetch room details by 6-char room code.
  * Public endpoint — no auth required.
@@ -566,4 +570,17 @@ export interface LiveGamesResponse {
  */
 export async function getLiveGames(): Promise<LiveGamesResponse> {
   return apiFetch<LiveGamesResponse>('/api/live-games', { method: 'GET' });
+}
+
+export interface ReturningRoom {
+  code: string;
+  destination: 'lobby' | 'game';
+}
+
+export async function getReturningRoom(displayName: string, recoveryKey: string, codes: string[]) {
+  const token = await getGuestBearerToken(displayName, recoveryKey);
+  return _withGuestRetry(token, { displayName, recoveryKey }, bearer =>
+    apiFetch<{ room: ReturningRoom | null; hosting: boolean; hostedLobby?: string }>('/api/rooms/return', {
+      method: 'POST', token: bearer, body: JSON.stringify({ codes }),
+    }));
 }

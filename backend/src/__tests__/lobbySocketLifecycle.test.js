@@ -154,6 +154,25 @@ describe('lobby socket lifecycle', () => {
     expect(roster(third)).toEqual(['Host', 'Friend']);
   });
 
+  it.each([
+    ['player', ''],
+    ['spectator', '&role=spectator&spectator_token=SPECTOK'],
+  ])('closes a pending %s join when the waiting-room read returns after abandonment', async (_, query) => {
+    const gate = deferred();
+    nextLookup = () => gate.promise;
+    const before = lookups;
+    const pending = connect(friendToken, query);
+    expect(await until(() => lookups === before + 1)).toBe(true);
+    room.closeCancelledLobby(ROOM_CODE);
+    gate.resolve({ data: ROOM_ROW, error: null });
+    await until(() => has(pending, 'connected') || has(pending, 'closing'));
+    expect(pending.messages).toContainEqual({ type: 'closing', code: 4005, reason: 'Lobby closed' });
+    expect(has(pending, 'connected')).toBe(false);
+    expect(room.roomMeta.has(ROOM_CODE)).toBe(false);
+    expect(room.roomClients.has(ROOM_CODE)).toBe(false);
+    expect(room.roomSpectators.has(ROOM_CODE)).toBe(false);
+  });
+
   it('does not register a socket that closed during the room lookup', async () => {
     const gate = deferred();
     nextLookup = () => gate.promise;

@@ -264,6 +264,8 @@ export interface PlayerVoteRecord {
 /** Rematch vote tally broadcast after every vote cast (including bot auto-votes). */
 export interface RematchVoteUpdatePayload {
   type: 'rematch_vote_update';
+  roundId?: string;
+  expiresAt?: number;
   yesCount: number;
   noCount: number;
   totalCount: number;
@@ -318,10 +320,10 @@ export interface RematchStartingPayload {
   roomCode: string;
 }
 
-/** Broadcast when the vote window expired or majority voted no. */
+/** Final outcome when the vote ends without starting another game. */
 export interface RematchDeclinedPayload {
   type: 'rematch_declined';
-  reason: 'timeout' | 'majority_no';
+  reason: 'timeout' | 'majority_no' | 'room_unavailable';
 }
 
 /**

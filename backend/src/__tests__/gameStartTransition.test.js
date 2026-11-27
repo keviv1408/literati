@@ -64,8 +64,8 @@ function allSent(mockWs) {
 function buildMockSupabase({ room = null, updateError = null } = {}) {
   const maybeSingle = jest.fn().mockResolvedValue({ data: room, error: null });
   const selectChain = { eq: null, maybeSingle };
-  const updateResult = jest.fn().mockResolvedValue({ error: updateError });
-  const updateChain  = { eq: updateResult };
+  const updateResult = jest.fn().mockResolvedValue({ data: room, error: updateError });
+  const updateChain = { eq: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), maybeSingle: updateResult };
   const updateFn     = jest.fn().mockReturnValue(updateChain);
   const selectFn     = jest.fn().mockReturnValue(selectChain);
   selectChain.eq     = jest.fn().mockReturnValue(selectChain);
@@ -471,6 +471,7 @@ describe('handleStartGame — game creation and broadcast', () => {
     const errMsg   = msgs.find((m) => m.type === 'error');
     const startMsg = msgs.find((m) => m.type === 'lobby-starting');
 
+    expect(mockDb._updateFn).toHaveBeenCalledWith({ status: 'waiting' });
     expect(errMsg).toBeDefined();
     expect(startMsg).toBeUndefined();
   });

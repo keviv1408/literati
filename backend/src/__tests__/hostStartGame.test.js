@@ -67,7 +67,9 @@ function buildMockSupabase(roomData = null, updateError = null) {
   select.mockReturnValue(chain);
   eq.mockReturnValue(chain);
   update.mockReturnValue({
-    eq: jest.fn().mockResolvedValue({ data: null, error: updateError }),
+    eq: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn().mockResolvedValue({ data: roomData, error: updateError }),
   });
 
   return {
@@ -565,12 +567,14 @@ describe('E. Supabase status update', () => {
     expect(supabase.update).toHaveBeenCalledWith({ status: 'starting' });
   });
 
-  it('still broadcasts lobby-starting even when Supabase update fails', async () => {
+  it('rejects game start when the database write fails', async () => {
     // First call (maybeSingle): return room data.
     // Subsequent calls (update): throw.
     const supabase = buildMockSupabase(makeWaitingRoom());
     supabase.update.mockReturnValue({
-      eq: jest.fn().mockRejectedValue(new Error('DB write error')),
+      eq: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockRejectedValue(new Error('DB write error')),
     });
     _setSupabaseClientFactory(() => supabase);
 
@@ -582,8 +586,8 @@ describe('E. Supabase status update', () => {
 
     await handleStartGame({ ws: hostWs, userId: HOST_ID, isHost: true, roomCode: ROOM_CODE, clients });
 
-    // Should still broadcast even though update threw
-    expect(msgOfType(hostWs, 'lobby-starting')).not.toBeNull();
+    expect(msgOfType(hostWs, 'lobby-starting')).toBeNull();
+    expect(msgOfType(hostWs, 'error')).not.toBeNull();
   });
 });
 

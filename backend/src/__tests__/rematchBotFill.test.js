@@ -149,28 +149,12 @@ const DEFAULT_DB_ROOM = {
  * We track which operation is in progress and return the appropriate mock.
  */
 function setupSupabaseMock(roomData = DEFAULT_DB_ROOM) {
-  let _inUpdateChain = false;
-  const mockMaybeSingle = jest.fn().mockResolvedValue({ data: roomData, error: null });
-  const mockUpdate = jest.fn().mockImplementation(() => {
-    _inUpdateChain = true;
-    return sb; // eslint-disable-line no-use-before-define
-  });
-  const mockSelect = jest.fn().mockImplementation(() => {
-    _inUpdateChain = false;
-    return sb; // eslint-disable-line no-use-before-define
-  });
-  const mockEq = jest.fn().mockImplementation(() => {
-    if (_inUpdateChain) {
-      return Promise.resolve({ data: null, error: null });
-    }
-    return sb; // eslint-disable-line no-use-before-define
-  });
   const sb = {
-    from:        jest.fn().mockImplementation(() => { _inUpdateChain = false; return sb; }),
-    select:      mockSelect,
-    update:      mockUpdate,
-    eq:          mockEq,
-    maybeSingle: mockMaybeSingle,
+    from: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    update: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn().mockResolvedValue({ data: roomData, error: null }),
   };
   _setSupabaseClientFactory(() => sb);
   return sb;
@@ -422,6 +406,15 @@ describe('_executeRematchBotFill', () => {
     }
   });
 
+  test('a rematch timer losing the waiting-room claim cannot create a game', async () => {
+    setPendingRematch('ROOM01', makePending6());
+    const db = setupSupabaseMock();
+    db.maybeSingle.mockResolvedValueOnce({ data: DEFAULT_DB_ROOM }).mockResolvedValueOnce({ data: null });
+    await _executeRematchBotFill('ROOM01', new Map());
+    expect(db.eq).toHaveBeenCalledWith('status', 'waiting');
+    expect(mockCreateGame).not.toHaveBeenCalled();
+  });
+
   test('14. Supabase room status updated to in_progress', async () => {
     const pending = makePending6();
     setPendingRematch('ROOM01', pending);
@@ -446,6 +439,25 @@ describe('_executeRematchBotFill', () => {
         roomId:      DEFAULT_DB_ROOM.id,
       })
     );
+  });
+
+  test('tells waiting players how to retry after the rematch claim loses its response', async () => {
+    registerFakeClient('ROOM01', 'h1', 1);
+    registerFakeClient('ROOM01', 'h2', 2);
+    setPendingRematch('ROOM01', makePending6());
+    const db = setupSupabaseMock();
+    db.maybeSingle.mockResolvedValueOnce({ data: DEFAULT_DB_ROOM })
+      .mockRejectedValueOnce(new Error('connection interrupted'));
+
+    await _executeRematchBotFill('ROOM01');
+
+    for (const { ws } of roomClients.get('ROOM01').values()) {
+      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
+        type: 'error', message: 'The rematch could not start. The host can use Start game to try again.',
+      }));
+    }
+    expect(mockCreateGame).not.toHaveBeenCalled();
+    expect(_startingRooms.has('ROOM01')).toBe(false);
   });
 
   test('16. createGame failure → broadcasts error; pendingRematch cleared', async () => {
@@ -547,14 +559,10 @@ describe('timer fires after REMATCH_BOT_FILL_TIMEOUT_MS', () => {
     expect(_rematchBotFillTimers.has('ROOM01')).toBe(true);
 
     // Advance fake timers past the 30-second mark.
-    jest.advanceTimersByTime(REMATCH_BOT_FILL_TIMEOUT_MS);
+    await jest.advanceTimersByTimeAsync(REMATCH_BOT_FILL_TIMEOUT_MS);
 
     // Timer handle is removed once it fires.
     expect(_rematchBotFillTimers.has('ROOM01')).toBe(false);
-
-    // Flush any micro-tasks / Promises that _executeRematchBotFill may have queued.
-    await Promise.resolve();
-    await Promise.resolve();
 
     // createGame should have been called (all humans absent → bot fill).
     expect(mockCreateGame).toHaveBeenCalledTimes(1);
