@@ -42,7 +42,6 @@ async function _startGame(page: Page) {
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
   await page.getByRole('button', { name: 'Continue as Guest' }).click();
   await page.getByRole('button', { name: 'Create Room', exact: true }).click();
-  await page.getByTestId('enter-room-btn').click();
   await page.getByTestId('start-game-btn').click();
   await page.waitForURL(/\/game\//);
   await expect(page.getByTestId('desktop-card-hand')).toBeVisible({ timeout: 30_000 });

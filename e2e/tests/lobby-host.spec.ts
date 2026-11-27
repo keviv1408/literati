@@ -70,7 +70,6 @@ test('a host whose session the server forgot comes back as the same player', asy
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
   await page.getByRole('button', { name: 'Continue as Guest' }).click();
   await page.getByRole('button', { name: 'Create Room', exact: true }).click();
-  await page.getByTestId('enter-room-btn').click();
   await expect(page.getByTestId('lobby-player-count')).toHaveText(/^1\//, { timeout: 30_000 });
   await expect
     .poll(() => (sockets[0] ? _frames(sockets[0], 'connected').length : 0), { message: 'no connected frame' })
@@ -161,7 +160,6 @@ test('only the host sees Start', async ({ page, browser }) => {
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
   await page.getByRole('button', { name: 'Continue as Guest' }).click();
   await page.getByRole('button', { name: 'Create Room', exact: true }).click();
-  await page.getByTestId('enter-room-btn').click();
   await expect(page.getByTestId('lobby-player-count')).toHaveText(/^1\//, { timeout: 30_000 });
 
   const guestContext = await browser.newContext();
@@ -173,7 +171,7 @@ test('only the host sees Start', async ({ page, browser }) => {
   await expect(guest.getByTestId('lobby-player-count')).toHaveText(/^2\//, { timeout: 30_000 });
 
   const start = page.getByTestId('start-game-btn');
-  await expect(start).toBeVisible();
+  await expect(start).toHaveText('Start with 4 bots');
   await expect(start).toBeEnabled();
   // The guest can see "Waiting for a host…" for a moment if the host's socket is reconnecting.
   await expect(guest.getByTestId('waiting-for-host')).toHaveText('Waiting for E2E Host to start the game');

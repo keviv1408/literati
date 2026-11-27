@@ -133,11 +133,10 @@ async function _host(draft: _Draft, stack: Stack): Promise<string> {
     await page.getByRole('button', { name: 'Create Room', exact: true }).click();
   });
   await _step(stack, 'room creation', async () => {
-    const enter = page.getByTestId('enter-room-btn');
+    const lobby = page.getByTestId('start-game-panel');
     const refusal = page.getByRole('dialog').getByRole('alert');
-    await expect(enter.or(refusal).first()).toBeVisible({ timeout: LOBBY_WAIT_MS });
+    await expect(lobby.or(refusal).first()).toBeVisible({ timeout: LOBBY_WAIT_MS });
     if (await refusal.isVisible()) throw new Error(`the page says "${await refusal.innerText()}"`);
-    await enter.click();
   });
   return _step(stack, `${draft.name}: lobby`, async () => {
     await page.waitForURL(/\/room\/[^/?#]+$/);

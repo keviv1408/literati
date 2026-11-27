@@ -150,7 +150,7 @@ export default function GuestNameModal() {
             Welcome to Literati
           </h2>
           <p className="mt-1 text-sm text-emerald-300/80">
-            Enter a display name to join or spectate a game
+            Choose the name your friends will see at the table.
           </p>
         </div>
 

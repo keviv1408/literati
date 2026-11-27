@@ -10,10 +10,6 @@
  *
  * Form: player count, 6 or 8 (radio cards). Rooms always remove the 7s.
  *
- * On success the modal transitions to a "Room Created!" confirmation phase that
- * immediately displays the invite code, invite link, and spectator link.
- * The host then clicks "Enter Room →" to navigate to the room lobby.
- *
  * The created room data is cached in sessionStorage so the room lobby page can
  * display instantly without an additional API round-trip.
  */
@@ -103,21 +99,12 @@ export default function CreateRoomModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Success phase state ────────────────────────────────────────────────────
-  /** Populated after the room-created API response is received. */
-  const [createdRoom, setCreatedRoom] = useState<Room | null>(null);
-  const [copiedInvite, setCopiedInvite] = useState(false);
-  const [copiedSpectator, setCopiedSpectator] = useState(false);
-
   // Reset state whenever modal reopens
   useEffect(() => {
     if (open) {
       setPlayerCount(6);
       setError(null);
       setIsSubmitting(false);
-      setCreatedRoom(null);
-      setCopiedInvite(false);
-      setCopiedSpectator(false);
     }
   }, [open]);
 
@@ -164,9 +151,8 @@ export default function CreateRoomModal({
         });
         // Cache room data so the lobby page can render without an extra fetch
         cacheCreatedRoom(room);
-        // Show the success confirmation panel immediately
-        setCreatedRoom(room);
-        setIsSubmitting(false);
+        onClose();
+        router.push(`/room/${room.code}`);
       } catch (err) {
         if (err instanceof ApiError) {
           if (err.status === 409) {
@@ -194,41 +180,8 @@ export default function CreateRoomModal({
     [isSubmitting, playerCount, displayName, guestSession, onClose, router]
   );
 
-  // ── Enter room (from success phase) ────────────────────────────────────────
-  const handleEnterRoom = useCallback(() => {
-    if (!createdRoom) return;
-    onClose();
-    router.push(`/room/${createdRoom.code}`);
-  }, [createdRoom, onClose, router]);
-
-  // ── Copy helpers ───────────────────────────────────────────────────────────
-  const handleCopyInvite = useCallback(() => {
-    if (typeof window === 'undefined' || !createdRoom) return;
-    const url = `${window.location.origin}/room/${createdRoom.code}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedInvite(true);
-      setTimeout(() => setCopiedInvite(false), 2000);
-    });
-  }, [createdRoom]);
-
-  const handleCopySpectator = useCallback(() => {
-    if (typeof window === 'undefined' || !createdRoom) return;
-    const url = `${window.location.origin}/room/${createdRoom.code}?spectate=1`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedSpectator(true);
-      setTimeout(() => setCopiedSpectator(false), 2000);
-    });
-  }, [createdRoom]);
-
   // ── Render guard ───────────────────────────────────────────────────────────
   if (!open) return null;
-
-  // ── Success confirmation URLs (computed client-side) ──────────────────────
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const inviteUrl = createdRoom ? `${origin}/room/${createdRoom.code}` : '';
-  const spectatorUrl = createdRoom
-    ? `${origin}/room/${createdRoom.code}?spectate=1`
-    : '';
 
   return createPortal(
     /* Backdrop */
@@ -239,10 +192,9 @@ export default function CreateRoomModal({
       aria-labelledby="create-room-title"
       onKeyDown={handleKeyDown}
     >
-      {/* Overlay — only close when in form phase (not success) */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={() => !isSubmitting && !createdRoom && onClose()}
+        onClick={() => !isSubmitting && onClose()}
         aria-hidden="true"
       />
 
@@ -273,113 +225,6 @@ export default function CreateRoomModal({
           ♦
         </div>
 
-        {/* ─────────────────────── SUCCESS PHASE ─────────────────────────── */}
-        {createdRoom ? (
-          <div data-testid="room-created-confirmation">
-            {/* Success header */}
-            <div className="text-center mb-6">
-              <div className="text-4xl mb-3 select-none" aria-hidden="true">
-                🎉
-              </div>
-              <h2
-                id="create-room-title"
-                className="text-2xl font-bold text-white tracking-tight"
-              >
-                Room Created!
-              </h2>
-              <p className="mt-1 text-sm text-emerald-300/80">
-                Share the code or links below with your friends
-              </p>
-            </div>
-
-            {/* Room code — large, select-all */}
-            <div className="text-center mb-5">
-              <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
-                Room Code
-              </p>
-              <div
-                className="text-5xl font-black font-mono tracking-[0.2em] text-white select-all"
-                aria-label={`Room code: ${createdRoom.code}`}
-                data-testid="room-code-display"
-              >
-                {createdRoom.code}
-              </div>
-            </div>
-
-            {/* Invite link row */}
-            <div className="mb-3">
-              <p className="text-xs text-emerald-300/70 font-medium mb-1.5 uppercase tracking-widest">
-                Invite Link
-              </p>
-              <div className="flex items-center gap-2">
-                <div
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-300 truncate text-left"
-                  data-testid="invite-url-display"
-                >
-                  {inviteUrl}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyInvite}
-                  aria-label="Copy invite link"
-                  data-testid="copy-invite-btn"
-                  className="
-                    px-3 py-2 rounded-xl text-xs font-semibold shrink-0
-                    bg-emerald-700 hover:bg-emerald-600 text-white
-                    transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-                  "
-                >
-                  {copiedInvite ? '✓ Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-
-            {/* Spectator link row */}
-            <div className="mb-6">
-              <p className="text-xs text-slate-400/70 font-medium mb-1.5 uppercase tracking-widest">
-                Spectator Link
-              </p>
-              <div className="flex items-center gap-2">
-                <div
-                  className="flex-1 bg-slate-800 border border-slate-600/60 rounded-xl px-3 py-2 text-xs font-mono text-slate-400 truncate text-left"
-                  data-testid="spectator-url-display"
-                >
-                  {spectatorUrl}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopySpectator}
-                  aria-label="Copy spectator link"
-                  data-testid="copy-spectator-btn"
-                  className="
-                    px-3 py-2 rounded-xl text-xs font-semibold shrink-0
-                    bg-slate-600 hover:bg-slate-500 text-white
-                    transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-                  "
-                >
-                  {copiedSpectator ? '✓ Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-
-            {/* Enter Room button */}
-            <button
-              type="button"
-              onClick={handleEnterRoom}
-              data-testid="enter-room-btn"
-              className="
-                w-full py-3 px-4 rounded-xl font-semibold text-sm
-                bg-emerald-600 hover:bg-emerald-500 text-white
-                shadow-lg shadow-emerald-900/40
-                transition-all duration-150 active:scale-[0.98]
-                focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900
-              "
-            >
-              Enter Room →
-            </button>
-          </div>
-        ) : (
-          <>
         {/* Header */}
         <div className="text-center mb-6">
           <div className="text-4xl mb-3 select-none" aria-hidden="true">
@@ -391,9 +236,6 @@ export default function CreateRoomModal({
           >
             Create Private Room
           </h2>
-          <p className="mt-1 text-sm text-emerald-300/80">
-            Configure your game and share the code with friends
-          </p>
         </div>
 
         {/* Form */}
@@ -544,8 +386,6 @@ export default function CreateRoomModal({
             </button>
           </div>
         </form>
-          </>
-        )}
       </div>
     </div>,
     document.body
