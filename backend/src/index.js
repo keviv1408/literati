@@ -52,6 +52,7 @@ app.use(
     origin: [
       process.env.FRONTEND_URL || 'http://localhost:3011',
       'http://localhost:3011',
+      'https://localhost',
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
