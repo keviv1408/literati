@@ -1780,7 +1780,59 @@ describe('GamePage — declaration outcome broadcast', () => {
     expect(screen.queryByTestId('declaration-result-overlay')).toBeNull();
   });
 
-  it('clears failed declaration seat reveals after 9.5 seconds', async () => {
+  it.each([
+    ['player', true], ['player', false], ['spectator', true], ['spectator', false],
+  ] as const)('shows the final declaration to a %s for seven seconds (correct=%s)', async (viewer, correct) => {
+    render(<GamePage params={makeParams('ABC123')} />);
+    await screen.findByTestId('game-view');
+    act(() => {
+      openWs();
+      const init = makeGameInit(MY_PLAYER_ID, players6);
+      sendWsMessage(viewer === 'player' ? init : { ...init, type: 'spectator_init', hands: {} });
+    });
+
+    const holders = { '1_c': MY_PLAYER_ID, '2_c': MY_PLAYER_ID, '3_c': 'p2', '4_c': 'p2', '5_c': 'p3', '6_c': 'p3' };
+    const result = {
+      declarerId: 'p2', halfSuitId: 'low_c', correct, winningTeam: correct ? 1 : 2,
+      assignment: correct ? holders : { ...holders, '1_c': 'p2' },
+      lastMove: `Alice declared Low Clubs — ${correct ? 'correct' : 'incorrect'}! Team ${correct ? 1 : 2} scores`,
+    };
+    const scores = correct ? { team1: 5, team2: 3 } : { team1: 3, team2: 5 };
+    jest.useFakeTimers();
+    try {
+      act(() => {
+        sendWsMessage({ type: 'declaration_result', ...result });
+        if (!correct) {
+          sendWsMessage({
+            type: 'declarationFailed', ...result, actualHolders: holders,
+            wrongAssignmentDiffs: [{ card: '1_c', claimedPlayerId: 'p2', actualPlayerId: MY_PLAYER_ID }],
+          });
+        }
+        sendWsMessage({ type: 'game_state', state: {
+          ...makeGameState(), status: 'completed', scores, winner: result.winningTeam, lastMove: result.lastMove,
+        } });
+      });
+      const reveal = screen.getByRole('region', { name: 'Declared cards by actual holder' });
+      expect(within(reveal).getAllByRole('figure')).toHaveLength(6);
+      expect(screen.getByText(correct ? 'correct!' : 'incorrect!')).toBeInTheDocument();
+      if (!correct) expect(reveal.querySelector('s')).toHaveTextContent('Alice');
+      expect(screen.queryByTestId('game-completed-view')).toBeNull();
+      expect(screen.queryByTestId('ask-declare-toggle')).toBeNull();
+
+      await _advanceTime(1000);
+      act(() => sendWsMessage({ type: 'game_over', winner: result.winningTeam, scores }));
+      await _advanceTime(5999);
+      expect(reveal).toBeInTheDocument();
+      expect(screen.queryByTestId('game-completed-view')).toBeNull();
+      await _advanceTime(1);
+      expect(reveal).not.toBeInTheDocument();
+      expect(screen.getByTestId('game-completed-view')).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('clears a failed declaration reveal after seven seconds', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => expect(screen.getByTestId('game-view')).toBeTruthy());
 
@@ -1825,7 +1877,7 @@ describe('GamePage — declaration outcome broadcast', () => {
       expect(screen.getByRole('region', { name: 'Declared cards by actual holder' })).toBeInTheDocument();
 
       act(() => {
-        jest.advanceTimersByTime(9_500);
+        jest.advanceTimersByTime(7_000);
       });
 
       expect(screen.queryByRole('region', { name: 'Declared cards by actual holder' })).toBeNull();
@@ -2139,7 +2191,7 @@ describe('GamePage — while the game socket reconnects', () => {
         playerCount: 6,
         lastAskResult: null,
         lastDeclareResult: null,
-        declarationFailed: null,
+        declarationReveal: null,
         turnTimer: null,
         declarationTimer: null,
         rematchVote: null,

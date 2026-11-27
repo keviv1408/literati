@@ -286,7 +286,7 @@ export default function GamePage({ params }: PageProps) {
 
   const {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, askHistory, players, gameState, variant, playerCount,
-    lastAskResult, lastDeclareResult, declarationFailed, turnTimer, declarationTimer,
+    lastAskResult, lastDeclareResult, declarationReveal, turnTimer, declarationTimer,
     botTakeover, reclaimQueued, rematchVote, rematchDeclined, roomDissolved,
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting,
@@ -1045,7 +1045,8 @@ export default function GamePage({ params }: PageProps) {
     </div>
   ) : null;
 
-  if (finalGameOver || room.status === 'completed') {
+  const gameFinished = Boolean(finalGameOver || room.status === 'completed');
+  if (gameFinished && !declarationReveal) {
     // Show a brief "Rematch starting…" overlay while redirect is in flight
     if (rematchStarted) {
       return (
@@ -1186,7 +1187,7 @@ export default function GamePage({ params }: PageProps) {
           lastAskResult={lastAskResult}
           lastDeclareResult={lastDeclareResult}
           declareProgress={declareProgress ?? null}
-          declarationFailed={declarationFailed}
+          declarationReveal={declarationReveal}
           postDeclarationTimer={postDeclarationTimer}
           roomCode={room.code}
           cardRemovalVariant={room.card_removal_variant}
@@ -1292,8 +1293,7 @@ export default function GamePage({ params }: PageProps) {
         players={players}
       />
       <DeclarationCardReveal
-        result={lastAskResult ? null : lastDeclareResult}
-        failure={declarationFailed}
+        reveal={declarationReveal}
         players={players}
         variant={effectiveVariant}
       />
@@ -1380,7 +1380,7 @@ export default function GamePage({ params }: PageProps) {
         const handTimer = postDeclarationTimer ?? (isSelectingNextTurn ? null : turnTimer);
         const isMyTimer = postDeclarationTimer ? isMyTurn : turnTimer?.playerId === myPlayerId;
 
-        const footerContent = (
+        const footerContent = !gameFinished && (
           <>
           {/*
            * Player hand area -- ask/declare controls.

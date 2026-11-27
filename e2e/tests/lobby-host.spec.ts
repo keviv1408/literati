@@ -178,7 +178,7 @@ test('only the host sees Start and starting brings a practicing guest into the g
   await expect(guest.getByTestId('start-game-btn')).toHaveCount(0);
 
   const roomUrl = guest.url();
-  await guest.getByRole('button', { name: /Start a short tutorial to learn the basics/ }).click();
+  await guest.getByRole('button', { name: /Start a short tutorial/ }).click();
   const welcome = guest.getByRole('dialog', { name: 'Literature: a game of memory and fun' });
   await expect(welcome.getByRole('button', { name: 'Try an ask' })).toBeFocused();
   await expect(welcome.getByText('Win the most sets.', { exact: true })).toBeVisible();

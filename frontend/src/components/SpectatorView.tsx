@@ -61,7 +61,7 @@ import type {
   SpectatorMoveEntry,
   AskResultPayload,
   DeclarationResultPayload,
-  DeclarationFailedPayload,
+  DeclarationReveal,
   DeclareProgressPayload,
 } from '@/types/game';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
@@ -126,8 +126,7 @@ export interface SpectatorViewProps {
    * can see the same countdown the declaring player sees.
    */
   declarationTimer?: DeclarationTimerPayload | null;
-  /** Per-card diff from a failed declaration, used for the seat-level reveal. */
-  declarationFailed?: DeclarationFailedPayload | null;
+  declarationReveal?: DeclarationReveal | null;
   /**
    * Active post-declaration turn-selection timer (AC 28).
    * Non-null for 30 seconds after a human correct declaration while the
@@ -158,7 +157,7 @@ export default function SpectatorView({
   lastAskResult,
   lastDeclareResult,
   declareProgress,
-  declarationFailed,
+  declarationReveal,
   postDeclarationTimer,
   roomCode,
   cardRemovalVariant,
@@ -470,8 +469,7 @@ export default function SpectatorView({
         testId="spectator-last-move"
       />
       <DeclarationCardReveal
-        result={lastAskResult ? null : lastDeclareResult}
-        failure={declarationFailed}
+        reveal={declarationReveal ?? null}
         players={players}
         variant={effectiveVariant}
       />

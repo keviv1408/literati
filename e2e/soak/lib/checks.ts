@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { findFrame, type Frame, type GameSocket, type Msg } from '../../tests/helpers/gameWire';
 import type { GameResult, KillRecord } from './driver';
 import { failure } from './fail';
-import { AFTER_MOVE_POLL_MS, BACKEND_URL, FINAL_SAVE_MS } from './limits';
+import { AFTER_MOVE_POLL_MS, BACKEND_URL, FINAL_SAVE_MS, FINAL_SCREEN_POLL_MS } from './limits';
 import type { Team } from './model';
 import type { Kill } from './plan';
 import { liveSocket, nameOf, type Seat, type Table } from './seats';
@@ -145,7 +145,9 @@ export async function atEnd(table: Table, stack: Stack, result: GameResult, plan
   if (team1 + team2 !== _HALF_SUITS || team1 !== model.scores.team1 || team2 !== model.scores.team2) {
     throw failure(`end: result scores ${team1}-${team2}, model ${_score(model.scores)}`, where);
   }
-  await Promise.all(table.seats.map((seat) => _poll({ seat, move: result.moves }, () => _endProblems(table, seat))));
+  await Promise.all(table.seats.map((seat) =>
+    _poll({ seat, move: result.moves }, () => _endProblems(table, seat), FINAL_SCREEN_POLL_MS),
+  ));
   await _savedSummary(table, where);
 
   const ran = new Set(result.kills.map((record) => record.kill.id));
@@ -182,12 +184,12 @@ function _isStopCode(code: number): boolean {
   return code >= 4000 && code <= 4999 && code !== _SERVER_ERROR_CODE;
 }
 
-async function _poll(where: _Where, read: () => Promise<string[]>): Promise<void> {
-  const deadline = Date.now() + AFTER_MOVE_POLL_MS;
+async function _poll(where: _Where, read: () => Promise<string[]>, timeoutMs = AFTER_MOVE_POLL_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
     const problems = await read();
     if (problems.length === 0) return;
-    if (Date.now() >= deadline) throw failure(`${problems.join('; ')} (still after ${AFTER_MOVE_POLL_MS / 1000} s)`, where);
+    if (Date.now() >= deadline) throw failure(`${problems.join('; ')} (still after ${timeoutMs / 1000} s)`, where);
     await sleep(_POLL_MS);
   }
 }

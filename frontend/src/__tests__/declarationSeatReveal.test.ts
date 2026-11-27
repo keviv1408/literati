@@ -5,7 +5,7 @@
 import {
   buildDeclarationSeatRevealMap,
   buildSuccessfulDeclarationSeatRevealMap,
-  FAILED_DECLARATION_SEAT_REVEAL_MS,
+  DECLARATION_REVEAL_MS,
 } from '@/lib/declarationSeatReveal';
 import type { DeclarationFailedPayload, DeclarationResultPayload, GamePlayer } from '@/types/game';
 
@@ -137,8 +137,8 @@ describe('buildSuccessfulDeclarationSeatRevealMap', () => {
   });
 });
 
-describe('FAILED_DECLARATION_SEAT_REVEAL_MS', () => {
-  it('keeps the failed reveal visible long enough for players to parse it', () => {
-    expect(FAILED_DECLARATION_SEAT_REVEAL_MS).toBe(7000);
+describe('DECLARATION_REVEAL_MS', () => {
+  it('shows declared cards for seven seconds', () => {
+    expect(DECLARATION_REVEAL_MS).toBe(7000);
   });
 });

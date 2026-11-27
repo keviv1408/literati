@@ -210,6 +210,8 @@ export interface DeclarationFailedPayload {
   lastMove: string;
 }
 
+export type DeclarationReveal = DeclarationResultPayload | DeclarationFailedPayload;
+
 /** Game over payload. */
 export interface GameOverPayload {
   type: 'game_over';

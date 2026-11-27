@@ -411,60 +411,49 @@ describe('SpectatorView', () => {
       expect(screen.getByTestId('spectator-last-move').textContent).toContain('Team 2 scores');
     });
 
-    it('clears failed declaration seat reveals after 9.5 seconds', () => {
-      jest.useFakeTimers();
-      try {
-        render(
-          <SpectatorView
-            {...buildProps({
-              declarationFailed: {
-                type: 'declarationFailed',
-                declarerId: 'p1',
-                halfSuitId: 'low_c',
-                winningTeam: 2,
-                assignment: {
-                  '1_c': 'p1',
-                  '2_c': 'p2',
-                  '3_c': 'p3',
-                  '4_c': 'p4',
-                  '5_c': 'p5',
-                  '6_c': 'p6',
-                },
-                wrongAssignmentDiffs: [
-                  { card: '1_c', claimedPlayerId: 'p1', actualPlayerId: 'p4' },
-                  { card: '4_c', claimedPlayerId: 'p4', actualPlayerId: 'p1' },
-                ],
-                actualHolders: {
-                  '1_c': 'p4',
-                  '2_c': 'p2',
-                  '3_c': 'p3',
-                  '4_c': 'p1',
-                  '5_c': 'p5',
-                  '6_c': 'p6',
-                },
-                lastMove: 'Alice declared Low Clubs — incorrect! Team 2 scores',
+    it('shows actual holders and marks incorrect guesses', () => {
+      render(
+        <SpectatorView
+          {...buildProps({
+            declarationReveal: {
+              type: 'declarationFailed',
+              declarerId: 'p1',
+              halfSuitId: 'low_c',
+              winningTeam: 2,
+              assignment: {
+                '1_c': 'p1',
+                '2_c': 'p2',
+                '3_c': 'p3',
+                '4_c': 'p4',
+                '5_c': 'p5',
+                '6_c': 'p6',
               },
-            })}
-          />,
-        );
+              wrongAssignmentDiffs: [
+                { card: '1_c', claimedPlayerId: 'p1', actualPlayerId: 'p4' },
+                { card: '4_c', claimedPlayerId: 'p4', actualPlayerId: 'p1' },
+              ],
+              actualHolders: {
+                '1_c': 'p4',
+                '2_c': 'p2',
+                '3_c': 'p3',
+                '4_c': 'p1',
+                '5_c': 'p5',
+                '6_c': 'p6',
+              },
+              lastMove: 'Alice declared Low Clubs — incorrect! Team 2 scores',
+            },
+          })}
+        />,
+      );
 
-        const reveal = within(screen.getByRole('region', { name: 'Declared cards by actual holder' }));
-        expect(reveal.getAllByRole('figure')).toHaveLength(6);
-        const ace = reveal.getByRole('img', { name: /^a of clubs$/i }).closest('figure');
-        expect(ace).toHaveTextContent('Held by Dave');
-        expect(ace?.querySelector('s')).toHaveTextContent('Alice');
-        const two = reveal.getByRole('img', { name: /^2 of clubs$/i }).closest('figure');
-        expect(two).toHaveTextContent('Held by Bob');
-        expect(two?.querySelector('s')).toBeNull();
-
-        act(() => {
-          jest.advanceTimersByTime(9_500);
-        });
-
-        expect(screen.queryByRole('region', { name: 'Declared cards by actual holder' })).toBeNull();
-      } finally {
-        jest.useRealTimers();
-      }
+      const reveal = within(screen.getByRole('region', { name: 'Declared cards by actual holder' }));
+      expect(reveal.getAllByRole('figure')).toHaveLength(6);
+      const ace = reveal.getByRole('img', { name: /^a of clubs$/i }).closest('figure');
+      expect(ace).toHaveTextContent('Held by Dave');
+      expect(ace?.querySelector('s')).toHaveTextContent('Alice');
+      const two = reveal.getByRole('img', { name: /^2 of clubs$/i }).closest('figure');
+      expect(two).toHaveTextContent('Held by Bob');
+      expect(two?.querySelector('s')).toBeNull();
     });
   });
 
