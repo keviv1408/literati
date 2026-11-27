@@ -24,13 +24,18 @@ import { DeclareDropSeat } from './InlineDeclare';
 import InlineDeclareTray from './InlineDeclareTray';
 import LastMoveDisplay from './LastMoveDisplay';
 import PlayingCard from './PlayingCard';
-import styles from './LobbyPractice.module.css';
+import styles from './ShortTutorial.module.css';
 
 const diamonds = getHalfSuitCards('low_d', TUTORIAL_VARIANT);
 const opponents = new Set(PLAYERS.filter(p => p.teamId === 2).map(p => p.id));
 const playerName = (id: string) => PLAYERS.find(p => p.id === id)?.name;
 
-function PracticeHand({ onExit }: { onExit: () => void }) {
+interface PracticeHandProps {
+  returnTo: 'home' | 'lobby';
+  onExit: () => void;
+}
+
+function PracticeHand({ returnTo, onExit }: PracticeHandProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const popupButton = useRef<HTMLButtonElement>(null);
   const instruction = useRef<HTMLSpanElement>(null);
@@ -190,7 +195,7 @@ function PracticeHand({ onExit }: { onExit: () => void }) {
         if (!event.target.closest('.action-tray, [data-ask-targetable="true"], [data-testid="declare-drop-seat"], [role="radiogroup"]')) closePicker();
       }}>
         <header className="player-header">
-          <button type="button" aria-label="Back to lobby" className="header-button" onClick={() => dialog.current?.close()}>←</button>
+          <button type="button" aria-label={`Back to ${returnTo}`} className="header-button" onClick={() => dialog.current?.close()}>←</button>
           <TableScore scores={table.scores} myTeamId={1} />
           <span className={styles.practiceLabel}>Face-up practice</span>
         </header>
@@ -246,7 +251,7 @@ function PracticeHand({ onExit }: { onExit: () => void }) {
       {showPopup && (
         <div className={styles.popupOverlay}>
           <div className={styles.popup}>
-            {stage === 'intro' && <button type="button" className={styles.popupClose} aria-label="Back to lobby" onClick={() => dialog.current?.close()}>×</button>}
+            {stage === 'intro' && <button type="button" className={styles.popupClose} aria-label={`Back to ${returnTo}`} onClick={() => dialog.current?.close()}>×</button>}
             <div className={stage === 'intro' ? styles.introCards : styles.wonSet} aria-hidden="true">
               {(stage === 'intro' ? diamonds.slice(0, 3) : diamonds).map(card => <PlayingCard key={card} cardId={card} size="md" />)}
             </div>
@@ -265,7 +270,7 @@ function PracticeHand({ onExit }: { onExit: () => void }) {
                   <p>In a live game, if you name the wrong holder for even one card, the other team gets the point.</p>
                 </div>
                 <p id="practice-popup-note" className={styles.goal}>Remember to have fun!</p>
-                <button type="button" ref={popupButton} className={styles.cta} onClick={() => dialog.current?.close()}>Return to lobby</button>
+                <button type="button" ref={popupButton} className={styles.cta} onClick={() => dialog.current?.close()}>Return to {returnTo}</button>
               </>
             )}
           </div>
@@ -275,16 +280,10 @@ function PracticeHand({ onExit }: { onExit: () => void }) {
   );
 }
 
-export default function LobbyPractice() {
-  const [open, setOpen] = useState(false);
+export default function PracticeSession(props: PracticeHandProps) {
   return (
-    <>
-      <button type="button" className={styles.entry} onClick={() => setOpen(true)}>
-        <strong>Try a turn</strong><span>1–2 min →</span>
-      </button>
-      {open && <VoiceProvider roomCode={null} bearerToken={null} isGuest canJoin={false}>
-        <PracticeHand onExit={() => setOpen(false)} />
-      </VoiceProvider>}
-    </>
+    <VoiceProvider roomCode={null} bearerToken={null} isGuest canJoin={false}>
+      <PracticeHand {...props} />
+    </VoiceProvider>
   );
 }

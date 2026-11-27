@@ -108,6 +108,7 @@ export interface PlayerDeclarationStats {
 }
 
 export interface GameOverScreenProps {
+  children?: React.ReactNode;
   winner: 1 | 2 | null;
   tiebreakerWinner: 1 | 2 | null;
   scores: { team1: number; team2: number };
@@ -208,6 +209,7 @@ export function computePlayerStats(
 }
 
 export default function GameOverScreen({
+  children,
   winner,
   tiebreakerWinner,
   scores,
@@ -272,24 +274,11 @@ export default function GameOverScreen({
     return result;
   }, [playerSummaries, players]);
 
-  const isTie = winner === null || scores.team1 === scores.team2;
-  const isWinner = !isTie && myTeamId !== null && myTeamId !== undefined && winner === myTeamId;
-  const isLoser = !isTie && myTeamId !== null && myTeamId !== undefined && winner !== myTeamId;
-
-  // Tie-break applies when the final scores are exactly 4–4 and a tiebreaker
-  // winner is recorded (meaning high_d decided the game).
-  const showTiebreak = scores.team1 === 4 && scores.team2 === 4 && tiebreakerWinner !== null;
-
-  // Headline emoji
-  let emoji = '🤝';
-  if (!isTie) {
-    // For non-spectators use personal perspective; for spectators show trophy
-    if (myTeamId != null) {
-      emoji = isWinner ? '🏆' : '😔';
-    } else {
-      emoji = '🏆';
-    }
-  }
+  const tiedAtFour = scores.team1 === 4 && scores.team2 === 4;
+  const winningTeam = tiedAtFour ? tiebreakerWinner ?? winner ?? declaredMap.get(TIEBREAKER_HALF_SUIT) ?? null : winner;
+  const onHighDiamonds = tiedAtFour && winningTeam !== null;
+  const myTeamWon = myTeamId === winningTeam && winningTeam !== null;
+  const emoji = winningTeam === null ? '🤝' : myTeamId == null || myTeamWon ? '🏆' : '😔';
 
   return (
     <div
@@ -304,25 +293,14 @@ export default function GameOverScreen({
         data-testid="game-over-hero"
         aria-label="Result"
       >
-        <div className="text-5xl mb-3" role="img" aria-label={isTie ? 'Tie' : `Team ${winner} wins`}>
-          {emoji}
-        </div>
-
-        <h1 className="text-2xl font-bold text-white mb-1">Game Over</h1>
-
-        {isTie ? (
-          <p className="text-lg font-semibold text-slate-300" data-testid="result-tie">
-            It&apos;s a tie!
-          </p>
-        ) : (
-          <p
-            className={`text-xl font-bold ${winner === 1 ? 'text-emerald-300' : 'text-violet-300'}`}
-            data-testid="result-winner"
-            aria-label={`Team ${winner} wins`}
-          >
-            Team {winner} wins{isWinner ? ' 🎉' : ''}
-          </p>
-        )}
+        <div className="text-3xl mb-2" aria-hidden="true">{emoji}</div>
+        <h1 className="text-3xl font-bold text-white" data-testid={winningTeam ? 'result-winner' : 'result-tie'}>
+          {winningTeam ? (
+            <span data-testid={onHighDiamonds ? 'tiebreak-reason' : undefined}>
+              Team {winningTeam} wins{onHighDiamonds && ' on High Diamonds'}{myTeamWon && <span aria-hidden="true"> 🎉</span>}
+            </span>
+          ) : 'It’s a tie!'}
+        </h1>
       </section>
 
       {/* ── Final score ────────────────────────────────────────────────────── */}
@@ -334,7 +312,7 @@ export default function GameOverScreen({
         <div className="flex flex-col items-center gap-1">
           <span className="text-xs uppercase tracking-widest text-slate-400">Team 1</span>
           <span
-            className={`text-4xl font-extrabold tabular-nums ${winner === 1 ? 'text-emerald-300' : 'text-slate-300'}`}
+            className={`text-4xl font-extrabold tabular-nums ${winningTeam === 1 ? 'text-rose-300' : 'text-slate-300'}`}
             data-testid="score-team1"
           >
             {scores.team1}
@@ -346,7 +324,7 @@ export default function GameOverScreen({
         <div className="flex flex-col items-center gap-1">
           <span className="text-xs uppercase tracking-widest text-slate-400">Team 2</span>
           <span
-            className={`text-4xl font-extrabold tabular-nums ${winner === 2 ? 'text-violet-300' : 'text-slate-300'}`}
+            className={`text-4xl font-extrabold tabular-nums ${winningTeam === 2 ? 'text-violet-300' : 'text-slate-300'}`}
             data-testid="score-team2"
           >
             {scores.team2}
@@ -354,22 +332,7 @@ export default function GameOverScreen({
         </div>
       </section>
 
-      {/* ── Tiebreak reason ────────────────────────────────────────────────── */}
-      {showTiebreak && (
-        <section
-          className="w-full rounded-xl bg-amber-900/30 border border-amber-700/40 px-4 py-3 text-center"
-          data-testid="tiebreak-reason"
-          aria-label="Tiebreak reason"
-        >
-          <p className="text-sm text-amber-300 font-semibold mb-0.5">Tiebreaker</p>
-          <p className="text-sm text-amber-200/80">
-            Team {tiebreakerWinner} declared{' '}
-            <span className="font-semibold text-amber-100">
-              High {SUIT_SYMBOLS['d']} (High Diamonds)
-            </span>
-          </p>
-        </section>
-      )}
+      {children}
 
       {/* ── Half-suit tally ────────────────────────────────────────────────── */}
       <section

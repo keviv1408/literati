@@ -1,4 +1,4 @@
-.entry {
+.entry, .homeEntry {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10,8 +10,15 @@
   font-size: .875rem;
   cursor: pointer;
 }
-.entry span { color: #a2c0b6; }
-.entry:hover { color: white; }
+.homeEntry {
+  padding: .8rem 1.1rem;
+  border: 1px solid #467364;
+  border-radius: .75rem;
+  background: #112d28;
+  font-size: 1rem;
+}
+.entry span, .homeEntry span { color: #a2c0b6; white-space: nowrap; font-size: .8125rem; }
+.entry:hover, .homeEntry:hover { color: white; }
 .dialog {
   position: fixed;
   inset: 0;
@@ -97,7 +104,7 @@
 .popup .cta { width: 100%; margin-top: 1.25rem; }
 .cta { min-height: 44px; border-radius: .65rem; padding: .5rem .85rem; background: #00835e; color: white; font-weight: 650; font-size: .875rem; cursor: pointer; }
 .cta:hover { background: #05704f; }
-.entry:focus-visible, .cta:focus-visible, .popupClose:focus-visible { outline: 2px solid #f9d28b; outline-offset: 2px; }
+.entry:focus-visible, .homeEntry:focus-visible, .cta:focus-visible, .popupClose:focus-visible { outline: 2px solid #f9d28b; outline-offset: 2px; }
 @media (min-width: 64rem) {
   .mini [role='img'] { width: 2rem; }
   .mini b { font-size: .8rem; }

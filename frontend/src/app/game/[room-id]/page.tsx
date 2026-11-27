@@ -1046,8 +1046,6 @@ export default function GamePage({ params }: PageProps) {
   ) : null;
 
   if (finalGameOver || room.status === 'completed') {
-    const { winner, scores, tiebreakerWinner } = finalGameOver ?? { winner: null as 1 | 2 | null, tiebreakerWinner: null as 1 | 2 | null, scores: { team1: 0, team2: 0 } };
-
     // Show a brief "Rematch starting…" overlay while redirect is in flight
     if (rematchStarted) {
       return (
@@ -1059,42 +1057,8 @@ export default function GamePage({ params }: PageProps) {
       );
     }
 
-    return (
-      <div
-        className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-8 gap-6 overflow-y-auto"
-        data-testid="game-completed-view"
-      >
-        {wsStatus === 'reconnecting' && (
-          <div className="fixed inset-x-0 top-0 z-50">
-            <ReconnectBar onRetry={retryNow} />
-          </div>
-        )}
-        {wsErrorBanner && <div className="fixed inset-x-0 top-0 z-50">{wsErrorBanner}</div>}
-
-        {/* ── Game-over summary ─────────────────────────────────
-         * Renders the winner announcement, final score, tiebreak reason (if
-         * applicable), and the full half-suit tally. declaredSuits is drawn
-         * from the most-recent gameState snapshot so the tally is always
-         * complete when the game_over message arrives.
-         */}
-        <GameOverScreen
-          winner={winner ?? null}
-          tiebreakerWinner={tiebreakerWinner ?? null}
-          scores={scores}
-          declaredSuits={finalDeclaredSuits}
-          myTeamId={myTeamId}
-          myPlayerId={myPlayerId}
-          players={players}
-          playerSummaries={gameSummary?.playerSummaries}
-          mvpPlayerId={gameSummary?.mvpPlayerId ?? null}
-          variant={VARIANT_LABELS[room.card_removal_variant]}
-          roomCode={room.code}
-          testId="game-over-screen"
-        />
-
-        {/* Room dissolved notice — shown when the server permanently closes the room.
-         * Takes priority over the vote panel; once dissolved the vote is moot.
-         */}
+    const resultActions = (
+      <div className="flex w-full max-w-sm flex-col items-center gap-2">
         {roomDissolved ? (
           <div
             className="flex flex-col items-center gap-3 px-4 py-4 rounded-2xl border border-slate-700/60 bg-slate-800/70 backdrop-blur-sm w-full max-w-sm text-center"
@@ -1126,15 +1090,6 @@ export default function GamePage({ params }: PageProps) {
           )
         )}
 
-        {/* ── Host Rematch button (private rooms only) ──────────────
-         * Visible only to the registered host of a non-matchmaking room.
-         * Clicking sends `rematch_initiate` to the server; the server validates
-         * host identity via DB lookup and broadcasts `rematch_start` to all
-         * clients, bypassing the vote window.
-         *
-         * Not shown when roomDissolved is set (room is permanently closed) or
-         * when rematchStarted is true (redirect is already in flight).
-         */}
         {isHostOfPrivateRoom && !roomDissolved && (
           <button
             onClick={() => roomCode && sendRematchInitiate(roomCode)}
@@ -1149,10 +1104,48 @@ export default function GamePage({ params }: PageProps) {
 
         <button
           onClick={handleGoHome}
-          className="py-3 px-6 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          className="min-h-11 px-5 rounded-xl font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
         >
           Back to Home
         </button>
+      </div>
+    );
+
+    return (
+      <div
+        className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-8 gap-6 overflow-y-auto"
+        data-testid="game-completed-view"
+      >
+        {wsStatus === 'reconnecting' && (
+          <div className="fixed inset-x-0 top-0 z-50">
+            <ReconnectBar onRetry={retryNow} />
+          </div>
+        )}
+        {wsErrorBanner && <div className="fixed inset-x-0 top-0 z-50">{wsErrorBanner}</div>}
+
+        {finalGameOver ? (
+          <GameOverScreen
+            winner={finalGameOver.winner ?? null}
+            tiebreakerWinner={finalGameOver.tiebreakerWinner ?? null}
+            scores={finalGameOver.scores}
+            declaredSuits={finalDeclaredSuits}
+            myTeamId={myTeamId}
+            myPlayerId={myPlayerId}
+            players={players}
+            playerSummaries={gameSummary?.playerSummaries}
+            mvpPlayerId={gameSummary?.mvpPlayerId ?? null}
+            variant={VARIANT_LABELS[room.card_removal_variant]}
+            roomCode={room.code}
+          >
+            {resultActions}
+          </GameOverScreen>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold text-white">Game Over</h1>
+            <p role="status" className="text-slate-300">Waiting for the final score…</p>
+            {resultActions}
+          </>
+        )}
       </div>
     );
   }

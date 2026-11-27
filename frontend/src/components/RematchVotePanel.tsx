@@ -20,7 +20,7 @@
  *   disabled         — true while the vote cannot be sent
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import type { RematchVoteUpdatePayload, RematchDeclinedPayload } from '@/types/game';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -44,14 +44,13 @@ export default function RematchVotePanel({
   voteStartedAt,
   disabled = false,
 }: RematchVotePanelProps) {
-  const mountTimeRef   = useRef<number>(Date.now());
-  const startTime      = voteStartedAt ?? mountTimeRef.current;
+  const [mountedAt] = useState(Date.now);
+  const startTime      = voteStartedAt ?? mountedAt;
   const expiresAt      = startTime + voteTimeoutMs;
 
   const [secondsLeft, setSecondsLeft] = useState<number>(
-    Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
+    () => Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
   );
-  const [hasVoted, setHasVoted] = useState(false);
   const [localVote, setLocalVote] = useState<boolean | null>(null);
 
   // Countdown ticker
@@ -66,20 +65,6 @@ export default function RematchVotePanel({
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
   }, [expiresAt, rematchDeclined, rematchVote]);
-
-  // Detect whether this player already voted (from server snapshot on reconnect)
-  useEffect(() => {
-    if (!rematchVote || !myPlayerId) return;
-    const myVote = rematchVote.votes[myPlayerId];
-    if (myVote !== undefined) setHasVoted(true);
-  }, [rematchVote, myPlayerId]);
-
-  function handleVote(vote: boolean) {
-    if (hasVoted || disabled) return;
-    setHasVoted(true);
-    setLocalVote(vote);
-    onVote(vote);
-  }
 
   // ── Declined state ──────────────────────────────────────────────────────
   if (rematchDeclined) {
@@ -111,11 +96,17 @@ export default function RematchVotePanel({
     );
   }
 
-  const { yesCount, noCount, totalCount, majority, playerVotes } = rematchVote;
+  const { yesCount, totalCount, majority, playerVotes } = rematchVote;
   const myVoteRecord = myPlayerId ? playerVotes.find((pv) => pv.playerId === myPlayerId) : null;
-  // Prefer local optimistic vote; fall back to server-confirmed vote
-  const myCurrentVote = localVote ?? myVoteRecord?.vote ?? null;
-  const locked = hasVoted || disabled;
+  const serverVote = myPlayerId ? rematchVote.votes[myPlayerId] : undefined;
+  const myCurrentVote = localVote ?? serverVote ?? myVoteRecord?.vote ?? null;
+  const locked = myCurrentVote !== null || disabled;
+
+  function handleVote(vote: boolean) {
+    if (locked) return;
+    setLocalVote(vote);
+    onVote(vote);
+  }
 
   return (
     <div
@@ -169,32 +160,34 @@ export default function RematchVotePanel({
         </div>
       )}
 
-      {/* Player vote status list */}
-      <ul className="w-full space-y-1" aria-label="Player votes" data-testid="rematch-player-votes">
-        {playerVotes.map((pv) => (
-          <li
-            key={pv.playerId}
-            className="flex items-center justify-between text-xs"
-            data-testid={`rematch-player-vote-${pv.playerId}`}
-          >
-            <span className={['flex items-center gap-1', pv.playerId === myPlayerId ? 'text-emerald-300 font-semibold' : 'text-slate-300'].join(' ')}>
-              {pv.isBot && <span aria-label="bot">🤖</span>}
-              <span className="max-w-[8rem] truncate">{pv.displayName}</span>
-              {pv.playerId === myPlayerId && <span className="text-slate-500">(you)</span>}
-            </span>
-            <span
-              aria-label={pv.vote === true ? 'voted yes' : pv.vote === false ? 'voted no' : 'waiting'}
-              className={[
-                'font-semibold',
-                pv.vote === true  ? 'text-emerald-400' :
-                pv.vote === false ? 'text-red-400'     : 'text-slate-600',
-              ].join(' ')}
+      <details className="w-full text-sm text-slate-300">
+        <summary className="cursor-pointer rounded py-1 focus-visible:outline-2">Player votes</summary>
+        <ul className="w-full space-y-1" aria-label="Player votes" data-testid="rematch-player-votes">
+          {playerVotes.map((pv) => (
+            <li
+              key={pv.playerId}
+              className="flex items-center justify-between text-xs"
+              data-testid={`rematch-player-vote-${pv.playerId}`}
             >
-              {pv.vote === true ? '✔ Yes' : pv.vote === false ? '✘ No' : '…'}
-            </span>
-          </li>
-        ))}
-      </ul>
+              <span className={['flex items-center gap-1', pv.playerId === myPlayerId ? 'text-emerald-300 font-semibold' : 'text-slate-300'].join(' ')}>
+                {pv.isBot && <span aria-label="bot">🤖</span>}
+                <span className="max-w-[8rem] truncate">{pv.displayName}</span>
+                {pv.playerId === myPlayerId && <span className="text-slate-500">(you)</span>}
+              </span>
+              <span
+                aria-label={pv.vote === true ? 'voted yes' : pv.vote === false ? 'voted no' : 'waiting'}
+                className={[
+                  'font-semibold',
+                  pv.vote === true  ? 'text-emerald-400' :
+                  pv.vote === false ? 'text-red-400'     : 'text-slate-600',
+                ].join(' ')}
+              >
+                {pv.vote === true ? '✔ Yes' : pv.vote === false ? '✘ No' : '…'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </details>
 
       {/* Progress bar */}
       <div className="w-full h-1 rounded-full bg-slate-700 overflow-hidden" aria-hidden="true">
@@ -213,10 +206,6 @@ export default function RematchVotePanel({
         {secondsLeft}s remaining
       </p>
 
-      {/* Tally bar label */}
-      <p className="text-[10px] text-slate-600 -mt-2" aria-hidden="true">
-        {yesCount} yes · {noCount} no · {totalCount - yesCount - noCount} waiting
-      </p>
     </div>
   );
 }

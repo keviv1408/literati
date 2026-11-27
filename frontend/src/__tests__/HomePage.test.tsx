@@ -95,6 +95,9 @@ describe('Home entry points', () => {
     expect(screen.queryByText(/Spectate Live Games/)).toBeNull();
     expect(screen.queryByText('Spectators')).toBeNull();
     expect(screen.getByText('Smart Bots')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Begin Interactive Tutorial/ })).toHaveAttribute('href', '/tutorial');
+    expect(screen.getByRole('heading', { name: 'Literature', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start a short tutorial to learn the basics/ })).toBeInTheDocument();
+    expect(screen.queryByTitle(/tutorial video/i)).toBeNull();
+    expect(screen.getByRole('link', { name: /full interactive tutorial/i })).toHaveAttribute('href', '/tutorial');
   });
 });

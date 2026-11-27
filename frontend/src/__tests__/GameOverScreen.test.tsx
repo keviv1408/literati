@@ -6,7 +6,7 @@
  * Coverage:
  * 1. Renders with data-testid="game-over-screen" by default
  * 2. Custom testId override works
- * 3. Shows "Game Over" heading always
+ * 3. Shows the winner in the result heading
  * 4. Winner announcement: Team 1 wins
  * 5. Winner announcement: Team 2 wins
  * 6. Tie announcement when winner is null
@@ -209,10 +209,10 @@ describe('GameOverScreen', () => {
     expect(screen.getByTestId('my-custom-id')).toBeTruthy();
   });
 
-  // 3. "Game Over" heading always present
-  it('shows "Game Over" heading', () => {
+  // 3. Result heading
+  it('shows the winner in the main heading', () => {
     render(<GameOverScreen {...makeProps()} />);
-    expect(screen.getByRole('heading', { name: /game over/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: /Team 1 wins/ })).toBeTruthy();
   });
 
   // 4. Team 1 winner announcement
@@ -231,13 +231,13 @@ describe('GameOverScreen', () => {
 
   // 6. Tie announcement (winner null)
   it('shows tie message when winner is null', () => {
-    render(<GameOverScreen {...makeProps({ winner: null, scores: { team1: 4, team2: 4 } })} />);
+    render(<GameOverScreen {...makeProps({ declaredSuits: [], winner: null, scores: { team1: 4, team2: 4 } })} />);
     expect(screen.getByTestId('result-tie')).toBeTruthy();
   });
 
   // 7. Tie announcement (scores equal, winner explicitly null)
   it('shows tie message when scores are equal and winner is null', () => {
-    render(<GameOverScreen {...makeProps({ winner: null, scores: { team1: 4, team2: 4 }, tiebreakerWinner: null })} />);
+    render(<GameOverScreen {...makeProps({ declaredSuits: [], winner: null, scores: { team1: 4, team2: 4 }, tiebreakerWinner: null })} />);
     expect(screen.getByTestId('result-tie')).toBeTruthy();
   });
 
@@ -281,7 +281,8 @@ describe('GameOverScreen', () => {
         {...makeProps({ winner: 2, scores: { team1: 4, team2: 4 }, tiebreakerWinner: 2 })}
       />
     );
-    expect(screen.getByTestId('tiebreak-reason')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Team 2 wins on High Diamonds' })).toBeTruthy();
+    expect(screen.queryByTestId('result-tie')).toBeNull();
   });
 
   // 14. Tiebreak section mentions winning team
@@ -307,6 +308,11 @@ describe('GameOverScreen', () => {
     expect(section.textContent).toContain('Diamonds');
   });
 
+  it('uses the awarded High Diamonds set when an older result has no winner fields', () => {
+    render(<GameOverScreen {...makeProps({ winner: null, scores: { team1: 4, team2: 4 }, declaredSuits: MIXED_DECLARATIONS })} />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Team 1 wins on High Diamonds' })).toBeTruthy();
+  });
+
   // 16. Tiebreak NOT shown when scores differ
   it('does not render tiebreak section when scores are not 4-4', () => {
     render(<GameOverScreen {...makeProps({ winner: 1, scores: { team1: 5, team2: 3 }, tiebreakerWinner: 1 })} />);
@@ -317,7 +323,7 @@ describe('GameOverScreen', () => {
   it('does not render tiebreak section when tiebreakerWinner is null at 4-4', () => {
     render(
       <GameOverScreen
-        {...makeProps({ winner: null, scores: { team1: 4, team2: 4 }, tiebreakerWinner: null })}
+        {...makeProps({ declaredSuits: [], winner: null, scores: { team1: 4, team2: 4 }, tiebreakerWinner: null })}
       />
     );
     expect(screen.queryByTestId('tiebreak-reason')).toBeNull();
