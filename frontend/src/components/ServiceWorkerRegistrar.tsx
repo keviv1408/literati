@@ -7,9 +7,11 @@
  */
 
 import { useEffect } from 'react';
+import { isAndroidBuild } from '@/lib/appPaths';
 
 export default function ServiceWorkerRegistrar() {
   useEffect(() => {
+    if (isAndroidBuild()) return;
     if (!('serviceWorker' in navigator)) return;
 
     // Avoid stale dev caches causing hydration mismatches while iterating locally.

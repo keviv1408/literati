@@ -33,6 +33,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoomByCode, ApiError } from '@/lib/api';
+import { gamePath } from '@/lib/appPaths';
 import { trackEvent } from '@/lib/analytics';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
 import {
@@ -278,7 +279,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   useEffect(() => {
     if (!lobbyStarting || !roomCode) return;
     if (!isSpectator) queueOpeningDeal(roomCode);
-    router.push(`/game/${roomCode}`);
+    router.push(gamePath(roomCode));
   }, [lobbyStarting, roomCode, router, isSpectator]);
 
   /**
@@ -396,7 +397,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           // The game page handles seated players (reconnect) and everyone
           // else; the lobby would only show an empty roster for a started game.
           if (fetched.status === 'in_progress') {
-            router.replace(`/game/${fetched.code}`);
+            router.replace(gamePath(fetched.code));
             return;
           }
           setRoom(fetched);

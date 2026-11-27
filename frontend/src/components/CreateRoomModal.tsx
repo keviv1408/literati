@@ -25,6 +25,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { createRoom, ApiError } from '@/lib/api';
+import { gamePath, roomPath } from '@/lib/appPaths';
 import { trackEvent } from '@/lib/analytics';
 import { useGuest } from '@/contexts/GuestContext';
 import {
@@ -80,8 +81,8 @@ function getExistingRoomPath(existingRoom: {
   status?: RoomStatus;
 }): string {
   return existingRoom.status === 'in_progress'
-    ? `/game/${existingRoom.code}`
-    : `/room/${existingRoom.code}`;
+    ? gamePath(existingRoom.code)
+    : roomPath(existingRoom.code);
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -152,7 +153,7 @@ export default function CreateRoomModal({
         // Cache room data so the lobby page can render without an extra fetch
         cacheCreatedRoom(room);
         onClose();
-        router.push(`/room/${room.code}`);
+        router.push(roomPath(room.code));
       } catch (err) {
         if (err instanceof ApiError) {
           if (err.status === 409) {
