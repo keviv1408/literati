@@ -255,3 +255,36 @@
 
 .ask-result-mark[data-ask-result='received']::after { content: '✓'; color: #047857; }
 .ask-result-mark[data-ask-result='denied']::after { content: '×'; color: #be123c; }
+
+.declaration-reveal {
+  flex: none;
+  position: relative;
+  padding: 0.3rem 0.65rem 0.45rem;
+  background: #14232d;
+  border-bottom: 1px solid #3e515b;
+  color: #edf3f5;
+}
+
+.reveal-holders {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.35rem;
+  max-width: 22rem;
+  margin-inline: auto;
+}
+
+.reveal-card { min-width: 0; text-align: center; }
+.reveal-card [role="img"] { width: 100%; height: auto; aspect-ratio: 2 / 3; }
+.reveal-card figcaption {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.reveal-holder { display: block; color: #86efac; font-weight: 650; }
+.reveal-guess { display: block; color: #fda4af; }
+
+@media (max-height: 40rem) {
+  .reveal-holders { max-width: 17rem; }
+}

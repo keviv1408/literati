@@ -4,13 +4,13 @@
  * Frontend turn-pass seat-selection interaction tests.
  *
  * Covers:
- * • Turn indicator shows "Tap a highlighted seat" when postDeclarationHighlight is set
+ * • The hand tray shows the handoff instruction and timer during selection
  * • Ask and Declare buttons hidden during turn-pass selection mode
  * • "Turn-pass action prompt" replaces Ask/Declare row during selection
  * • Ask-prompt hint suppressed during turn-pass mode
  * • CardHand is disabled during turn-pass mode
  * • Clicking a highlighted seat dispatches `choose_next_turn` via WebSocket
- * • After seat click, UI shows "Choosing…" pending state
+ * • After seat click, UI shows "Passing the turn…" pending state
  * • Ask/Declare still hidden while pendingTurnPassAck (waiting for server ack)
  * • After `post_declaration_turn_selected` all turn-pass UI clears and normal
  * Ask/Declare controls reappear for the NEW turn player
@@ -288,15 +288,23 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
     });
   });
 
-  it('turn indicator shows "Tap a highlighted seat" instruction', async () => {
+  it('puts the only handoff prompt and countdown in the hand tray', async () => {
     await setupActiveGame();
     await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
     act(() => sendWsMessage(makeDeclarationResult({ correct: true })));
 
+    act(() => sendWsMessage({
+      type: 'post_declaration_timer',
+      declarerId: MY_PLAYER_ID,
+      eligiblePlayers: [MY_PLAYER_ID, 'p2'],
+      durationMs: 30_000,
+      expiresAt: Date.now() + 30_000,
+    }));
     await waitFor(() => {
-      const indicator = screen.getByTestId('turn-indicator');
-      expect(indicator).toContainElement(screen.getByTestId('turn-pass-select-label'));
+      expect(screen.getByTestId('player-hand-area')).toContainElement(screen.getByTestId('turn-pass-action-prompt'));
+      expect(screen.queryByTestId('turn-indicator')).toBeNull();
+      expect(screen.getByTestId('player-hand-area')).toContainElement(screen.getByTestId('countdown-timer'));
     });
   });
 
@@ -308,7 +316,7 @@ describe('TurnPassInteraction — turn-pass mode after correct declaration', () 
 
     await waitFor(() => {
       const prompt = screen.getByTestId('turn-pass-action-prompt');
-      expect(prompt.textContent).toContain('highlighted teammate seat');
+      expect(prompt.textContent).toContain('Tap a highlighted teammate to play next.');
     });
   });
 
@@ -440,7 +448,7 @@ describe('TurnPassInteraction — seat click dispatches choose_next_turn', () =>
 // ---------------------------------------------------------------------------
 
 describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)', () => {
-  it('shows "Choosing…" turn indicator after clicking a highlighted seat', async () => {
+  it('shows the pending handoff status after clicking a highlighted seat', async () => {
     await setupActiveGame();
     await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
@@ -455,7 +463,7 @@ describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)
     act(() => (clickableSeats[0] as HTMLElement).click());
 
     await waitFor(() => {
-      expect(screen.getByTestId('turn-pass-pending-label')).toBeTruthy();
+      expect(screen.getByTestId('turn-pass-action-prompt')).toHaveTextContent('Passing the turn…');
     });
   });
 
@@ -480,7 +488,7 @@ describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)
     });
   });
 
-  it('turn-pass action prompt shows "Choosing…" text after click', async () => {
+  it('turn-pass action prompt shows "Passing the turn…" text after click', async () => {
     await setupActiveGame();
     await waitFor(() => expect(screen.getByTestId('toggle-ask')).toBeTruthy());
 
@@ -496,7 +504,7 @@ describe('TurnPassInteraction — pending ack state (post-click, pre-server-ack)
 
     await waitFor(() => {
       const prompt = screen.getByTestId('turn-pass-action-prompt');
-      expect(prompt.textContent).toContain('Choosing');
+      expect(prompt.textContent).toContain('Passing the turn');
     });
   });
 
@@ -568,8 +576,6 @@ describe('TurnPassInteraction — server ack restores normal state', () => {
     // Now p2 has the turn — my turn-pass mode should be gone
     await waitFor(() => {
       expect(screen.queryByTestId('turn-pass-action-prompt')).toBeNull();
-      expect(screen.queryByTestId('turn-pass-select-label')).toBeNull();
-      expect(screen.queryByTestId('turn-pass-pending-label')).toBeNull();
     });
   });
 

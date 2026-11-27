@@ -46,11 +46,6 @@
 
 import React, { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
-import {
-  buildDeclarationSeatRevealMap,
-  buildSuccessfulDeclarationSeatRevealMap,
-  FAILED_DECLARATION_SEAT_REVEAL_MS,
-} from '@/lib/declarationSeatReveal';
 import CircularGameTable from '@/components/CircularGameTable';
 import CardHand from '@/components/CardHand';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
@@ -71,6 +66,7 @@ import type {
 } from '@/types/game';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
+import DeclarationCardReveal from '@/components/DeclarationCardReveal';
 import ReconnectBar from '@/components/ReconnectBar';
 import CountdownTimer from '@/components/CountdownTimer';
 import CardFlightAnimation from '@/components/CardFlightAnimation';
@@ -170,10 +166,6 @@ export default function SpectatorView({
   onGoHome,
   onRetry,
 }: SpectatorViewProps) {
-  // ── Failed Declaration Seat Reveal dismiss state ──────────────
-  const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
-    useState<Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null>(null);
-  const declarationSeatRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [godModeEnabled, setGodModeEnabled] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
@@ -184,7 +176,6 @@ export default function SpectatorView({
   const observedAskBatchRef = useRef<AskMoveBatch | null>(null);
   const processedAskResultKeyRef = useRef<string | null>(null);
   const processedDeclareResultKeyRef = useRef<string | null>(null);
-  const processedDeclarationFailedKeyRef = useRef<string | null>(null);
   const getPlayerDisplayName = useCallback((playerId: string) => {
     return players.find((p) => p.playerId === playerId)?.displayName;
   }, [players]);
@@ -265,57 +256,8 @@ export default function SpectatorView({
     if (processedDeclareResultKeyRef.current === declareResultKey) return;
     processedDeclareResultKeyRef.current = declareResultKey;
     observedAskBatchRef.current = null;
-    if (result.correct) {
-      setDeclarationSeatRevealByPlayerId(
-        buildSuccessfulDeclarationSeatRevealMap(result, effectiveVariant),
-      );
-      if (declarationSeatRevealTimerRef.current) {
-        clearTimeout(declarationSeatRevealTimerRef.current);
-      }
-      declarationSeatRevealTimerRef.current = setTimeout(() => {
-        setDeclarationSeatRevealByPlayerId(null);
-      }, FAILED_DECLARATION_SEAT_REVEAL_MS);
-    }
     showTransientLastResult(msg, null);
-  }, [effectiveVariant, lastDeclareResult]);
-
-  useEffect(() => {
-    if (!declarationFailed) {
-      processedDeclarationFailedKeyRef.current = null;
-      setDeclarationSeatRevealByPlayerId(null);
-      return;
-    }
-    const declarationFailedKey = [
-      declarationFailed.declarerId,
-      declarationFailed.halfSuitId,
-      declarationFailed.winningTeam,
-      declarationFailed.lastMove,
-    ].join('|');
-    if (processedDeclarationFailedKeyRef.current === declarationFailedKey) return;
-    processedDeclarationFailedKeyRef.current = declarationFailedKey;
-    setDeclarationSeatRevealByPlayerId(
-      buildDeclarationSeatRevealMap(declarationFailed, players, effectiveVariant),
-    );
-    if (declarationSeatRevealTimerRef.current) {
-      clearTimeout(declarationSeatRevealTimerRef.current);
-    }
-    declarationSeatRevealTimerRef.current = setTimeout(() => {
-      setDeclarationSeatRevealByPlayerId(null);
-    }, FAILED_DECLARATION_SEAT_REVEAL_MS);
-    return () => {
-      if (declarationSeatRevealTimerRef.current) {
-        clearTimeout(declarationSeatRevealTimerRef.current);
-      }
-    };
-  }, [declarationFailed, effectiveVariant, players]);
-
-  useEffect(() => {
-    return () => {
-      if (declarationSeatRevealTimerRef.current) {
-        clearTimeout(declarationSeatRevealTimerRef.current);
-      }
-    };
-  }, []);
+  }, [lastDeclareResult]);
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const effectivePlayerCount = playerCount ?? gamePlayerCount;
@@ -526,6 +468,12 @@ export default function SpectatorView({
         players={players}
         testId="spectator-last-move"
       />
+      <DeclarationCardReveal
+        result={lastAskResult ? null : lastDeclareResult}
+        failure={declarationFailed}
+        players={players}
+        variant={effectiveVariant}
+      />
 
       {declareProgress && declareProgress.halfSuitId && (
         <div className="relative z-10 px-4 py-2 border-b border-amber-800/40">
@@ -554,7 +502,6 @@ export default function SpectatorView({
                 : undefined
             }
             onDirectSeatClick={godModeEnabled ? setSelectedPlayerId : undefined}
-            declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
           >
             <DeclaredBooksTable
               declaredSuits={gameState?.declaredSuits ?? []}
