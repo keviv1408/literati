@@ -38,6 +38,46 @@ describe('POST /api/rooms', () => {
     _clearStore();
   });
 
+  it('finds the authenticated host lobby without any client hints', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
+    mockSupabase._chain.limit.mockResolvedValue({ data: [{ code: 'ABC123', status: 'waiting' }] });
+
+    const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [] });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ room: { code: 'ABC123', destination: 'lobby', hosting: true } });
+    expect(mockSupabase._chain.eq).toHaveBeenCalledWith('host_user_id', 'owner');
+  });
+
+  it('returns a saved bot-covered seat only to its original player', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
+    const chain = mockSupabase._chain;
+    chain.eq.mockImplementation((column) => {
+      if (column === 'is_matchmaking') return Promise.resolve({ data: [{ code: 'ABC123', status: 'in_progress' }] });
+      if (column === 'status') return Promise.resolve({ data: [{ code: 'ABC123', game_state: {
+        status: 'active', players: [{ playerId: 'owner', isBot: true }], hands: { owner: ['secret'] },
+      } }] });
+      return chain;
+    });
+    const lookup = () => request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: ['ABC123'] });
+
+    expect((await lookup()).body).toEqual({ room: { code: 'ABC123', destination: 'game', hosting: false } });
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'stranger' } } });
+    expect((await lookup()).body).toEqual({ room: null, hosting: false });
+  });
+
+  it('rejects a waiting lobby hint without current or previous seating', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'spectator' } } });
+    const chain = mockSupabase._chain;
+    chain.eq.mockImplementation((column) => column === 'is_matchmaking'
+      ? Promise.resolve({ data: [{ code: 'ABC123', status: 'waiting', player_count: 6 }] })
+      : chain);
+    const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: ['ABC123'] });
+
+    expect(response.body).toEqual({ room: null, hosting: false });
+    expect(chain.in).toHaveBeenCalledWith('status', ['waiting', 'starting', 'in_progress']);
+  });
+
   // ── Happy path ──────────────────────────────────────────────────────────────
 
   it('creates a room and returns 201 with room details including invite_code and spectator_token', async () => {

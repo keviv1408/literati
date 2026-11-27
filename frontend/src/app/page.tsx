@@ -4,8 +4,10 @@ import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
-import { API_URL } from '@/lib/api';
-import { isAndroidBuild, roomPath, tutorialPath } from '@/lib/appPaths';
+import { recentPlayerRoomCodes } from '@/lib/roomMembership';
+import { isKickedFromRoom } from '@/lib/kickedRooms';
+import { API_URL, getReturningRoom, type ReturningRoom } from '@/lib/api';
+import { gamePath, isAndroidBuild, roomPath, tutorialPath } from '@/lib/appPaths';
 import { parseRoomJoinInput } from '@/lib/roomJoinInput';
 import ShortTutorial from '@/components/ShortTutorial';
 import CreateRoomModal from '@/components/CreateRoomModal';
@@ -25,6 +27,34 @@ export default function Home() {
   const [roomInput, setRoomInput] = useState('');
   const [invalidRoomInput, setInvalidRoomInput] = useState(false);
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
+
+  const [check, setCheck] = useState<{ identity: string; room: ReturningRoom | null; hosting: boolean; failed?: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [createAfterCheck, setCreateAfterCheck] = useState(false);
+  const identity = guestSession?.sessionId;
+  const displayName = guestSession?.displayName;
+  const current = check?.identity === identity ? check : null;
+  const returning = current?.room;
+  const checking = Boolean(identity && !current);
+
+  useEffect(() => {
+    if (!identity || !displayName) return;
+    let active = true;
+    getReturningRoom(displayName, identity, recentPlayerRoomCodes().filter(code => !isKickedFromRoom(code)))
+      .then(({ room, hosting }) => {
+        if (active) setCheck({ identity, room, hosting: Boolean(room?.hosting || hosting) });
+      })
+      .catch(() => {
+        if (active) setCheck({ identity, room: null, hosting: false, failed: true });
+      });
+    return () => { active = false; };
+  }, [identity, displayName, attempt]);
+
+  useEffect(() => {
+    if (!createAfterCheck || !current) return;
+    setCreateAfterCheck(false);
+    if (!current.failed && !current.hosting && !current.room) setIsCreateRoomOpen(true);
+  }, [createAfterCheck, current]);
 
   // Ping the backend on landing so a spun-down Render instance starts waking
   // before the first real request, and tell the player if it is slow.
@@ -50,7 +80,11 @@ export default function Home() {
   async function _createPrivateRoom() {
     const session = await ensureGuestName();
     if (!session) return; // user dismissed the guest name modal
-    setIsCreateRoomOpen(true);
+    if (!current || current.identity !== session.sessionId) {
+      setCreateAfterCheck(true);
+      return;
+    }
+    if (!returning || window.confirm('Create another room and leave your current seat?')) setIsCreateRoomOpen(true);
   }
 
   function _joinPrivateRoom(event: FormEvent<HTMLFormElement>) {
@@ -61,7 +95,8 @@ export default function Home() {
       setInvalidRoomInput(true);
       return;
     }
-    router.push(roomPath(code));
+    if (returning && returning.code !== code && !window.confirm('Join another room and leave your current seat?')) return;
+    router.push(returning?.code === code && returning.destination === 'game' ? gamePath(code) : roomPath(code));
   }
 
   return (
@@ -102,7 +137,10 @@ export default function Home() {
             Playing as{' '}
             <span className="font-semibold">{guestSession.displayName}</span>
             <button
-              onClick={clearGuest}
+              onClick={() => {
+                if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
+              }}
+              disabled={checking || current?.failed}
               className="ml-1 text-emerald-400 hover:text-white text-xs underline focus:outline-none focus:ring-1 focus:ring-emerald-400 rounded"
               aria-label="Change display name"
             >
@@ -113,7 +151,22 @@ export default function Home() {
 
         {/* Action buttons */}
         <div className="flex flex-col gap-3 w-full">
-          <button
+          {returning && (
+            <button
+              onClick={() => router.push(returning.destination === 'game' ? gamePath(returning.code) : roomPath(returning.code))}
+              className="rounded-xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white hover:bg-emerald-500"
+            >
+              Return to {returning.destination} · {returning.code}
+            </button>
+          )}
+          {current?.failed && (
+            <button onClick={() => { setCheck(null); setAttempt(value => value + 1); }} className="rounded-xl border border-amber-600 p-3 text-amber-200">
+              Couldn’t check your room. Retry
+            </button>
+          )}
+          {current?.hosting && !returning && <p role="status" className="text-amber-200">You already host an active room.</p>}
+          {!current?.hosting && <button
+            disabled={checking || current?.failed}
             onClick={_createPrivateRoom}
             className="
               flex-1 py-4 px-6 rounded-xl font-bold text-lg
@@ -124,12 +177,12 @@ export default function Home() {
             "
           >
             <span className="flex flex-col items-center leading-tight">
-              <span><span aria-hidden="true">🔒 </span>Create Private Room</span>
+              <span><span aria-hidden="true">🔒 </span>{checking ? 'Checking your room…' : 'Create Private Room'}</span>
               <span className="text-xs font-medium text-emerald-100/90 mt-1">
                 Play with friends in your own room
               </span>
             </span>
-          </button>
+          </button>}
           <form
             onSubmit={_joinPrivateRoom}
             className="rounded-xl border border-emerald-800/70 bg-emerald-950/40 p-3 text-left sm:p-4"
@@ -154,6 +207,7 @@ export default function Home() {
                 className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-emerald-300"
               />
               <button
+                disabled={checking || current?.failed}
                 type="submit"
                 className="shrink-0 rounded-lg border border-emerald-600 bg-emerald-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-emerald-300"
               >

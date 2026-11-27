@@ -569,7 +569,13 @@ function restoreGameState(snapshot, roomCode, roomId) {
   return gs;
 }
 
+function findReturningSeat(players, playerId, recoveryKey) {
+  return players.find(player => player.playerId === playerId)
+    ?? (recoveryKey ? players.find(player => player.guestRecoveryKey === recoveryKey) : undefined);
+}
+
 module.exports = {
+  findReturningSeat,
   BOT_TURN_DELAY_MS,
   createGameState,
   getTeamPlayers,

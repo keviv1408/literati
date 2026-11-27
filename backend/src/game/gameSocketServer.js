@@ -149,6 +149,7 @@ const {
   serializeSpectatorMoveHistory,
   persistGameState,
   restoreGameState,
+  findReturningSeat,
   markRoomAbandoned,
   cardHalfSuit,
   getPlayerTeam,
@@ -3495,28 +3496,11 @@ function attachGameSocketServer(httpServer) {
     if (ws.readyState !== 1) return;
 
     // Verify this player is in the game (or is a spectator)
-    let playerInGame = gs.players.find((p) => p.playerId === playerId);
-    if (
-      !playerInGame &&
-      user.isGuest &&
-      guestRecoveryKey
-    ) {
-      const recoveredGuestPlayer = gs.players.find(
-        (player) => player.guestRecoveryKey === guestRecoveryKey,
-      );
-      if (recoveredGuestPlayer) {
-        playerId = recoveredGuestPlayer.playerId;
-        displayName = recoveredGuestPlayer.displayName || displayName;
-        playerInGame = recoveredGuestPlayer;
-
-        // Restore human control if the seat was bot-controlled (e.g. server
-        // restart wiped _reconnectWindows so the normal reclaim path won't fire).
-        if (recoveredGuestPlayer.isBot) _restoreHumanSeat(gs, recoveredGuestPlayer, displayName);
-
-        console.log(
-          `[game-ws] Rebound guest recovery key to player ${playerId} in room ${roomCode}`,
-        );
-      }
+    const playerInGame = findReturningSeat(gs.players, playerId, user.isGuest && guestRecoveryKey);
+    if (playerInGame && playerInGame.playerId !== playerId) {
+      playerId = playerInGame.playerId;
+      displayName = playerInGame.displayName || displayName;
+      if (playerInGame.isBot) _restoreHumanSeat(gs, playerInGame, displayName);
     } else if (
       playerInGame &&
       playerInGame.isBot &&

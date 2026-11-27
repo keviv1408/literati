@@ -192,7 +192,7 @@ function _renderPage() {
 
 async function _renderConnecting() {
   _renderPage();
-  await waitFor(() => expect(_lastToken()).toBe('stale-room-token'));
+  await waitFor(() => expect(_lastToken()).toBe('token-1'));
   await waitFor(() => expect(screen.queryByTestId('reconnecting-screen')).not.toBeInTheDocument());
 }
 
@@ -205,7 +205,6 @@ beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   saveGuestSession('Ada');
-  // Another player's id, so the page keeps preferring this token over the fresh one.
   saveRoomMembership('ABC123', 'stale-room-token', 'sid-0', 'player');
   mockGetRoomByCode.mockResolvedValue({ room: ROOM });
   mockValidateSession.mockResolvedValue(SESSION);
@@ -227,7 +226,7 @@ describe('room lobby recovery from a refused token', () => {
 
     expect(watch.seen()).toBe(false);
     watch.stop();
-    expect(_tokenChangesSince(before)).toEqual(['stale-room-token', null, 'token-2']);
+    expect(_tokenChangesSince(before)).toEqual(['token-1', null, 'token-2']);
   });
 
   it('shows Connection Error when registering again fails', async () => {
@@ -267,7 +266,7 @@ describe('room lobby recovery from a refused token', () => {
     await waitFor(() => expect(_lastToken()).toBe('token-2'));
 
     expect(mockSocketCalls[mockSocketCalls.length - 1].sessionId).toBe('sid-1');
-    expect(_tokenChangesSince(before)).toEqual(['stale-room-token', null, 'token-2']);
+    expect(_tokenChangesSince(before)).toEqual(['token-1', null, 'token-2']);
     expect(mockValidateSession).not.toHaveBeenCalledWith('cached-stale');
     expect(screen.queryByTestId('connection-error-screen')).not.toBeInTheDocument();
   });
@@ -291,11 +290,11 @@ describe('room lobby token choice after a restart', () => {
     expect(mockGetGuestBearerToken).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the stored room token when it is another player's", async () => {
+  it("ignores the stored room token when it is another player's", async () => {
     _renderPage();
 
-    await waitFor(() => expect(_lastToken()).toBe('stale-room-token'));
-    expect(_tokenChangesSince(0)).toEqual([null, 'stale-room-token']);
+    await waitFor(() => expect(_lastToken()).toBe('token-1'));
+    expect(_tokenChangesSince(0)).toEqual([null, 'token-1']);
     expect(mockGetGuestBearerToken).toHaveBeenCalledTimes(1);
   });
 });

@@ -24,7 +24,7 @@ import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
 import { roomPath } from '@/lib/appPaths';
 import { backoffDelayMs, retryWithBackoff } from '@/lib/backoff';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
-import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
+import { saveRoomMembership } from '@/lib/roomMembership';
 import { useGuest } from '@/contexts/GuestContext';
 import { useCardDeck } from '@/hooks/useCardDeck';
 import { useReconnect } from '@/hooks/useReconnect';
@@ -168,25 +168,8 @@ export default function GamePage({ params }: PageProps) {
   const [serverUnreachable, setServerUnreachable] = useState(false);
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
-  const [gameBearerToken, setGameBearerToken] = useState<string | null>(null);
-  const spectatorToken                    = searchParams.get('spectatorToken');
-
-  // Prefer the room-specific token that originally joined this game.
-  // This prevents refresh from drifting to a new backend identity.
-  useEffect(() => {
-    if (!roomCode || reconnectStatus !== 'ready') {
-      setGameBearerToken(null);
-      return;
-    }
-
-    const membership = loadRoomMembership(roomCode);
-    if (membership?.bearerToken) {
-      setGameBearerToken(membership.bearerToken);
-      return;
-    }
-
-    setGameBearerToken(reconnectBearerToken);
-  }, [roomCode, reconnectStatus, reconnectBearerToken]);
+  const gameBearerToken = reconnectStatus === 'ready' ? reconnectBearerToken : null;
+  const spectatorToken = searchParams.get('spectatorToken');
 
   const [declareMode, setDeclareMode]     = useState(false);
   const [declareSelectedSuit, setDeclareSelectedSuit] = useState<HalfSuitId | null>(null);
@@ -318,8 +301,6 @@ export default function GamePage({ params }: PageProps) {
 
   const canSend = wsStatus === 'connected';
 
-  // Persist the exact token that was accepted by the game WS server.
-  // On refresh this lets us reconnect as the same player identity.
   useEffect(() => {
     if (!roomCode || !myPlayerId || !gameBearerToken) return;
     saveRoomMembership(roomCode, gameBearerToken, myPlayerId, 'player');

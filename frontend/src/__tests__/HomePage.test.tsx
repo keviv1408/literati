@@ -8,13 +8,15 @@ import Home from '@/app/page';
 
 const mockPush = jest.fn();
 const mockEnsureGuestName = jest.fn();
+const mockGetReturningRoom = jest.fn();
+let mockGuest: { displayName: string; sessionId: string } | null = null;
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 jest.mock('@/hooks/useGuestSession', () => ({
   useGuestSession: () => ({
-    guestSession: null,
-    hasName: false,
+    guestSession: mockGuest,
+    hasName: !!mockGuest,
     ensureGuestName: mockEnsureGuestName,
   }),
 }));
@@ -23,7 +25,7 @@ jest.mock('@/contexts/GuestContext', () => ({
   useGuest: () => ({ clearGuest: jest.fn() }),
 }));
 
-jest.mock('@/lib/api', () => ({ API_URL: 'http://api.test' }));
+jest.mock('@/lib/api', () => ({ API_URL: 'http://api.test', getReturningRoom: (...args: unknown[]) => mockGetReturningRoom(...args) }));
 
 jest.mock('@/components/CreateRoomModal', () => ({
   __esModule: true,
@@ -154,6 +156,46 @@ describe('Home entry points', () => {
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockEnsureGuestName).not.toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Home room recovery', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = jest.fn(() => Promise.resolve({ ok: true })) as unknown as typeof fetch;
+    mockGuest = { displayName: 'Ada', sessionId: 'current' };
+    mockGetReturningRoom.mockReset();
+    mockPush.mockClear();
+  });
+
+  afterEach(() => {
+    mockGuest = null;
+    global.fetch = originalFetch;
+  });
+
+  it('waits for the owner lookup before allowing creation and opens the validated game', async () => {
+    let resolve!: (value: unknown) => void;
+    mockGetReturningRoom.mockReturnValue(new Promise(done => { resolve = done; }));
+    render(<Home />);
+    expect(screen.getByRole('button', { name: /Checking your room/ })).toBeDisabled();
+    await act(async () => resolve({ room: { code: 'ABC123', destination: 'game', hosting: true } }));
+    expect(screen.queryByRole('button', { name: /Create Private Room/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Return to game/ }));
+    expect(mockPush).toHaveBeenCalledWith('/game/ABC123');
+  });
+
+  it('can retry a failed lookup and rejects a cancelled switch from a guest lobby', async () => {
+    mockGetReturningRoom.mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ room: { code: 'ABC123', destination: 'lobby', hosting: false } });
+    render(<Home />);
+    fireEvent.click(await screen.findByRole('button', { name: /Retry/ }));
+    expect(await screen.findByRole('button', { name: /Return to lobby/ })).toBeVisible();
+    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    _submitJoin('DEF456');
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 });
 

@@ -37,7 +37,6 @@ import { gamePath, isAndroidBuild } from '@/lib/appPaths';
 import { trackEvent } from '@/lib/analytics';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
 import {
-  loadRoomMembership,
   saveRoomMembership,
   clearRoomMembership,
   type RoomRole,
@@ -121,20 +120,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
    */
   const [kickedOnEntry, setKickedOnEntry] = useState(false);
 
-  /**
-   * Bearer token used for WebSocket authentication.
-   *
-   * Derived from two sources:
-   * 1. loadRoomMembership(roomCode).bearerToken — the token from a previous
-   * visit, used only when that membership belongs to another player.
-   * 2. useReconnect().bearerToken — the validated base session token
-   * (guest bearer or Supabase JWT), used otherwise, including when the
-   * stored membership is this same player's (it may predate a restart).
-   *
-   * Only populated once reconnectStatus === 'ready' so the WebSocket hook
-   * never attempts to connect with an unvalidated or expired token.
-   */
-  const [bearerToken, setBearerToken] = useState<string | null>(null);
+  const bearerToken = reconnectStatus === 'ready' && !kickedOnEntry ? baseToken : null;
 
   useEffect(() => {
     params.then(({ roomCode: code }) => {
@@ -157,32 +143,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
       setLoading(false);
     }
   }, [roomCode]);
-
-  // ── Derive WebSocket bearer token from validated session ────────
-  //
-  // Only runs once the session has been validated by useReconnect (status ===
-  // 'ready'). Prefers the room-specific membership token (same identity that
-  // was used on the last visit) over the generic base session token, unless
-  // both are the same player's: the stored one may predate a backend restart.
-  //
-  // Setting bearerToken to null when the session is not yet ready prevents
-  // useRoomSocket from opening a WebSocket connection prematurely.
-  useEffect(() => {
-    if (reconnectStatus !== 'ready' || !roomCode || kickedOnEntry) {
-      setBearerToken(null);
-      return;
-    }
-
-    // Priority 1: the stored membership token, only when it is another player's.
-    const membership = loadRoomMembership(roomCode);
-    if (membership && membership.playerId !== reconnectSessionId) {
-      setBearerToken(membership.bearerToken);
-      return;
-    }
-
-    // Priority 2: validated base session token from useReconnect.
-    setBearerToken(baseToken);
-  }, [reconnectStatus, roomCode, baseToken, reconnectSessionId, kickedOnEntry]);
 
   // ── Live kick listener ────────────────────────────────────────────────────
   //
@@ -289,23 +249,15 @@ export default function RoomLobbyPage({ params }: PageProps) {
    */
   const myTeamId = (myWsPlayer?.teamId ?? null) as 1 | 2 | null;
 
-  // ── Persist room membership binding ───────────────────────────────────────
-  // Once the WS server confirms authentication (myPlayerId is set) and the
-  // room is not in a kicked state, save the session-to-room binding in
-  // localStorage. This allows the page to restore the WebSocket connection
-  // on a page reload using the same backend session — see the bearer-token
-  // resolution effect above.
-  //
-  // The role is updated whenever amIHostLive changes (e.g. original host
-  // leaves and another player is promoted) so the stored record stays accurate.
   useEffect(() => {
     if (!roomCode || !bearerToken || !myPlayerId) return;
     if (isKicked || kickedOnEntry) return;  // Don't save after being kicked.
 
+    if (isSpectator) return;
     const role: RoomRole = amIHostLive ? 'host' : 'player';
     saveRoomMembership(roomCode, bearerToken, myPlayerId, role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode, bearerToken, myPlayerId, amIHostLive, isKicked, kickedOnEntry]);
+  }, [roomCode, bearerToken, myPlayerId, amIHostLive, isKicked, kickedOnEntry, isSpectator]);
 
   // ── Convert live wsPlayers to the seats array used by the team UI ─────────
   // Runs whenever the server broadcasts a room_players snapshot, keeping the

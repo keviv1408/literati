@@ -567,3 +567,17 @@ export interface LiveGamesResponse {
 export async function getLiveGames(): Promise<LiveGamesResponse> {
   return apiFetch<LiveGamesResponse>('/api/live-games', { method: 'GET' });
 }
+
+export interface ReturningRoom {
+  code: string;
+  destination: 'lobby' | 'game';
+  hosting: boolean;
+}
+
+export async function getReturningRoom(displayName: string, recoveryKey: string, codes: string[]) {
+  const token = await getGuestBearerToken(displayName, recoveryKey);
+  return _withGuestRetry(token, { displayName, recoveryKey }, bearer =>
+    apiFetch<{ room: ReturningRoom | null; hosting?: boolean }>('/api/rooms/return', {
+      method: 'POST', token: bearer, body: JSON.stringify({ codes }),
+    }));
+}

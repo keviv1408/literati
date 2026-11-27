@@ -1,34 +1,4 @@
-/**
- * Room membership persistence.
- *
- * Records the client's session-to-room binding in localStorage so the
- * WebSocket connection can be re-established after a page reload without
- * the user needing to re-authenticate or re-join from scratch.
- *
- * Why this module exists (distinct from backendSession.ts):
- *   backendSession.ts caches a single bearer token keyed by *display name*.
- *   If the user changes their display name, the old token is evicted from that
- *   cache and a fresh one is obtained — but the fresh token would represent a
- *   DIFFERENT backend session and would NOT be recognised by the room's WS
- *   server as the same player.
- *
- *   roomMembership.ts caches the *room-specific* token that was accepted by
- *   the WS server for this room, indexed by room code.  On reload the page
- *   uses this cached token to re-authenticate the WS connection with the same
- *   backend identity, preserving the player's seat assignment and host status.
- *
- * Storage key:  `literati_room_<UPPERCASE_CODE>`
- * TTL:          12 hours  (well within the backend guest-session 24-hour TTL,
- *               and long enough to survive mid-game browser restarts)
- *
- * Lifecycle:
- *   save  — called when the WS server confirms the client is an active member
- *            (i.e. the 'connected' event arrives and myPlayerId is set).
- *   load  — called on mount to restore the token before the guest-session
- *            flow, giving a fast reconnection path.
- *   clear — called when the client is kicked (so they cannot sneak back in
- *            using the stored token) or when all sessions are invalidated.
- */
+/** Recent room hints survive navigation. The server validates each against the current identity. */
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -130,12 +100,6 @@ export function saveRoomMembership(
 /**
  * Return a non-expired room membership record for the given room code, or
  * `null` if no record exists, the record is expired, or the data is malformed.
- *
- * Calling this function is the first step in the bearer-token resolution
- * chain on page load:
- *   1. loadRoomMembership(roomCode)      — fastest: room-specific token
- *   2. getCachedToken(displayName)       — generic backendSession.ts cache
- *   3. getGuestBearerToken(displayName)  — network round-trip fallback
  */
 export function loadRoomMembership(roomCode: string): RoomMembership | null {
   const stored = loadRaw(roomCode);
@@ -177,4 +141,18 @@ export function clearAllRoomMemberships(): void {
     }
   }
   keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+}
+
+export function recentPlayerRoomCodes(): string[] {
+  try {
+    return Object.keys(window.localStorage)
+      .filter(key => key.startsWith(PREFIX))
+      .map(key => loadRoomMembership(key.slice(PREFIX.length)))
+      .filter((room): room is RoomMembership => !!room && room.role !== 'spectator' && /^[A-Z0-9]{6}$/.test(room.roomCode))
+      .sort((a, b) => b.expiresAt - a.expiresAt)
+      .slice(0, 20)
+      .map(room => room.roomCode);
+  } catch {
+    return [];
+  }
 }

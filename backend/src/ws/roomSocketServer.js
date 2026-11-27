@@ -62,6 +62,7 @@
 const { WebSocketServer } = require('ws');
 const url = require('url');
 const { getGuestSession, updateGuestAvatar, VALID_AVATAR_IDS } = require('../sessions/guestSessionStore');
+const { blockPlayer, isBlocked } = require('../rooms/roomBlocklist');
 const rateLimiter = require('./rateLimiter');
 const { closeWithNotice } = require('./closeWs');
 const { buildGameSeats, toPublicSeat } = require('../game/gameInitService');
@@ -284,6 +285,19 @@ function autoAssignTeam(clients, playerCount) {
   if (t1 >= max) return 2;
   if (t2 >= max) return 1;
   return t2 < t1 ? 2 : 1;
+}
+
+const departedLobbies = new Map();
+
+function _rememberDeparture(playerId, roomCode) {
+  clearTimeout(departedLobbies.get(playerId)?.timer);
+  const timer = setTimeout(() => departedLobbies.delete(playerId), 12 * 60 * 60 * 1000);
+  timer.unref?.();
+  departedLobbies.set(playerId, { roomCode, timer });
+}
+
+function recentlyLeftLobby(playerId, roomCode) {
+  return departedLobbies.get(playerId)?.roomCode === roomCode;
 }
 
 /**
@@ -694,6 +708,8 @@ function handleKickPlayer(ctx, message) {
     );
     return;
   }
+
+  blockPlayer(roomCode, targetId);
 
   // Notify and disconnect target
   if (targetEntry.ws.readyState === 1 /* OPEN */) {
@@ -1889,6 +1905,10 @@ function attachRoomSocketServer(httpServer) {
     // PLAYER BRANCH (normal join)
     // ── ─────────────────────────────────────────────────────────────────────
 
+    if (isBlocked(roomCode, userId)) {
+      closeWithNotice(ws, 4010, 'Kicked by host');
+      return;
+    }
     const clients = getRoomClientMap(roomCode);
     const playerCount = meta ? meta.playerCount : 6;
     const existingEntry = clients.get(userId);
@@ -2111,6 +2131,7 @@ function attachRoomSocketServer(httpServer) {
       const entry = clients.get(userId);
       if (!entry || entry.ws !== ws) return;
       const wasHost = entry.isHost;
+      if (!isMatchmakingRoom) _rememberDeparture(userId, roomCode);
 
       clients.delete(userId);
       console.log(`[RoomWS] leave room=${roomCode} user=${userId} players=${clients.size}`);
@@ -2164,6 +2185,8 @@ function attachRoomSocketServer(httpServer) {
  * Used in tests to reset state between cases.
  */
 function _resetRoomState() {
+  for (const { timer } of departedLobbies.values()) clearTimeout(timer);
+  departedLobbies.clear();
   roomClients.clear();
   roomSpectators.clear();
   roomMeta.clear();
@@ -2186,6 +2209,7 @@ function _resetRoomState() {
 
 module.exports = {
   attachRoomSocketServer,
+  recentlyLeftLobby,
 
   // Exported for unit testing:
   roomClients,
