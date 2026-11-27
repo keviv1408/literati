@@ -82,11 +82,16 @@ export default function RoomLobbyPage({ params }: PageProps) {
   } = useReconnect();
 
   const { setGuestName } = useGuest();
-  const [confirmAbandon, setConfirmAbandon] = useState(false);
+  const [abandonPrompt, setAbandonPrompt] = useState<'idle' | 'confirming' | 'dismissed'>('idle');
+  const abandonActionRef = useRef<HTMLButtonElement>(null);
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState('');
   const [joinName, setJoinName] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (abandonPrompt !== 'idle') abandonActionRef.current?.focus();
+  }, [abandonPrompt]);
 
   const [room, setRoom] = useState<Room | null>(null);
   const [inviteLink, setInviteLink] = useState<string>();
@@ -1148,11 +1153,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
         )}
 
         {amIHostLive && !isSpectator && !room.is_matchmaking && room.status === 'waiting' && (
-          confirmAbandon ? (
-            <section role="alertdialog" aria-labelledby="abandon-title" className="rounded-xl border border-red-800 p-4">
+          abandonPrompt === 'confirming' ? (
+            <section role="alertdialog" aria-labelledby="abandon-title" aria-describedby="abandon-description" className="rounded-xl border border-red-800 p-4">
               <h2 id="abandon-title" className="font-semibold">Abandon this lobby?</h2>
-              <p className="my-2">This closes the lobby for everyone. Its invite link will stop working.</p>
-              <button disabled={closing} onClick={() => { setConfirmAbandon(false); setCloseError(''); }}>Cancel</button>
+              <p id="abandon-description" className="my-2">This closes the lobby for everyone. Its invite link will stop working.</p>
+              <button ref={abandonActionRef} disabled={closing} onClick={() => { setAbandonPrompt('dismissed'); setCloseError(''); }}>Cancel</button>
               <button className="ml-6 text-red-300" disabled={closing} onClick={async () => {
                 if (!bearerToken || closing) return;
                 setClosing(true);
@@ -1167,7 +1172,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
               }}>Confirm abandon</button>
               {closeError && <p role="alert">{closeError}</p>}
             </section>
-          ) : <button className="py-2 text-red-300" onClick={() => setConfirmAbandon(true)}>Abandon lobby</button>
+          ) : <button ref={abandonActionRef} className="py-2 text-red-300" onClick={() => setAbandonPrompt('confirming')}>Abandon lobby</button>
         )}
 
         {/* ── Back button ──────────────────────────────────────────────────── */}

@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { LobbyPlayer, UseRoomSocketOptions, WsStatus } from '@/hooks/useRoomSocket';
 import type { Room } from '@/types/room';
 import { cacheCreatedRoom } from '@/components/CreateRoomModal';
@@ -339,7 +340,7 @@ describe('room lobby invite link', () => {
   });
 });
 
-describe('room lobby start control', () => {
+describe('room lobby controls', () => {
   const _player = (playerId: string, displayName: string, isHost: boolean): LobbyPlayer => ({
     playerId,
     displayName,
@@ -357,6 +358,25 @@ describe('room lobby start control', () => {
 
   afterEach(() => {
     window.history.replaceState({}, '', '/');
+  });
+
+  it('focuses Cancel when the host opens the confirmation and restores focus on dismissal', async () => {
+    const user = userEvent.setup();
+    await _renderLobby([_player('p-ada', 'Ada', true)]);
+    const trigger = await screen.findByRole('button', { name: 'Abandon lobby' });
+    expect(trigger).not.toHaveFocus();
+
+    trigger.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(screen.getByRole('alertdialog', { name: 'Abandon this lobby?' })).toHaveAccessibleDescription(
+      'This closes the lobby for everyone. Its invite link will stop working.',
+    );
+
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Abandon lobby' })).toHaveFocus();
   });
 
   it('shows the start button to the player the server flags host', async () => {
