@@ -2,18 +2,13 @@
 
 import { DeclareDraggableCard } from './InlineDeclare';
 import DeclarationTimerBar from './DeclarationTimerBar';
-import PlayingCard from './PlayingCard';
-import { cardLabel, halfSuitLabel } from '@/types/game';
+import { halfSuitLabel } from '@/types/game';
 import type { CardId, HalfSuitId } from '@/types/game';
 import type { DeclarationTimerPayload } from '@/hooks/useGameSocket';
 
 interface InlineDeclareTrayProps {
   halfSuitId: HalfSuitId;
-  cards: CardId[];
-  assignment: Record<CardId, string>;
-  players: { playerId: string; displayName: string }[];
-  myPlayerId: string | null;
-  onRemoveCard: (card: CardId) => void;
+  unassignedCards: CardId[];
   selectedCard: CardId | null;
   onTapCard: (cardId: CardId) => void;
   totalCards: number;
@@ -28,11 +23,7 @@ interface InlineDeclareTrayProps {
 
 export default function InlineDeclareTray({
   halfSuitId,
-  cards,
-  assignment,
-  players,
-  myPlayerId,
-  onRemoveCard,
+  unassignedCards,
   selectedCard,
   onTapCard,
   totalCards,
@@ -86,36 +77,21 @@ export default function InlineDeclareTray({
         />
       )}
 
-      <div className="tray-card-row declare-card-row">
-        {cards.map((cardId) => {
-          const owner = assignment[cardId];
-          const mine = Boolean(owner && owner === myPlayerId);
-          const name = mine ? 'You' : players.find((player) => player.playerId === owner)?.displayName;
-          return (
+      {unassignedCards.length > 0 && (
+        <div className="tray-card-row declare-card-row">
+          {unassignedCards.map(cardId => (
             <div key={cardId} className="tray-card-cell">
-              {owner ? (
-                <button
-                  type="button"
-                  className="assigned-card"
-                  disabled={mine || disabled || isLoading}
-                  onClick={() => onRemoveCard(cardId)}
-                  aria-label={mine ? `${cardLabel(cardId)} in your hand` : `Unassign ${cardLabel(cardId)} from ${name}`}
-                >
-                  <PlayingCard cardId={cardId} size="xl" />
-                  <span className="assignment-name">{name}</span>
-                </button>
-              ) : (
-                <DeclareDraggableCard
-                  cardId={cardId}
-                  isSelected={selectedCard === cardId}
-                  onTap={() => onTapCard(cardId)}
-                  size="xl"
-                />
-              )}
+              <DeclareDraggableCard
+                cardId={cardId}
+                isSelected={selectedCard === cardId}
+                onTap={() => onTapCard(cardId)}
+                disabled={disabled || isLoading}
+                size="xl"
+              />
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

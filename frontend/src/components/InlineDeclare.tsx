@@ -19,9 +19,8 @@
 
 import React from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import PlayingCard from './PlayingCard';
-import { cardLabel, halfSuitLabel } from '@/types/game';
+import { cardLabel, cardRankLabel, halfSuitLabel, parseCard } from '@/types/game';
 import type { CardId, HalfSuitId } from '@/types/game';
 import DeclarationTimerBar from './DeclarationTimerBar';
 import type { DeclarationTimerPayload } from '@/hooks/useGameSocket';
@@ -34,106 +33,117 @@ export function DeclareDraggableCard({
   isSelected,
   onTap,
   size = 'md',
+  disabled = false,
+  label,
 }: {
   cardId: CardId;
   isSelected: boolean;
   onTap: () => void;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  disabled?: boolean;
+  label?: string;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `declare-${cardId}`,
+    disabled,
   });
 
-  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
-
   return (
-    <div
+    <button
       ref={setNodeRef}
-      style={style}
-      {...listeners}
+      type="button"
       {...attributes}
+      {...listeners}
+      disabled={disabled}
       className={[
-        'relative transition-all duration-100 cursor-grab active:cursor-grabbing',
-        isDragging ? 'opacity-30 scale-95' : '',
-        isSelected ? 'ring-2 ring-amber-400 rounded-lg scale-105' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      role="button"
-      tabIndex={0}
-      onClick={(e) => {
-        e.stopPropagation();
+        'block touch-none select-none rounded-md cursor-grab active:cursor-grabbing disabled:cursor-default',
+        isDragging ? 'opacity-30' : '',
+        isSelected ? 'ring-2 ring-amber-400' : '',
+      ].join(' ')}
+      onClick={(event) => {
+        event.stopPropagation();
         onTap();
       }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onTap();
-        }
-      }}
-      aria-label={`${cardLabel(cardId)}${isSelected ? ', selected' : ''} — drag to a teammate`}
+      aria-label={label ?? `${cardLabel(cardId)}${isSelected ? ', selected' : ''} — drag to a teammate`}
       data-testid="declare-draggable-card"
       data-card-id={cardId}
     >
       <PlayingCard cardId={cardId} size={size} selected={isSelected} />
-    </div>
+    </button>
   );
 }
 
-// ── DeclareDropSeat ───────────────────────────────────────────────────────────
-
-/**
- * Wrapper that makes a GamePlayerSeat a droppable zone during inline declare.
- * Keeps the entire seat available as a drop target.
- */
 export function DeclareDropSeat({
   playerId,
+  name,
+  assignedCards,
   children,
   hasSelectedCard,
   onTapZone,
+  onRemoveCard,
   isMe,
+  disabled,
 }: {
   playerId: string;
-  /** The GamePlayerSeat element to wrap. */
+  name: string;
+  assignedCards: CardId[];
   children: React.ReactNode;
   hasSelectedCard: boolean;
   onTapZone: () => void;
+  onRemoveCard: (cardId: CardId) => void;
   isMe: boolean;
+  disabled: boolean;
 }) {
-  const isDisabled = isMe;
-  const { setNodeRef, isOver } = useDroppable({ id: playerId, disabled: isDisabled });
+  const canAssign = !isMe && !disabled;
+  const { setNodeRef, isOver } = useDroppable({ id: playerId, disabled: !canAssign });
 
   return (
     <div
       ref={setNodeRef}
-      onClick={!isDisabled && hasSelectedCard ? onTapZone : undefined}
-      className={[
-        'relative flex flex-col items-center transition-all duration-150',
-        isDisabled ? 'opacity-65 cursor-not-allowed' : '',
-        isOver ? 'scale-110 z-20' : '',
-        hasSelectedCard && !isDisabled ? 'cursor-pointer' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      aria-disabled={isDisabled}
-      title={isDisabled ? 'Your cards are auto-assigned during declaration' : undefined}
+      className="relative"
+      onClick={canAssign && hasSelectedCard ? onTapZone : undefined}
+      aria-disabled={!canAssign}
       data-testid="declare-drop-seat"
       data-player-id={playerId}
     >
-      {/* Visual ring around the seat */}
-      <div
-        className={[
-          'rounded-xl transition-all duration-150',
-          isDisabled
-            ? 'ring-1 ring-slate-600/60 ring-offset-1 ring-offset-slate-950 bg-slate-950/30'
-            : isOver
-            ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-amber-500/20'
-            : 'ring-2 ring-violet-500/60 ring-offset-1 ring-offset-slate-950',
-        ].join(' ')}
-      >
+      <div className={[
+        'rounded-xl',
+        isMe ? '' : isOver ? 'ring-2 ring-amber-400' : 'ring-2 ring-violet-500/60',
+      ].join(' ')}>
         {children}
       </div>
-
+      {canAssign && hasSelectedCard && (
+        <button
+          type="button"
+          className="absolute inset-0 z-20 rounded-xl cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400"
+          aria-label={`Assign selected card to ${name}`}
+        />
+      )}
+      {assignedCards.length > 0 && (
+        <div className="seat-assignment-cards" aria-label={`Cards assigned to ${name}`} role="group">
+          {assignedCards.map(cardId => (
+            <div className="seat-assignment-slot" key={cardId}>
+              {isMe ? (
+                <div title={`${cardLabel(cardId)} is fixed in your hand`}>
+                  <PlayingCard cardId={cardId} size="sm" />
+                </div>
+              ) : (
+                <DeclareDraggableCard
+                  cardId={cardId}
+                  isSelected={false}
+                  size="sm"
+                  disabled={disabled}
+                  label={`Unassign ${cardLabel(cardId)} from ${name}, or drag to another teammate`}
+                  onTap={() => onRemoveCard(cardId)}
+                />
+              )}
+              <span className="seat-card-rank" aria-hidden="true">
+                {cardRankLabel(parseCard(cardId).rank)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

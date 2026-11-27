@@ -41,10 +41,9 @@ import {
   DragOverlay,
   DragStartEvent,
   PointerSensor,
-  TouchSensor,
   useSensor,
   useSensors,
-  closestCenter,
+  pointerWithin,
 } from '@dnd-kit/core';
 import { DeclareDropSeat } from '@/components/InlineDeclare';
 import InlineDeclareTray from '@/components/InlineDeclareTray';
@@ -751,7 +750,6 @@ export default function GamePage({ params }: PageProps) {
   // ── Inline declare: DnD sensors ──────────────────────────────
   const declareSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
   // ── Inline declare: DnD handlers ────────────────────────────
@@ -761,56 +759,35 @@ export default function GamePage({ params }: PageProps) {
     setDeclareSelectedCard(null);
   }, [canSend]);
 
-  const handleDeclareDragEnd = useCallback((event: DragEndEvent) => {
-    setDeclareActiveDragId(null);
-    if (!canSend) return;
-    const rawId = String(event.active.id);
-    // Draggable IDs are prefixed with "declare-"
-    const cardId = rawId.replace(/^declare-/, '') as CardId;
-    const overId = event.over?.id;
-    if (!overId) return;
-    // Never allow moving hand cards
-    if (myHand.includes(cardId)) return;
-
-    const overStr = String(overId);
-    // Verify the target is a teammate
-    const teammates = players.filter((p) => p.teamId === myTeamId && p.playerId !== myPlayerId);
-    if (teammates.some((t) => t.playerId === overStr)) {
-      setDeclareAssignment((prev) => {
-        const next = { ...prev, [cardId]: overStr };
-        if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
-        return next;
-      });
+  const assignDeclareCard = useCallback((cardId: CardId, playerId: string) => {
+    if (!canSend || actionLoading || !declareSelectedSuit || myHand.includes(cardId)) return;
+    if (playerId === myPlayerId || !players.some(p => p.playerId === playerId && p.teamId === myTeamId)) return;
+    if (declareAssignment[cardId] !== playerId) {
+      const next = { ...declareAssignment, [cardId]: playerId };
+      setDeclareAssignment(next);
+      sendDeclareProgress(declareSelectedSuit, next);
     }
-  }, [canSend, myHand, players, myTeamId, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
-
-  // ── Inline declare: tap-to-assign ────────────────────────────
-  const handleDeclareTapCard = useCallback((cardId: CardId) => {
-    if (!canSend || myHand.includes(cardId)) return;
-    setDeclareSelectedCard((prev) => (prev === cardId ? null : cardId));
-  }, [canSend, myHand]);
-
-  const handleDeclareTapZone = useCallback((playerId: string) => {
-    if (!canSend || !declareSelectedCard || playerId === myPlayerId) return;
-    setDeclareAssignment((prev) => {
-      const next = { ...prev, [declareSelectedCard]: playerId };
-      if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
-      return next;
-    });
     setDeclareSelectedCard(null);
-  }, [canSend, declareSelectedCard, myPlayerId, declareSelectedSuit, sendDeclareProgress]);
+  }, [canSend, actionLoading, declareSelectedSuit, myHand, myPlayerId, players, myTeamId, declareAssignment, sendDeclareProgress]);
+
+  const handleDeclareDragEnd = useCallback(({ active, over }: DragEndEvent) => {
+    setDeclareActiveDragId(null);
+    if (over) assignDeclareCard(String(active.id).replace(/^declare-/, ''), String(over.id));
+  }, [assignDeclareCard]);
+
+  const handleDeclareTapCard = useCallback((cardId: CardId) => {
+    if (!canSend || actionLoading || myHand.includes(cardId)) return;
+    setDeclareSelectedCard((prev) => (prev === cardId ? null : cardId));
+  }, [canSend, actionLoading, myHand]);
 
   const handleDeclareRemoveCard = useCallback((cardId: CardId) => {
-    if (!canSend || myHand.includes(cardId)) return;
-    setDeclareAssignment((prev) => {
-      const next = { ...prev };
-      delete next[cardId];
-      if (declareSelectedSuit) sendDeclareProgress(declareSelectedSuit, next);
-      return next;
-    });
-  }, [canSend, myHand, declareSelectedSuit, sendDeclareProgress]);
+    if (!canSend || actionLoading || !declareSelectedSuit || myHand.includes(cardId)) return;
+    const next = { ...declareAssignment };
+    delete next[cardId];
+    setDeclareAssignment(next);
+    sendDeclareProgress(declareSelectedSuit, next);
+  }, [canSend, actionLoading, declareSelectedSuit, myHand, declareAssignment, sendDeclareProgress]);
 
-  // ── Inline declare: confirm ──────────────────────────────────
   const handleDeclareConfirm = useCallback(() => {
     if (!canSend || !declareSelectedSuit || actionLoading) return;
     const suitCards = getHalfSuitCards(declareSelectedSuit, resolvedVariant);
@@ -1344,8 +1321,12 @@ export default function GamePage({ params }: PageProps) {
                 return (
                   <DeclareDropSeat
                     playerId={player.playerId}
+                    name={player.displayName}
+                    assignedCards={declareSuitCards.filter(card => declareAssignment[card] === player.playerId)}
+                    onRemoveCard={handleDeclareRemoveCard}
+                    disabled={!canSend || actionLoading}
                     hasSelectedCard={!!declareSelectedCard}
-                    onTapZone={() => handleDeclareTapZone(player.playerId)}
+                    onTapZone={() => { if (declareSelectedCard) assignDeclareCard(declareSelectedCard, player.playerId); }}
                     isMe={player.playerId === myPlayerId}
                   >
                     {seatElement}
@@ -1513,11 +1494,7 @@ export default function GamePage({ params }: PageProps) {
                   <div ref={declareTrayRef} role="dialog" aria-modal="true" aria-label="Declare a half-suit">
                     <InlineDeclareTray
                       halfSuitId={declareSelectedSuit!}
-                      cards={declareSuitCards}
-                      assignment={declareAssignment}
-                      players={players}
-                      myPlayerId={myPlayerId}
-                      onRemoveCard={handleDeclareRemoveCard}
+                      unassignedCards={declareUnassignedCards}
                       selectedCard={declareSelectedCard}
                       onTapCard={handleDeclareTapCard}
                       totalCards={declareSuitCards.length}
@@ -1580,9 +1557,10 @@ export default function GamePage({ params }: PageProps) {
           return (
             <DndContext
               sensors={declareSensors}
-              collisionDetection={closestCenter}
+              collisionDetection={pointerWithin}
               onDragStart={handleDeclareDragStart}
               onDragEnd={handleDeclareDragEnd}
+              onDragCancel={() => setDeclareActiveDragId(null)}
             >
               {mainContent}
               {footerContent}
