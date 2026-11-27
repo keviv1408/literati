@@ -1625,6 +1625,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
       if (!await _claimRoomStart(getSupabase(), code, 'waiting')) return;
     } catch (err) {
       console.error('[RoomWS] Failed to claim rematch:', err);
+      broadcast(code, { type: 'error', message: 'The rematch could not start. The host can use Start game to try again.' });
       return;
     }
 

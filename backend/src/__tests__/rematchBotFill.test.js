@@ -441,6 +441,25 @@ describe('_executeRematchBotFill', () => {
     );
   });
 
+  test('tells waiting players how to retry after the rematch claim loses its response', async () => {
+    registerFakeClient('ROOM01', 'h1', 1);
+    registerFakeClient('ROOM01', 'h2', 2);
+    setPendingRematch('ROOM01', makePending6());
+    const db = setupSupabaseMock();
+    db.maybeSingle.mockResolvedValueOnce({ data: DEFAULT_DB_ROOM })
+      .mockRejectedValueOnce(new Error('connection interrupted'));
+
+    await _executeRematchBotFill('ROOM01');
+
+    for (const { ws } of roomClients.get('ROOM01').values()) {
+      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
+        type: 'error', message: 'The rematch could not start. The host can use Start game to try again.',
+      }));
+    }
+    expect(mockCreateGame).not.toHaveBeenCalled();
+    expect(_startingRooms.has('ROOM01')).toBe(false);
+  });
+
   test('16. createGame failure → broadcasts error; pendingRematch cleared', async () => {
     registerFakeClient('ROOM01', 'h1', 1);
     const pending = makePending6();
