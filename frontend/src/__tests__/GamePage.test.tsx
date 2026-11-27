@@ -1095,6 +1095,9 @@ describe('GamePage — game controls always available', () => {
         .find((seat) => seat.getAttribute('data-player-id') === MY_PLAYER_ID);
       expect(mySeat).toBeTruthy();
       expect(mySeat).toHaveAttribute('aria-disabled', 'true');
+      expect(within(mySeat!).getByRole('img', { name: 'A of Spades' })).toBeInTheDocument();
+      expect(within(mySeat!).queryByTestId('declare-draggable-card')).toBeNull();
+      expect(within(tray).queryByRole('img', { name: 'A of Spades' })).toBeNull();
 
       const cards = within(tray).getAllByTestId('declare-draggable-card');
       fireEvent.click(cards[0]);
@@ -1132,6 +1135,11 @@ describe('GamePage — game controls always available', () => {
 
       expect(screen.getByTestId('inline-declare-tray')).toBeTruthy();
       expect(screen.getByText(/2\/6 assigned/)).toBeTruthy();
+      const assigned = within(teammateSeat!).getByRole('button', { name: /Unassign 2♠/ });
+      expect(within(tray).queryByRole('img', { name: '2 of Spades' })).toBeNull();
+      fireEvent.click(assigned);
+      expect(within(tray).getByRole('img', { name: '2 of Spades' })).toBeInTheDocument();
+      expect(within(tray).getByText(/1\/6 assigned/)).toBeInTheDocument();
     });
 
     it('dismisses the declare tray when the player clicks outside it', async () => {

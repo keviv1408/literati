@@ -102,8 +102,51 @@
   }
 }
 
-.declare-card-row .tray-card-cell {
-  max-width: calc((100% - 1.75rem) / 6);
+.declare-card-row .tray-card-cell > button { width: 100%; }
+
+.seat-assignment-cards {
+  --card-width: 1.55rem;
+  position: absolute;
+  z-index: 15;
+  top: 0.18rem;
+  inset-inline: 0.16rem;
+  display: flex;
+  padding-inline-end: var(--card-width);
+  pointer-events: none;
+}
+
+.seat-assignment-slot {
+  position: relative;
+  flex: 0 1 calc(var(--card-width) + 0.1rem);
+  min-width: 0;
+}
+
+.seat-card-rank {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  padding-inline: 1px;
+  background: #ffedce;
+  border-radius: 2px;
+  color: #282118;
+  font-size: 0.7rem;
+  line-height: 1;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.seat-assignment-slot:last-child { flex-basis: 0; }
+
+.seat-assignment-slot button { pointer-events: auto; }
+.seat-assignment-slot [role="img"] {
+  width: var(--card-width);
+  height: auto;
+  aspect-ratio: 2 / 3;
+  box-shadow: 0 1px 3px #0009;
+}
+
+@media (min-width: 64rem) {
+  .seat-assignment-cards { --card-width: 2.1rem; }
 }
 
 @media (max-width: 39.999rem) {
@@ -113,8 +156,6 @@
   }
 }
 
-.assigned-card { display: block; width: 100%; }
-.assignment-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; }
 .hand-status { display: flex; align-items: center; gap: 0.5rem; }
 .hand-status > [role="status"] { flex: 1; }
 .tray-timer { width: 2.4rem; }
