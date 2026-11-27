@@ -55,6 +55,12 @@ describe('Home wake-up notice', () => {
     expect(global.fetch).toHaveBeenCalledWith('http://api.test/health');
   });
 
+  it('shows the tutorial link without advertising the avatar demo', () => {
+    render(<Home />);
+    expect(screen.getByRole('link', { name: /full interactive tutorial/i })).toBeVisible();
+    expect(screen.queryByRole('link', { name: /preview avatar animations/i })).toBeNull();
+  });
+
   it('shows the notice only once the health ping has been slow', async () => {
     render(<Home />);
     expect(screen.queryByRole('status')).toBeNull();

@@ -286,15 +286,9 @@ export default function Home() {
             </span>
           ))}
         </div>
-        <nav aria-label="Explore Literati" className="flex flex-wrap items-center justify-center gap-x-3 text-sm text-emerald-200">
-          <a href={tutorialPath()} className="rounded px-3 py-2 underline underline-offset-4 hover:text-white focus-visible:outline-2">
-            Play the full interactive tutorial
-          </a>
-          <a href={isAndroidBuild() ? '/avatar-preview.html' : '/avatar-preview'}
-            className="rounded px-3 py-2 underline underline-offset-4 hover:text-white focus-visible:outline-2">
-            Preview avatar animations
-          </a>
-        </nav>
+        <a href={tutorialPath()} className="rounded px-3 py-2 text-sm text-emerald-200 underline underline-offset-4 hover:text-white focus-visible:outline-2">
+          Play the full interactive tutorial
+        </a>
       </main>
 
       {/* Create Room modal — shown after guest name is confirmed */}
