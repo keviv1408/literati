@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
+import { creatureForEmoji } from "./creatures/kind";
 import { getAvatarColor, getAvatarEmoji } from "@/utils/avatar";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
@@ -45,6 +47,8 @@ const Avatar: React.FC<AvatarProps> = ({
 }) => {
   const color = getAvatarColor(displayName);
   const label = ariaLabel ?? `Avatar for ${displayName}`;
+  const emoji = getAvatarEmoji(avatarId, displayName);
+  const creature = creatureForEmoji(emoji);
 
   return (
     <div
@@ -56,6 +60,7 @@ const Avatar: React.FC<AvatarProps> = ({
         .filter(Boolean)
         .join(" ")}
       role="img"
+      data-creature={creature}
       aria-label={label}
       title={showTooltip ? displayName : undefined}
       style={{
@@ -64,12 +69,14 @@ const Avatar: React.FC<AvatarProps> = ({
         boxShadow: "inset 0 0 0 1.5px rgba(255,255,255,0.15)",
       }}
     >
-      {/* SVG text scales with the circle, so callers can resize via className */}
-      <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
+      {creature ? (
+        <Image unoptimized width={128} height={128} src={`/creatures/${creature}.webp`}
+          alt="" className="h-full w-full" draggable={false} />
+      ) : <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden="true">
         <text x="50" y="54" fontSize="80" textAnchor="middle" dominantBaseline="central">
-          {getAvatarEmoji(avatarId, displayName)}
+          {emoji}
         </text>
-      </svg>
+      </svg>}
     </div>
   );
 };

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
-import CardFlightAnimation from '@/components/CardFlightAnimation';
+import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import CardHand from '@/components/CardHand';
 import CircularGameTable from '@/components/CircularGameTable';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
@@ -228,7 +228,7 @@ export default function TutorialPage() {
             >
               <DeclaredBooksTable declaredSuits={state.declared} playerCount={6} />
             </CircularGameTable>
-            {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
+            <TableCardTransfer flight={cardFlight} onComplete={clearCardFlight} />
           </div>
 
           {step.kind === 'intro' && (

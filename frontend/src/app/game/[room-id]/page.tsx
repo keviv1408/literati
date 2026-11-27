@@ -57,7 +57,7 @@ import ReconnectBar from '@/components/ReconnectBar';
 import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import { takeOpeningDeal } from '@/lib/openingDeal';
-import CardFlightAnimation from '@/components/CardFlightAnimation';
+import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
@@ -1336,7 +1336,7 @@ export default function GamePage({ params }: PageProps) {
                   playerCount={effectivePlayerCount === 8 ? 8 : 6}
                 />
               </CircularGameTable>
-              {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
+              <TableCardTransfer flight={cardFlight} onComplete={clearCardFlight} />
             </div>
           </main>
           </>

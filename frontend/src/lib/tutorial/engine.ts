@@ -12,6 +12,7 @@ export const TUTORIAL_VARIANT = 'remove_7s' as const;
 export interface TutorialPlayer {
   id: string;
   name: string;
+  avatarId?: string;
   teamId: 1 | 2;
 }
 

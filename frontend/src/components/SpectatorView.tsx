@@ -69,7 +69,7 @@ import LastMoveDisplay from '@/components/LastMoveDisplay';
 import DeclarationCardReveal from '@/components/DeclarationCardReveal';
 import ReconnectBar from '@/components/ReconnectBar';
 import CountdownTimer from '@/components/CountdownTimer';
-import CardFlightAnimation from '@/components/CardFlightAnimation';
+import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import { useReactionBubble } from '@/hooks/useReactionBubble';
 
@@ -507,7 +507,7 @@ export default function SpectatorView({
               playerCount={effectivePlayerCount === 8 ? 8 : 6}
             />
           </CircularGameTable>
-          {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
+          <TableCardTransfer flight={cardFlight} onComplete={clearCardFlight} />
         </div>
       </main>
 

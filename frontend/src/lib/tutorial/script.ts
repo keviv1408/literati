@@ -10,10 +10,10 @@
 import type { Step, TableState, TutorialPlayer } from './engine';
 
 export const PLAYERS: TutorialPlayer[] = [
-  { id: 'you', name: 'You', teamId: 1 },
-  { id: 'maya', name: 'Maya', teamId: 2 },
+  { id: 'you', name: 'You', teamId: 1, avatarId: 'avatar-3' },
+  { id: 'maya', name: 'Maya', teamId: 2, avatarId: 'avatar-12' },
   { id: 'raj', name: 'Raj', teamId: 1 },
-  { id: 'lin', name: 'Lin', teamId: 2 },
+  { id: 'lin', name: 'Lin', teamId: 2, avatarId: 'avatar-4' },
   { id: 'ana', name: 'Ana', teamId: 1 },
   { id: 'omar', name: 'Omar', teamId: 2 },
 ];

@@ -5,6 +5,7 @@ import type { AskSpeechBubbleState } from '@/components/AskSpeechBubbleOverlay';
 import type { AskResultPayload, CardId } from '@/types/game';
 
 export interface CardFlightState {
+  askerId: string;
   cardId: CardId;
   fromX: number;
   fromY: number;
@@ -151,6 +152,7 @@ export function useAskResultAnimations(
         const fromRect = fromEl.getBoundingClientRect();
         const toRect = toEl.getBoundingClientRect();
         setCardFlight({
+          askerId: lastAskResult.askerId,
           cardId: lastAskResult.cardId,
           fromX: fromRect.left - bounds.left + fromRect.width / 2,
           fromY: fromRect.top - bounds.top + fromRect.height / 2,

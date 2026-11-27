@@ -16,11 +16,9 @@ describe("Avatar component", () => {
     expect(screen.getByText("🍡")).toBeDefined();
   });
 
-  it("renders a stable name-derived glyph for unknown names without an avatarId", () => {
-    const first = render(<Avatar displayName="Carol Green" />).container.textContent;
-    const second = render(<Avatar displayName="Carol Green" />).container.textContent;
-    expect(first).toBe(second);
-    expect(first).toMatch(/\S/);
+  it("uses the frog portrait when the name-derived avatar is a frog", () => {
+    const { container } = render(<Avatar displayName="Carol Green" />);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/creatures/frog.webp');
   });
 
   it("has role='img' and an accessible aria-label", () => {

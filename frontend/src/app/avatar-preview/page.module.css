@@ -1,0 +1,112 @@
+.preview {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  min-height: 20rem;
+  background: radial-gradient(ellipse at 50% 48%, #193732, #0e2424 55%, #0b191c);
+  color: #f2eee6;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .4rem clamp(.65rem, 3vw, 2rem);
+  background: #0a171b;
+  border-bottom: 1px solid #354743;
+}
+
+.header h1 {
+  margin-right: auto;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -.035em;
+}
+
+.back {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  color: #d4e3d9;
+  font-size: 1.25rem;
+}
+
+.table {
+  width: min(100%, 72rem);
+  justify-self: center;
+  padding-block: .4rem;
+}
+
+.controls {
+  display: grid;
+  justify-items: center;
+  gap: .65rem;
+  border-top: 1px solid #354743;
+  padding: .8rem .75rem max(1rem, env(safe-area-inset-bottom));
+  background: #0a171b;
+}
+
+.controls p {
+  color: #d0ded7;
+  font-size: .875rem;
+}
+
+.examples {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(.35rem, 1.2vw, .75rem);
+  width: min(100%, 34rem);
+}
+
+.examples button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(.375rem, 1.2vw, .75rem);
+  padding: .6rem .25rem;
+  border: 1px solid #435650;
+  border-radius: .65rem;
+  background: #1a2a29;
+  color: #f4f0e8;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.examples button[data-active='true'] {
+  border-color: #d8b67a;
+  background: #353329;
+}
+
+@media (hover: hover) {
+  .examples button:hover { border-color: #e3cb9c; }
+}
+
+.back:focus-visible, .examples button:focus-visible {
+  outline: 2px solid #f2d198;
+  outline-offset: 2px;
+}
+
+.card {
+  display: grid;
+  place-items: center;
+  width: clamp(1.2rem, 3vw, 1.65rem);
+  aspect-ratio: 2 / 3;
+  border-radius: 3px;
+  background: #f1e6cf;
+  box-shadow: 0 2px 2px #0005;
+  color: #233238;
+  font-size: clamp(.68rem, 1.6vw, .84rem);
+  font-weight: 700;
+  transform: rotate(-6deg);
+}
+
+.card[data-red='true'] { color: #9d3640; }
+.labels { display: grid; text-align: left; line-height: 1.2; }
+.labels strong { font-size: clamp(.8rem, 1.8vw, .95rem); }
+.labels small { color: #a9bcb2; font-size: .7rem; }
+
+@media (orientation: landscape) and (max-height: 30rem) {
+  .table :global(.seats-6) { --seat-y-scale: .65; }
+  .controls { gap: .25rem; padding-block: .4rem; }
+}

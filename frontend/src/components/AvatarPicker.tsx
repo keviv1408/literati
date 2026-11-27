@@ -1,6 +1,8 @@
 'use client';
 
 import { AVATAR_IDS, getAvatarEmoji } from '@/utils/avatar';
+import Avatar from './Avatar';
+import { creatureForEmoji } from './creatures/kind';
 
 interface AvatarPickerProps {
   value: string | null;
@@ -17,6 +19,7 @@ export default function AvatarPicker({ value, onChange }: AvatarPickerProps) {
     >
       {AVATAR_IDS.map((id) => {
         const selected = id === value;
+        const emoji = getAvatarEmoji(id, '');
         return (
           <button
             key={id}
@@ -33,7 +36,7 @@ export default function AvatarPicker({ value, onChange }: AvatarPickerProps) {
                 : 'bg-slate-800/60 ring-1 ring-slate-600 hover:bg-slate-700',
             ].join(' ')}
           >
-            {getAvatarEmoji(id, '')}
+            {creatureForEmoji(emoji) ? <Avatar displayName="" avatarId={id} size="sm" /> : emoji}
           </button>
         );
       })}

@@ -135,6 +135,22 @@ body:has([role="dialog"]) {
   .opening-deal { display: none; }
 }
 
+.creature-retrieval {
+  position: absolute;
+  inset: 0;
+  z-index: 41;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.speech-avatar[data-retrieving] img { visibility: hidden; }
+
+.animate-card-flight-table[data-retrieving],
+.animate-card-flight-table[data-retrieving] .card-flight-face { animation: none; }
+.animate-card-flight-table[data-retrieving]::before { content: none; }
+
 .animate-card-flight-table {
   animation: transfer-to-seat 2s cubic-bezier(.38, 0, .26, 1) both;
 }
