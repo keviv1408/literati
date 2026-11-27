@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
 import { API_URL } from '@/lib/api';
-import { tutorialPath } from '@/lib/appPaths';
+import { isAndroidBuild, roomPath, tutorialPath } from '@/lib/appPaths';
+import { parseRoomJoinInput } from '@/lib/roomJoinInput';
 import ShortTutorial from '@/components/ShortTutorial';
 import CreateRoomModal from '@/components/CreateRoomModal';
 
@@ -14,11 +16,14 @@ const emptySubscribe = () => () => {};
 const WAKE_NOTICE_DELAY_MS = 2000;
 
 export default function Home() {
+  const router = useRouter();
   const { guestSession, hasName, ensureGuestName } = useGuestSession();
   const { clearGuest } = useGuest();
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [isWakingServer, setIsWakingServer] = useState(false);
+  const [roomInput, setRoomInput] = useState('');
+  const [invalidRoomInput, setInvalidRoomInput] = useState(false);
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   // Ping the backend on landing so a spun-down Render instance starts waking
@@ -42,10 +47,21 @@ export default function Home() {
     };
   }, []);
 
-  async function handlePrivateRoom() {
+  async function _createPrivateRoom() {
     const session = await ensureGuestName();
     if (!session) return; // user dismissed the guest name modal
     setIsCreateRoomOpen(true);
+  }
+
+  function _joinPrivateRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const origin = isAndroidBuild() ? undefined : window.location.origin;
+    const code = parseRoomJoinInput(roomInput, origin);
+    if (!code) {
+      setInvalidRoomInput(true);
+      return;
+    }
+    router.push(roomPath(code));
   }
 
   return (
@@ -98,7 +114,7 @@ export default function Home() {
         {/* Action buttons */}
         <div className="flex flex-col gap-3 w-full">
           <button
-            onClick={handlePrivateRoom}
+            onClick={_createPrivateRoom}
             className="
               flex-1 py-4 px-6 rounded-xl font-bold text-lg
               bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
@@ -108,12 +124,48 @@ export default function Home() {
             "
           >
             <span className="flex flex-col items-center leading-tight">
-              <span>🔒 Private Room</span>
+              <span><span aria-hidden="true">🔒 </span>Create Private Room</span>
               <span className="text-xs font-medium text-emerald-100/90 mt-1">
                 Play with friends in your own room
               </span>
             </span>
           </button>
+          <form
+            onSubmit={_joinPrivateRoom}
+            className="rounded-xl border border-emerald-800/70 bg-emerald-950/40 p-3 text-left sm:p-4"
+          >
+            <label htmlFor="room-join-input" className="mb-2 block text-sm font-semibold text-emerald-100">
+              Join by code
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="room-join-input"
+                value={roomInput}
+                onChange={(event) => {
+                  setRoomInput(event.target.value);
+                  setInvalidRoomInput(false);
+                }}
+                placeholder="Room code or invite link"
+                autoCapitalize="none"
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={invalidRoomInput}
+                aria-describedby={invalidRoomInput ? 'room-join-error' : undefined}
+                className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-emerald-300"
+              />
+              <button
+                type="submit"
+                className="shrink-0 rounded-lg border border-emerald-600 bg-emerald-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-emerald-300"
+              >
+                Join room
+              </button>
+            </div>
+            {invalidRoomInput && (
+              <p id="room-join-error" role="alert" className="mt-2 text-sm text-rose-200">
+                Enter a 6-character room code or invite link for players.
+              </p>
+            )}
+          </form>
           <ShortTutorial returnTo="home" />
         </div>
 

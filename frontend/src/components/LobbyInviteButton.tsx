@@ -80,6 +80,15 @@ export default function LobbyInviteButton({ roomCode, inviteLink }: { roomCode: 
         </svg>
         <span aria-live="polite">{copied ? 'Link copied' : 'Invite friends'}</span>
       </button>
+      <label className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-emerald-200">
+        Room code
+        <input
+          readOnly
+          value={roomCode}
+          onFocus={(event) => event.currentTarget.select()}
+          className="w-[7ch] select-all rounded bg-transparent font-mono text-base font-semibold tracking-wide text-white focus-visible:outline-2 focus-visible:outline-emerald-300"
+        />
+      </label>
       {showUnavailable && !inviteLink && (
         <p className="mt-2 text-xs text-emerald-200" role="status">
           Invite link unavailable. Reopen this room and try again.

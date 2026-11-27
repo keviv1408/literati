@@ -3,13 +3,19 @@
  */
 
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
+import Home from '@/app/page';
+
+const mockPush = jest.fn();
+const mockEnsureGuestName = jest.fn();
+
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 jest.mock('@/hooks/useGuestSession', () => ({
   useGuestSession: () => ({
     guestSession: null,
     hasName: false,
-    ensureGuestName: jest.fn(),
+    ensureGuestName: mockEnsureGuestName,
   }),
 }));
 
@@ -23,8 +29,6 @@ jest.mock('@/components/CreateRoomModal', () => ({
   __esModule: true,
   default: () => null,
 }));
-
-import Home from '@/app/page';
 
 describe('Home wake-up notice', () => {
   const originalFetch = global.fetch;
@@ -82,15 +86,17 @@ describe('Home entry points', () => {
 
   beforeEach(() => {
     global.fetch = jest.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch;
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    delete process.env.NEXT_PUBLIC_BUILD_TARGET;
   });
 
-  it('offers Private Room as the only way to play', () => {
+  it('offers a clear way to create a private room', () => {
     render(<Home />);
-    expect(screen.getByRole('button', { name: /Private Room/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Create Private Room/ })).toBeInTheDocument();
     expect(screen.queryByText(/Find Online Match/)).toBeNull();
     expect(screen.queryByText(/Spectate Live Games/)).toBeNull();
     expect(screen.queryByText('Spectators')).toBeNull();
@@ -100,4 +106,60 @@ describe('Home entry points', () => {
     expect(screen.queryByTitle(/tutorial video/i)).toBeNull();
     expect(screen.getByRole('link', { name: /full interactive tutorial/i })).toHaveAttribute('href', '/tutorial');
   });
+
+  it.each([
+    ['  abc123  ', '/room/ABC123'],
+    [' https://literati-ochre.vercel.app/room/def456 ', '/room/DEF456'],
+    ['http://localhost/room/ghi789', '/room/GHI789'],
+  ])('opens the player lobby for %s', (input, path) => {
+    render(<Home />);
+
+    _submitJoin(input);
+
+    expect(mockPush).toHaveBeenCalledWith(path);
+    expect(mockEnsureGuestName).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the Android lobby when given a public invite', () => {
+    process.env.NEXT_PUBLIC_BUILD_TARGET = 'android';
+    render(<Home />);
+
+    _submitJoin('https://literati-ochre.vercel.app/room/abc123');
+
+    expect(mockPush).toHaveBeenCalledWith('/?room=ABC123');
+  });
+
+  it.each([
+    '',
+    'ABC12',
+    'AB C12',
+    'ſBC123',
+    '/room/ABC123',
+    'https://example.com/room/ABC123',
+    'https://literati-ochre.vercel.app.example.com/room/ABC123',
+    'https://user@literati-ochre.vercel.app/room/ABC123',
+    'https://literati-ochre.vercel.app/room/ABC12',
+    'https://literati-ochre.vercel.app/spectate/ABC123',
+    'https://literati-ochre.vercel.app/room/ABC123?spectate=1',
+    'https://literati-ochre.vercel.app/live/../room/ABC123',
+  ])('shows an inline error without navigating for %s', (input) => {
+    render(<Home />);
+
+    const field = _submitJoin(input);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/room code or invite link/i);
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription(/room code or invite link/i);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockEnsureGuestName).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
 });
+
+function _submitJoin(input: string) {
+  const field = screen.getByRole('textbox', { name: /Join by code/i });
+  fireEvent.change(field, { target: { value: input } });
+  fireEvent.click(screen.getByRole('button', { name: 'Join room' }));
+  return field;
+}
