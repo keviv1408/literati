@@ -14,8 +14,10 @@ const { _setSupabaseClient } = require('../db/supabase');
 describe('POST /api/rooms', () => {
   let app;
   let mockSupabase;
+  let originalFrontendUrl;
 
   beforeEach(() => {
+    originalFrontendUrl = process.env.FRONTEND_URL;
     // Build a fresh mock for each test
     mockSupabase = buildMockSupabase();
     _setSupabaseClient(mockSupabase);
@@ -29,6 +31,8 @@ describe('POST /api/rooms', () => {
   });
 
   afterEach(() => {
+    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = originalFrontendUrl;
     jest.clearAllMocks();
     const { _clearStore } = require('../sessions/guestSessionStore');
     _clearStore();
@@ -74,6 +78,8 @@ describe('POST /api/rooms', () => {
       error: null,
     });
 
+    process.env.FRONTEND_URL = 'https://literati-ochre.vercel.app';
+
     const res = await request(app)
       .post('/api/rooms')
       .set('Authorization', 'Bearer valid-token')
@@ -92,6 +98,7 @@ describe('POST /api/rooms', () => {
     // spectator_token: 32-char hex token
     expect(res.body.room.spectator_token).toHaveLength(32);
     expect(res.body.room.spectator_token).toMatch(/^[0-9A-F]{32}$/i);
+    expect(res.body.inviteLink).toBe('https://literati-ochre.vercel.app/room/ABC123');
   });
 
   it('insert payload includes invite_code and spectator_token', async () => {
@@ -446,13 +453,20 @@ describe('POST /api/rooms', () => {
 describe('GET /api/rooms/:code', () => {
   let app;
   let mockSupabase;
+  let originalFrontendUrl;
 
   beforeEach(() => {
+    originalFrontendUrl = process.env.FRONTEND_URL;
     jest.resetModules();
     mockSupabase = buildMockSupabase();
     const { _setSupabaseClient: set } = require('../db/supabase');
     set(mockSupabase);
     app = require('../index');
+  });
+
+  afterEach(() => {
+    if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = originalFrontendUrl;
   });
 
   it('returns 200 with room when found, including invite_code', async () => {
@@ -472,6 +486,8 @@ describe('GET /api/rooms/:code', () => {
       error: null,
     });
 
+    process.env.FRONTEND_URL = 'https://literati-ochre.vercel.app';
+
     const res = await request(app).get('/api/rooms/ABCDEF');
 
     expect(res.status).toBe(200);
@@ -481,6 +497,8 @@ describe('GET /api/rooms/:code', () => {
     // spectator_token is NOT in GET response (security)
     expect(res.body.room).not.toHaveProperty('spectator_token');
     expect(res.body.room.players).toEqual([]);
+    expect(res.body.inviteLink).toBe('https://literati-ochre.vercel.app/room/ABCDEF');
+    expect(res.body).not.toHaveProperty('spectatorLink');
   });
 
   it('includes the players currently connected to the lobby', async () => {

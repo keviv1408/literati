@@ -40,6 +40,11 @@ function isRoomHost(room, user) {
   return roomHost.isRoomHost(room, user.isGuest ? user.sessionId : user.id);
 }
 
+function _inviteLink(code) {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  return `${frontendUrl}/room/${code}`;
+}
+
 /**
  * Valid player counts for a Literature game room.
  * The spec allows 6 or 8 players (evenly split into two teams).
@@ -277,7 +282,7 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
 
     // ── Build convenience URLs for the host ────────────────────────────────────
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const inviteLink    = `${frontendUrl}/room/${room.code}`;
+    const inviteLink = _inviteLink(room.code);
     // Private rooms use the token-based spectator URL so the link is not
     // guessable from the room code alone.
     const spectatorLink = `${frontendUrl}/spectate/${room.spectator_token}`;
@@ -351,7 +356,7 @@ router.get('/active', async (req, res) => {
  * invite_code is included so the host can copy the join link from the
  * lobby page after a browser refresh.
  *
- * Response 200: { room: { ... } }
+ * Response 200: { room: { ... }, inviteLink: string }
  * Response 404: { error: 'Room not found' }
  */
 router.get('/:code', async (req, res) => {
@@ -382,7 +387,10 @@ router.get('/:code', async (req, res) => {
     }
 
     const { getRoomPlayers } = require('../ws/roomSocketServer');
-    return res.status(200).json({ room: { ...room, players: getRoomPlayers(room.code) } });
+    return res.status(200).json({
+      room: { ...room, players: getRoomPlayers(room.code) },
+      inviteLink: _inviteLink(room.code),
+    });
   } catch (err) {
     console.error('Unexpected error fetching room:', err);
     return res.status(500).json({ error: 'Internal server error' });
