@@ -9,7 +9,11 @@ import InlineDeclareTray from '@/components/InlineDeclareTray';
 function renderTray(overrides: Partial<React.ComponentProps<typeof InlineDeclareTray>> = {}) {
   const props: React.ComponentProps<typeof InlineDeclareTray> = {
     halfSuitId: 'low_s',
-    unassignedCards: ['2_s', '3_s'],
+    cards: ['1_s', '2_s', '3_s'],
+    assignment: { '1_s': 'me' },
+    players: [{ playerId: 'me', displayName: 'Me' }],
+    myPlayerId: 'me',
+    onRemoveCard: jest.fn(),
     selectedCard: null,
     onTapCard: jest.fn(),
     totalCards: 6,
@@ -50,7 +54,6 @@ describe('InlineDeclareTray', () => {
     rerender(
       <InlineDeclareTray
         {...props}
-        unassignedCards={[]}
         assignedCount={6}
         isComplete={true}
       />,

@@ -26,22 +26,13 @@ interface LastMoveDisplayProps {
   message: string | null | undefined;
   /** Current room players so names can be color-coded by team. */
   players?: GamePlayer[];
-  /** Current viewer's playerId (for "my team = green, opponent = purple"). */
-  myPlayerId?: string | null;
   /** data-testid for automated tests. Defaults to "last-move-display". */
   testId?: string;
 }
 
-function teamNameClass(teamId?: 1 | 2, myTeamId?: 1 | 2 | null): string {
+function teamNameClass(teamId?: 1 | 2): string {
   if (!teamId) return 'text-slate-800 font-semibold';
-  if (myTeamId) {
-    return teamId === myTeamId
-      ? 'text-emerald-700 font-semibold'
-      : 'text-violet-700 font-semibold';
-  }
-  return teamId === 1
-    ? 'text-emerald-700 font-semibold'
-    : 'text-violet-700 font-semibold';
+  return teamId === 1 ? 'name-coral font-semibold' : 'text-violet-700 font-semibold';
 }
 
 function suitClassFromSymbol(symbol: string): string {
@@ -88,30 +79,29 @@ function renderHalfSuitLabel(label: string) {
   );
 }
 
-function renderTeamScoreText(teamScoreText: string, myTeamId?: 1 | 2 | null) {
+function renderTeamScoreText(teamScoreText: string) {
   const m = teamScoreText.match(/^Team ([12]) scores$/);
   if (!m) return <span className="font-semibold text-slate-800">{teamScoreText}</span>;
   const teamId = Number(m[1]) as 1 | 2;
-  return <span className={teamNameClass(teamId, myTeamId)}>{teamScoreText}</span>;
+  return <span className={teamNameClass(teamId)}>{teamScoreText}</span>;
 }
 
-function renderName(name: string, nameToTeam: Map<string, 1 | 2>, myTeamId?: 1 | 2 | null) {
-  return <span className={teamNameClass(nameToTeam.get(name), myTeamId)}>{name}</span>;
+function renderName(name: string, nameToTeam: Map<string, 1 | 2>) {
+  return <span className={teamNameClass(nameToTeam.get(name))}>{name}</span>;
 }
 
 function renderStyledMessage(
   message: string,
   nameToTeam: Map<string, 1 | 2>,
-  myTeamId?: 1 | 2 | null
 ) {
   const askMixedMatch = message.match(/^(.*?) asked (.*?) for (.*?) — got (.*?); denied (.*?)$/);
   if (askMixedMatch) {
     const [, asker, target, requestedCards, gotCards, deniedCards] = askMixedMatch;
     return (
       <>
-        {renderName(asker, nameToTeam, myTeamId)}
+        {renderName(asker, nameToTeam)}
         <span className="text-slate-700"> asked </span>
-        {renderName(target, nameToTeam, myTeamId)}
+        {renderName(target, nameToTeam)}
         <span className="text-slate-700"> for </span>
         {renderCardText(requestedCards)}
         <span className="text-slate-600"> — </span>
@@ -132,9 +122,9 @@ function renderStyledMessage(
       : 'text-rose-700 font-semibold';
     return (
       <>
-        {renderName(asker, nameToTeam, myTeamId)}
+        {renderName(asker, nameToTeam)}
         <span className="text-slate-700"> asked </span>
-        {renderName(target, nameToTeam, myTeamId)}
+        {renderName(target, nameToTeam)}
         <span className="text-slate-700"> for </span>
         {renderCardText(requestedCards)}
         <span className="text-slate-600"> — </span>
@@ -148,9 +138,9 @@ function renderStyledMessage(
     const [, asker, target, requestedCards] = askPreviewMatch;
     return (
       <>
-        {renderName(asker, nameToTeam, myTeamId)}
+        {renderName(asker, nameToTeam)}
         <span className="text-slate-700"> asked </span>
-        {renderName(target, nameToTeam, myTeamId)}
+        {renderName(target, nameToTeam)}
         <span className="text-slate-700"> for </span>
         {renderCardText(requestedCards)}
       </>
@@ -165,13 +155,13 @@ function renderStyledMessage(
       : 'text-rose-700 font-semibold';
     return (
       <>
-        {renderName(declarer, nameToTeam, myTeamId)}
+        {renderName(declarer, nameToTeam)}
         <span className="text-slate-700"> declared </span>
         {renderHalfSuitLabel(halfSuitText)}
         <span className="text-slate-600"> — </span>
         <span className={verdictClass}>{verdict}</span>
         <span className="text-slate-700"> </span>
-        {renderTeamScoreText(teamScore, myTeamId)}
+        {renderTeamScoreText(teamScore)}
       </>
     );
   }
@@ -181,11 +171,11 @@ function renderStyledMessage(
     const [, declarer, halfSuitText, teamScore] = timeoutDeclMatch;
     return (
       <>
-        {renderName(declarer, nameToTeam, myTeamId)}
+        {renderName(declarer, nameToTeam)}
         <span className="text-slate-700"> ran out of time declaring </span>
         {renderHalfSuitLabel(halfSuitText)}
         <span className="text-slate-600"> — </span>
-        {renderTeamScoreText(teamScore, myTeamId)}
+        {renderTeamScoreText(teamScore)}
       </>
     );
   }
@@ -196,7 +186,6 @@ function renderStyledMessage(
 export default function LastMoveDisplay({
   message,
   players,
-  myPlayerId = null,
   testId = 'last-move-display',
 }: LastMoveDisplayProps) {
   if (!message) return null;
@@ -205,11 +194,6 @@ export default function LastMoveDisplay({
   for (const player of players ?? []) {
     nameToTeam.set(player.displayName, player.teamId);
   }
-  const myTeamId =
-    myPlayerId
-      ? (players ?? []).find((player) => player.playerId === myPlayerId)?.teamId ?? null
-      : null;
-
   return (
     <div
       className="relative z-10 flex items-center justify-center px-4 py-3 bg-slate-100/95 border-b border-slate-300/90 text-base sm:text-lg md:text-xl leading-tight text-slate-800 font-medium shadow-sm"
@@ -218,7 +202,7 @@ export default function LastMoveDisplay({
       data-testid={testId}
     >
       <span className="text-center">
-        {renderStyledMessage(message, nameToTeam, myTeamId)}
+        {renderStyledMessage(message, nameToTeam)}
       </span>
     </div>
   );

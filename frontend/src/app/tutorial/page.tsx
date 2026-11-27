@@ -235,18 +235,8 @@ export default function TutorialPage() {
           <span>{state.turn === ME ? 'Your turn' : `${turnPlayer?.name}'s turn`}</span>
         </div>
 
-        <main className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center overflow-y-auto px-2 py-2 sm:px-3 sm:py-3 lg:px-5">
-          {/* Width follows the free height (chrome ~13rem, ~26rem while the footer hand shows) so the 5:3
-              table keeps its shape; my-auto keeps the wrapper content-sized so the table's max-h-full
-              never squashes it, and main scrolls below the width floor. */}
-          <div
-            className={[
-              'w-full my-auto max-w-[82rem] sm:min-w-[34rem] lg:min-w-[43rem]',
-              inspectedId
-                ? 'sm:max-w-[calc((100dvh-26rem)*5/3)]'
-                : 'sm:max-w-[calc((100dvh-13rem)*5/3)] sm:[@media(min-height:900px)]:max-w-[calc((100dvh-26rem)*5/3)]',
-            ].join(' ')}
-          >
+        <main className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center overflow-hidden px-2 py-2 sm:px-3 sm:py-3 lg:px-5">
+          <div className="game-table-space tutorial-table-space w-full">
             <CircularGameTable
               players={players}
               myPlayerId={ME}

@@ -37,15 +37,10 @@ describe('InlineAskTray', () => {
     expect(onToggleCard).toHaveBeenCalledWith('1_h');
   });
 
-  it('shows the multi-select opponent prompt once cards are selected', () => {
+  it('keeps both selected cards marked in the tray', () => {
     renderTray({ selectedCardIds: ['1_h', '2_h'] });
-    expect(screen.getByTestId('inline-ask-step-opponent').textContent).toContain('2 cards');
-    expect(screen.getByTestId('inline-ask-selected-count').textContent).toContain('2 selected');
-  });
-
-  it('shows the outside-click cancel hint while choosing ask cards', () => {
-    renderTray();
-    expect(screen.getByTestId('inline-ask-step-card').textContent).toContain('Click anywhere outside to cancel');
+    expect(screen.getByTestId('inline-ask-card-1_h')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('inline-ask-card-2_h')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('does not render the old back/cancel tray controls', () => {

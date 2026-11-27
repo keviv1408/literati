@@ -1186,6 +1186,9 @@ describe('GamePage — game controls always available', () => {
       const heartCard = heartCardWrapper.querySelector('[role="button"]') as HTMLElement;
       expect(heartCard).toBeTruthy();
       fireEvent.click(heartCard);
+      expect(screen.getByTestId('ask-prompt')).toHaveTextContent(
+        'Pick one or more missing cards from Low Hearts. Click anywhere outside to cancel.',
+      );
       fireEvent.click(screen.getByTestId('inline-ask-card-1_h'));
 
       const carolSeat = document.querySelector('[data-player-id="p4"]') as HTMLElement;
@@ -1215,10 +1218,13 @@ describe('GamePage — game controls always available', () => {
 
       expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
 
+      expect(screen.queryByTestId('ask-declare-toggle')).toBeNull();
+
       fireEvent.click(document.body);
 
       await waitFor(() => {
         expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeVisible();
       });
     });
 
@@ -1536,8 +1542,7 @@ describe('GamePage — game controls always available', () => {
       await waitFor(() => {
         // Card hand area is shown (player has 5 cards from makeGameInit)
         expect(screen.getByTestId('game-controls')).toBeTruthy();
-        // "Your hand — 5 cards" — use the stable label text instead of card count
-        expect(screen.getByText(/Your hand/i)).toBeTruthy();
+        expect(screen.getByTestId('card-hand')).toHaveAttribute('aria-label', expect.stringMatching(/^Your hand:/));
       });
     });
   });

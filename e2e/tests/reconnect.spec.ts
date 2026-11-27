@@ -85,12 +85,12 @@ async function _ask(page: Page) {
     await expect(tray).toBeVisible();
     const askable = tray.locator('[data-testid^="inline-ask-card-"]');
     if ((await askable.count()) === 0) {
-      await page.getByTestId('toggle-ask').click();
+      await page.getByTestId('game-room-code').click();
       continue;
     }
     const cardId = (await askable.first().getAttribute('data-testid'))!.replace('inline-ask-card-', '');
     await askable.first().click();
-    await expect(page.getByTestId('inline-ask-step-opponent')).toBeVisible();
+    await expect(page.getByTestId('ask-seat-prompt')).toBeVisible();
     const target = page.locator('[data-testid="game-player-seat"][data-ask-targetable="true"]').first();
     const targetId = (await target.getAttribute('data-player-id'))!;
     const at = Date.now();

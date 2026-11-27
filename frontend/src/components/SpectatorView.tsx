@@ -541,7 +541,7 @@ export default function SpectatorView({
         className="relative z-10 flex-1 flex flex-col items-center justify-center px-3 py-3 min-h-0 overflow-hidden"
         aria-label="Spectator game table"
       >
-        <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem]">
+        <div className="game-table-space h-full w-full">
           <CircularGameTable
             players={players}
             myPlayerId={null}

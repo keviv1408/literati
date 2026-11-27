@@ -19,8 +19,7 @@
  * seat puts the next server seat to the right of the local player.
  *
  * ### Responsive
- * - Mobile  (<sm): container uses `aspect-[5/4]`, tighter radii (32%)
- * - Desktop (≥sm): container uses `aspect-[5/3]`, wider radii (34%)
+ * Phones use a taller seat ring to clear the felt. Larger screens use a 5:3 table.
  *
  * Both use the same percentage-based positioning so the layout scales
  * fluidly with the container width.
@@ -48,7 +47,7 @@ interface SeatXY { x: number; y: number }
  */
 function getCircularPositions(count: 6 | 8): SeatXY[] {
   const step = 360 / count;
-  const r = count === 8 ? 33 : 34; // slightly tighter for 8-player
+  const r = count === 8 ? 38 : 41;
 
   return Array.from({ length: count }, (_, i) => {
     const angleDeg = ((180 - i * step) + 360) % 360;
@@ -136,7 +135,7 @@ export default function CircularGameTable({
 
   return (
     <div
-      className="relative w-full aspect-[5/4] sm:aspect-[5/3] max-h-full mx-auto"
+      className={`game-table relative mx-auto seats-${playerCount}`}
       aria-label="Game table — players seated in a circle, alternating teams"
       data-testid="circular-game-table"
     >
@@ -144,12 +143,11 @@ export default function CircularGameTable({
       {/* Inset oval representing the green card-table surface */}
       <div
         className={[
-          'absolute rounded-[50%]',
+          'game-table-felt absolute rounded-[50%]',
           'bg-gradient-to-br from-emerald-950 via-emerald-900/90 to-emerald-950',
           'border border-emerald-700/25',
           'shadow-[inset_0_4px_60px_rgba(0,0,0,0.55),inset_0_0_0_1px_rgba(52,211,153,0.06)]',
         ].join(' ')}
-        style={{ left: '24%', top: '22%', width: '52%', height: '56%' }}
         aria-hidden="true"
       >
         {/* Subtle double-ring rim — evokes the wooden rail of a card table */}
@@ -159,8 +157,7 @@ export default function CircularGameTable({
 
       {/* ── Center content (DeclaredBooksTable) ────────────────────────────── */}
       <div
-        className="absolute"
-        style={{ left: '24%', top: '22%', width: '52%', height: '56%' }}
+        className="game-table-felt absolute"
         data-testid="game-table-center"
       >
         <div className="h-full flex items-center justify-center p-2 sm:p-3">
@@ -225,8 +222,11 @@ export default function CircularGameTable({
             // Zero-size flex box centres the (overflowing) seat on the point without a
             // transform, which would make each slot its own stacking context and defeat
             // z-index ordering between seats and their neighbours' overlays.
-            className="absolute flex h-0 w-0 items-center justify-center [&>*]:shrink-0"
-            style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+            className="game-table-seat absolute flex h-0 w-0 items-center justify-center [&>*]:shrink-0"
+            style={{
+              left: `${pos.x}%`,
+              top: `calc(50% + ${(pos.y - 50).toFixed(3)}% * var(--seat-y-scale, 1))`,
+            }}
           >
             {content}
           </div>

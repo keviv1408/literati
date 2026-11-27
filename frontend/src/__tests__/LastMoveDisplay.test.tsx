@@ -102,7 +102,7 @@ describe('LastMoveDisplay', () => {
 
   it('renders combined ask-success message with multiple cards', () => {
     const msg = 'Alice asked Bob for 8♣, 10♣, and J♣ — got them';
-    render(<LastMoveDisplay message={msg} players={PLAYERS} myPlayerId="p1" />);
+    render(<LastMoveDisplay message={msg} players={PLAYERS} />);
     expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
     expect(screen.getByText('8♣').className).toContain('text-slate-900');
     expect(screen.getByText('10♣').className).toContain('text-slate-900');
@@ -111,13 +111,13 @@ describe('LastMoveDisplay', () => {
 
   it('renders combined ask message with mixed got and denied cards', () => {
     const msg = 'Alice asked Bob for 8♣ and 10♣ — got 8♣; denied 10♣';
-    render(<LastMoveDisplay message={msg} players={PLAYERS} myPlayerId="p1" />);
+    render(<LastMoveDisplay message={msg} players={PLAYERS} />);
     expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
   });
 
   it('renders a multi-card ask preview without an outcome', () => {
     const msg = 'Alice asked Bob for 8♣, 10♣, and J♣';
-    render(<LastMoveDisplay message={msg} players={PLAYERS} myPlayerId="p1" />);
+    render(<LastMoveDisplay message={msg} players={PLAYERS} />);
     expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
     expect(screen.getByText('8♣').className).toContain('text-slate-900');
   });
@@ -164,16 +164,15 @@ describe('LastMoveDisplay', () => {
     expect(screen.queryByText('some move')).toBeNull();
   });
 
-  it('colors my-team and opponent names for ask messages', () => {
+  it('uses the seat team colours for names in ask messages', () => {
     render(
       <LastMoveDisplay
         message="Alice asked Bob for 9♠ — denied"
         players={PLAYERS}
-        myPlayerId="p1"
       />
     );
 
-    expect(screen.getByText('Alice').className).toContain('text-emerald-700');
+    expect(screen.getByText('Alice').className).toContain('name-coral');
     expect(screen.getByText('Bob').className).toContain('text-violet-700');
   });
 
@@ -182,7 +181,6 @@ describe('LastMoveDisplay', () => {
       <LastMoveDisplay
         message="Alice asked Bob for 6♦ — got it"
         players={PLAYERS}
-        myPlayerId="p1"
       />
     );
 
