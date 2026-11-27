@@ -1808,13 +1808,13 @@ describe('GamePage — declaration outcome broadcast', () => {
         lastMove: 'Me declared Low Clubs — incorrect! Team 2 scores',
       }));
 
-      expect(screen.getAllByTestId('declaration-seat-reveal').length).toBeGreaterThan(0);
+      expect(screen.getByRole('region', { name: 'Declared cards by actual holder' })).toBeInTheDocument();
 
       act(() => {
         jest.advanceTimersByTime(9_500);
       });
 
-      expect(screen.queryByTestId('declaration-seat-reveal')).toBeNull();
+      expect(screen.queryByRole('region', { name: 'Declared cards by actual holder' })).toBeNull();
     } finally {
       jest.useRealTimers();
     }

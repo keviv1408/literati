@@ -23,11 +23,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
 import { backoffDelayMs, retryWithBackoff } from '@/lib/backoff';
 import { advanceAskMoveBatch, buildAskMoveSummaryMessage, type AskMoveBatch } from '@/lib/askMoveSummary';
-import {
-  buildDeclarationSeatRevealMap,
-  buildSuccessfulDeclarationSeatRevealMap,
-  FAILED_DECLARATION_SEAT_REVEAL_MS,
-} from '@/lib/declarationSeatReveal';
 import { loadRoomMembership, saveRoomMembership } from '@/lib/roomMembership';
 import { useGuest } from '@/contexts/GuestContext';
 import { useCardDeck } from '@/hooks/useCardDeck';
@@ -55,6 +50,7 @@ import { DeclareDropSeat } from '@/components/InlineDeclare';
 import InlineDeclareTray from '@/components/InlineDeclareTray';
 import DeclarationProgressBanner from '@/components/DeclarationProgressBanner';
 import LastMoveDisplay from '@/components/LastMoveDisplay';
+import DeclarationCardReveal from '@/components/DeclarationCardReveal';
 import CircularGameTable from '@/components/CircularGameTable';
 import RematchVotePanel from '@/components/RematchVotePanel';
 import ReconnectBar from '@/components/ReconnectBar';
@@ -213,16 +209,6 @@ export default function GamePage({ params }: PageProps) {
   const [lastResultMsg, setLastResultMsg] = useState<string | null>(null);
   const [syntheticLastMoveMsg, setSyntheticLastMoveMsg] = useState<string | null>(null);
   const lastResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Declaration Seat Reveal ──────────────────────────────────
-  //
-  // Both successful and failed declarations can briefly reveal the declared
-  // half-suit directly on seats. Failed reveals include red wrong markers;
-  // successful reveals are all green.
-  const [declarationSeatRevealByPlayerId, setDeclarationSeatRevealByPlayerId] =
-    useState<Map<string, import('@/lib/declarationSeatReveal').DeclarationSeatRevealCard[]> | null>(null);
-  const declarationSeatRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const processedDeclarationFailedKeyRef = useRef<string | null>(null);
 
   // ── Score flash ───────────────────────────────────────────────
   //
@@ -564,20 +550,6 @@ export default function GamePage({ params }: PageProps) {
         playDeclarationFail();
       }
 
-      if (lastDeclareResult.correct) {
-        const revealVariant = (variant ?? room?.card_removal_variant ?? 'remove_7s') as
-          'remove_2s' | 'remove_7s' | 'remove_8s';
-        setDeclarationSeatRevealByPlayerId(
-          buildSuccessfulDeclarationSeatRevealMap(lastDeclareResult, revealVariant),
-        );
-        if (declarationSeatRevealTimerRef.current) {
-          clearTimeout(declarationSeatRevealTimerRef.current);
-        }
-        declarationSeatRevealTimerRef.current = setTimeout(() => {
-          setDeclarationSeatRevealByPlayerId(null);
-        }, FAILED_DECLARATION_SEAT_REVEAL_MS);
-      }
-
       publishMoveMessage(lastDeclareResult.lastMove, null);
 
       updatePendingAskBatch(null);
@@ -592,47 +564,6 @@ export default function GamePage({ params }: PageProps) {
       setShowAskInline(false);
     }
   }, [lastDeclareResult, playDeclarationSuccess, playDeclarationFail, publishMoveMessage, updatePendingAskBatch]);
-
-  // ── Reset / auto-dismiss failed declaration seat reveal ──────
-  useEffect(() => {
-    if (!declarationFailed) {
-      processedDeclarationFailedKeyRef.current = null;
-      setDeclarationSeatRevealByPlayerId(null);
-      return;
-    }
-    const declarationFailedKey = [
-      declarationFailed.declarerId,
-      declarationFailed.halfSuitId,
-      declarationFailed.winningTeam,
-      declarationFailed.lastMove,
-    ].join('|');
-    if (processedDeclarationFailedKeyRef.current === declarationFailedKey) return;
-    processedDeclarationFailedKeyRef.current = declarationFailedKey;
-    const revealVariant = (variant ?? room?.card_removal_variant ?? 'remove_7s') as
-      'remove_2s' | 'remove_7s' | 'remove_8s';
-    setDeclarationSeatRevealByPlayerId(
-      buildDeclarationSeatRevealMap(declarationFailed, players, revealVariant),
-    );
-    if (declarationSeatRevealTimerRef.current) {
-      clearTimeout(declarationSeatRevealTimerRef.current);
-    }
-    declarationSeatRevealTimerRef.current = setTimeout(() => {
-      setDeclarationSeatRevealByPlayerId(null);
-    }, FAILED_DECLARATION_SEAT_REVEAL_MS);
-    return () => {
-      if (declarationSeatRevealTimerRef.current) {
-        clearTimeout(declarationSeatRevealTimerRef.current);
-      }
-    };
-  }, [declarationFailed]);
-
-  useEffect(() => {
-    return () => {
-      if (declarationSeatRevealTimerRef.current) {
-        clearTimeout(declarationSeatRevealTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!roomCode || !canShowCards || !myPlayerId || !myHand.length || !takeOpeningDeal(roomCode)) return;
@@ -986,22 +917,8 @@ export default function GamePage({ params }: PageProps) {
       ? handleChooseNextTurnSeat
       : undefined;
 
-  // ── Turn-pass mode ────────────────────────────────────────────
-  //
-  // `isTurnPassMode` is true when the local player is the current turn player
-  // AND is in the post-declaration seat-selection window. This covers two
-  // sub-states:
-  // 1. `postDeclarationHighlight !== null` — seats are highlighted, waiting
-  // for the player to tap one.
-  // 2. `pendingTurnPassAck` — the player tapped a seat (highlight cleared
-  // optimistically) but the server's `post_declaration_turn_selected` ack
-  // hasn't arrived yet.
-  //
-  // While `isTurnPassMode` is true:
-  // • Ask and Declare buttons are hidden (replaced by a selection prompt).
-  // • The ask-prompt hint is suppressed.
-  // • The turn-indicator banner shows seat-selection guidance.
-  const isTurnPassMode = isMyTurn && (postDeclarationHighlight !== null || pendingTurnPassAck);
+  const isSelectingNextTurn = postDeclarationHighlight !== null || pendingTurnPassAck;
+  const isTurnPassMode = isMyTurn && isSelectingNextTurn;
   const showDeclareTray = declareMode && !!declareSelectedSuit && isMyTurn && !isTurnPassMode;
 
   useEffect(() => {
@@ -1349,61 +1266,6 @@ export default function GamePage({ params }: PageProps) {
         }}
       />
 
-      {gameState && isMyTurn && isTurnPassMode && (
-        <div className="relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40" role="status" aria-live="polite" data-testid="turn-indicator">
-          {pendingTurnPassAck
-            ? (<><span aria-hidden="true">⏳</span><span data-testid="turn-pass-pending-label">Choosing next turn…</span></>)
-            : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)}
-        </div>
-      )}
-      {/* ── Post-declaration turn-selection countdown ───────────
-       * Shown to ALL clients for 30 seconds after a human correct declaration
-       * while the declaring team chooses who takes the next turn.
-       * On expiry the server auto-selects a random eligible player.
-       */}
-      {postDeclarationTimer && gameState && (
-        <CountdownTimer
-          key={postDeclarationTimer.expiresAt}
-          expiresAt={postDeclarationTimer.expiresAt}
-          durationMs={postDeclarationTimer.durationMs}
-          isMyTimer={
-            postDeclarationTimer.eligiblePlayers.includes(myPlayerId ?? '') ||
-            myPlayerId === postDeclarationTimer.declarerId
-          }
-          label="Choose next turn"
-          data-testid="post-declaration-timer"
-        />
-      )}
-
-      {/* ── Declaration turn-pass prompt ──────────────────────────
-       * Shown to ALL clients while `postDeclarationHighlight` is non-null —
-       * i.e. while the current turn player (the declarant) is choosing which
-       * eligible same-team player receives the next turn.
-       *
-       * For the DECLARANT (isMyTurn): cyan banner with instruction to click a
-       * highlighted (cyan-ring) teammate seat.
-       *
-       * For ALL OTHER PLAYERS: muted status strip showing the declarant's
-       * name so observers understand why some seats are glowing.
-       *
-       * The prompt disappears (unmounts) as soon as `postDeclarationHighlight`
-       * is cleared, which happens when:
-       * a) The declarant clicks a highlighted seat → `sendChooseNextTurn`
-       * immediately sets `postDeclarationHighlight` to null (optimistic).
-       * b) The 30-second timer expires → server sends
-       * `post_declaration_turn_selected` → hook clears the highlight.
-       * In both cases the cyan seat rings disappear simultaneously with the
-       * prompt banner, fulfilling the "clearing highlights when the prompt is
-       * dismissed" requirement.
-       */}
-      {postDeclarationHighlight && gameState && (
-        <DeclarationTurnPassPrompt
-          isMyTurn={isMyTurn && gameState.currentTurnPlayerId === myPlayerId}
-          chooserName={currentTurnPlayer?.displayName ?? null}
-          declarerIsBot={postDeclarationHighlight.declarerIsBot}
-        />
-      )}
-
       <VoiceAudioLayer />
 
       {/*
@@ -1457,6 +1319,12 @@ export default function GamePage({ params }: PageProps) {
         message={currentLastMoveMessage}
         players={players}
       />
+      <DeclarationCardReveal
+        result={lastAskResult ? null : lastDeclareResult}
+        failure={declarationFailed}
+        players={players}
+        variant={effectiveVariant}
+      />
 
       {declareProgress && declareProgress.halfSuitId && declareProgress.declarerId !== myPlayerId && (
         <div className="relative z-10 px-4 py-2 border-b border-amber-800/40">
@@ -1502,7 +1370,6 @@ export default function GamePage({ params }: PageProps) {
                 onSeatClick={seatClickHandler}
                 askTargetPlayerIds={selectedAskCardIds.length > 0 ? validAskTargetIds : undefined}
                 onAskTargetClick={selectedAskCardIds.length > 0 ? handleAskTargetSeat : undefined}
-                declarationSeatRevealByPlayerId={declarationSeatRevealByPlayerId}
                 onOpeningDealComplete={isDealAnimating ? finishOpeningDeal : undefined}
                 renderSeatWrapper={declareSeatWrapper}
               >
@@ -1533,6 +1400,9 @@ export default function GamePage({ params }: PageProps) {
           );
         }
 
+        const handTimer = postDeclarationTimer ?? (isSelectingNextTurn ? null : turnTimer);
+        const isMyTimer = postDeclarationTimer ? isMyTurn : turnTimer?.playerId === myPlayerId;
+
         const footerContent = (
           <>
           {/*
@@ -1550,21 +1420,27 @@ export default function GamePage({ params }: PageProps) {
             {myPlayer ? (
               <div className="mx-auto flex w-full max-w-[82rem] flex-col gap-2 xl:max-w-[90rem] 2xl:max-w-[98rem]" data-testid="game-controls">
                 <div className="hand-status">
-                  {!isTurnPassMode && (
+                  {isSelectingNextTurn ? (
+                    <DeclarationTurnPassPrompt
+                      isMyTurn={isMyTurn}
+                      chooserName={currentTurnPlayer?.displayName ?? null}
+                      pending={pendingTurnPassAck}
+                    />
+                  ) : (
                     <span className="text-sm font-medium text-slate-200" role="status" data-testid={
                       !isMyTurn ? 'waiting-prompt' : declareMode ? 'declare-card-prompt' : selectedAskCardIds.length ? 'ask-seat-prompt' : 'ask-prompt'
                     }>
                       {handPrompt}
                     </span>
                   )}
-                  {turnTimer && gameState && (
+                  {handTimer && gameState && (
                     <CountdownTimer
                       className="tray-timer"
-                      key={turnTimer.expiresAt}
-                      expiresAt={turnTimer.expiresAt}
-                      durationMs={turnTimer.durationMs}
-                      isMyTimer={turnTimer.playerId === myPlayerId}
-                      label={turnTimer.playerId === myPlayerId ? 'Your turn' : 'Turn timer'}
+                      key={handTimer.expiresAt}
+                      expiresAt={handTimer.expiresAt}
+                      durationMs={handTimer.durationMs}
+                      isMyTimer={isMyTimer}
+                      label={postDeclarationTimer ? 'Choose next turn' : isMyTimer ? 'Your turn' : 'Turn timer'}
                     />
                   )}
                   {isMyTurn && !isTurnPassMode && !showAskInline && (
@@ -1617,17 +1493,6 @@ export default function GamePage({ params }: PageProps) {
                         </button>
                       </div>
                     </div>
-                  )}
-                  {/* seat-selection prompt -- replaces Ask/Declare row
-                   * while the declarant is choosing who gets the next turn. */}
-                  {isTurnPassMode && (
-                    <span
-                      className="text-xs text-cyan-300 font-medium animate-pulse"
-                      data-testid="turn-pass-action-prompt"
-                      aria-live="polite"
-                    >
-                      {pendingTurnPassAck ? '⏳ Choosing…' : '👆 Tap a highlighted teammate seat above'}
-                    </span>
                   )}
                 </div>
                 {showAskInline && isMyTurn && !isTurnPassMode && (

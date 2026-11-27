@@ -24,42 +24,31 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 // Mock CircularGameTable — avoids VoiceProvider dependency and keeps
 // spectator-view tests focused on SpectatorView behaviour.
 // Exposes spectator-player-button-{id} for god-mode click tests,
-// mock-player-seat for seat-count assertions, and mock-declaration-reveal-{id}
-// for declaration reveal tests.
+// and mock-player-seat for seat-count assertions.
 // ---------------------------------------------------------------------------
 jest.mock('@/components/CircularGameTable', () => ({
   __esModule: true,
   default: ({
     players,
     onDirectSeatClick,
-    declarationSeatRevealByPlayerId,
     children,
   }: {
     players: { playerId: string; displayName: string }[];
     onDirectSeatClick?: (playerId: string) => void;
-    declarationSeatRevealByPlayerId?: Map<string, { cardId: string }[]> | null;
     children?: React.ReactNode;
   }) => (
     <div data-testid="mock-circular-game-table">
-      {players.map((p) => {
-        const revealCards = declarationSeatRevealByPlayerId?.get(p.playerId) ?? null;
-        return (
-          <button
-            key={p.playerId}
-            data-testid={`spectator-player-button-${p.playerId}`}
-            onClick={() => onDirectSeatClick?.(p.playerId)}
-          >
-            <div data-testid="mock-player-seat" data-player-id={p.playerId}>
-              {p.displayName}
-              {revealCards && revealCards.length > 0 && (
-                <div data-testid={`mock-declaration-reveal-${p.playerId}`}>
-                  {revealCards.map(({ cardId }: { cardId: string }) => cardId).join(',')}
-                </div>
-              )}
-            </div>
-          </button>
-        );
-      })}
+      {players.map((p) => (
+        <button
+          key={p.playerId}
+          data-testid={`spectator-player-button-${p.playerId}`}
+          onClick={() => onDirectSeatClick?.(p.playerId)}
+        >
+          <div data-testid="mock-player-seat" data-player-id={p.playerId}>
+            {p.displayName}
+          </div>
+        </button>
+      ))}
       <div data-testid="game-table-center">{children}</div>
     </div>
   ),
@@ -459,15 +448,20 @@ describe('SpectatorView', () => {
           />,
         );
 
-        expect(screen.getByTestId('mock-declaration-reveal-p1')).toBeTruthy();
-        expect(screen.getByTestId('mock-declaration-reveal-p4')).toBeTruthy();
+        const reveal = within(screen.getByRole('region', { name: 'Declared cards by actual holder' }));
+        expect(reveal.getAllByRole('figure')).toHaveLength(6);
+        const ace = reveal.getByRole('img', { name: /^a of clubs$/i }).closest('figure');
+        expect(ace).toHaveTextContent('Held by Dave');
+        expect(ace?.querySelector('s')).toHaveTextContent('Alice');
+        const two = reveal.getByRole('img', { name: /^2 of clubs$/i }).closest('figure');
+        expect(two).toHaveTextContent('Held by Bob');
+        expect(two?.querySelector('s')).toBeNull();
 
         act(() => {
           jest.advanceTimersByTime(9_500);
         });
 
-        expect(screen.queryByTestId('mock-declaration-reveal-p1')).toBeNull();
-        expect(screen.queryByTestId('mock-declaration-reveal-p4')).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Declared cards by actual holder' })).toBeNull();
       } finally {
         jest.useRealTimers();
       }
