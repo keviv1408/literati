@@ -1,4 +1,4 @@
-const PUBLIC_ORIGIN = 'https://literati-ochre.vercel.app';
+const DEFAULT_PUBLIC_ORIGIN = 'https://literati-ochre.vercel.app';
 const ROOM_CODE = /^[A-Za-z0-9]{6}$/;
 const PLAYER_INVITE_URL = /^https?:\/\/[^/?#@\\\s]+\/room\/([A-Za-z0-9]{6})\/?$/;
 
@@ -10,7 +10,8 @@ export function parsePlayerInviteUrl(input: string, webOrigin?: string): string 
 
   try {
     const { origin } = new URL(value);
-    return origin === PUBLIC_ORIGIN || origin === webOrigin ? match[1].toUpperCase() : null;
+    const publicOrigin = process.env.FRONTEND_URL || DEFAULT_PUBLIC_ORIGIN;
+    return origin === publicOrigin || origin === webOrigin ? match[1].toUpperCase() : null;
   } catch {
     return null;
   }

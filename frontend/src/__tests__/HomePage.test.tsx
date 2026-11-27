@@ -85,15 +85,19 @@ describe('Home wake-up notice', () => {
 
 describe('Home entry points', () => {
   const originalFetch = global.fetch;
+  const originalEnv = process.env;
 
   beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.FRONTEND_URL;
+    delete process.env.NEXT_PUBLIC_BUILD_TARGET;
     global.fetch = jest.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch;
     jest.clearAllMocks();
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
-    delete process.env.NEXT_PUBLIC_BUILD_TARGET;
+    process.env = originalEnv;
   });
 
   it('offers a clear way to create a private room', () => {
@@ -130,6 +134,28 @@ describe('Home entry points', () => {
     _submitJoin('https://literati-ochre.vercel.app/room/abc123');
 
     expect(mockPush).toHaveBeenCalledWith('/?room=ABC123');
+  });
+
+  it('opens a player invite from the configured Android deployment', () => {
+    process.env.NEXT_PUBLIC_BUILD_TARGET = 'android';
+    process.env.FRONTEND_URL = 'https://cards.example.org:8443';
+    render(<Home />);
+
+    _submitJoin('https://cards.example.org:8443/room/abc123');
+    expect(mockPush).toHaveBeenCalledWith('/?room=ABC123');
+  });
+
+  it.each([
+    'https://cards.example.org/room/ABC123',
+    'https://cards.example.org.evil.example:8443/room/ABC123',
+    'http://localhost/room/ABC123',
+  ])('rejects an invite outside the configured Android origin: %s', (invite) => {
+    process.env.NEXT_PUBLIC_BUILD_TARGET = 'android';
+    process.env.FRONTEND_URL = 'https://cards.example.org:8443';
+    render(<Home />);
+
+    expect(_submitJoin(invite)).toHaveAttribute('aria-invalid', 'true');
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it.each([

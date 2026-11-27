@@ -642,7 +642,7 @@ describe('GET /api/rooms/:code', () => {
       error: null,
     });
 
-    process.env.FRONTEND_URL = 'https://literati-ochre.vercel.app';
+    process.env.FRONTEND_URL = 'https://cards.example.org:8443/';
 
     const res = await request(app).get('/api/rooms/ABCDEF');
 
@@ -653,7 +653,7 @@ describe('GET /api/rooms/:code', () => {
     // spectator_token is NOT in GET response (security)
     expect(res.body.room).not.toHaveProperty('spectator_token');
     expect(res.body.room.players).toEqual([]);
-    expect(res.body.inviteLink).toBe('https://literati-ochre.vercel.app/room/ABCDEF');
+    expect(res.body.inviteLink).toBe('https://cards.example.org:8443/room/ABCDEF');
     expect(res.body).not.toHaveProperty('spectatorLink');
   });
 

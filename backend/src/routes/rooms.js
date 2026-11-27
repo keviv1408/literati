@@ -46,7 +46,7 @@ function isRoomHost(room, user) {
 
 function _inviteLink(code) {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  return `${frontendUrl}/room/${code}`;
+  return new URL(`/room/${code}`, frontendUrl).href;
 }
 
 /**
