@@ -69,7 +69,7 @@ describe('POST /api/rooms', () => {
 
   it('finds the authenticated host lobby without any client hints', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
-    mockSupabase._chain.limit.mockResolvedValue({ data: [{ code: 'ABC123', status: 'waiting' }] });
+    mockSupabase._chain.order.mockResolvedValue({ data: [{ code: 'ABC123', status: 'waiting' }] });
 
     const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [] });
 
@@ -81,6 +81,7 @@ describe('POST /api/rooms', () => {
   it('returns a saved bot-covered seat only to its original player', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
     const chain = mockSupabase._chain;
+    chain.order.mockResolvedValue({ data: [] });
     chain.eq.mockImplementation((column) => {
       if (column === 'is_matchmaking') return Promise.resolve({ data: [{ code: 'ABC123', status: 'in_progress' }] });
       if (column === 'status') return Promise.resolve({ data: [{ code: 'ABC123', game_state: {
@@ -100,7 +101,7 @@ describe('POST /api/rooms', () => {
     const hosted = { code: 'HOST01', status };
     const joined = { code: 'JOIN02', status: 'in_progress' };
     const chain = mockSupabase._chain;
-    chain.limit.mockResolvedValue({ data: [hosted] });
+    chain.order.mockResolvedValue({ data: [hosted] });
     chain.eq.mockImplementation((column) => {
       if (column === 'is_matchmaking') return Promise.resolve({ data: [hosted, joined] });
       if (column === 'status') return Promise.resolve({ data: [
@@ -118,9 +119,30 @@ describe('POST /api/rooms', () => {
     });
   });
 
+  it('offers an older transferred lobby alongside a newer hosted game without client hints', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
+    const game = { code: 'GAME01', status: 'in_progress' };
+    const lobby = { code: 'LOBBY2', status: 'waiting' };
+    const chain = mockSupabase._chain;
+    chain.order.mockResolvedValue({ data: [game, lobby] });
+    chain.eq.mockImplementation((column) => {
+      if (column === 'is_matchmaking') return Promise.resolve({ data: [lobby, game] });
+      if (column === 'status') return Promise.resolve({ data: [
+        { code: game.code, game_state: { status: 'active', players: [{ playerId: 'owner' }] } },
+      ] });
+      return chain;
+    });
+
+    const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [] });
+
+    expect(chain.in).toHaveBeenCalledWith('code', [game.code, lobby.code]);
+    expect(response.body).toEqual({ room: { code: game.code, destination: 'game' }, hosting: true, hostedLobby: lobby.code });
+  });
+
   it('rejects a waiting lobby hint without current or previous seating', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'spectator' } } });
     const chain = mockSupabase._chain;
+    chain.order.mockResolvedValue({ data: [] });
     chain.eq.mockImplementation((column) => column === 'is_matchmaking'
       ? Promise.resolve({ data: [{ code: 'ABC123', status: 'waiting', player_count: 6 }] })
       : chain);

@@ -77,11 +77,11 @@ const ROOM_STATUS = {
   CANCELLED: 'cancelled',
 };
 
-function _activeHostedRoom(db, user) {
+function _activeHostedRooms(db, user) {
   return db.from('rooms').select('id, code, status')
     .eq(user.isGuest ? 'host_guest_id' : 'host_user_id', getPlayerIdentifier(user))
     .in('status', [ROOM_STATUS.WAITING, ROOM_STATUS.STARTING, ROOM_STATUS.IN_PROGRESS])
-    .order('created_at', { ascending: false }).limit(1);
+    .order('created_at', { ascending: false });
 }
 
 router.post('/:code/abandon', requireAuth, async (req, res) => {
@@ -108,13 +108,13 @@ router.post('/return', requireAuth, async (req, res) => {
   const playerId = getPlayerIdentifier(req.user);
   const recoveryKey = req.user.isGuest && getGuestSession(extractBearerToken(req))?.recoveryKey;
   try {
-    const { data, error } = await _activeHostedRoom(db, req.user);
+    const { data: hosted, error } = await _activeHostedRooms(db, req.user);
     if (error) throw error;
-    const hosted = data?.[0];
-    const hosting = Boolean(hosted);
-    const candidates = [...new Set(hosted ? [...codes, hosted.code] : codes)].filter(code => !isBlocked(code, playerId));
-    if (hosted && candidates[0] === hosted.code && hosted.status !== ROOM_STATUS.IN_PROGRESS) {
-      return res.json({ room: { code: hosted.code, destination: 'lobby' }, hosting });
+    const hosting = hosted.length > 0;
+    const candidates = [...new Set([...codes, ...hosted.map(room => room.code)])].filter(code => !isBlocked(code, playerId));
+    const firstHosted = hosted.find(room => room.code === candidates[0]);
+    if (firstHosted && firstHosted.status !== ROOM_STATUS.IN_PROGRESS) {
+      return res.json({ room: { code: firstHosted.code, destination: 'lobby' }, hosting });
     }
     if (!candidates.length) return res.json({ room: null, hosting });
 
@@ -123,8 +123,8 @@ router.post('/return', requireAuth, async (req, res) => {
       .eq('is_matchmaking', false);
     if (rooms.error) throw rooms.error;
     const byCode = new Map(rooms.data.map(room => [room.code, room]));
-    const hostedRoom = byCode.get(hosted?.code);
-    const hostedLobby = hostedRoom && hostedRoom.status !== ROOM_STATUS.IN_PROGRESS ? hostedRoom.code : null;
+    const hostedLobby = hosted.map(room => byCode.get(room.code))
+      .find(room => room && room.status !== ROOM_STATUS.IN_PROGRESS)?.code;
     const games = new Map();
     const cold = [];
     for (const room of rooms.data) {
@@ -300,7 +300,7 @@ router.post('/', roomCreationLimiter, requireAuth, async (req, res) => {
   // A host may not create a new room while they have an existing room that is
   // waiting, starting, or in progress.
   try {
-    const { data: activeRooms, error: existingError } = await _activeHostedRoom(supabase, req.user);
+    const { data: activeRooms, error: existingError } = await _activeHostedRooms(supabase, req.user).limit(1);
 
     if (existingError) {
       console.error('Error checking existing rooms:', existingError);
