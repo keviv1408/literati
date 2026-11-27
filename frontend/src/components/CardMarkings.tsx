@@ -38,7 +38,7 @@ export default function CardMarkings({ rank, suit }: { rank: string; suit: CardS
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300" preserveAspectRatio="none"
       width="100%" height="100%" fill={ink} data-rank={rank} aria-hidden="true">
-      <title>{rank} {SUIT_SYMBOLS[suit]}</title>
+      <title>{`${rank} ${SUIT_SYMBOLS[suit]}`}</title>
       {corner}
       <g transform="translate(200 300) rotate(180)">{corner}</g>
       {rank === '7' && sevenPips.map(([x, y]) => (

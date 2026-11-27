@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useGuest } from '@/contexts/GuestContext';
 import { API_URL } from '@/lib/api';
+import ShortTutorial from '@/components/ShortTutorial';
 import CreateRoomModal from '@/components/CreateRoomModal';
 
 const emptySubscribe = () => () => {};
@@ -62,13 +63,16 @@ export default function Home() {
       </div>
 
       {/* Hero */}
-      <main className="relative z-10 flex flex-col items-center text-center max-w-lg w-full gap-8">
+      <main className="relative z-10 flex flex-col items-center text-center max-w-lg w-full gap-6 py-10 sm:gap-8">
         <div className="space-y-2">
-          <h1 className="text-6xl font-black text-white tracking-tight">
-            Literati
+          <h1 className="flex items-center justify-center gap-3 text-[clamp(2.8rem,9vw,4.2rem)] leading-none font-bold tracking-[-0.045em] text-white" style={{ fontFamily: 'Georgia, serif' }}>
+            <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" className="size-[.9em] shrink-0">
+              <use href="/icons/high-diamond.svg#diamond" />
+            </svg>
+            Literature
           </h1>
-          <p className="text-emerald-300 text-lg">
-            The classic Half-Suit card game — online, real-time, free.
+          <p className="mt-4 text-emerald-200 text-base sm:text-lg">
+            Remember who took the card. Ask for it back.
           </p>
         </div>
 
@@ -91,7 +95,7 @@ export default function Home() {
         )}
 
         {/* Action buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full">
+        <div className="flex flex-col gap-3 w-full">
           <button
             onClick={handlePrivateRoom}
             className="
@@ -109,6 +113,7 @@ export default function Home() {
               </span>
             </span>
           </button>
+          <ShortTutorial returnTo="home" />
         </div>
 
         {isWakingServer && (
@@ -124,7 +129,7 @@ export default function Home() {
         {/* Feature pills */}
         <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-400">
           {[
-            '6–8 Players',
+            '6 or 8 Players',
             'Smart Bots',
             'No Account Required',
           ].map((f) => (
@@ -136,70 +141,10 @@ export default function Home() {
             </span>
           ))}
         </div>
+        <a href="/tutorial" className="rounded px-3 py-2 text-sm text-emerald-200 underline underline-offset-4 hover:text-white focus-visible:outline-2">
+          Play the full interactive tutorial
+        </a>
       </main>
-
-      {/* How to Play */}
-      <section className="relative z-10 w-full max-w-2xl mt-16 mb-12 px-4">
-        <h2 className="text-2xl font-bold text-white text-center mb-6">
-          How to Play Literature
-        </h2>
-
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 mb-4">
-          <p className="text-sm text-emerald-300 font-semibold mb-3">
-            Watch this quick tutorial to learn how to play
-          </p>
-          <div className="relative overflow-hidden rounded-xl border border-slate-600/70">
-            <iframe
-              className="w-full h-[280px] sm:h-[360px] lg:h-[420px]"
-              src="https://www.youtube.com/embed/LXFpcZytpQc"
-              title="How to Play Literature tutorial video"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              referrerPolicy="strict-origin-when-cross-origin"
-              allowFullScreen
-            />
-          </div>
-          <a
-            href="/tutorial"
-            className="
-              mt-3 flex w-full items-center justify-center rounded-xl
-              bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
-              px-4 py-3 text-white shadow-lg shadow-emerald-900/50
-              transition-all duration-150 active:scale-[0.98]
-              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
-            "
-          >
-            <span className="flex flex-col items-center leading-tight">
-              <span className="font-bold">🎓 Begin Interactive Tutorial</span>
-              <span className="text-xs font-medium text-emerald-100/90 mt-1">
-                Walk through a 6-player hand with every card face up
-              </span>
-            </span>
-          </a>
-        </div>
-
-        {/* The Basics */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 mb-4">
-          <h3 className="text-lg font-semibold text-emerald-300 mb-3">The Basics</h3>
-          <ul className="space-y-2 text-sm text-slate-300">
-            <li><span className="text-emerald-400 font-medium">Teams:</span> 6 players split into two teams of 3 (or 8 players, 4v4).</li>
-            <li><span className="text-emerald-400 font-medium">Cards:</span> A standard deck with 7s removed, leaving 48 cards. Each suit is split into a <span className="text-white font-medium">low half</span> (A-6) and a <span className="text-white font-medium">high half</span> (8-K) &mdash; these are called <span className="text-white font-medium">half-suits</span>.</li>
-            <li><span className="text-emerald-400 font-medium">Goal:</span> Collect all 6 cards of a half-suit across your team and <span className="text-white font-medium">declare</span> it to score a point. First team to score 5 (of 8) half-suits wins.</li>
-          </ul>
-        </div>
-
-        {/* On Your Turn */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 mb-4">
-          <h3 className="text-lg font-semibold text-emerald-300 mb-3">On Your Turn</h3>
-          <ul className="space-y-2 text-sm text-slate-300">
-            <li><span className="text-emerald-400 font-medium">Ask:</span> Pick an opponent and ask for a specific card. You must hold at least one card from that half-suit before asking for another card from it.</li>
-            <li><span className="text-emerald-400 font-medium">If they have it:</span> They hand it over and you go again.</li>
-            <li><span className="text-emerald-400 font-medium">If they don&apos;t:</span> Your turn ends and the turn passes to them.</li>
-            <li><span className="text-emerald-400 font-medium">Declare:</span> You can declare a half-suit by stating which teammate holds each of the six cards. If correct, your team scores; if wrong, the other team scores.</li>
-            <li><span className="text-emerald-400 font-medium">Pass the chance:</span> After finishing a set, you can give the next turn to a teammate who is being blocked or who has a better read on the opponents&apos; cards so they can keep collecting and complete another half-suit.</li>
-          </ul>
-        </div>
-
-      </section>
 
       {/* Create Room modal — shown after guest name is confirmed */}
       {mounted && guestSession && (

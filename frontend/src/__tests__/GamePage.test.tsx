@@ -584,13 +584,14 @@ describe('GamePage — completed room', () => {
     await waitFor(() => {
       expect(screen.getByTestId('game-completed-view')).toBeTruthy();
     });
-    expect(screen.getByText('Game Over')).toBeTruthy();
+    expect(await screen.findByRole('heading', {name: /team 1 wins/i})).toBeTruthy();
     await waitFor(() => {
       expect(mockGetGameSummary).toHaveBeenCalledWith('ABC123');
     });
   });
 
-  it('shows final score as 0-0 when no game state is available', async () => {
+  it('waits for the final score before announcing a result', async () => {
+    mockGetGameSummary.mockReturnValue(new Promise(() => {}));
     mockGetRoomByCode.mockResolvedValue({ room: buildRoom('completed') });
 
     render(<GamePage params={makeParams('ABC123')} />);
@@ -598,10 +599,9 @@ describe('GamePage — completed room', () => {
     await waitFor(() => {
       expect(screen.getByTestId('game-completed-view')).toBeTruthy();
     });
-    // Score display: GameOverScreen shows score-team1 and score-team2 elements
-    expect(screen.getByTestId('final-score')).toBeTruthy();
-    expect(screen.getByTestId('score-team1')).toBeTruthy();
-    expect(screen.getByTestId('score-team2')).toBeTruthy();
+    expect(screen.getByText('Waiting for the final score…')).toBeTruthy();
+    expect(screen.queryByTestId('final-score')).toBeNull();
+    expect(screen.queryByTestId('result-tie')).toBeNull();
   });
 
   it('falls back to game summary data for final score and half-suit tally', async () => {
