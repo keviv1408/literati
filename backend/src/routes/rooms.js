@@ -84,6 +84,13 @@ function _activeHostedRooms(db, user) {
     .order('created_at', { ascending: false });
 }
 
+function _withLiveRoomStatus(room) {
+  if (room.status === ROOM_STATUS.STARTING && getGame(room.code)?.status === 'active') {
+    return { ...room, status: ROOM_STATUS.IN_PROGRESS };
+  }
+  return room;
+}
+
 router.post('/:code/abandon', requireAuth, async (req, res) => {
   const code = req.params.code.toUpperCase();
   if (!/^[A-Z0-9]{6}$/.test(code)) return res.status(400).json({ error: 'Invalid room code' });
@@ -118,12 +125,12 @@ router.post('/return', requireAuth, async (req, res) => {
       .in('code', candidates).in('status', [ROOM_STATUS.WAITING, ROOM_STATUS.STARTING, ROOM_STATUS.IN_PROGRESS])
       .eq('is_matchmaking', false);
     if (rooms.error) throw rooms.error;
-    const byCode = new Map(rooms.data.map(room => [room.code, room]));
+    const byCode = new Map(rooms.data.map(room => [room.code, _withLiveRoomStatus(room)]));
     const hostedLobby = hosted.map(room => byCode.get(room.code))
       .find(room => room && room.status !== ROOM_STATUS.IN_PROGRESS)?.code;
     const games = new Map();
     const cold = [];
-    for (const room of rooms.data) {
+    for (const room of byCode.values()) {
       if (room.status !== ROOM_STATUS.IN_PROGRESS) continue;
       const game = getGame(room.code);
       if (game) games.set(room.code, game);
@@ -461,7 +468,7 @@ router.get('/:code', async (req, res) => {
 
     const { getRoomPlayers } = require('../ws/roomSocketServer');
     return res.status(200).json({
-      room: { ...room, players: getRoomPlayers(room.code) },
+      room: { ..._withLiveRoomStatus(room), players: getRoomPlayers(room.code) },
       inviteLink: _inviteLink(room.code),
     });
   } catch (err) {

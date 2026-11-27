@@ -6,6 +6,40 @@
 
 const request = require('supertest');
 const { _setSupabaseClient } = require('../db/supabase');
+const { setGame, deleteGame } = require('../game/gameStore');
+const roomsApp = require('../index');
+
+describe('returning while the first game snapshot is pending', () => {
+  const code = 'START1';
+
+  afterEach(() => deleteGame(code));
+
+  it('switches Home and the game page to the live game as soon as the seats exist', async () => {
+    const db = buildMockSupabase();
+    _setSupabaseClient(db);
+    db.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
+    const room = { code, status: 'starting', player_count: 6 };
+    const chain = db._chain;
+    chain.order.mockResolvedValue({ data: [room] });
+    chain.maybeSingle.mockResolvedValue({ data: room });
+    chain.eq.mockImplementation(column => column === 'is_matchmaking' ? Promise.resolve({ data: [room] }) : chain);
+    const returnFromHome = () => request(roomsApp).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [code] });
+    const loadPage = () => request(roomsApp).get(`/api/rooms/${code}`);
+
+    expect((await returnFromHome()).body).toEqual({ room: { code, destination: 'lobby' }, hosting: true });
+    expect((await loadPage()).body.room.status).toBe('starting');
+
+    setGame(code, { status: 'active', players: [{ playerId: 'owner' }] });
+
+    expect((await returnFromHome()).body).toEqual({ room: { code, destination: 'game' }, hosting: true });
+    expect((await loadPage()).body.room.status).toBe('in_progress');
+    expect(chain.select).not.toHaveBeenCalledWith('code, game_state');
+
+    db.auth.getUser.mockResolvedValue({ data: { user: { id: 'visitor' } } });
+    chain.order.mockResolvedValue({ data: [] });
+    expect((await returnFromHome()).body).toEqual({ room: null, hosting: false });
+  });
+});
 
 // We need to set the mock BEFORE requiring the app, because the app and
 // routes import supabase at module load time via getSupabaseClient().
