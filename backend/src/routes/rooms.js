@@ -112,10 +112,10 @@ router.post('/return', requireAuth, async (req, res) => {
     if (error) throw error;
     const hosted = data?.[0];
     const hosting = Boolean(hosted);
-    if (hosted && !isBlocked(hosted.code, playerId) && hosted.status !== ROOM_STATUS.IN_PROGRESS) {
+    const candidates = [...new Set(hosted ? [...codes, hosted.code] : codes)].filter(code => !isBlocked(code, playerId));
+    if (hosted && candidates[0] === hosted.code && hosted.status !== ROOM_STATUS.IN_PROGRESS) {
       return res.json({ room: { code: hosted.code, destination: 'lobby' }, hosting });
     }
-    const candidates = [...new Set(hosted ? [hosted.code, ...codes] : codes)].filter(code => !isBlocked(code, playerId));
     if (!candidates.length) return res.json({ room: null, hosting });
 
     const rooms = await db.from('rooms').select('code, status, player_count')
@@ -123,6 +123,8 @@ router.post('/return', requireAuth, async (req, res) => {
       .eq('is_matchmaking', false);
     if (rooms.error) throw rooms.error;
     const byCode = new Map(rooms.data.map(room => [room.code, room]));
+    const hostedRoom = byCode.get(hosted?.code);
+    const hostedLobby = hostedRoom && hostedRoom.status !== ROOM_STATUS.IN_PROGRESS ? hostedRoom.code : null;
     const games = new Map();
     const cold = [];
     for (const room of rooms.data) {
@@ -141,15 +143,16 @@ router.post('/return', requireAuth, async (req, res) => {
     for (const code of candidates) {
       const room = byCode.get(code);
       if (!room) continue;
+      const otherLobby = hostedLobby && hostedLobby !== code ? { hostedLobby } : {};
       if (room.status === ROOM_STATUS.IN_PROGRESS) {
         const game = games.get(code);
         if (game?.status === 'active' && findReturningSeat(game.players, playerId, recoveryKey)) {
-          return res.json({ room: { code, destination: 'game' }, hosting });
+          return res.json({ room: { code, destination: 'game' }, hosting, ...otherLobby });
         }
       } else {
         const clients = roomClients.get(code);
-        if (clients?.has(playerId) || (recentlyLeftLobby(playerId, code) && (clients?.size ?? 0) < room.player_count)) {
-          return res.json({ room: { code, destination: 'lobby' }, hosting });
+        if (code === hostedLobby || clients?.has(playerId) || (recentlyLeftLobby(playerId, code) && (clients?.size ?? 0) < room.player_count)) {
+          return res.json({ room: { code, destination: 'lobby' }, hosting, ...otherLobby });
         }
       }
     }

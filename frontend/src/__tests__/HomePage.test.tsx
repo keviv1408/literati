@@ -185,6 +185,19 @@ describe('Home room recovery', () => {
     expect(mockPush).toHaveBeenCalledWith('/game/ABC123');
   });
 
+  it('offers both the recent game and the distinct owned lobby', async () => {
+    mockGetReturningRoom.mockResolvedValue({
+      room: { code: 'JOIN02', destination: 'game' }, hosting: true, hostedLobby: 'HOST01',
+    });
+    render(<Home />);
+    expect(await screen.findByRole('button', { name: /Return to game · JOIN02/ })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Create Private Room/ })).toBeNull();
+    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: /Return to hosted lobby · HOST01/ }));
+    expect(mockPush).toHaveBeenCalledWith('/room/HOST01');
+    confirm.mockRestore();
+  });
+
   it('keeps the room usable during refresh and ignores a superseded response', async () => {
     jest.useFakeTimers();
     try {

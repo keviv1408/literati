@@ -28,7 +28,7 @@ export default function Home() {
   const [invalidRoomInput, setInvalidRoomInput] = useState(false);
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
-  const [check, setCheck] = useState<{ identity: string; room: ReturningRoom | null; hosting: boolean; failed?: boolean } | null>(null);
+  const [check, setCheck] = useState<{ identity: string; room: ReturningRoom | null; hosting: boolean; hostedLobby?: string; failed?: boolean } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [createAfterCheck, setCreateAfterCheck] = useState(false);
   const identity = guestSession?.sessionId;
@@ -36,6 +36,7 @@ export default function Home() {
   const current = check?.identity === identity ? check : null;
   const returning = current?.room;
   const checking = Boolean(identity && !current);
+  const hostedLobby = current?.hostedLobby;
 
   useEffect(() => {
     if (!identity || !displayName) return;
@@ -50,10 +51,10 @@ export default function Home() {
       clearTimeout(timer);
       try {
         const codes = recentPlayerRoomCodes().filter(code => !isKickedFromRoom(code));
-        const { room, hosting } = await getReturningRoom(session.displayName, session.identity, codes);
+        const { room, hosting, hostedLobby } = await getReturningRoom(session.displayName, session.identity, codes);
         if (request !== latest) return;
         hasResult = true;
-        setCheck({ identity: session.identity, room, hosting });
+        setCheck({ identity: session.identity, room, hosting, hostedLobby });
         if (room || hosting) timer = setTimeout(refreshWhenVisible, 15000);
       } catch {
         if (request !== latest) return;
@@ -184,6 +185,16 @@ export default function Home() {
               className="rounded-xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white hover:bg-emerald-500"
             >
               Return to {returning.destination} · {returning.code}
+            </button>
+          )}
+          {hostedLobby && (
+            <button
+              onClick={() => {
+                if (window.confirm('Return to your hosted lobby and leave your current seat?')) router.push(roomPath(hostedLobby));
+              }}
+              className="rounded-xl border border-emerald-700 px-6 py-3 font-semibold text-emerald-100 hover:bg-emerald-900"
+            >
+              Return to hosted lobby · {hostedLobby}
             </button>
           )}
           {current?.failed && (
