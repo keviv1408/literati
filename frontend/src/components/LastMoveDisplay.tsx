@@ -90,6 +90,10 @@ function renderName(name: string, nameToTeam: Map<string, 1 | 2>) {
   return <span className={teamNameClass(nameToTeam.get(name))}>{name}</span>;
 }
 
+function _askMark(received: boolean) {
+  return <span aria-hidden="true" className="ask-result-mark" data-ask-result={received ? 'received' : 'denied'} />;
+}
+
 function renderStyledMessage(
   message: string,
   nameToTeam: Map<string, 1 | 2>,
@@ -106,10 +110,10 @@ function renderStyledMessage(
         {renderCardText(requestedCards)}
         <span className="text-slate-600"> — </span>
         <span className="text-emerald-700 font-semibold">got </span>
-        {renderCardText(gotCards)}
+        {renderCardText(gotCards)}{_askMark(true)}
         <span className="text-slate-600">; </span>
         <span className="text-rose-700 font-semibold">denied </span>
-        {renderCardText(deniedCards)}
+        {renderCardText(deniedCards)}{_askMark(false)}
       </>
     );
   }
@@ -117,7 +121,8 @@ function renderStyledMessage(
   const askMatch = message.match(/^(.*?) asked (.*?) for (.*?) — (got it|got them|denied)$/);
   if (askMatch) {
     const [, asker, target, requestedCards, outcome] = askMatch;
-    const outcomeClass = outcome === 'got it' || outcome === 'got them'
+    const received = outcome !== 'denied';
+    const outcomeClass = received
       ? 'text-emerald-700 font-semibold'
       : 'text-rose-700 font-semibold';
     return (
@@ -128,7 +133,7 @@ function renderStyledMessage(
         <span className="text-slate-700"> for </span>
         {renderCardText(requestedCards)}
         <span className="text-slate-600"> — </span>
-        <span className={outcomeClass}>{outcome}</span>
+        <span className={`${outcomeClass} whitespace-nowrap`}>{outcome}{_askMark(received)}</span>
       </>
     );
   }
@@ -196,7 +201,7 @@ export default function LastMoveDisplay({
   }
   return (
     <div
-      className="relative z-10 flex items-center justify-center px-4 py-3 bg-slate-100/95 border-b border-slate-300/90 text-base sm:text-lg md:text-xl leading-tight text-slate-800 font-medium shadow-sm"
+      className="last-move-band relative z-10 flex items-center justify-center px-4 py-3 bg-slate-100/95 border-b border-slate-300/90 text-base sm:text-lg md:text-xl leading-tight text-slate-800 font-medium shadow-sm"
       aria-live="polite"
       aria-label="Last move"
       data-testid={testId}
