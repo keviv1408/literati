@@ -345,7 +345,7 @@ function getRoomPlayers(roomCode) {
  * @param {string} roomCode
  * @param {string} currentHostId
  */
-function _startHostTransferTimer(roomCode, currentHostId) {
+function _startHostTransferTimer(roomCode, currentHostId, currentHostIsGuest = false) {
   // Don't double-start.
   if (hostTransferTimers.has(roomCode)) return;
 
@@ -369,7 +369,7 @@ function _startHostTransferTimer(roomCode, currentHostId) {
     (code) => {
       hostTransferTimers.delete(code);
       broadcast(code, { type: 'host_timeout', roomCode: code });
-      _executeHostTransfer(code).catch((err) => {
+      _executeHostTransfer(code, currentHostId, currentHostIsGuest).catch((err) => {
         console.error(`[RoomWS] Host transfer error for room "${code}":`, err.message);
       });
     },
@@ -406,59 +406,45 @@ function _cancelHostTransferTimer(roomCode) {
   console.log(`[RoomWS] Host-disconnect timer cancelled for room "${roomCode}".`);
 }
 
-/**
- * Execute host authority transfer for `roomCode`.
- *
- * Called when the host-transfer timer expires with no reconnect.
- *
- * Algorithm:
- * 1. Select the first remaining player in Map insertion order as new host.
- * 2. Set `isHost = false` on every existing in-memory entry.
- * 3. Set `isHost = true` on the selected entry.
- * 4. Persist the new host to `host_user_id` or `host_guest_id` (best-effort).
- * 5. Broadcast `host_changed` to notify all clients of the new authority.
- * 6. Broadcast `room_players` so all isHost badges refresh.
- *
- * If no players remain the function is a silent no-op.
- *
- * @param {string} roomCode
- * @returns {Promise<void>}
- */
-async function _executeHostTransfer(roomCode) {
+async function _executeHostTransfer(roomCode, previousHostId = null, previousHostIsGuest = false) {
   const clients = roomClients.get(roomCode);
-  if (!clients || clients.size === 0) {
-    console.log(`[RoomWS] Host transfer skipped — room "${roomCode}" has no remaining players.`);
+  if (!clients?.size) return;
+  const [candidateId, candidate] = clients.entries().next().value;
+  let newHostId = candidateId;
+  let newHostIsGuest = candidate.isGuest;
+  try {
+    let query = getSupabase().from('rooms').update(hostColumns(candidateId, candidate.isGuest))
+      .eq('code', roomCode).eq('status', 'waiting').eq('is_matchmaking', false);
+    query = previousHostId
+      ? query.eq(previousHostIsGuest ? 'host_guest_id' : 'host_user_id', previousHostId)
+      : query.is('host_user_id', null).is('host_guest_id', null);
+    const { data, error } = await query.select('code').maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      // An earlier transfer may have committed even though its response was lost.
+      const current = await getSupabase().from('rooms').select('status, host_user_id, host_guest_id')
+        .eq('code', roomCode).maybeSingle();
+      if (current.error) throw current.error;
+      if (current.data?.status !== 'waiting') return;
+      newHostId = storedHostId(current.data);
+      newHostIsGuest = Boolean(current.data.host_guest_id);
+    }
+  } catch (err) {
+    console.error('[RoomWS] Host transfer failed:', roomCode, err.message);
+    if (roomClients.get(roomCode) === clients && clients.size && !_hasConnectedHost(clients)) {
+      _startHostTransferTimer(roomCode, previousHostId, previousHostIsGuest);
+    }
     return;
   }
 
-  // Pick the first remaining player in insertion order as the new host.
-  const [newHostId, newHostEntry] = Array.from(clients.entries())[0];
-
-  // Clear all existing host flags then promote the selected player.
-  for (const entry of clients.values()) {
-    entry.isHost = false;
+  if (roomClients.get(roomCode) !== clients || !clients.size) return;
+  for (const [id, entry] of clients) entry.isHost = id === newHostId;
+  const newHostEntry = clients.get(newHostId);
+  if (!newHostEntry) {
+    _startHostTransferTimer(roomCode, newHostId, newHostIsGuest);
+    return;
   }
-  newHostEntry.isHost = true;
-
-  console.log(
-    `[RoomWS] Host authority transferred in room "${roomCode}" → ` +
-    `userId="${newHostId}" displayName="${newHostEntry.displayName}".`,
-  );
-
-  // Persist to Supabase (best-effort; log but do not throw on failure).
-  try {
-    const supabase = getSupabase();
-    const { error } = await supabase
-      .from('rooms')
-      .update(hostColumns(newHostId, newHostEntry.isGuest))
-      .eq('code', roomCode)
-      .eq('status', 'waiting');
-    if (error) {
-      console.error(`[RoomWS] Supabase host-transfer update failed for room "${roomCode}":`, error.message);
-    }
-  } catch (err) {
-    console.error(`[RoomWS] Supabase host-transfer exception for room "${roomCode}":`, err.message);
-  }
+  _cancelHostTransferTimer(roomCode);
 
   // Notify all connected clients of the authority change.
   broadcast(roomCode, {
@@ -1975,7 +1961,7 @@ function attachRoomSocketServer(httpServer) {
 
     // A restart drops every socket without a close, so a lobby can come back with no host and no timer.
     if (!isMatchmakingRoom && !_hasConnectedHost(clients)) {
-      _startHostTransferTimer(roomCode, storedHostId(dbRoom));
+      _startHostTransferTimer(roomCode, storedHostId(dbRoom), Boolean(dbRoom.host_guest_id));
     }
 
     // ── Notify rematch gathering countdown ─────────────────────
@@ -2152,7 +2138,7 @@ function attachRoomSocketServer(httpServer) {
         // a grace-period timer so that a reconnect within the window cancels
         // the transfer. Matchmaking rooms have no host concept.
         if (wasHost && !isMatchmakingRoom) {
-          _startHostTransferTimer(roomCode, userId);
+          _startHostTransferTimer(roomCode, userId, entry.isGuest);
         }
       } else {
         // Clean up empty entries and any pending timers.

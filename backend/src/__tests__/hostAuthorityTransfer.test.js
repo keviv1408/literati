@@ -68,12 +68,15 @@ function makeFakeWs(isOpen = true) {
 // ---------------------------------------------------------------------------
 
 function buildMockSupabase({ updateError = null } = {}) {
-  const result = { data: null, error: updateError };
+  const result = { data: updateError ? null : { code: 'XFER01' }, error: updateError };
   const filterChain = {
     then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
   };
   const eqFn    = jest.fn().mockReturnValue(filterChain);
   filterChain.eq = eqFn;
+  filterChain.is = eqFn;
+  filterChain.select = jest.fn().mockReturnValue(filterChain);
+  filterChain.maybeSingle = jest.fn().mockResolvedValue(result);
   const updateFn = jest.fn().mockReturnValue({ eq: eqFn });
   const fromFn   = jest.fn().mockReturnValue({ update: updateFn });
 
@@ -274,7 +277,14 @@ describe('_executeHostTransfer', () => {
       { userId: 'surviving', displayName: 'Survivor', isHost: false, isGuest: false, teamId: 1 },
     ]);
 
-    await expect(_executeHostTransfer(ROOM)).resolves.toBeUndefined();
+    await _executeHostTransfer(ROOM, 'disconnected-host', true);
+    expect(roomClients.get(ROOM).get('surviving').isHost).toBe(false);
+    expect(getAllSentMessages(ROOM).some(m => m.type === 'host_changed')).toBe(false);
+    expect(hostTransferTimers.has(ROOM)).toBe(true);
+    expect(errorSupabase._eq).toHaveBeenCalledWith('host_guest_id', 'disconnected-host');
+    _setSupabaseClientFactory(() => mockSupabase);
+    await jest.advanceTimersByTimeAsync(HOST_RECONNECT_WINDOW_MS);
+    expect(roomClients.get(ROOM).get('surviving').isHost).toBe(true);
   });
 
   it('8. broadcasts to spectators as well as players', async () => {
