@@ -154,7 +154,7 @@ test('a host whose session the server forgot comes back as the same player', asy
   expect(loads, 'the page reloaded').toBe(0);
 });
 
-test('only the host sees Start', async ({ page, browser }) => {
+test('only the host sees Start and starting brings a practicing guest into the game', async ({ page, browser }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Private Room/ }).click();
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
@@ -177,6 +177,22 @@ test('only the host sees Start', async ({ page, browser }) => {
   await expect(guest.getByTestId('waiting-for-host')).toHaveText('Waiting for E2E Host to start the game');
   await expect(guest.getByTestId('start-game-btn')).toHaveCount(0);
 
+  const roomUrl = guest.url();
+  await guest.getByRole('button', { name: /Try a turn/ }).click();
+  const welcome = guest.getByRole('dialog', { name: 'Literature: a game of memory and fun' });
+  await expect(welcome.getByRole('button', { name: 'Try an ask' })).toBeFocused();
+  await expect(welcome.getByText('Win the most sets.', { exact: true })).toBeVisible();
+  await expect(welcome.getByRole('button')).toHaveCount(2);
+  await welcome.getByRole('button', { name: 'Try an ask' }).click();
+  const practice = guest.getByRole('dialog', { name: 'Practice hand' });
+  await expect(practice.getByTestId('circular-game-table')).toBeVisible();
+  await expect(practice.getByText('Your A♦ lets you ask for a low diamond. Tap it.')).toBeFocused();
+  await practice.getByRole('button', { name: 'A of Diamonds', exact: true }).click({ position: { x: 6, y: 12 } });
+  await practice.getByTestId('inline-ask-card-6_d').click();
+  await practice.getByRole('button', { name: /Maya, ask target/ }).click();
+  await expect(practice.getByTestId('last-move-display')).toContainText('You asked Maya for 6♦');
+  await expect(guest).toHaveURL(roomUrl);
+  await expect(start).toHaveText('Start with 4 bots');
   await start.click();
   await expect(page).toHaveURL(/\/game\//, { timeout: 30_000 });
   await expect(guest).toHaveURL(/\/game\//, { timeout: 30_000 });

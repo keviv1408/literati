@@ -8,6 +8,7 @@ import {
 } from '@/lib/tutorial/engine';
 import type { Step, TableState } from '@/lib/tutorial/engine';
 import { INITIAL_STATE, PLAYERS, SCRIPT } from '@/lib/tutorial/script';
+import { PRACTICE_ASKS, PRACTICE_DEAL } from '@/lib/tutorial/quickTurn';
 import { getCardHalfSuit, getHalfSuitCards } from '@/types/game';
 
 function allCards(state: TableState): string[] {
@@ -97,5 +98,32 @@ describe('tutorial script', () => {
 
     const final = computeState(INITIAL_STATE, SCRIPT, SCRIPT.length - 1, PLAYERS);
     expect(final.scores).toEqual({ team1: 3, team2: 2 });
+  });
+});
+
+describe('lobby practice hand', () => {
+  it('returns the turn to the learner through legal asks and leaves Low Diamonds declarable', () => {
+    let state = PRACTICE_DEAL;
+    const outcomes = [];
+    for (const ask of PRACTICE_ASKS) {
+      expectConsistentDeal(state);
+      expect(state.turn).toBe(ask.asker);
+      expect(teamOf(PLAYERS, ask.asker)).not.toBe(teamOf(PLAYERS, ask.target));
+      const suit = getCardHalfSuit(ask.card, TUTORIAL_VARIANT);
+      expect(state.hands[ask.asker].some(card => getCardHalfSuit(card, TUTORIAL_VARIANT) === suit)).toBe(true);
+      expect(state.hands[ask.asker]).not.toContain(ask.card);
+      outcomes.push(askSucceeds(state, ask));
+      state = applyStep(state, ask, PLAYERS);
+    }
+    expect(outcomes).toEqual([true, false, true, false]);
+    expect(state.turn).toBe('you');
+    const declaration: Step = {
+      kind: 'declare', declarer: 'you', halfSuit: 'low_d', text: '',
+      assignment: { '1_d': 'you', '2_d': 'ana', '3_d': 'you', '4_d': 'raj', '5_d': 'you', '6_d': 'you' },
+    };
+    expect(declareIsCorrect(state, declaration)).toBe(true);
+    const scored = applyStep(state, declaration, PLAYERS);
+    expectConsistentDeal(scored);
+    expect(scored.scores.team1).toBe(PRACTICE_DEAL.scores.team1 + 1);
   });
 });

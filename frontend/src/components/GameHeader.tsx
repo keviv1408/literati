@@ -26,6 +26,22 @@ const CONNECTION_LABELS: Record<GameWsStatus, string> = {
   error: 'Connection error',
 };
 
+export function TableScore({ scores, myTeamId }: {
+  scores?: PublicGameState['scores'];
+  myTeamId: 1 | 2 | null;
+}) {
+  const visible = myTeamId ? scores : undefined;
+  const ours = myTeamId === 2 ? visible?.team2 : visible?.team1;
+  const theirs = myTeamId === 2 ? visible?.team1 : visible?.team2;
+  return (
+    <div className="header-score" role="status" aria-label="Score" data-testid="game-score" data-team={myTeamId}>
+      <span>Us</span> <strong>{ours ?? '–'}</strong>
+      <span className="score-divider" aria-hidden="true">·</span>
+      <strong>{theirs ?? '–'}</strong> <span>Them</span>
+    </div>
+  );
+}
+
 export default function GameHeader({
   gameState, myTeamId, wsStatus, muted, onToggleMute, onGoHome, onBotSpeed, knowledge,
 }: GameHeaderProps) {
@@ -35,10 +51,6 @@ export default function GameHeader({
   const connected = wsStatus === 'connected';
   const status = CONNECTION_LABELS[wsStatus];
   const delay = gameState?.botDelayMs ?? 5000;
-  const scores = myTeamId ? gameState?.scores : null;
-  const ours = myTeamId === 2 ? scores?.team2 : scores?.team1;
-  const theirs = myTeamId === 2 ? scores?.team1 : scores?.team2;
-
   function closePanel() {
     setPanel(null);
     trigger.current?.focus();
@@ -63,11 +75,7 @@ export default function GameHeader({
   return (
     <header className="player-header">
       <button type="button" onClick={onGoHome} aria-label="Home" className="header-button">←</button>
-      <div className="header-score" role="status" aria-label="Score" data-testid="game-score" data-team={myTeamId}>
-        <span>Us</span> <strong>{ours ?? '–'}</strong>
-        <span className="score-divider" aria-hidden="true">·</span>
-        <strong>{theirs ?? '–'}</strong> <span>Them</span>
-      </div>
+      <TableScore scores={gameState?.scores} myTeamId={myTeamId} />
       <div className="header-menu" ref={menu} onBlur={(event) => {
         if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setPanel(null);
       }}>
