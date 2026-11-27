@@ -73,7 +73,7 @@ import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import { useReactionBubble } from '@/hooks/useReactionBubble';
 import type { Room } from '@/types/room';
-import { cardLabel, getCardHalfSuit, getHalfSuitCards } from '@/types/game';
+import { cardLabel, getCardHalfSuit, getHalfSuitCards, halfSuitLabel } from '@/types/game';
 import type { CardId, HalfSuitId, GameOverPayload, GameSummaryResponse, DeclaredSuit } from '@/types/game';
 
 const ROOM_CODE_RE = /^[A-Z0-9]{6}$/;
@@ -915,11 +915,6 @@ export default function GamePage({ params }: PageProps) {
   const declareIsComplete = declareSuitCards.length > 0 && declareSuitCards.every((c) => declareAssignment[c]);
   const declareAssignedCount = declareSuitCards.length - declareUnassignedCards.length;
 
-  /** Cards assigned to a specific teammate. */
-  const getDeclareTeammateCards = useCallback((playerId: string): CardId[] =>
-    declareSuitCards.filter((c) => declareAssignment[c] === playerId),
-  [declareSuitCards, declareAssignment]);
-
   const handleAskCardToggle = useCallback((cardId: CardId) => {
     if (!canSend || !selectedAskHalfSuit) return;
     const next = selectedAskCardIds.includes(cardId)
@@ -1405,16 +1400,6 @@ export default function GamePage({ params }: PageProps) {
             : (<><span aria-hidden="true">👆</span><span data-testid="turn-pass-select-label">Tap a highlighted seat to choose who plays next</span></>)}
         </div>
       )}
-      {turnTimer && gameState && (
-        <CountdownTimer
-          key={turnTimer.expiresAt}
-          expiresAt={turnTimer.expiresAt}
-          durationMs={turnTimer.durationMs}
-          isMyTimer={turnTimer.playerId === myPlayerId}
-          label={turnTimer.playerId === myPlayerId ? 'Your turn' : 'Turn timer'}
-        />
-      )}
-
       {/* ── Post-declaration turn-selection countdown ───────────
        * Shown to ALL clients for 30 seconds after a human correct declaration
        * while the declaring team chooses who takes the next turn.
@@ -1515,7 +1500,6 @@ export default function GamePage({ params }: PageProps) {
       <LastMoveDisplay
         message={currentLastMoveMessage}
         players={players}
-        myPlayerId={myPlayerId}
       />
 
       {declareProgress && declareProgress.halfSuitId && declareProgress.declarerId !== myPlayerId && (
@@ -1536,11 +1520,8 @@ export default function GamePage({ params }: PageProps) {
                 return (
                   <DeclareDropSeat
                     playerId={player.playerId}
-                    assignedCards={getDeclareTeammateCards(player.playerId)}
-                    myHand={myHand}
                     hasSelectedCard={!!declareSelectedCard}
                     onTapZone={() => handleDeclareTapZone(player.playerId)}
-                    onRemoveCard={handleDeclareRemoveCard}
                     isMe={player.playerId === myPlayerId}
                   >
                     {seatElement}
@@ -1554,7 +1535,7 @@ export default function GamePage({ params }: PageProps) {
         const mainContent = (
           <>
           <main className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center overflow-hidden px-2 py-2 sm:px-3 sm:py-3 lg:px-5 xl:px-6">
-            <div className="w-full max-w-[82rem] xl:max-w-[90rem] 2xl:max-w-[98rem] flex flex-col justify-center">
+            <div className="game-table-space h-full w-full">
               <CircularGameTable
                 players={players}
                 myPlayerId={myPlayerId}
@@ -1579,6 +1560,23 @@ export default function GamePage({ params }: PageProps) {
           </>
         );
 
+        let handPrompt: React.ReactNode = 'Tap a card to ask.';
+        if (!isMyTurn) {
+          const currentPlayer = players.find((player) => player.playerId === gameState?.currentTurnPlayerId);
+          handPrompt = currentPlayer ? `${currentPlayer.displayName}’s turn` : 'Waiting for the next turn.';
+        } else if (declareMode) {
+          if (!declareSelectedSuit) handPrompt = 'Tap a card to declare.';
+          else if (declareIsComplete) handPrompt = 'Review and confirm.';
+          else handPrompt = declareSelectedCard ? 'Tap a teammate to assign.' : 'Drag or tap a card to assign.';
+        } else if (selectedAskCardIds.length) {
+          const request = selectedAskCardIds.length === 1 ? cardLabel(selectedAskCardIds[0]) : `${selectedAskCardIds.length} cards`;
+          handPrompt = `Tap an opponent for ${request}.`;
+        } else if (showAskInline && selectedAskHalfSuit) {
+          handPrompt = (
+            <>Pick one or more missing cards from <strong>{halfSuitLabel(selectedAskHalfSuit)}</strong>. Click anywhere outside to cancel.</>
+          );
+        }
+
         const footerContent = (
           <>
           {/*
@@ -1592,11 +1590,27 @@ export default function GamePage({ params }: PageProps) {
            * once game_init is received, regardless of player count (6 or 8) or
            * whether any seat is occupied by a bot.
            */}
-          <footer className="relative z-20 border-t border-slate-700/50 bg-slate-900/80 px-3 py-2.5 backdrop-blur-sm lg:px-5 lg:py-3" data-testid="player-hand-area">
+          <footer className="relative z-20 border-t hand-tray px-3 py-2.5 lg:px-5 lg:py-3" data-testid="player-hand-area">
             {myPlayer ? (
               <div className="mx-auto flex w-full max-w-[82rem] flex-col gap-2 xl:max-w-[90rem] 2xl:max-w-[98rem]" data-testid="game-controls">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Your hand — <strong className="text-white">{myHand.length}</strong> card{myHand.length !== 1 ? 's' : ''}</span>
+                <div className="hand-status">
+                  {!isTurnPassMode && (
+                    <span className="text-sm font-medium text-slate-200" role="status" data-testid={
+                      !isMyTurn ? 'waiting-prompt' : declareMode ? 'declare-card-prompt' : selectedAskCardIds.length ? 'ask-seat-prompt' : 'ask-prompt'
+                    }>
+                      {handPrompt}
+                    </span>
+                  )}
+                  {turnTimer && gameState && (
+                    <CountdownTimer
+                      className="tray-timer"
+                      key={turnTimer.expiresAt}
+                      expiresAt={turnTimer.expiresAt}
+                      durationMs={turnTimer.durationMs}
+                      isMyTimer={turnTimer.playerId === myPlayerId}
+                      label={turnTimer.playerId === myPlayerId ? 'Your turn' : 'Turn timer'}
+                    />
+                  )}
                   {/* during turn-pass mode the declarant must choose a
                    * teammate seat -- Ask/Declare are hidden until the turn advances. */}
                   {isMyTurn && !isTurnPassMode && (
@@ -1685,7 +1699,11 @@ export default function GamePage({ params }: PageProps) {
                   <div ref={declareTrayRef} role="dialog" aria-modal="true" aria-label="Declare a half-suit">
                     <InlineDeclareTray
                       halfSuitId={declareSelectedSuit!}
-                      unassignedCards={declareUnassignedCards}
+                      cards={declareSuitCards}
+                      assignment={declareAssignment}
+                      players={players}
+                      myPlayerId={myPlayerId}
+                      onRemoveCard={handleDeclareRemoveCard}
                       selectedCard={declareSelectedCard}
                       onTapCard={handleDeclareTapCard}
                       totalCards={declareSuitCards.length}
@@ -1701,7 +1719,7 @@ export default function GamePage({ params }: PageProps) {
                 )}
                 <div className={[
                   'transition-opacity',
-                  showAskInline || showDeclareTray ? 'hidden sm:block opacity-45' : 'opacity-100',
+                  showAskInline || showDeclareTray ? 'hidden' : 'opacity-100',
                   declareMode && !declareSelectedSuit ? 'ring-2 ring-violet-500/70 rounded-xl shadow-lg shadow-violet-500/20' : '',
                 ].join(' ')}>
                   <CardHand
@@ -1718,22 +1736,6 @@ export default function GamePage({ params }: PageProps) {
                     newlyArrivedCardId={newlyArrivedCardId}
                   />
                 </div>
-                {isMyTurn && !isTurnPassMode && !showAskInline && !declareMode && myHand.length > 0 && (
-                  <p className="text-xs text-slate-500 text-center animate-pulse" data-testid="ask-prompt">Tap a card to ask, or switch to Declare mode</p>
-                )}
-                {isMyTurn && !isTurnPassMode && declareMode && !declareSelectedSuit && (
-                  <p className="text-xs text-violet-300 text-center animate-pulse" data-testid="declare-card-prompt">
-                    Tap a card in your hand to select which half-suit to declare
-                  </p>
-                )}
-                {isMyTurn && !isTurnPassMode && showAskInline && selectedAskCardIds.length > 0 && (
-                  <p className="text-xs text-emerald-300 text-center" data-testid="ask-seat-prompt">
-                    Tap an opponent avatar above for{' '}
-                    {selectedAskCardIds.length === 1
-                      ? cardLabel(selectedAskCardIds[0])
-                      : `${selectedAskCardIds.length} selected cards`}.
-                  </p>
-                )}
               </div>
             ) : (
               <div className="text-center text-xs text-slate-500 py-2" data-testid="spectator-status">

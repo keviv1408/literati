@@ -84,34 +84,24 @@ export function DeclareDraggableCard({
 
 /**
  * Wrapper that makes a GamePlayerSeat a droppable zone during inline declare.
- * Renders the existing seat element inside a droppable container and shows
- * assigned card badges below the seat.
+ * Keeps the entire seat available as a drop target.
  */
 export function DeclareDropSeat({
   playerId,
   children,
-  assignedCards,
-  myHand,
   hasSelectedCard,
   onTapZone,
-  onRemoveCard,
   isMe,
 }: {
   playerId: string;
   /** The GamePlayerSeat element to wrap. */
   children: React.ReactNode;
-  assignedCards: CardId[];
-  myHand: CardId[];
   hasSelectedCard: boolean;
   onTapZone: () => void;
-  onRemoveCard: (cardId: CardId) => void;
   isMe: boolean;
 }) {
   const isDisabled = isMe;
   const { setNodeRef, isOver } = useDroppable({ id: playerId, disabled: isDisabled });
-
-  const handCards = assignedCards.filter((c) => myHand.includes(c));
-  const nonHandCards = assignedCards.filter((c) => !myHand.includes(c));
 
   return (
     <div
@@ -144,53 +134,6 @@ export function DeclareDropSeat({
         {children}
       </div>
 
-      {isDisabled && (
-        <span className="mt-1 text-[0.45rem] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Auto-assigned
-        </span>
-      )}
-
-      {/* Assigned cards underneath the seat */}
-      {assignedCards.length > 0 && (
-        <div className="flex flex-wrap gap-0.5 justify-center mt-1.5 max-w-[8rem]">
-          {handCards.map((cardId) => (
-            <div
-              key={cardId}
-              className="relative"
-              title={`${cardLabel(cardId)} — in your hand`}
-            >
-              <PlayingCard cardId={cardId} size="sm" />
-              <span className="absolute -bottom-0.5 -right-0.5 text-[0.4rem] bg-emerald-800 text-emerald-300 rounded-full px-0.5 leading-tight">
-                ✓
-              </span>
-            </div>
-          ))}
-          {nonHandCards.map((cardId) => (
-            <button
-              key={cardId}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveCard(cardId);
-              }}
-              className="relative group"
-              title={`${cardLabel(cardId)} — click to unassign`}
-            >
-              <PlayingCard cardId={cardId} size="sm" />
-              <span className="absolute inset-0 bg-red-900/0 group-hover:bg-red-900/40 rounded transition-colors flex items-center justify-center">
-                <span className="opacity-0 group-hover:opacity-100 text-[0.5rem] text-red-300">
-                  ✕
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {isOver && !isDisabled && (
-        <span className="text-[0.45rem] text-amber-300 font-medium animate-pulse mt-0.5">
-          Drop here
-        </span>
-      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@
  * `currentTurnPlayerId` (or `isActiveTurn`) no longer matches, i.e.
  * as soon as the player takes an action and the server advances the turn.
  * - **Card count badge**: small circle showing remaining hand size.
- * - **Team colour**: border and background tinted emerald (T1) or violet (T2).
+ * - **Team colour**: border and background tinted coral (T1) or violet (T2).
  *
  * ### Active-turn animation lifecycle
  * The animation is triggered by either:
@@ -76,8 +76,7 @@ export interface GamePlayerSeatProps {
 
   /**
    * The current client's own player ID.
-   * When it matches `player.playerId`, a "You" pill is rendered and the border
-   * is highlighted in emerald regardless of team.
+   * When it matches `player.playerId`, the seat shows a "You" badge.
    */
   myPlayerId: string | null;
 
@@ -126,7 +125,7 @@ export interface GamePlayerSeatProps {
 
   /**
    * When true, this seat is an eligible ask target for the currently selected
-   * ask-card flow and should render an emerald highlight ring.
+   * ask-card flow and should render a cyan highlight ring.
    */
   isAskTargetable?: boolean;
 
@@ -157,19 +156,6 @@ export interface GamePlayerSeatProps {
 }
 
 // ── Team style map ────────────────────────────────────────────────────────────
-
-const TEAM_STYLES = {
-  1: {
-    border: 'border-emerald-500/70',
-    bg: 'bg-emerald-800/55',
-    ring: 'ring-emerald-500/50',
-  },
-  2: {
-    border: 'border-violet-500/70',
-    bg: 'bg-violet-800/55',
-    ring: 'ring-violet-500/50',
-  },
-} as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -239,7 +225,6 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
     ? isActiveTurn
     : (playerId === currentTurnPlayerId || isCurrentTurn);
 
-  const style = TEAM_STYLES[teamId] ?? TEAM_STYLES[1];
 
   const voiceAria = voiceState?.connected
     ? [
@@ -282,8 +267,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         !isEliminated && isTurn ? 'animate-seat-glow' : '',
         // eligible-for-turn highlight (cyan ring, raised z-index)
         isHighlighted && !isEliminated ? 'ring-2 ring-teal-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
-        // Ask flow target highlight uses emerald to match the ask action.
-        isAskTargetable && !isEliminated ? 'ring-2 ring-emerald-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
+        isAskTargetable && !isEliminated ? 'ring-2 ring-cyan-400/90 ring-offset-1 ring-offset-slate-950 z-10' : '',
         // + AC 55: clickable seats get pointer cursor, hover scale,
         // and mobile tap-target enlargement (≥44 px min-height + scale-110).
         // On mobile the seat is statically enlarged so a thumb can hit it
@@ -295,10 +279,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           'scale-110 md:scale-100',   // mobile: always enlarged; desktop: normal base
           'md:hover:scale-105',       // desktop: subtle hover scale feedback
         ].join(' ') : '',
-        // Current user always gets an emerald highlight
-        isMe
-          ? 'border-emerald-400/75 bg-emerald-700/50'
-          : [style.border, style.bg].join(' '),
+        teamId === 2 ? 'seat-violet' : 'seat-coral',
         className,
       ]
         .filter(Boolean)
@@ -342,7 +323,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
 
       {isAskTargetable && !isEliminated && (
         <span
-          className="absolute inset-0 rounded-xl border-2 border-emerald-400/80 animate-pulse pointer-events-none"
+          className="absolute inset-0 rounded-xl border-2 border-cyan-400/80 animate-pulse pointer-events-none"
           aria-hidden="true"
           data-testid="ask-target-ring"
         />
@@ -446,7 +427,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
         <span
           className={[
             'text-[0.65rem] lg:text-[0.92rem] xl:text-[1rem] font-semibold truncate w-full text-center leading-tight',
-            isMe ? 'text-emerald-300' : 'text-slate-200',
+            'text-slate-100',
           ].join(' ')}
           title={displayName}
           data-testid="player-display-name"
@@ -461,7 +442,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           <span
             className="
               text-[0.55rem] lg:text-[0.72rem] font-semibold uppercase tracking-wider
-              bg-emerald-600/40 text-emerald-300
+              bg-slate-950/40 text-slate-100
               px-1 py-0.5 rounded-full leading-none
             "
             aria-hidden="true"

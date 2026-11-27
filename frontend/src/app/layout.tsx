@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import '@/components/game-table.css';
 import { GuestProvider } from '@/contexts/GuestContext';
 import GuestNameModal from '@/components/GuestNameModal';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';

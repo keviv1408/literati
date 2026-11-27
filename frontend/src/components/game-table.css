@@ -1,0 +1,148 @@
+.game-table-space {
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+
+.game-table {
+  container-type: inline-size;
+  width: min(100cqw, calc(100cqh * 390 / 448));
+  aspect-ratio: 390 / 448;
+}
+
+.game-table-felt {
+  left: 24%;
+  top: 50%;
+  width: 52%;
+  aspect-ratio: 65 / 56;
+  translate: 0 -50%;
+}
+
+/* Keep tile centres fixed when a short window needs smaller seats. */
+.game-table-seat > * {
+  zoom: min(1, tan(atan2(100cqw, var(--seat-fit-width, 23.5rem))));
+}
+
+.tutorial-table-space {
+  --seat-fit-width: 37rem;
+}
+
+.hand-tray {
+  background: #0a111b;
+  border-color: #536272;
+}
+
+.seat-coral {
+  background-color: #653b3c;
+  border-color: #bc7674;
+}
+
+.seat-violet {
+  background-color: #493963;
+  border-color: #9e83b8;
+}
+
+.action-tray {
+  width: 100%;
+  max-width: 38rem;
+  margin-inline: auto;
+}
+
+.tray-card-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.tray-card-cell {
+  flex: 0 1 4.5rem;
+  min-width: 0;
+}
+
+.tray-card-cell [role='img'] {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+}
+
+.ask-card-row {
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.ask-card {
+  flex-basis: 5.25rem;
+  cursor: pointer;
+  border-radius: 8% / 5.33%;
+}
+
+.ask-card:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ask-card[aria-pressed="true"] [role="img"] {
+  outline: 2px solid #34d399;
+}
+
+.ask-card:focus-visible [role="img"] {
+  box-shadow: 0 0 0 2px #0a111b, 0 0 0 4px #a5f3fc;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ask-card:enabled:hover [role="img"] {
+    box-shadow: 0 0 0 2px #a5f3fc, 0 6px 12px #0008;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .ask-card:enabled:hover [role="img"] {
+      translate: 0 -0.375rem;
+    }
+  }
+}
+
+.declare-card-row .tray-card-cell {
+  max-width: calc((100% - 1.75rem) / 6);
+}
+
+@media (max-width: 39.999rem) {
+  .seats-6 {
+    width: min(100cqw, calc(100cqh * 390 / 526));
+    aspect-ratio: 390 / 526;
+  }
+}
+
+.assigned-card { display: block; width: 100%; }
+.assignment-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; }
+.hand-status { display: flex; align-items: center; gap: 0.5rem; }
+.hand-status > [role="status"] { flex: 1; }
+.tray-timer { width: 2.4rem; }
+.tray-timer [data-testid="countdown-timer-seconds"] { margin-left: auto; }
+.tray-timer [data-testid="countdown-timer-label"] { position: absolute; clip-path: inset(50%); }
+
+@media (min-width: 40rem) {
+  .seats-6 { --seat-y-scale: 0.83; }
+
+  .game-table {
+    width: min(100cqw, calc(100cqh * 5 / 3));
+    aspect-ratio: 5 / 3;
+  }
+
+  .game-table-felt {
+    aspect-ratio: auto;
+    height: 56%;
+  }
+}
+
+@media (min-width: 64rem) {
+  .game-table-space {
+    --seat-fit-width: 52rem;
+  }
+
+  .tutorial-table-space {
+    --seat-fit-width: 65rem;
+  }
+}
+
+.name-coral { color: #973e42; }
