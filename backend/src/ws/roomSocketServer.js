@@ -578,6 +578,7 @@ async function resolveUserFromToken(token) {
 // ---------------------------------------------------------------------------
 
 const JOINABLE_STATUSES = ['waiting', 'starting'];
+const pendingRoomLookups = new Map();
 
 /**
  * Fetch minimal room metadata from Supabase — also retrieves spectator_token
@@ -1807,10 +1808,20 @@ function attachRoomSocketServer(httpServer) {
     // ── Verify room exists and is joinable ──────────────────────────────────
     // For spectator connections we also need the spectator_token from the DB
     // to validate private-room access, so use the extended fetch.
-    const dbRoom = isSpectatorRequest
-      ? await fetchRoomMetaWithToken(roomCode)
-      : await fetchRoomMeta(roomCode);
+    pendingRoomLookups.set(ws, roomCode);
+    const forgetLookup = () => pendingRoomLookups.delete(ws);
+    ws.once('close', forgetLookup);
+    let dbRoom;
+    try {
+      dbRoom = isSpectatorRequest
+        ? await fetchRoomMetaWithToken(roomCode)
+        : await fetchRoomMeta(roomCode);
+    } finally {
+      ws.off('close', forgetLookup);
+      forgetLookup();
+    }
 
+    if (ws.readyState !== 1 /* OPEN */) return;
     if (!dbRoom) {
       closeWithNotice(ws, 4004, 'Room not found');
       return;
@@ -1819,9 +1830,6 @@ function attachRoomSocketServer(httpServer) {
       closeWithNotice(ws, 4005, dbRoom.status === 'cancelled' ? 'Lobby closed' : 'Room not accepting connections');
       return;
     }
-
-    // The awaits above can outlast the client; its close event has already fired, so nothing would ever remove the entry.
-    if (ws.readyState !== 1 /* OPEN */) return;
 
     // ── Store room metadata (playerCount + matchmaking flag) ────────────────
     if (!roomMeta.has(roomCode)) {
@@ -2205,6 +2213,9 @@ function _resetRoomState() {
 // ---------------------------------------------------------------------------
 
 function closeCancelledLobby(code) {
+  for (const [ws, roomCode] of pendingRoomLookups) {
+    if (roomCode === code) closeWithNotice(ws, 4005, 'Lobby closed');
+  }
   cancelRematchBotFillTimer(code);
   clearPendingRematch(code);
   _getGameServer()._cancelRematchGathering?.(code);
