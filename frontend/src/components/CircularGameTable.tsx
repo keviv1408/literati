@@ -31,6 +31,8 @@ import GamePlayerSeat from './GamePlayerSeat';
 import type { GamePlayer } from '@/types/game';
 import type { DeclarationSeatRevealCard } from '@/lib/declarationSeatReveal';
 import { useVoice } from '@/contexts/VoiceContext';
+import BrowserTabletop from './BrowserTabletop';
+import tabletopStyles from './BrowserTabletop.module.css';
 
 // ── Geometry ───────────────────────────────────────────────────────────────────
 
@@ -139,25 +141,23 @@ export default function CircularGameTable({
       aria-label="Game table — players seated in a circle, alternating teams"
       data-testid="circular-game-table"
     >
-      {/* ── Table felt ─────────────────────────────────────────────────────── */}
-      {/* Inset oval representing the green card-table surface */}
-      <div
-        className={[
-          'game-table-felt absolute rounded-[50%]',
+      <div className={`game-table-felt pointer-events-none absolute ${tabletopStyles.surface}`} aria-hidden="true">
+        <div className={[
+          tabletopStyles.flatFelt,
+          'absolute inset-0 rounded-[50%]',
           'bg-gradient-to-br from-emerald-950 via-emerald-900/90 to-emerald-950',
           'border border-emerald-700/25',
           'shadow-[inset_0_4px_60px_rgba(0,0,0,0.55),inset_0_0_0_1px_rgba(52,211,153,0.06)]',
-        ].join(' ')}
-        aria-hidden="true"
-      >
-        {/* Subtle double-ring rim — evokes the wooden rail of a card table */}
-        <div className="absolute inset-[6px] rounded-[50%] border border-emerald-800/20" />
-        <div className="absolute inset-[2px] rounded-[50%] border border-emerald-700/10" />
+        ].join(' ')}>
+          <div className="absolute inset-[6px] rounded-[50%] border border-emerald-800/20" />
+          <div className="absolute inset-[2px] rounded-[50%] border border-emerald-700/10" />
+        </div>
+        <BrowserTabletop />
       </div>
 
       {/* ── Center content (DeclaredBooksTable) ────────────────────────────── */}
       <div
-        className="game-table-felt absolute"
+        className={`game-table-felt absolute ${tabletopStyles.center}`}
         data-testid="game-table-center"
       >
         <div className="h-full flex items-center justify-center p-2 sm:p-3">

@@ -1,0 +1,24 @@
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  visibility: hidden;
+  filter: drop-shadow(0 3px 2px rgb(0 0 0 / 50%)) drop-shadow(0 7px 7px rgb(0 0 0 / 24%));
+}
+
+.surface[data-rendered='true'] > .canvas {
+  visibility: visible;
+}
+
+.surface[data-rendered='true'] > .flatFelt {
+  visibility: hidden;
+}
+
+.surface[data-rendered='true'] + .center .books {
+  inset: 6% 4% 10%;
+}
+
+.surface[data-rendered='true'] + .center .flatRim {
+  display: none;
+}

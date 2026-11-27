@@ -12,7 +12,7 @@
  * • The flying card element is present on mount
  * • Card carries the transferred card face so players can identify it
  * • CSS custom properties --flight-dx and --flight-dy are set from props
- * • animate-card-flight class is applied to the flying card element
+ * • The table transfer animation is applied to the flying card element
  * • onComplete fires after FLIGHT_DURATION_MS
  * • onComplete does NOT fire before FLIGHT_DURATION_MS elapses
  * • Component is driven by timer not DOM events — cleanup cancels timer on unmount
@@ -85,10 +85,10 @@ describe('CardFlightAnimation — rendering', () => {
 // ── Face-up card visual ──────────────────────────────────────────────────────
 
 describe('CardFlightAnimation — face-up card style', () => {
-  it('the flying card has animate-card-flight class', () => {
+  it('uses the table transfer animation', () => {
     renderFlight();
     const card = screen.getByTestId('card-flight-card');
-    expect(card.className).toContain('animate-card-flight');
+    expect(card).toHaveClass('animate-card-flight-table');
   });
 
   it('renders the transferred card face-up instead of a face-down card back', () => {
@@ -159,20 +159,32 @@ describe('CardFlightAnimation — CSS custom properties', () => {
 // ── Card positioning ─────────────────────────────────────────────────────────
 
 describe('CardFlightAnimation — card positioning', () => {
-  it('positions the card so its left edge = fromX - 20 (half of CARD_W=40)', () => {
-    renderFlight({ fromX: 200 });
-    const card = screen.getByTestId('card-flight-card');
-    const style = card.getAttribute('style') ?? '';
-    // left: 200 - 20 = 180
-    expect(style).toContain('left: 180');
+  it('centers the card box on the giving seat', () => {
+    renderFlight({ fromX: 200, fromY: 300 });
+    const { style } = screen.getByTestId('card-flight-card');
+    expect(parseFloat(style.left) + parseFloat(style.width) / 2).toBe(200);
+    expect(parseFloat(style.top) + parseFloat(style.height) / 2).toBe(300);
   });
 
-  it('positions the card so its top edge = fromY - 32 (half of CARD_H=64)', () => {
-    renderFlight({ fromY: 300 });
-    const card = screen.getByTestId('card-flight-card');
-    const style = card.getAttribute('style') ?? '';
-    // top: 300 - 32 = 268
-    expect(style).toContain('top: 268');
+  it.each([[100, 400, 8], [400, 100, -8], [100, 100, 0]])(
+    'banks in the transfer direction from x=%s to x=%s',
+    (fromX, toX, lean) => {
+      renderFlight({ fromX, toX, fromY: 200, toY: 200 });
+      const { style } = screen.getByTestId('card-flight-card');
+      expect(style.getPropertyValue('--flight-lean')).toBe(`${lean}deg`);
+    },
+  );
+
+  it('uses the tilted card face and table transfer on Android', () => {
+    const env = jest.replaceProperty(process, 'env', { ...process.env, NEXT_PUBLIC_BUILD_TARGET: 'android' });
+    try {
+      renderFlight();
+      const card = screen.getByTestId('card-flight-card');
+      expect(card).toHaveClass('animate-card-flight-table');
+      expect(card.querySelector('[role="img"]')).toHaveClass('card-flight-face');
+    } finally {
+      env.restore();
+    }
   });
 });
 
@@ -197,6 +209,21 @@ describe('CardFlightAnimation — completion', () => {
     const onComplete = jest.fn();
     renderFlight({ onComplete });
     act(() => { jest.advanceTimersByTime(FLIGHT_DURATION_MS * 3); });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('restarts the animation and timer if another card arrives mid-flight', () => {
+    const onComplete = jest.fn();
+    const { rerender } = renderFlight({ onComplete });
+    const first = screen.getByTestId('card-flight-card');
+    act(() => { jest.advanceTimersByTime(1000); });
+    rerender(
+      <CardFlightAnimation cardId="7_h" fromX={100} fromY={200} toX={400} toY={150} onComplete={onComplete} />,
+    );
+    expect(screen.getByTestId('card-flight-card')).not.toBe(first);
+    act(() => { jest.advanceTimersByTime(FLIGHT_DURATION_MS - 1); });
+    expect(onComplete).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });
@@ -229,7 +256,6 @@ describe('CardFlightAnimation — onComplete ref stability', () => {
 
     act(() => { jest.advanceTimersByTime(FLIGHT_DURATION_MS / 2); });
 
-    // Update the prop mid-flight — the ref update should ensure second() is called
     rerender(
       <CardFlightAnimation
         cardId="5_s"
@@ -238,7 +264,7 @@ describe('CardFlightAnimation — onComplete ref stability', () => {
       />
     );
 
-    act(() => { jest.advanceTimersByTime(FLIGHT_DURATION_MS); });
+    act(() => { jest.advanceTimersByTime(FLIGHT_DURATION_MS / 2); });
 
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);

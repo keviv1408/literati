@@ -1,6 +1,7 @@
 'use client';
 
 import PlayingCard from '@/components/PlayingCard';
+import tabletopStyles from './BrowserTabletop.module.css';
 import {
   halfSuitLabel,
   SUIT_SYMBOLS,
@@ -96,12 +97,12 @@ export default function DeclaredBooksTable({
 }: DeclaredBooksTableProps) {
   return (
     <div
-      className="absolute inset-0 grid grid-rows-2"
+      className={`${tabletopStyles.books} absolute inset-0 grid grid-rows-2`}
       data-testid="declared-books-table"
       aria-label={`Declared books table for a ${playerCount === 6 ? '3v3' : '4v4'} game`}
     >
       <div
-        className="absolute inset-2 sm:inset-3 rounded-[50%] border border-emerald-800/40 sm:border-2 sm:border-emerald-800/50 bg-emerald-900/15 shadow-inner shadow-black/40"
+        className={`${tabletopStyles.flatRim} absolute inset-2 sm:inset-3 rounded-[50%] border border-emerald-800/40 sm:border-2 sm:border-emerald-800/50 bg-emerald-900/15 shadow-inner shadow-black/40`}
         aria-hidden="true"
       />
       <div
