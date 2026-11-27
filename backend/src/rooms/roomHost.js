@@ -16,4 +16,23 @@ function storedHostId(room) {
   return room.host_user_id || room.host_guest_id || null;
 }
 
-module.exports = { isRoomHost, hostColumns, storedHostId };
+async function _transitionWaitingRoom(db, code, nextStatus, hostColumn, hostId) {
+  let query = db.from('rooms').update({ status: nextStatus })
+    .eq('code', code).eq('status', 'waiting').eq('is_matchmaking', false);
+  if (hostColumn) query = query.eq(hostColumn, hostId);
+  const { data, error } = await query.select('code').maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function _releaseFailedStart(db, code) {
+  try {
+    const { error } = await db.from('rooms').update({ status: 'waiting' })
+      .eq('code', code).eq('status', 'starting');
+    if (error) throw error;
+  } catch (err) {
+    console.error('[rooms/start] Could not release starting room:', code, err);
+  }
+}
+
+module.exports = { _releaseFailedStart, _transitionWaitingRoom, isRoomHost, hostColumns, storedHostId };

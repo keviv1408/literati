@@ -51,14 +51,12 @@ jest.mock('../db/supabase', () => ({
         }),
       }),
       update: () => ({
-        // Simulate Supabase network/write failures by rejecting the promise.
-        // handleRematchInitiate uses try/catch, so rejections are caught.
-        eq: () => {
-          if (mockDbConfig.updateError) {
-            return Promise.reject(mockDbConfig.updateError);
-          }
-          return Promise.resolve({ error: null });
-        },
+        eq: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        maybeSingle: async () => ({
+          data: mockDbConfig.matches ? { code: 'REMA01' } : null,
+          error: mockDbConfig.updateError,
+        }),
       }),
     }),
   }),
@@ -110,6 +108,7 @@ beforeEach(() => {
   mockDbConfig.isMatchmaking = false;
   mockDbConfig.lookupError   = null;
   mockDbConfig.updateError   = null;
+  mockDbConfig.matches = true;
 
   _clearAll();
   clearRematch();
@@ -169,9 +168,14 @@ describe('handleRematchInitiate ', () => {
     expect(observerWs._sent.find((m) => m.type === 'rematch_start')).toBeUndefined();
   });
 
+  it('refuses a stale rematch request after the private lobby closes', async () => {
+    mockDbConfig.matches = false;
+    const ws = { readyState: 1, send: jest.fn() };
+    await handleRematchInitiate(ROOM_CODE, HOST_ID, ws);
+    expect(JSON.parse(ws.send.mock.calls[0][0]).code).toBe('REMATCH_RESET_FAILED');
+  });
+
   it('5. Supabase update failure → rejects with REMATCH_RESET_FAILED, no broadcast', async () => {
-    // The mock returns Promise.reject when updateError is set, which triggers
-    // the try/catch handler in handleRematchInitiate.
     mockDbConfig.updateError = new Error('write timeout');
     const observerWs = registerFakeWs(ROOM_CODE, 'observer');
     const callerWs   = makeFakeWs();

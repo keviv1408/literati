@@ -303,6 +303,10 @@ export async function getGameSummary(roomCode: string): Promise<GameSummaryRespo
   });
 }
 
+export async function abandonLobby(code: string, token: string): Promise<void> {
+  await apiFetch(`/api/rooms/${code}/abandon`, { method: 'POST', token });
+}
+
 /**
  * GET /api/rooms/:code — Fetch room details by 6-char room code.
  * Public endpoint — no auth required.

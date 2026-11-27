@@ -32,7 +32,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { getRoomByCode, ApiError } from '@/lib/api';
+import { abandonLobby, getRoomByCode, ApiError } from '@/lib/api';
 import { gamePath, isAndroidBuild } from '@/lib/appPaths';
 import { trackEvent } from '@/lib/analytics';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
@@ -82,6 +82,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
   } = useReconnect();
 
   const { setGuestName } = useGuest();
+  const [confirmAbandon, setConfirmAbandon] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState('');
   const [joinName, setJoinName] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
 
@@ -397,6 +400,21 @@ export default function RoomLobbyPage({ params }: PageProps) {
     [socketEmit, seats],
   );
 
+  const lobbyClosed = room?.status === 'cancelled' || (stopCode === 4005 && wsError === 'Lobby closed');
+  useEffect(() => {
+    if (lobbyClosed && roomCode) clearRoomMembership(roomCode);
+  }, [lobbyClosed, roomCode]);
+
+  if (lobbyClosed) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4" data-testid="closed-lobby">
+        <h1 className="text-2xl font-bold">Lobby closed</h1>
+        <p>This lobby is closed for everyone.</p>
+        <button onClick={() => router.push('/')}>Back to Home</button>
+      </main>
+    );
+  }
+
   // ── Session-validation render gates ──────────────────────────
   // These are evaluated AFTER the kicked check (handled below) to avoid
   // delaying the kicked notice with a session-validation spinner.
@@ -539,7 +557,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── No session — the landing screen is the join form itself ──────────────
   // Who invited you, who's already here, your name, Join. Setting the guest
   // name re-runs useReconnect, which then lets the room socket connect.
-  if (!kickedOnEntry && !isKicked && !notFound && reconnectStatus === 'no_session') {
+  if (!kickedOnEntry && !isKicked && !notFound && !loading && reconnectStatus === 'no_session') {
     const host = room?.players?.find((p) => p.isHost);
     const handleJoin = (e: FormEvent) => {
       e.preventDefault();
@@ -739,8 +757,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   }
 
   // ── Room lobby ───────────────────────────────────────────────────────────
-  const isCancelled =
-    room.status === 'cancelled' || room.status === 'completed';
+  const isCancelled = room.status === 'completed';
   const openSeats = Math.max(0, room.player_count - wsPlayers.length);
   const startLabel = openSeats === 0
     ? 'Start game'
@@ -1128,6 +1145,29 @@ export default function RoomLobbyPage({ params }: PageProps) {
                 : 'The host has started the game. Redirecting to the game board.'}
             </p>
           </div>
+        )}
+
+        {amIHostLive && !isSpectator && !room.is_matchmaking && room.status === 'waiting' && (
+          confirmAbandon ? (
+            <section role="alertdialog" aria-labelledby="abandon-title" className="rounded-xl border border-red-800 p-4">
+              <h2 id="abandon-title" className="font-semibold">Abandon this lobby?</h2>
+              <p className="my-2">This closes the lobby for everyone. Its invite link will stop working.</p>
+              <button disabled={closing} onClick={() => { setConfirmAbandon(false); setCloseError(''); }}>Cancel</button>
+              <button className="ml-6 text-red-300" disabled={closing} onClick={async () => {
+                if (!bearerToken || closing) return;
+                setClosing(true);
+                try {
+                  await abandonLobby(room.code, bearerToken);
+                  setRoom({ ...room, status: 'cancelled' });
+                } catch (error) {
+                  setCloseError(error instanceof Error ? error.message : 'Could not close the lobby.');
+                } finally {
+                  setClosing(false);
+                }
+              }}>Confirm abandon</button>
+              {closeError && <p role="alert">{closeError}</p>}
+            </section>
+          ) : <button className="py-2 text-red-300" onClick={() => setConfirmAbandon(true)}>Abandon lobby</button>
         )}
 
         {/* ── Back button ──────────────────────────────────────────────────── */}

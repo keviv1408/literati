@@ -84,10 +84,10 @@ function buildMockSupabase({ roomData = null, updateError = null } = {}) {
   const eqForRead   = jest.fn().mockReturnValue({
     maybeSingle: jest.fn().mockResolvedValue({ data: roomData, error: null }),
   });
-  const eqForWrite  = jest.fn().mockResolvedValue({ data: null, error: updateError });
+  const eqForWrite = jest.fn().mockReturnThis();
 
   const select = jest.fn().mockReturnValue({ eq: eqForRead });
-  const update = jest.fn().mockReturnValue({ eq: eqForWrite });
+  const update = jest.fn().mockReturnValue({ eq: eqForWrite, select: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: roomData, error: updateError }) });
 
   const from   = jest.fn().mockReturnValue({ select, update });
 
@@ -378,15 +378,12 @@ describe('handleStartGame ', () => {
     expect(allMsgs.some((m) => m.type === 'lobby-starting')).toBe(false);
   });
 
-  // ── 9b. Supabase update throws / rejects — non-fatal ────────────────────────
-  // When.eq() throws (network error), the implementation logs and continues.
-
-  it('still broadcasts lobby-starting when Supabase update throws (network error)', async () => {
+  it('reports failure when the starting status cannot be claimed', async () => {
     // Build a mock where fetchRoomMetaFull succeeds but update throws
     const eqForRead   = jest.fn().mockReturnValue({
       maybeSingle: jest.fn().mockResolvedValue({ data: makeFakeRoomData(), error: null }),
     });
-    const eqForWrite  = jest.fn().mockRejectedValue(new Error('network timeout'));
+    const eqForWrite = jest.fn(() => { throw new Error('network timeout'); });
     const select = jest.fn().mockReturnValue({ eq: eqForRead });
     const update = jest.fn().mockReturnValue({ eq: eqForWrite });
     const mockSupa = {
@@ -403,8 +400,7 @@ describe('handleStartGame ', () => {
 
     await handleStartGame({ ws: hostWs, userId: 'h1', isHost: true, roomCode: ROOM, clients: roomClients.get(ROOM) });
 
-    // Network error is non-fatal — broadcast should still happen
-    expect(lastSent(hostWs).type).toBe('lobby-starting');
+    expect(lastSent(hostWs).type).toBe('error');
   });
 
   // ── 10. 8-player game ───────────────────────────────────────────────────────

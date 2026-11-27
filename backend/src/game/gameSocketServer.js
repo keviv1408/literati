@@ -2820,6 +2820,19 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
     return;
   }
 
+  try {
+    const { data, error } = await supabase.from('rooms')
+      .update({ status: 'waiting', game_state: null })
+      .eq('code', roomCode).eq('status', 'completed')
+      .eq('is_matchmaking', false).eq('host_user_id', playerId)
+      .select('code').maybeSingle();
+    if (error || !data) throw error || new Error('Room is no longer eligible for a rematch');
+  } catch (err) {
+    console.error('[game-ws] Could not reset room for rematch:', err.message);
+    if (ws) sendJson(ws, { type: 'error', message: 'Failed to reset room for rematch', code: 'REMATCH_RESET_FAILED' });
+    return;
+  }
+
   // Clear any active rematch vote (stops the auto-decline timer)
   clearRematch(roomCode);
 
@@ -2852,18 +2865,6 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
   deleteGame(roomCode);
   clearRoomPartialSelections(roomCode);
   clearDisconnectRoom(roomCode);
-
-  // Reset room to 'waiting' in Supabase so a new game can start
-  try {
-    await supabase
-      .from('rooms')
-      .update({ status: 'waiting', game_state: null })
-      .eq('code', roomCode);
-  } catch (err) {
-    console.error('[game-ws] handleRematchInitiate: Failed to reset room:', err.message);
-    if (ws) sendJson(ws, { type: 'error', message: 'Failed to reset room for rematch', code: 'REMATCH_RESET_FAILED' });
-    return;
-  }
 
   const rematchStartPayload = { type: 'rematch_start', roomCode };
   if (previousSettings) {

@@ -38,6 +38,34 @@ describe('POST /api/rooms', () => {
     _clearStore();
   });
 
+  it.each([
+    ['owner', true, 200],
+    ['visitor', false, 409],
+    ['owner', false, 409],
+  ])('claims a waiting private room for %s only while filters match (%s)', async (id, matched, status) => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id } } });
+    const chain = mockSupabase._chain;
+    chain.update = jest.fn().mockReturnValue(chain);
+    chain.maybeSingle.mockResolvedValue({ data: matched ? { code: 'ABC123' } : null });
+    const response = await request(app).post('/api/rooms/ABC123/abandon').set('Authorization', 'Bearer token');
+    expect(response.status).toBe(status);
+    expect(chain.update).toHaveBeenCalledWith({ status: 'cancelled' });
+    expect(chain.eq.mock.calls).toEqual(expect.arrayContaining([
+      ['code', 'ABC123'], ['status', 'waiting'], ['is_matchmaking', false], ['host_user_id', id],
+    ]));
+  });
+
+  it.each([true, false])('checks guest host ownership when abandoning (%s)', async (matched) => {
+    const { createGuestSession } = require('../sessions/guestSessionStore');
+    const { token, session } = createGuestSession('Guest');
+    const chain = mockSupabase._chain;
+    chain.update = jest.fn().mockReturnValue(chain);
+    chain.maybeSingle.mockResolvedValue({ data: matched ? { code: 'ABC123' } : null });
+    const response = await request(app).post('/api/rooms/ABC123/abandon').set('Authorization', `Bearer ${token}`);
+    expect(response.status).toBe(matched ? 200 : 409);
+    expect(chain.eq).toHaveBeenCalledWith('host_guest_id', session.sessionId);
+  });
+
   it('finds the authenticated host lobby without any client hints', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
     mockSupabase._chain.limit.mockResolvedValue({ data: [{ code: 'ABC123', status: 'waiting' }] });

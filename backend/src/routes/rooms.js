@@ -29,7 +29,7 @@ const {
 const { findReturningSeat } = require('../game/gameState');
 const { getGame } = require('../game/gameStore');
 const { getGuestSession } = require('../sessions/guestSessionStore');
-const { roomClients, recentlyLeftLobby } = require('../ws/roomSocketServer');
+const { roomClients, recentlyLeftLobby, closeCancelledLobby } = require('../ws/roomSocketServer');
 const { requireAuth, extractBearerToken } = require('../middleware/auth');
 const {
   blockPlayer,
@@ -83,6 +83,21 @@ function _activeHostedRoom(db, user) {
     .in('status', [ROOM_STATUS.WAITING, ROOM_STATUS.STARTING, ROOM_STATUS.IN_PROGRESS])
     .order('created_at', { ascending: false }).limit(1);
 }
+
+router.post('/:code/abandon', requireAuth, async (req, res) => {
+  const code = req.params.code.toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) return res.status(400).json({ error: 'Invalid room code' });
+  const hostColumn = req.user.isGuest ? 'host_guest_id' : 'host_user_id';
+  try {
+    const closed = await roomHost._transitionWaitingRoom(getSupabaseClient(), code, 'cancelled', hostColumn, getPlayerIdentifier(req.user));
+    if (!closed) return res.status(409).json({ error: 'Only the current host can close a waiting private lobby.' });
+    closeCancelledLobby(code);
+    return res.json({ code, status: 'cancelled' });
+  } catch (err) {
+    console.error('[rooms/abandon]', err);
+    return res.status(500).json({ error: 'Could not close the lobby.' });
+  }
+});
 
 router.post('/return', requireAuth, async (req, res) => {
   const codes = req.body?.codes;
@@ -794,6 +809,13 @@ router.post('/:code/start', requireAuth, async (req, res) => {
     );
   }
 
+  try {
+    const claimed = await roomHost._transitionWaitingRoom(supabase, roomCode, 'starting', 'host_user_id', getPlayerIdentifier(req.user));
+    if (!claimed) return res.status(409).json({ error: 'Room or host changed before the game could start.' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not start the game.' });
+  }
+
   // ── Create in-memory game state ───────────────────────────────────────────
   let gameState;
   try {
@@ -809,19 +831,9 @@ router.post('/:code/start', requireAuth, async (req, res) => {
     // game has been created — prevents stale data bleeding into future rounds.
     clearPendingRematchSettings(roomCode);
   } catch (err) {
+    await roomHost._releaseFailedStart(supabase, roomCode);
     console.error('[rooms/start] createGame error for room', roomCode, ':', err);
     return res.status(500).json({ error: 'Failed to initialise game' });
-  }
-
-  // ── Update Supabase room status → 'starting' ──────────────────────────────
-  try {
-    await supabase
-      .from('rooms')
-      .update({ status: ROOM_STATUS.STARTING })
-      .eq('code', roomCode);
-  } catch (err) {
-    console.error('[rooms/start] status update error for room', roomCode, ':', err);
-    // Non-fatal: the in-memory game is already created; respond with success.
   }
 
   // ── Persist initial game snapshot asynchronously (→ 'in_progress') ────────

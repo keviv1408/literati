@@ -62,13 +62,13 @@
 const { WebSocketServer } = require('ws');
 const url = require('url');
 const { getGuestSession, updateGuestAvatar, VALID_AVATAR_IDS } = require('../sessions/guestSessionStore');
-const { blockPlayer, isBlocked } = require('../rooms/roomBlocklist');
+const { blockPlayer, isBlocked, clearRoom: clearBlocklistRoom } = require('../rooms/roomBlocklist');
 const rateLimiter = require('./rateLimiter');
 const { closeWithNotice } = require('./closeWs');
 const { buildGameSeats, toPublicSeat } = require('../game/gameInitService');
 const { persistGameState } = require('../game/gameState');
 const { getSupabaseClient } = require('../db/supabase');
-const { isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
+const { _releaseFailedStart, _transitionWaitingRoom, isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
@@ -640,7 +640,7 @@ async function fetchRoomMetaFull(roomCode) {
     const supabase = getSupabase();
     const { data: room, error } = await supabase
       .from('rooms')
-      .select('id, host_user_id, status, player_count, card_removal_variant, spectator_token')
+      .select('id, host_user_id, host_guest_id, is_matchmaking, status, player_count, card_removal_variant, spectator_token')
       .eq('code', roomCode)
       .maybeSingle();
 
@@ -1237,30 +1237,16 @@ async function handleStartGame(ctx) {
       console.error('[RoomWS] handleStartGame: cancelLobbyTimer error (non-fatal):', err);
     }
 
-    // ── Update Supabase room status to 'starting' ─────────────────────────────
-    // 'starting' keeps the room joinable for late-connecting clients but signals
-    // that the game is transitioning. persistGameState (called below) will then
-    // move it to 'in_progress' once the snapshot is stored.
-    //
-    // Two failure modes:
-    // • Resolved with { error } (Supabase constraint/policy error) — fatal:
-    // send an error to the host and abort (the room state is indeterminate).
-    // • Thrown / rejected (network outage, connection refused) — non-fatal:
-    // log and continue so connected clients are not stranded mid-lobby.
     try {
-      const supabase = getSupabase();
-      const { error: updateErr } = await supabase
-        .from('rooms')
-        .update({ status: 'starting' })
-        .eq('code', roomCode);
-      if (updateErr) {
-        console.error('[RoomWS] handleStartGame: Supabase status update failed for room', roomCode, ':', updateErr);
-        ws.send(JSON.stringify({ type: 'error', message: 'Failed to start game. Please try again.' }));
+      const column = clients.get(ctx.userId)?.isGuest ? 'host_guest_id' : 'host_user_id';
+      const claimed = await _transitionWaitingRoom(getSupabase(), roomCode, 'starting', column, ctx.userId);
+      if (!claimed) {
+        ws.send(JSON.stringify({ type: 'error', code: 'ROOM_NOT_WAITING', message: 'Room or host changed before the game could start.' }));
         return;
       }
     } catch (err) {
-      // Network / infra error — log but continue; clients are still waiting.
-      console.error('[RoomWS] handleStartGame: Supabase status update threw for room', roomCode, ':', err);
+      ws.send(JSON.stringify({ type: 'error', message: 'Failed to start game. Please try again.' }));
+      return;
     }
 
     // ── Create in-memory game state ─────────────────────────────────────────────
@@ -1278,6 +1264,7 @@ async function handleStartGame(ctx) {
         seats: allSeats,
       });
     } catch (err) {
+      await _releaseFailedStart(getSupabase(), roomCode);
       console.error('[RoomWS] handleStartGame: createGame failed for room', roomCode, ':', err);
       ws.send(JSON.stringify({ type: 'error', message: 'Failed to initialise game. Please try again.' }));
       return;
@@ -1647,6 +1634,13 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
       );
     }
 
+    try {
+      if (!await _transitionWaitingRoom(getSupabase(), code, 'starting')) return;
+    } catch (err) {
+      console.error('[RoomWS] Failed to claim rematch:', err);
+      return;
+    }
+
     // ── Create in-memory game state ────────────────────────────────────────────
     let gameState = null;
     try {
@@ -1662,6 +1656,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
         seats: allSeats,
       });
     } catch (err) {
+      await _releaseFailedStart(getSupabase(), code);
       console.error('[RoomWS] _executeRematchBotFill: createGame failed for room', code, ':', err);
       broadcast(code, { type: 'error', message: 'Failed to start rematch. Please try again.' });
       return;
@@ -1821,7 +1816,7 @@ function attachRoomSocketServer(httpServer) {
       return;
     }
     if (!JOINABLE_STATUSES.includes(dbRoom.status)) {
-      closeWithNotice(ws, 4005, 'Room not accepting connections');
+      closeWithNotice(ws, 4005, dbRoom.status === 'cancelled' ? 'Lobby closed' : 'Room not accepting connections');
       return;
     }
 
@@ -2085,6 +2080,8 @@ function attachRoomSocketServer(httpServer) {
 
       if (!message || typeof message.type !== 'string') return;
 
+      if (clients.get(userId)?.ws !== ws) return;
+
       // Read isHost dynamically so host transfers (which mutate the in-memory
       // entry) are honoured without requiring a reconnect.
       const liveIsHost = clients.get(userId)?.isHost ?? false;
@@ -2207,7 +2204,25 @@ function _resetRoomState() {
 // Exports
 // ---------------------------------------------------------------------------
 
+function closeCancelledLobby(code) {
+  cancelRematchBotFillTimer(code);
+  clearPendingRematch(code);
+  _getGameServer()._cancelRematchGathering?.(code);
+  clearBlocklistRoom(code);
+  _cancelHostTransferTimer(code);
+  for (const connections of [roomClients.get(code), roomSpectators.get(code)]) {
+    for (const entry of connections?.values() ?? []) {
+      closeWithNotice(entry.ws, 4005, 'Lobby closed');
+    }
+    connections?.clear();
+  }
+  roomClients.delete(code);
+  roomSpectators.delete(code);
+  roomMeta.delete(code);
+}
+
 module.exports = {
+  closeCancelledLobby,
   attachRoomSocketServer,
   recentlyLeftLobby,
 

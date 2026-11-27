@@ -43,7 +43,11 @@ function buildMockSupabase() {
   eq.mockReturnValue(chain);
   inFn.mockReturnValue(chain);
   insert.mockReturnValue(chain);
-  update.mockReturnValue(chain);
+  update.mockReturnValue({
+    eq: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn().mockResolvedValue({ data: { code: 'ABCDEF' }, error: null }),
+  });
   order.mockReturnValue(chain);
   limit.mockReturnValue(chain);
 
@@ -457,6 +461,19 @@ describe('handleStartGame() WS handler', () => {
 
   // ── Happy path ────────────────────────────────────────────────────────────
 
+  it('skips dealing when closure wins after the websocket reads a waiting room', async () => {
+    mockSupabase._chain.maybeSingle.mockResolvedValueOnce({ data: makeFakeRoom() });
+    const write = { eq: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: null }) };
+    mockSupabase._chain.update.mockReturnValueOnce(write);
+    const ws = createMockWs();
+    const clients = seedRoomInStore('ABCDEF', 6, [{ userId: 'guest', teamId: 1, ws, isGuest: true }]);
+    await handleStartGame({ ws, userId: 'guest', isHost: true, roomCode: 'ABCDEF', clients });
+    expect(write.eq).toHaveBeenCalledWith('host_guest_id', 'guest');
+    expect(write.eq).toHaveBeenCalledWith('status', 'waiting');
+    expect(mockGameServer.createGame).not.toHaveBeenCalled();
+    expect(allSent(ws)).toContainEqual(expect.objectContaining({ code: 'ROOM_NOT_WAITING' }));
+  });
+
   it('broadcasts game_starting on valid start (1 human, 5 bots in 6-player room)', async () => {
     const code    = 'ROOM07';
     const hostWs  = createMockWs();
@@ -797,6 +814,20 @@ describe('POST /api/rooms/:code/start', () => {
   });
 
   // ── Happy path ─────────────────────────────────────────────────────────────
+
+  it('skips dealing when closure wins after the start endpoint reads the room', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'host-id' } } });
+    mockSupabase._chain.maybeSingle.mockResolvedValue({ data: makeFakeRoom({ host_user_id: 'host-id' }) });
+    const write = { eq: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: null }) };
+    mockSupabase._chain.update.mockReturnValueOnce(write);
+    const { roomClients } = require('../ws/roomSocketServer');
+    roomClients.set('ABCDEF', new Map([['host-id', { userId: 'host-id', teamId: 1, ws: createMockWs() }]]));
+    const response = await request(app).post('/api/rooms/ABCDEF/start').set('Authorization', 'Bearer token');
+    expect(response.status).toBe(409);
+    expect(write.eq).toHaveBeenCalledWith('status', 'waiting');
+    expect(write.eq).toHaveBeenCalledWith('host_user_id', 'host-id');
+    expect(require('../game/gameStore').getGame('ABCDEF')).toBeFalsy();
+  });
 
   it('returns 200 with started=true and full seat list when all conditions are met', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({
