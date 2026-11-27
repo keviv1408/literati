@@ -50,8 +50,9 @@ describe('POST /api/rooms', () => {
     const response = await request(app).post('/api/rooms/ABC123/abandon').set('Authorization', 'Bearer token');
     expect(response.status).toBe(status);
     expect(chain.update).toHaveBeenCalledWith({ status: 'cancelled' });
+    expect(chain.in).toHaveBeenCalledWith('status', ['waiting', 'cancelled']);
     expect(chain.eq.mock.calls).toEqual(expect.arrayContaining([
-      ['code', 'ABC123'], ['status', 'waiting'], ['is_matchmaking', false], ['host_user_id', id],
+      ['code', 'ABC123'], ['is_matchmaking', false], ['host_user_id', id],
     ]));
   });
 

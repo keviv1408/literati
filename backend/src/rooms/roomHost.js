@@ -18,7 +18,10 @@ function storedHostId(room) {
 
 async function _transitionWaitingRoom(db, code, nextStatus, hostColumn, hostId) {
   let query = db.from('rooms').update({ status: nextStatus })
-    .eq('code', code).eq('status', 'waiting').eq('is_matchmaking', false);
+    .eq('code', code).eq('is_matchmaking', false);
+  query = nextStatus === 'cancelled'
+    ? query.in('status', ['waiting', 'cancelled'])
+    : query.eq('status', 'waiting');
   if (hostColumn) query = query.eq(hostColumn, hostId);
   const { data, error } = await query.select('code').maybeSingle();
   if (error) throw error;
