@@ -1,5 +1,7 @@
 'use strict';
 
+const { randomUUID } = require('node:crypto');
+
 /**
  * Rematch vote store — in-memory per-room rematch state.
  *
@@ -84,6 +86,8 @@ function initRematch(roomCode, players, onTimeout, gameConfig = {}) {
   }, REMATCH_VOTE_TIMEOUT_MS);
 
   _rematchState.set(code, {
+    roundId: randomUUID(),
+    expiresAt: Date.now() + REMATCH_VOTE_TIMEOUT_MS,
     votes,
     players,
     totalCount,
@@ -180,6 +184,8 @@ function getVoteSummary(roomCode) {
     && (yesCount + remainingVotes < state.majority || humansUndecided === 0);
 
   return {
+    roundId:          state.roundId,
+    expiresAt:        state.expiresAt,
     yesCount,
     noCount,
     totalCount:       state.totalCount,

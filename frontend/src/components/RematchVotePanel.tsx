@@ -35,7 +35,11 @@ interface RematchVotePanelProps {
   disabled?:       boolean;
 }
 
-export default function RematchVotePanel({
+export default function RematchVotePanel(props: RematchVotePanelProps) {
+  return <VoteRound key={props.rematchVote?.roundId} {...props} />;
+}
+
+function VoteRound({
   rematchVote,
   rematchDeclined,
   myPlayerId,
@@ -46,7 +50,7 @@ export default function RematchVotePanel({
 }: RematchVotePanelProps) {
   const [mountedAt] = useState(Date.now);
   const startTime      = voteStartedAt ?? mountedAt;
-  const expiresAt      = startTime + voteTimeoutMs;
+  const expiresAt      = rematchVote?.expiresAt ?? startTime + voteTimeoutMs;
 
   const [secondsLeft, setSecondsLeft] = useState<number>(
     () => Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))

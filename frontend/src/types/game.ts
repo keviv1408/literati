@@ -264,6 +264,8 @@ export interface PlayerVoteRecord {
 /** Rematch vote tally broadcast after every vote cast (including bot auto-votes). */
 export interface RematchVoteUpdatePayload {
   type: 'rematch_vote_update';
+  roundId?: string;
+  expiresAt?: number;
   yesCount: number;
   noCount: number;
   totalCount: number;

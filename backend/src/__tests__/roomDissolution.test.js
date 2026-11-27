@@ -91,6 +91,7 @@ const {
   getGame,
   hasGame,
   deleteGame,
+  registerConnection,
   _clearAll: clearGameStore,
 } = require('../game/gameStore');
 
@@ -182,6 +183,29 @@ it('discards late stats completion from a previous game', () => {
   setGame('ABC123', makeGame('ABC123'));
   _openRematchVote(oldGame);
   expect(hasRematch('ABC123')).toBe(false);
+});
+
+it('starts a new vote round after a failed claim and deals when the same humans vote again', async () => {
+  const gs = makeGame('ABC123');
+  gs.status = 'completed';
+  setGame(gs.roomCode, gs);
+  const messages = [];
+  registerConnection(gs.roomCode, 'p1', { readyState: 1, send: json => messages.push(JSON.parse(json)) });
+  _openRematchVote(gs);
+  const firstRound = messages[0];
+  jest.advanceTimersByTime(10_000);
+  mockClaim.mockResolvedValueOnce({ error: new Error('write timeout') });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote(gs.roomCode, id, true);
+  expect(messages.at(-1)).toMatchObject({
+    type: 'rematch_vote_update', yesCount: 0, roundId: expect.any(String), expiresAt: Date.now() + REMATCH_VOTE_TIMEOUT_MS,
+  });
+  expect(messages.at(-1).roundId).not.toBe(firstRound.roundId);
+  expect(messages[4].roundId).toBe(firstRound.roundId);
+
+  mockClaim.mockResolvedValueOnce({ data: { code: gs.roomCode } });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote(gs.roomCode, id, true);
+  expect(getGame(gs.roomCode).status).toBe('active');
+  expect(messages).toContainEqual(expect.objectContaining({ type: 'game_init' }));
 });
 
 it('preserves a closed lobby when a majority vote loses the completed-room claim', async () => {
