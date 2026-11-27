@@ -57,8 +57,7 @@ import ReconnectBar from '@/components/ReconnectBar';
 import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import { takeOpeningDeal } from '@/lib/openingDeal';
-import CardFlightAnimation from '@/components/CardFlightAnimation';
-import AskDeniedAnimation from '@/components/AskDeniedAnimation';
+import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
@@ -270,7 +269,7 @@ export default function GamePage({ params }: PageProps) {
 
   const {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, askHistory, players, gameState, variant, playerCount,
-    lastAskResult, lastDeclareResult, declarationReveal, turnTimer, declarationTimer,
+    lastAskResult, lastVisibleAskResult, nextAskAnimation, finishAskAnimation, lastDeclareResult, declarationReveal, turnTimer, declarationTimer,
     botTakeover, reclaimQueued, rematchVote, rematchDeclined, roomDissolved,
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting,
@@ -387,13 +386,15 @@ export default function GamePage({ params }: PageProps) {
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
-    clearCardFlight,
-    clearAskDeniedCue,
-  } = useAskResultAnimations(lastAskResult, {
+    speechResult,
+    clearAskAnimation,
+  } = useAskResultAnimations(myPlayerId ? lastVisibleAskResult : null, {
+    nextAskAnimation: myPlayerId ? nextAskAnimation : null,
+    finishAskAnimation,
     getAskBubbleCardIds,
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult, players);
+  const reactionBubble = useReactionBubble(speechResult, lastAskResult ? null : lastDeclareResult, players);
   const speechBubble = reactionBubble ?? askSpeechBubble;
 
   const publishMoveMessage = useCallback((message: string, persistentMessage: string | null = null) => {
@@ -1167,6 +1168,9 @@ export default function GamePage({ params }: PageProps) {
           turnTimer={turnTimer}
           declarationTimer={declarationTimer}
           lastAskResult={lastAskResult}
+          lastVisibleAskResult={lastVisibleAskResult}
+          nextAskAnimation={nextAskAnimation}
+          finishAskAnimation={finishAskAnimation}
           lastDeclareResult={lastDeclareResult}
           declareProgress={declareProgress ?? null}
           declarationReveal={declarationReveal}
@@ -1336,7 +1340,7 @@ export default function GamePage({ params }: PageProps) {
                   playerCount={effectivePlayerCount === 8 ? 8 : 6}
                 />
               </CircularGameTable>
-              {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
+              <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearAskAnimation} />
             </div>
           </main>
           </>
@@ -1531,16 +1535,6 @@ export default function GamePage({ params }: PageProps) {
 
       {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
 
-      {askDeniedCue && (
-        <AskDeniedAnimation
-          cardId={askDeniedCue.cardId}
-          seatLeft={askDeniedCue.seatLeft}
-          seatTop={askDeniedCue.seatTop}
-          seatWidth={askDeniedCue.seatWidth}
-          seatHeight={askDeniedCue.seatHeight}
-          onComplete={clearAskDeniedCue}
-        />
-      )}
 
     </div>
     </VoiceProvider>

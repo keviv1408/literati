@@ -602,7 +602,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                     key={p.userId}
                     className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-slate-800 text-slate-200 text-xs"
                   >
-                    <Avatar displayName={p.displayName} size="xs" />
+                    <Avatar displayName={p.displayName} avatarId={p.avatarId} size="xs" />
                     {p.displayName}
                     {p.isHost && <span aria-label="host">👑</span>}
                   </span>

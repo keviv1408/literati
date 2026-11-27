@@ -990,6 +990,64 @@ function makeGameInit(
   };
 }
 
+describe('queued ask animations', () => {
+  it.each(['player', 'spectator'])('plays each received bot ask in order for a %s while the turn advances', async viewer => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
+    render(<GamePage params={makeParams('ABC123')} />);
+    await screen.findByTestId('game-view');
+    const me = 'player-me';
+    const bot = 'p4';
+    const roster = [
+      makePlayer(me, 'Me', 1, 0), makePlayer(bot, 'Carol', 2, 1, { isBot: true }),
+      makePlayer('p2', 'Alice', 1, 2), makePlayer('p5', 'Dave', 2, 3),
+      makePlayer('p3', 'Bob', 1, 4), makePlayer('p6', 'Eve', 2, 5),
+    ];
+    const init = makeGameInit(me, roster);
+    const state = { ...init.gameState, currentTurnPlayerId: bot };
+    act(() => {
+      openWs();
+      sendWsMessage({ ...init, type: viewer === 'player' ? 'game_init' : 'spectator_init',
+        myHand: ['3_h', '4_h', '6_h'], hands: {}, gameState: state });
+    });
+    await screen.findByTestId(viewer === 'player' ? 'game-view' : 'spectator-view');
+    jest.useFakeTimers();
+    try {
+      act(() => {
+        const batchCardIds = ['3_h', '4_h', '5_h'];
+        for (const cardId of batchCardIds) {
+          const success = cardId !== '5_h';
+          sendWsMessage({ type: 'ask_result', askerId: bot, targetId: me, cardId, batchCardIds,
+            success, newTurnPlayerId: success ? bot : me, lastMove: cardId });
+        }
+        sendWsMessage({ type: 'hand_update', hand: ['6_h'] });
+        sendWsMessage({ type: 'game_state', state: { ...state, currentTurnPlayerId: me } });
+      });
+      const seat = document.querySelector(`[data-player-id="${me}"][data-active-turn]`);
+      expect(seat).toBeInTheDocument();
+      if (viewer === 'player') {
+        expect(screen.getByTestId('card-wrapper-6_h')).toBeInTheDocument();
+        expect(screen.queryByTestId('card-wrapper-3_h')).toBeNull();
+      }
+      const expectRank = (overlay: string, rank: string) =>
+        expect(screen.getByTestId(overlay).querySelector('[data-rank]')).toHaveAttribute('data-rank', rank);
+      await _advanceTime(20);
+      expectRank('card-flight-card', '3');
+      await _advanceTime(2000);
+      await _advanceTime(20);
+      expectRank('card-flight-card', '4');
+      await _advanceTime(2000);
+      await _advanceTime(20);
+      expectRank('ask-denied-card', '5');
+      expect(screen.queryByTestId('card-flight-card')).toBeNull();
+      await _advanceTime(1300);
+      expect(screen.queryByTestId('ask-denied-card')).toBeNull();
+      expect(screen.queryByTestId('card-flight-card')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
 describe('GamePage — game controls always available', () => {
   describe('6-player game — all human players', () => {
     const MY_PLAYER_ID = 'player-me';
@@ -2190,6 +2248,9 @@ describe('GamePage — while the game socket reconnects', () => {
         variant: 'remove_7s',
         playerCount: 6,
         lastAskResult: null,
+        nextAskAnimation: null,
+        lastVisibleAskResult: null,
+        finishAskAnimation: jest.fn(),
         lastDeclareResult: null,
         declarationReveal: null,
         turnTimer: null,

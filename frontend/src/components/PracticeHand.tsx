@@ -12,9 +12,8 @@ import { askPayloadFor, toGamePlayers } from '@/lib/tutorial/table';
 import { cardLabel, getCardHalfSuit, getHalfSuitCards } from '@/types/game';
 import type { CardId, GamePlayer } from '@/types/game';
 import ActionModeToggle from './ActionModeToggle';
-import AskDeniedAnimation from './AskDeniedAnimation';
 import AskSpeechBubbleOverlay from './AskSpeechBubbleOverlay';
-import CardFlightAnimation from './CardFlightAnimation';
+import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import CardHand from './CardHand';
 import CircularGameTable from './CircularGameTable';
 import DeclaredBooksTable from './DeclaredBooksTable';
@@ -67,7 +66,7 @@ function PracticeHand({ returnTo, onExit }: PracticeHandProps) {
     const before = computeState(PRACTICE_DEAL, PRACTICE_ASKS, played - 2, PLAYERS);
     return askPayloadFor(PRACTICE_ASKS[played - 1], before);
   }, [played]);
-  const { cardFlight, askDeniedCue, askSpeechBubble, clearCardFlight, clearAskDeniedCue } =
+  const { cardFlight, askDeniedCue, askSpeechBubble, clearAskAnimation } =
     useAskResultAnimations(askResult, { getPlayerDisplayName: playerName });
   const showAskAnimation = !declareMode && stage === 'play';
   const lastMove = stage === 'done' ? 'You declared Low Diamonds — correct! Team 1 scores'
@@ -213,7 +212,7 @@ function PracticeHand({ returnTo, onExit }: PracticeHandProps) {
                 askTargetPlayerIds={requested.length ? opponents : undefined} onAskTargetClick={askSeat}>
                 <DeclaredBooksTable declaredSuits={table.declared} playerCount={6} />
               </CircularGameTable>
-              {showAskAnimation && cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
+              <TableCardTransfer denial={showAskAnimation ? askDeniedCue : null} flight={showAskAnimation ? cardFlight : null} onComplete={clearAskAnimation} />
             </div>
           </div>
           <footer className="hand-tray relative z-20 border-t px-3 py-2.5 lg:px-5 lg:py-3" data-testid="practice-hand-area">
@@ -246,7 +245,6 @@ function PracticeHand({ returnTo, onExit }: PracticeHandProps) {
           <DragOverlay dropAnimation={null}>{dragged && <PlayingCard cardId={dragged} size="md" selected />}</DragOverlay>
         </DndContext>
         {showAskAnimation && askSpeechBubble && <AskSpeechBubbleOverlay bubble={askSpeechBubble} />}
-        {showAskAnimation && askDeniedCue && <AskDeniedAnimation {...askDeniedCue} onComplete={clearAskDeniedCue} />}
       </div>
       {showPopup && (
         <div className={styles.popupOverlay}>

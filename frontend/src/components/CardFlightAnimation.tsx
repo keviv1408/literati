@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useEffectEvent, type CSSProperties } from 'react';
+import { useEffect, useEffectEvent, type CSSProperties, type Ref } from 'react';
 import type { CardId } from '@/types/game';
 import PlayingCard from './PlayingCard';
 
@@ -13,6 +13,7 @@ export interface CardFlightAnimationProps {
   toX: number;
   toY: number;
   onComplete: () => void;
+  cardRef?: Ref<HTMLDivElement>;
 }
 
 export default function CardFlightAnimation({
@@ -22,6 +23,7 @@ export default function CardFlightAnimation({
   toX,
   toY,
   onComplete,
+  cardRef,
 }: CardFlightAnimationProps) {
   const flightKey = [cardId, fromX, fromY, toX, toY].join(':');
   const complete = useEffectEvent(onComplete);
@@ -56,6 +58,7 @@ export default function CardFlightAnimation({
     >
       <div
         key={flightKey}
+        ref={cardRef}
         className="absolute animate-card-flight-table"
         style={style}
         data-testid="card-flight-card"

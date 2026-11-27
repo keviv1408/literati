@@ -1,6 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import posthog from 'posthog-js';
 import { useGameSocket } from '@/hooks/useGameSocket';
+import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import {
   reportPendingSocketDrop,
   trackEvent,
@@ -152,6 +153,103 @@ function _callOrder(...fns: unknown[]): number[] {
 }
 
 describe('useGameSocket reconnect', () => {
+  it('drops active and pending ask visuals while hidden and keeps receiving game updates', () => {
+    const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    const table = document.createElement('div');
+    table.className = 'game-table-space';
+    table.innerHTML = '<div data-player-id="p1"></div><div data-player-id="p2"></div>';
+    document.body.append(table);
+    const ask = { type: 'ask_result', askerId: 'p1', targetId: 'p2', success: true, newTurnPlayerId: 'p1', lastMove: 'Ask' };
+    try {
+      const { result } = renderHook(() => {
+        const socket = useGameSocket({ roomCode: 'ABCDEF', bearerToken: 't' });
+        const animation = useAskResultAnimations(socket.lastVisibleAskResult, {
+          nextAskAnimation: socket.nextAskAnimation, finishAskAnimation: socket.finishAskAnimation,
+        });
+        return { socket, animation };
+      });
+      const ws = _latestWs();
+      _confirm(ws);
+      _message(ws, { ...ask, cardId: '2_h' });
+      _message(ws, { ...ask, cardId: '3_h' });
+      _advance(20);
+      expect(result.current.animation.cardFlight?.cardId).toBe('2_h');
+      const staleComplete = result.current.animation.clearAskAnimation;
+      hidden.mockReturnValue(true);
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(result.current.socket.lastAskResult?.cardId).toBe('3_h');
+      expect(result.current.socket.nextAskAnimation).toBeNull();
+      expect(result.current.animation.askSpeechBubble).toBeNull();
+
+      _message(ws, { ...ask, cardId: '4_h' });
+      _message(ws, { ...ask, cardId: '5_h', success: false, newTurnPlayerId: 'p2' });
+      _message(ws, { type: 'hand_update', hand: ['4_h'] });
+      _message(ws, { type: 'game_state', state: { status: 'active', currentTurnPlayerId: 'p2' } });
+      hidden.mockReturnValue(false);
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      _advance(3200);
+      expect(result.current.socket.wsStatus).toBe('connected');
+      expect(result.current.socket.askHistory).toHaveLength(4);
+      expect(result.current.socket.lastAskResult?.cardId).toBe('5_h');
+      expect(result.current.socket.myHand).toEqual(['4_h']);
+      expect(result.current.socket.gameState?.currentTurnPlayerId).toBe('p2');
+      expect(result.current.animation).toMatchObject({
+        cardFlight: null, askDeniedCue: null, speechResult: null, askSpeechBubble: null,
+      });
+      _message(ws, { ...ask, cardId: '6_h' });
+      _advance(20);
+      act(staleComplete);
+      expect(result.current.animation.cardFlight?.cardId).toBe('6_h');
+      expect(result.current.animation.askSpeechBubble).toMatchObject({ variant: 'ask', cards: ['6_h'] });
+    } finally {
+      hidden.mockRestore();
+      table.remove();
+    }
+  });
+
+  it('skips missing seats and ignores a completed flight from an earlier connection', () => {
+    const table = document.createElement('div');
+    table.className = 'game-table-space';
+    table.innerHTML = '<div data-player-id="p1"></div><div data-player-id="p2"></div>';
+    document.body.append(table);
+    const ask = { type: 'ask_result', askerId: 'p1', targetId: 'p2', cardId: '3_h',
+      success: true, newTurnPlayerId: 'p1', lastMove: 'p1 received 3 of hearts' };
+    try {
+      const { result } = renderHook(() => {
+        const socket = useGameSocket({ roomCode: 'ABCDEF', bearerToken: 't' });
+        return useAskResultAnimations(socket.lastVisibleAskResult, {
+          nextAskAnimation: socket.nextAskAnimation, finishAskAnimation: socket.finishAskAnimation,
+        });
+      });
+      _confirm(_latestWs());
+      _message(_latestWs(), { ...ask, targetId: 'missing' });
+      _message(_latestWs(), ask);
+      _advance(20);
+      _advance(20);
+      expect(result.current.cardFlight?.cardId).toBe('3_h');
+      const completeOldFlight = result.current.clearAskAnimation;
+      _serverClose(_latestWs(), 1006);
+      expect(result.current.cardFlight).toBeNull();
+      _advance(1000);
+      _confirm(_latestWs(), { ...GAME_INIT, askHistory: [ask] });
+      _advance(20);
+      expect(result.current.cardFlight).toBeNull();
+      _message(_latestWs(), ask);
+      _advance(20);
+      const newFlight = result.current.cardFlight;
+      expect(newFlight?.cardId).toBe('3_h');
+      act(completeOldFlight);
+      expect(result.current.cardFlight).toBe(newFlight);
+      _message(_latestWs(), { ...ask, cardId: '4_h' });
+      _message(_latestWs(), { type: 'game_over' });
+      _advance(20);
+      expect(result.current.cardFlight).toBeNull();
+      expect(result.current.speechResult).toBeNull();
+    } finally {
+      table.remove();
+    }
+  });
+
   it('reconnects in place after an unexpected close', () => {
     const { result } = _renderPlayer();
     _confirm(_latestWs());
