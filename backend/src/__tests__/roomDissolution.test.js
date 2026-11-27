@@ -34,6 +34,7 @@ jest.useFakeTimers();
 
 // Capture broadcast calls so we can assert on them
 const broadcastedMessages = [];
+const mockClaim = jest.fn();
 
 // We need to intercept broadcastToGame. Since it is an internal function in
 // gameSocketServer.js we cannot mock it directly; instead we spy on the
@@ -47,7 +48,7 @@ jest.mock('../db/supabase', () => ({
         eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
         single:   async () => ({ data: null, error: null }),
       }),
-      update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      update: () => ({ eq: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), maybeSingle: mockClaim }),
       rpc:    () => Promise.resolve({ error: null }),
     }),
     auth: { getUser: async () => ({ data: null, error: new Error('mock') }) },
@@ -82,7 +83,7 @@ jest.mock('../game/botLogic', () => ({
 // ---------------------------------------------------------------------------
 
 const {
-  _handleRematchTimeout,
+  _handleRematchTimeout, handleRematchVote, _openRematchVote,
 } = require('../game/gameSocketServer');
 
 const {
@@ -174,6 +175,25 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+it('discards late stats completion from a previous game', () => {
+  const oldGame = makeGame('ABC123');
+  oldGame.status = 'completed';
+  setGame('ABC123', makeGame('ABC123'));
+  _openRematchVote(oldGame);
+  expect(hasRematch('ABC123')).toBe(false);
+});
+
+it('preserves a closed lobby when a majority vote loses the completed-room claim', async () => {
+  const gs = makeGame('ABC123');
+  gs.status = 'completed';
+  setGame('ABC123', gs);
+  _openRematchVote(gs);
+  mockClaim.mockResolvedValueOnce({ data: null });
+  for (const id of ['p1', 'p2', 'p3', 'p4']) await handleRematchVote('ABC123', id, true);
+  expect(mockClaim).toHaveBeenCalled();
+  expect(getGame('ABC123')).toBe(gs);
+});
 
 describe('REMATCH_VOTE_TIMEOUT_MS constant', () => {
   test('1. timer duration is exactly 30 000 ms (30 seconds)', () => {

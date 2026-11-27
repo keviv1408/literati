@@ -2467,17 +2467,7 @@ async function handleForcedFailedDeclaration(roomCode, declarerId, halfSuitId) {
     const supabase = getSupabaseClient();
     await persistGameState(gs, supabase);
     await updateStats(gs);
-    // pass game metadata so the rematch store can recreate the
-    // game with the same team assignments and seat order on majority yes.
-    const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout, {
-      roomId:      gs.roomId,
-      variant:     gs.variant,
-      playerCount: gs.playerCount,
-    });
-    broadcastToGame(roomCode, {
-      type: 'rematch_vote_update',
-      ...initialSummary,
-    });
+    _openRematchVote(gs);
     return;
   }
 
@@ -2611,19 +2601,7 @@ async function handleDeclare(roomCode, declarerId, halfSuitId, assignment, ws, i
     // Update player stats
     await updateStats(gs);
 
-    // Initiate rematch vote — bots auto-vote yes, humans vote within timeout
-    // pass game metadata so the rematch store can recreate the
-    // game with the same team assignments and seat order on majority yes.
-    const initialSummary = initRematch(roomCode, gs.players, _handleRematchTimeout, {
-      roomId:      gs.roomId,
-      variant:     gs.variant,
-      playerCount: gs.playerCount,
-    });
-    broadcastToGame(roomCode, {
-      type:        'rematch_vote_update',
-      ...initialSummary,
-    });
-
+    _openRematchVote(gs);
     return;
   }
 
@@ -2738,6 +2716,14 @@ function handleDeclareProgress(roomCode, declarerId, halfSuitId, assignment) {
 // ---------------------------------------------------------------------------
 // Rematch vote handling
 // ---------------------------------------------------------------------------
+
+function _openRematchVote(gs) {
+  if (gs.status !== 'completed' || getGame(gs.roomCode) !== gs) return;
+  const summary = initRematch(gs.roomCode, gs.players, _handleRematchTimeout, {
+    roomId: gs.roomId, variant: gs.variant, playerCount: gs.playerCount,
+  });
+  broadcastToGame(gs.roomCode, { type: 'rematch_vote_update', ...summary });
+}
 
 /**
  * Called when the 30-second rematch vote window expires without a majority yes.
@@ -3112,12 +3098,6 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
     // Clear rematch vote state (stops the timeout timer).
     clearRematch(roomCode);
 
-    // Clear stale runtime state from the finished game before spinning up a
-    // new one. Partial selections and disconnect timers from the old game must
-    // not leak into the rematch.
-    clearRoomPartialSelections(roomCode);
-    clearDisconnectRoom(roomCode);
-
     // Build the seat list. Prefer the config from the rematch store (captured
     // at game-over time) and fall back to the live game state if needed.
     const finishedGs = getGame(roomCode);
@@ -3147,6 +3127,20 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
       return;
     }
 
+    const supabase = getSupabaseClient();
+    try {
+      const { data, error } = await supabase.from('rooms').update({ status: 'starting' })
+        .eq('code', roomCode).eq('status', 'completed').select('code').maybeSingle();
+      if (error) throw error;
+      if (!data) return;
+    } catch (err) {
+      if (finishedGs) _openRematchVote(finishedGs);
+      if (ws) sendJson(ws, { type: 'error', code: 'REMATCH_START_FAILED', message: 'Could not start the rematch.' });
+      return;
+    }
+    clearRoomPartialSelections(roomCode);
+    clearDisconnectRoom(roomCode);
+
     try {
       // Spin up a new game instance with the same team assignments and seat
       // positions — cards are freshly dealt but player identities, teams, and
@@ -3163,13 +3157,6 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
         `[game-ws] Rematch game created for room ${roomCode} — ` +
         `${seats.length} players, variant=${rematchVariant}`
       );
-
-      // Mark the room as in_progress in Supabase.
-      const supabase = getSupabaseClient();
-      await supabase
-        .from('rooms')
-        .update({ status: 'in_progress' })
-        .eq('code', roomCode);
 
       // Persist the new game state for crash recovery.
       await persistGameState(newGs, supabase);
@@ -3204,6 +3191,10 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
       scheduleBotTurnIfNeeded(newGs);
       scheduleTurnTimerIfNeeded(newGs);
     } catch (err) {
+      if (getGame(roomCode) === finishedGs) {
+        await supabase.from('rooms').update({ status: 'completed' }).eq('code', roomCode).eq('status', 'starting');
+        if (finishedGs) _openRematchVote(finishedGs);
+      }
       console.error('[game-ws] Failed to create rematch game:', err.message);
       // Fall back to declining so clients aren't left waiting indefinitely.
       broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
@@ -3949,6 +3940,7 @@ module.exports = {
   handleAskCard,
   handleDeclare,
   handleRematchVote,
+  _openRematchVote,
   handleRematchInitiate,
   handlePartialSelection,
   handleDeclareProgress,
