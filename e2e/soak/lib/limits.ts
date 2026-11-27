@@ -34,6 +34,8 @@ export const STEP_WAIT_MS = 50_000;
 export const GAME_CAP_MS = { short: 360_000, long: 600_000 };
 export const LOST_MOVES_MAX = 2;
 export const AFTER_MOVE_POLL_MS = 5_000;
+// The summary follows the seven-second final declaration reveal.
+export const FINAL_SCREEN_POLL_MS = 7_000 + AFTER_MOVE_POLL_MS;
 
 export const LOBBY_WAIT_MS = 30_000;
 export const FIRST_SAVE_MS = 10_000;

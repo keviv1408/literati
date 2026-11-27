@@ -24,7 +24,7 @@ import {
   trackSocketDropped,
   trackSocketRecovered,
 } from '@/lib/analytics';
-import { FAILED_DECLARATION_SEAT_REVEAL_MS } from '@/lib/declarationSeatReveal';
+import { DECLARATION_REVEAL_MS } from '@/lib/declarationSeatReveal';
 import { createReconnectingSocket, type ReconnectingSocket, type SocketDrop } from '@/lib/reconnectingSocket';
 import type {
   CardId,
@@ -37,6 +37,7 @@ import type {
   AskRecord,
   DeclarationResultPayload,
   DeclarationFailedPayload,
+  DeclarationReveal,
   DeclareProgressPayload,
   GameOverPayload,
   RematchVoteUpdatePayload,
@@ -150,13 +151,7 @@ export interface UseGameSocketReturn {
   playerCount: 6 | 8 | null;
   lastAskResult: AskResultPayload | null;
   lastDeclareResult: DeclarationResultPayload | null;
-  /**
-   * Non-null after a failed declaration broadcast.
-   * Carries the per-card diff payload so the FailedDeclarationReveal overlay
-   * can show which cards were assigned incorrectly and who actually held them.
-   * Cleared when a new turn starts (next ask_result or declaration_result).
-   */
-  declarationFailed: DeclarationFailedPayload | null;
+  declarationReveal: DeclarationReveal | null;
   turnTimer: TurnTimerPayload | null;
   /**
    * Active declaration-phase timer for the local player.
@@ -408,7 +403,7 @@ export function useGameSocket({
   const [playerCount, setPlayerCount]    = useState<6 | 8 | null>(null);
   const [lastAskResult, setLastAskResult] = useState<AskResultPayload | null>(null);
   const [lastDeclareResult, setLastDeclareResult] = useState<DeclarationResultPayload | null>(null);
-  const [declarationFailed, setDeclarationFailed] = useState<DeclarationFailedPayload | null>(null);
+  const [declarationReveal, setDeclarationReveal] = useState<DeclarationReveal | null>(null);
   const [turnTimer, setTurnTimer]        = useState<TurnTimerPayload | null>(null);
   const [declarationTimer, setDeclarationTimer] = useState<DeclarationTimerPayload | null>(null);
   const [rematchVote, setRematchVote]    = useState<RematchVoteUpdatePayload | null>(null);
@@ -432,7 +427,6 @@ export function useGameSocket({
   const [error, setError]                   = useState<string | null>(null);
 
   const socketRef  = useRef<ReconnectingSocket | null>(null);
-  const declarationFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Persist the variant across message handlers so hand_update (which only
   // carries the new hand array) can still apply the half-suit sort.
   const variantRef = useRef<CardVariant | null>(null);
@@ -452,13 +446,13 @@ export function useGameSocket({
 
     function confirmSocket() {
       socket.confirm();
+      setDeclarationReveal(null);
       if (!lost) return;
       const { drop, at } = lost;
       lost = null;
       // A reload would not show these, so a reconnect must not either.
       setLastAskResult(null);
       setLastDeclareResult(null);
-      setDeclarationFailed(null);
       setDeclarationTimer(null);
       setBotTakeover(null);
       setDeclareProgress(null);
@@ -594,8 +588,7 @@ export function useGameSocket({
           setBotTakeover(null);
           // Turn ended — clear any active declaration phase timer
           setDeclarationTimer(null);
-          // New turn started — clear any lingering failed-declaration overlay
-          setDeclarationFailed(null);
+          setDeclarationReveal(null);
           // a player took an ask action — clear the post-declaration highlight
           setPostDeclarationHighlight(null);
           // clear post-declaration timer (turn is now in progress)
@@ -621,9 +614,7 @@ export function useGameSocket({
           setDeclareProgress(null);
           // Turn ended — clear declaration phase timer
           setDeclarationTimer(null);
-          // If the declaration was correct, there will be no `declarationFailed`
-          // event — proactively clear any stale diff from a previous round.
-          if (payload.correct) setDeclarationFailed(null);
+          setDeclarationReveal(payload.correct ? payload : null);
           // safety reset — a new declaration result means any previous
           // pending ack is moot (another declaration happened in the meantime).
           setPendingTurnPassAck(false);
@@ -672,7 +663,7 @@ export function useGameSocket({
           // Broadcast sent only for incorrect declarations (correct === false).
           // Carries the per-card diff so clients can render FailedDeclarationReveal.
           const payload = msg as unknown as DeclarationFailedPayload;
-          setDeclarationFailed(payload);
+          setDeclarationReveal(payload);
           break;
         }
 
@@ -909,24 +900,10 @@ export function useGameSocket({
   }, [roomCode, bearerToken, spectatorToken, guestRecoveryKey]);
 
   useEffect(() => {
-    if (declarationFailedTimerRef.current) {
-      clearTimeout(declarationFailedTimerRef.current);
-      declarationFailedTimerRef.current = null;
-    }
-
-    if (!declarationFailed) return;
-
-    declarationFailedTimerRef.current = setTimeout(() => {
-      setDeclarationFailed(null);
-    }, FAILED_DECLARATION_SEAT_REVEAL_MS);
-
-    return () => {
-      if (declarationFailedTimerRef.current) {
-        clearTimeout(declarationFailedTimerRef.current);
-        declarationFailedTimerRef.current = null;
-      }
-    };
-  }, [declarationFailed]);
+    if (!declarationReveal) return;
+    const timer = setTimeout(() => setDeclarationReveal(null), DECLARATION_REVEAL_MS);
+    return () => clearTimeout(timer);
+  }, [declarationReveal]);
 
   // ── Send helpers ──────────────────────────────────────────────────────────
 
@@ -1059,7 +1036,7 @@ export function useGameSocket({
     playerCount,
     lastAskResult,
     lastDeclareResult,
-    declarationFailed,
+    declarationReveal,
     declareProgress,
     turnTimer,
     declarationTimer,

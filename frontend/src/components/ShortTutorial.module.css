@@ -4,19 +4,32 @@
   justify-content: space-between;
   min-height: 44px;
   gap: 12px;
-  border-bottom: 1px solid #33534e;
   color: #d0efe2;
   text-align: left;
-  font-size: .875rem;
   cursor: pointer;
-}
-.homeEntry {
   padding: .8rem 1.1rem;
   border: 1px solid #467364;
   border-radius: .75rem;
   background: #112d28;
   font-size: 1rem;
 }
+.entry {
+  width: 100%;
+  border-color: #498676;
+  background: #123a32;
+}
+.entry strong {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+}
+.entry strong::before {
+  content: '';
+  flex: none;
+  border-block: .32rem solid transparent;
+  border-inline-start: .52rem solid #78e2b5;
+}
+.entry:hover, .entry:active { background: #194a3f; border-color: #78e2b5; }
 .entry span, .homeEntry span { color: #a2c0b6; white-space: nowrap; font-size: .8125rem; }
 .entry:hover, .homeEntry:hover { color: white; }
 .dialog {
