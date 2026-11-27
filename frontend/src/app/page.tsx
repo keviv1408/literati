@@ -3,6 +3,8 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
+import { useAccount } from '@/contexts/AccountContext';
+import AccountControls from '@/components/AccountControls';
 import { useGuest } from '@/contexts/GuestContext';
 import { recentPlayerRoomCodes } from '@/lib/roomMembership';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
@@ -20,6 +22,7 @@ const WAKE_NOTICE_DELAY_MS = 2000;
 export default function Home() {
   const router = useRouter();
   const { guestSession, hasName, ensureGuestName } = useGuestSession();
+  const { session: account, loading: accountLoading, displayName: accountName } = useAccount();
   const { clearGuest } = useGuest();
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
@@ -31,8 +34,8 @@ export default function Home() {
   const [check, setCheck] = useState<{ identity: string; room: ReturningRoom | null; hosting: boolean; hostedLobby?: string; failed?: boolean } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [createAfterCheck, setCreateAfterCheck] = useState(false);
-  const identity = guestSession?.sessionId;
-  const displayName = guestSession?.displayName;
+  const identity = accountLoading ? undefined : account?.user.id ?? guestSession?.sessionId;
+  const displayName = account ? accountName : guestSession?.displayName;
   const current = check?.identity === identity ? check : null;
   const returning = current?.room;
   const checking = Boolean(identity && !current);
@@ -51,7 +54,7 @@ export default function Home() {
       clearTimeout(timer);
       try {
         const codes = recentPlayerRoomCodes().filter(code => !isKickedFromRoom(code));
-        const { room, hosting, hostedLobby } = await getReturningRoom(session.displayName, session.identity, codes);
+        const { room, hosting, hostedLobby } = await getReturningRoom(session.displayName, session.identity, codes, account?.access_token);
         if (request !== latest) return;
         hasResult = true;
         setCheck({ identity: session.identity, room, hosting, hostedLobby });
@@ -76,7 +79,7 @@ export default function Home() {
       window.removeEventListener('focus', refreshWhenVisible);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
-  }, [identity, displayName, attempt]);
+  }, [identity, displayName, attempt, account?.access_token]);
 
   useEffect(() => {
     if (!createAfterCheck || !current) return;
@@ -106,7 +109,7 @@ export default function Home() {
   }, []);
 
   async function _createPrivateRoom() {
-    const session = await ensureGuestName();
+    const session = account ? { sessionId: account.user.id } : await ensureGuestName();
     if (!session) return; // user dismissed the guest name modal
     if (!current || current.identity !== session.sessionId) {
       setCreateAfterCheck(true);
@@ -157,7 +160,8 @@ export default function Home() {
         </div>
 
         {/* Guest session indicator */}
-        {mounted && hasName && guestSession && (
+        {!isAndroidBuild() && <AccountControls />}
+        {mounted && !accountLoading && !account && hasName && guestSession && (
           <div className="flex items-center gap-2 bg-emerald-900/50 border border-emerald-700/50 rounded-full px-4 py-2 text-sm text-emerald-200">
             <span className="text-base" aria-hidden="true">
               👤
@@ -168,7 +172,7 @@ export default function Home() {
               onClick={() => {
                 if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
               }}
-              disabled={checking || current?.failed}
+              disabled={accountLoading || checking || current?.failed}
               className="ml-1 text-emerald-400 hover:text-white text-xs underline focus:outline-none focus:ring-1 focus:ring-emerald-400 rounded"
               aria-label="Change display name"
             >
@@ -204,7 +208,7 @@ export default function Home() {
           )}
           {current?.hosting && !returning && <p role="status" className="text-amber-200">You already host an active room.</p>}
           {!current?.hosting && <button
-            disabled={checking || current?.failed}
+            disabled={accountLoading || checking || current?.failed}
             onClick={_createPrivateRoom}
             className="
               flex-1 py-4 px-6 rounded-xl font-bold text-lg
@@ -245,7 +249,7 @@ export default function Home() {
                 className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-emerald-300"
               />
               <button
-                disabled={checking || current?.failed}
+                disabled={accountLoading || checking || current?.failed}
                 type="submit"
                 className="shrink-0 rounded-lg border border-emerald-600 bg-emerald-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-emerald-300"
               >
@@ -292,10 +296,10 @@ export default function Home() {
       </main>
 
       {/* Create Room modal — shown after guest name is confirmed */}
-      {mounted && guestSession && (
+      {mounted && displayName && (
         <CreateRoomModal
           open={isCreateRoomOpen}
-          displayName={guestSession.displayName}
+          displayName={displayName}
           onClose={() => setIsCreateRoomOpen(false)}
         />
       )}

@@ -47,6 +47,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { useAccount } from '@/contexts/AccountContext';
 import { useGuest } from '@/contexts/GuestContext';
 import { clearToken, getCachedToken } from '@/lib/backendSession';
 import { getGuestBearerToken, validateSession, ApiError } from '@/lib/api';
@@ -99,6 +100,9 @@ export interface ReconnectResult {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useReconnect(): ReconnectResult {
+  const { session: account, loading: accountLoading } = useAccount();
+  const accountToken = account?.access_token;
+  const accountId = account?.user.id;
   const { guestSession } = useGuest();
 
   const [status, setStatus] = useState<ReconnectStatus>('loading');
@@ -119,6 +123,29 @@ export function useReconnect(): ReconnectResult {
 
   useEffect(() => {
     let cancelled = false;
+
+    if (accountLoading) return;
+    if (accountId && accountToken) {
+      setStatus('reconnecting');
+      validateSession(accountToken).then(me => {
+        if (cancelled) return;
+        if (me.isGuest || me.id !== accountId) throw new ApiError(401, 'Account mismatch');
+        setSessionId(me.id);
+        setBearerToken(accountToken);
+        setDisplayName(me.displayName);
+        setIsGuest(false);
+        setErrorMessage(null);
+        setStatus('ready');
+      }).catch(err => {
+        if (cancelled) return;
+        const expired = err instanceof ApiError && err.status === 401;
+        setSessionId(null);
+        setBearerToken(null);
+        setStatus(expired ? 'session_expired' : 'error');
+        setErrorMessage(expired ? 'Please sign in again.' : 'Could not reach the server.');
+      });
+      return () => { cancelled = true; };
+    }
 
     // ── Guest path ────────────────────────────────────────────────────────────
     // GuestContext loads the display name from localStorage on mount (sync).
@@ -213,7 +240,7 @@ export function useReconnect(): ReconnectResult {
     setErrorMessage(null);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guestSession, retryCounter]);
+  }, [accountLoading, accountId, accountToken, guestSession, retryCounter]);
 
   return {
     status,

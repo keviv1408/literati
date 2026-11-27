@@ -41,6 +41,7 @@
  * { type: 'lobby-starting', roomCode, seats, botsAdded: string[] }
  */
 
+const { accountDisplayName } = require('../sessions/accountDisplayName');
 const { WebSocketServer, WebSocket } = require('ws');
 const url = require('url');
 const { v4: uuidv4 } = require('uuid');
@@ -113,7 +114,7 @@ async function resolveTokenToUser(token) {
     const { user } = data;
     return {
       playerId: user.id,
-      displayName: user.user_metadata?.display_name || user.email,
+      displayName: accountDisplayName(user),
       avatarId: user.user_metadata?.avatar_id || null,
       isGuest: false,
     };

@@ -17,6 +17,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from '@/contexts/AccountContext';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import {
   useMatchmakingSocket,
@@ -40,6 +41,7 @@ interface MatchmakingActivitySummary {
 
 export default function MatchmakingPage() {
   const router = useRouter();
+  const { session: account, loading: accountLoading, displayName: accountName } = useAccount();
   const { guestSession, ensureGuestName } = useGuestSession();
 
   // ── Filter selection ────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ export default function MatchmakingPage() {
   // ── WebSocket matchmaking hook ───────────────────────────────────────────────
   const { status, queueSize, leaveQueue } = useMatchmakingSocket({
     sessionId,
-    bearerToken,
+    bearerToken: bearerToken && (account?.access_token ?? bearerToken),
     autoJoinFilter,
     onMatchFound: useCallback(
       (roomCode: string) => {
@@ -114,14 +116,16 @@ export default function MatchmakingPage() {
 
     try {
       // Ensure the guest has a display name (opens modal if not set)
-      const session = await ensureGuestName();
+      const session = account
+        ? { sessionId: account.user.id, displayName: accountName || 'Player' }
+        : await ensureGuestName();
       if (!session) {
         setIsFetching(false);
         return; // user dismissed the name modal
       }
 
       // Obtain backend bearer token (uses cached token if still valid)
-      const token = await getGuestBearerToken(session.displayName, session.sessionId);
+      const token = account?.access_token ?? await getGuestBearerToken(session.displayName, session.sessionId);
 
       // Setting bearerToken + autoJoinFilter triggers the hook to:
       //   1. Open a WebSocket to /ws?token=<token>
@@ -205,11 +209,11 @@ export default function MatchmakingPage() {
         </div>
 
         {/* ── Guest name indicator ─────────────────────────────────────────── */}
-        {guestSession && (
+        {(account || guestSession) && (
           <div className="flex items-center gap-2 bg-emerald-900/50 border border-emerald-700/50 rounded-full px-4 py-2 text-sm text-emerald-200">
             <span aria-hidden="true">👤</span>
             Playing as{' '}
-            <span className="font-semibold">{guestSession.displayName}</span>
+            <span className="font-semibold">{accountName ?? guestSession?.displayName}</span>
           </div>
         )}
 
@@ -385,7 +389,7 @@ export default function MatchmakingPage() {
             {/* Find Game button */}
             <button
               onClick={handleFindGame}
-              disabled={isFetching}
+              disabled={isFetching || accountLoading}
               className="
                 w-full py-4 px-6 rounded-xl font-bold text-lg
                 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700

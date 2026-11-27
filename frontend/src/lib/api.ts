@@ -577,10 +577,12 @@ export interface ReturningRoom {
   destination: 'lobby' | 'game';
 }
 
-export async function getReturningRoom(displayName: string, recoveryKey: string, codes: string[]) {
-  const token = await getGuestBearerToken(displayName, recoveryKey);
-  return _withGuestRetry(token, { displayName, recoveryKey }, bearer =>
+export async function getReturningRoom(displayName: string, identity: string, codes: string[], accountToken?: string) {
+  const lookup = (token: string) =>
     apiFetch<{ room: ReturningRoom | null; hosting: boolean; hostedLobby?: string }>('/api/rooms/return', {
-      method: 'POST', token: bearer, body: JSON.stringify({ codes }),
-    }));
+      method: 'POST', token, body: JSON.stringify({ codes }),
+    });
+  if (accountToken) return lookup(accountToken);
+  const token = await getGuestBearerToken(displayName, identity);
+  return _withGuestRetry(token, { displayName, recoveryKey: identity }, lookup);
 }

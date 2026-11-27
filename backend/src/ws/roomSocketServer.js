@@ -59,6 +59,7 @@
  * 4010 — Kicked by host
  */
 
+const { accountDisplayName } = require('../sessions/accountDisplayName');
 const { WebSocketServer } = require('ws');
 const url = require('url');
 const { getGuestSession, updateGuestAvatar, VALID_AVATAR_IDS } = require('../sessions/guestSessionStore');
@@ -546,8 +547,7 @@ async function resolveUserFromToken(token) {
     if (error || !data?.user) return null;
 
     const { user } = data;
-    const displayName =
-      user.user_metadata?.display_name || user.email || 'Unknown';
+    const displayName = accountDisplayName(user);
     return {
       userId: user.id,
       displayName,

@@ -322,7 +322,7 @@ describe('resolveUser: display name resolution from metadata', () => {
     expect(mock.from).not.toHaveBeenCalled();
   });
 
-  it('falls back to email when user_metadata has no display_name', async () => {
+  it('falls back to the email prefix when user_metadata has no display_name', async () => {
     const mock = buildMockSupabase({
       data: {
         user: {
@@ -341,7 +341,7 @@ describe('resolveUser: display name resolution from metadata', () => {
       .set('Authorization', 'Bearer jwt');
 
     expect(res.status).toBe(200);
-    expect(res.body.user.displayName).toBe('noname@example.com');
+    expect(res.body.user.displayName).toBe('noname');
     expect(res.body.user.avatarId).toBeNull();
   });
 

@@ -49,6 +49,7 @@ self.addEventListener('fetch', (event) => {
   if (
     request.method !== 'GET' ||
     url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/auth/') ||
     url.pathname.startsWith('/ws') ||
     !url.origin.startsWith(self.location.origin)
   ) {

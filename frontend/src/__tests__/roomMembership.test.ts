@@ -49,16 +49,15 @@ describe('MEMBERSHIP_TTL_MS', () => {
 
 describe('saveRoomMembership', () => {
   it('returns the membership object it just saved', () => {
-    const result = saveRoomMembership('abc123', 'tok_abc', 'pid_1');
+    const result = saveRoomMembership('abc123', 'pid_1');
     expect(result.roomCode).toBe('ABC123');
-    expect(result.bearerToken).toBe('tok_abc');
     expect(result.playerId).toBe('pid_1');
     expect(result.role).toBe('player');
     expect(typeof result.expiresAt).toBe('number');
   });
 
   it('upper-cases the room code', () => {
-    saveRoomMembership('abc123', 'token', 'pid');
+    saveRoomMembership('abc123', 'pid');
     const raw = window.localStorage.getItem('literati_room_ABC123');
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!) as RoomMembership;
@@ -67,48 +66,47 @@ describe('saveRoomMembership', () => {
 
   it('stores a correct expiresAt approximately MEMBERSHIP_TTL_MS in the future', () => {
     const before = Date.now();
-    const result = saveRoomMembership('ROOM01', 'tok', 'pid');
+    const result = saveRoomMembership('ROOM01', 'pid');
     const after = Date.now();
     expect(result.expiresAt).toBeGreaterThanOrEqual(before + MEMBERSHIP_TTL_MS);
     expect(result.expiresAt).toBeLessThanOrEqual(after + MEMBERSHIP_TTL_MS);
   });
 
   it('defaults role to "player" when not specified', () => {
-    const result = saveRoomMembership('ROOM01', 'tok', 'pid');
+    const result = saveRoomMembership('ROOM01', 'pid');
     expect(result.role).toBe('player');
   });
 
   it('accepts "host" role', () => {
-    const result = saveRoomMembership('ROOM01', 'tok', 'pid', 'host');
+    const result = saveRoomMembership('ROOM01', 'pid', 'host');
     expect(result.role).toBe('host');
   });
 
   it('accepts "spectator" role', () => {
-    const result = saveRoomMembership('ROOM01', 'tok', 'pid', 'spectator');
+    const result = saveRoomMembership('ROOM01', 'pid', 'spectator');
     expect(result.role).toBe('spectator');
   });
 
   it('stores data under the key literati_room_<CODE>', () => {
-    saveRoomMembership('XYZ999', 'token', 'pid');
+    saveRoomMembership('XYZ999', 'pid');
     const stored = window.localStorage.getItem('literati_room_XYZ999');
     expect(stored).not.toBeNull();
     const parsed = JSON.parse(stored!) as RoomMembership;
-    expect(parsed.bearerToken).toBe('token');
+    expect(parsed).not.toHaveProperty('bearerToken');
   });
 
   it('is idempotent — calling twice for the same room overwrites cleanly', () => {
-    saveRoomMembership('ROOM01', 'tok1', 'pid1');
-    saveRoomMembership('ROOM01', 'tok2', 'pid2', 'host');
+    saveRoomMembership('ROOM01', 'pid1');
+    saveRoomMembership('ROOM01', 'pid2', 'host');
     const stored = loadRoomMembership('ROOM01');
     expect(stored).not.toBeNull();
-    expect(stored!.bearerToken).toBe('tok2');
     expect(stored!.playerId).toBe('pid2');
     expect(stored!.role).toBe('host');
   });
 
   it('stores different rooms under separate keys', () => {
-    saveRoomMembership('ROOM01', 'tokA', 'pidA');
-    saveRoomMembership('ROOM02', 'tokB', 'pidB');
+    saveRoomMembership('ROOM01', 'pidA');
+    saveRoomMembership('ROOM02', 'pidB');
     expect(window.localStorage.getItem('literati_room_ROOM01')).not.toBeNull();
     expect(window.localStorage.getItem('literati_room_ROOM02')).not.toBeNull();
   });
@@ -118,11 +116,10 @@ describe('saveRoomMembership', () => {
 
 describe('loadRoomMembership', () => {
   it('returns the saved membership for a valid record', () => {
-    saveRoomMembership('ABC123', 'tok', 'pid', 'player');
+    saveRoomMembership('ABC123', 'pid', 'player');
     const loaded = loadRoomMembership('ABC123');
     expect(loaded).not.toBeNull();
     expect(loaded!.roomCode).toBe('ABC123');
-    expect(loaded!.bearerToken).toBe('tok');
     expect(loaded!.playerId).toBe('pid');
     expect(loaded!.role).toBe('player');
   });
@@ -150,7 +147,7 @@ describe('loadRoomMembership', () => {
   });
 
   it('is case-insensitive — lower-case lookup matches upper-cased stored code', () => {
-    saveRoomMembership('ABC123', 'tok', 'pid');
+    saveRoomMembership('ABC123', 'pid');
     const loaded = loadRoomMembership('abc123');
     expect(loaded).not.toBeNull();
     expect(loaded!.roomCode).toBe('ABC123');
@@ -160,7 +157,7 @@ describe('loadRoomMembership', () => {
     jest.useFakeTimers();
     // Save now.
     jest.setSystemTime(new Date('2025-01-01T00:00:00Z'));
-    saveRoomMembership('EXPIRE', 'tok', 'pid');
+    saveRoomMembership('EXPIRE', 'pid');
 
     // Advance time past the TTL.
     jest.advanceTimersByTime(MEMBERSHIP_TTL_MS + 1);
@@ -175,14 +172,13 @@ describe('loadRoomMembership', () => {
   it('returns the record when it is NOT yet expired', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2025-01-01T00:00:00Z'));
-    saveRoomMembership('FRESH', 'tok', 'pid');
+    saveRoomMembership('FRESH', 'pid');
 
     // Advance time to just before expiry.
     jest.advanceTimersByTime(MEMBERSHIP_TTL_MS - 1000);
 
     const loaded = loadRoomMembership('FRESH');
     expect(loaded).not.toBeNull();
-    expect(loaded!.bearerToken).toBe('tok');
   });
 });
 
@@ -190,14 +186,14 @@ describe('loadRoomMembership', () => {
 
 describe('clearRoomMembership', () => {
   it('removes the specified room record from localStorage', () => {
-    saveRoomMembership('ROOM01', 'tok', 'pid');
+    saveRoomMembership('ROOM01', 'pid');
     clearRoomMembership('ROOM01');
     expect(loadRoomMembership('ROOM01')).toBeNull();
     expect(window.localStorage.getItem('literati_room_ROOM01')).toBeNull();
   });
 
   it('is case-insensitive', () => {
-    saveRoomMembership('ROOM01', 'tok', 'pid');
+    saveRoomMembership('ROOM01', 'pid');
     clearRoomMembership('room01');
     expect(window.localStorage.getItem('literati_room_ROOM01')).toBeNull();
   });
@@ -207,8 +203,8 @@ describe('clearRoomMembership', () => {
   });
 
   it('leaves other room records intact', () => {
-    saveRoomMembership('ROOM01', 'tokA', 'pidA');
-    saveRoomMembership('ROOM02', 'tokB', 'pidB');
+    saveRoomMembership('ROOM01', 'pidA');
+    saveRoomMembership('ROOM02', 'pidB');
     clearRoomMembership('ROOM01');
     expect(loadRoomMembership('ROOM01')).toBeNull();
     expect(loadRoomMembership('ROOM02')).not.toBeNull();
@@ -216,7 +212,7 @@ describe('clearRoomMembership', () => {
 
   it('leaves non-room localStorage keys untouched', () => {
     window.localStorage.setItem('some_other_key', 'value');
-    saveRoomMembership('ROOM01', 'tok', 'pid');
+    saveRoomMembership('ROOM01', 'pid');
     clearRoomMembership('ROOM01');
     expect(window.localStorage.getItem('some_other_key')).toBe('value');
   });
@@ -226,9 +222,9 @@ describe('clearRoomMembership', () => {
 
 describe('clearAllRoomMemberships', () => {
   it('removes all literati_room_* keys', () => {
-    saveRoomMembership('ROOM01', 'tokA', 'pidA');
-    saveRoomMembership('ROOM02', 'tokB', 'pidB');
-    saveRoomMembership('ROOM03', 'tokC', 'pidC');
+    saveRoomMembership('ROOM01', 'pidA');
+    saveRoomMembership('ROOM02', 'pidB');
+    saveRoomMembership('ROOM03', 'pidC');
     clearAllRoomMemberships();
     expect(loadRoomMembership('ROOM01')).toBeNull();
     expect(loadRoomMembership('ROOM02')).toBeNull();
@@ -238,7 +234,7 @@ describe('clearAllRoomMemberships', () => {
   it('leaves non-room keys untouched', () => {
     window.localStorage.setItem('literati_guest_session', '{"type":"guest"}');
     window.localStorage.setItem('some_app_key', 'value');
-    saveRoomMembership('ROOM01', 'tok', 'pid');
+    saveRoomMembership('ROOM01', 'pid');
     clearAllRoomMemberships();
     expect(window.localStorage.getItem('literati_guest_session')).toBe('{"type":"guest"}');
     expect(window.localStorage.getItem('some_app_key')).toBe('value');
@@ -249,7 +245,7 @@ describe('clearAllRoomMemberships', () => {
   });
 
   it('is safe to call multiple times', () => {
-    saveRoomMembership('ROOM01', 'tok', 'pid');
+    saveRoomMembership('ROOM01', 'pid');
     clearAllRoomMemberships();
     expect(() => clearAllRoomMemberships()).not.toThrow();
   });
@@ -262,7 +258,7 @@ describe('RoomRole values', () => {
 
   roles.forEach((role) => {
     it(`saves and restores role "${role}" correctly`, () => {
-      saveRoomMembership('ROLE01', 'tok', 'pid', role);
+      saveRoomMembership('ROLE01', 'pid', role);
       const loaded = loadRoomMembership('ROLE01');
       expect(loaded).not.toBeNull();
       expect(loaded!.role).toBe(role);
@@ -274,13 +270,13 @@ describe('RoomRole values', () => {
 
 describe('Storage key format', () => {
   it('uses the literati_room_ prefix', () => {
-    saveRoomMembership('FOOBAR', 'tok', 'pid');
+    saveRoomMembership('FOOBAR', 'pid');
     const stored = window.localStorage.getItem('literati_room_FOOBAR');
     expect(stored).not.toBeNull();
   });
 
   it('does NOT store under a key without the prefix', () => {
-    saveRoomMembership('FOOBAR', 'tok', 'pid');
+    saveRoomMembership('FOOBAR', 'pid');
     expect(window.localStorage.getItem('FOOBAR')).toBeNull();
     expect(window.localStorage.getItem('literati_FOOBAR')).toBeNull();
   });
@@ -290,16 +286,15 @@ describe('Storage key format', () => {
 
 describe('Persistence round-trip', () => {
   it('data written by saveRoomMembership is immediately readable by loadRoomMembership', () => {
-    saveRoomMembership('ROUND1', 'round_token', 'round_pid', 'host');
+    saveRoomMembership('ROUND1', 'round_pid', 'host');
     const loaded = loadRoomMembership('ROUND1');
     expect(loaded).not.toBeNull();
-    expect(loaded!.bearerToken).toBe('round_token');
     expect(loaded!.playerId).toBe('round_pid');
     expect(loaded!.role).toBe('host');
   });
 
   it('clearRoomMembership makes the record unreadable by loadRoomMembership', () => {
-    saveRoomMembership('ROUND2', 'tok', 'pid');
+    saveRoomMembership('ROUND2', 'pid');
     clearRoomMembership('ROUND2');
     expect(loadRoomMembership('ROUND2')).toBeNull();
   });

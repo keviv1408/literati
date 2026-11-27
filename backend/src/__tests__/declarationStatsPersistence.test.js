@@ -36,11 +36,14 @@ let mockProfileRow = null;
 
 jest.mock('../db/supabase', () => ({
   getSupabaseClient: () => ({
-    from: () => ({
+    from: (table) => ({
       select: () => ({
-        eq: () => ({
+        eq: (column, value) => ({
           maybeSingle: async () => ({
-            data:  mockProfileRow,
+            data: value === mockProfileRow?.user_id ? {
+              user_profiles: { id: { ...mockProfileRow.user_profiles, id: value } },
+              user_stats: { user_id: mockProfileRow },
+            }[table]?.[column] : null,
             error: null,
           }),
         }),
@@ -322,7 +325,7 @@ describe('GET /api/stats/profile/:userId — declarationsAttempted ', () => {
       .get('/api/stats/profile/uuid-abc')
       .expect(200);
 
-    expect(res.body.profile).toHaveProperty('declarationsAttempted', 8);
+    expect(res.body.profile).toMatchObject({ userId: 'uuid-abc', displayName: 'Alice', wins: 5, declarationsAttempted: 8 });
     expect(res.body.profile).toHaveProperty('declarationsCorrect', 6);
     expect(res.body.profile).toHaveProperty('declarationsIncorrect', 2);
   });

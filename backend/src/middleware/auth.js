@@ -20,6 +20,7 @@
  *   requireRegisteredUser — 401 if unauthenticated, 403 if guest
  */
 
+const { accountDisplayName } = require('../sessions/accountDisplayName');
 const { getSupabaseClient } = require('../db/supabase');
 const { getGuestSession } = require('../sessions/guestSessionStore');
 
@@ -88,7 +89,7 @@ async function resolveUser(req) {
     // it is only fetched by endpoints that need the full profile (e.g.
     // GET /api/auth/me) to avoid coupling the lightweight JWT-verification
     // path to an additional database round-trip on every request.
-    const displayName = user.user_metadata?.display_name || user.email;
+    const displayName = accountDisplayName(user);
     const avatarId = user.user_metadata?.avatar_id || null;
 
     return {

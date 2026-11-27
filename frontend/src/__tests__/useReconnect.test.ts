@@ -24,6 +24,9 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
+const mockUseAccount = jest.fn();
+jest.mock('@/contexts/AccountContext', () => ({ useAccount: () => mockUseAccount() }));
+
 // Mock GuestContext
 const mockUseGuest = jest.fn();
 jest.mock('@/contexts/GuestContext', () => ({
@@ -100,6 +103,7 @@ function rejectValidateWithNetworkError() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUseAccount.mockReturnValue({ session: null, loading: false });
   mockGetCachedToken.mockReturnValue(null);
   mockClearToken.mockImplementation(() => {});
   mockGetGuestBearerToken.mockResolvedValue('fresh-guest-token');
@@ -108,6 +112,21 @@ beforeEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('useReconnect', () => {
+  it('waits for account hydration and prefers a verified account over a saved guest', async () => {
+    stubGuestSession();
+    mockUseAccount.mockReturnValue({ session: null, loading: true });
+    const { result, rerender } = renderHook(() => useReconnect());
+    expect(result.current.status).toBe('loading');
+    expect(mockGetGuestBearerToken).not.toHaveBeenCalled();
+
+    mockUseAccount.mockReturnValue({ session: { user: { id: 'account' }, access_token: 'current-jwt' }, loading: false });
+    resolveValidateSession({ id: 'account', isGuest: false, displayName: 'Player', avatarId: null });
+    rerender();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current).toMatchObject({ sessionId: 'account', bearerToken: 'current-jwt', isGuest: false });
+    expect(mockValidateSession).toHaveBeenCalledWith('current-jwt');
+    expect(mockGetGuestBearerToken).not.toHaveBeenCalled();
+  });
   // ── No-session path ────────────────────────────────────────────────────────
 
   describe('no_session', () => {

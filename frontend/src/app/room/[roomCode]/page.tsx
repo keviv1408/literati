@@ -49,6 +49,7 @@ import { useReconnect } from '@/hooks/useReconnect';
 import { useLobbyRecovery } from '@/hooks/useLobbyRecovery';
 import { useGuest } from '@/contexts/GuestContext';
 import { DISPLAY_NAME_MAX_LENGTH, validateDisplayName } from '@/types/user';
+import AccountControls from '@/components/AccountControls';
 import Avatar from '@/components/Avatar';
 import type { Room, Team } from '@/types/room';
 import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
@@ -263,7 +264,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
     if (isSpectator) return;
     const role: RoomRole = amIHostLive ? 'host' : 'player';
-    saveRoomMembership(roomCode, bearerToken, myPlayerId, role);
+    saveRoomMembership(roomCode, myPlayerId, role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, bearerToken, myPlayerId, amIHostLive, isKicked, kickedOnEntry, isSpectator]);
 
@@ -473,17 +474,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           </p>
         </div>
         <div className="flex flex-col gap-3 w-full max-w-xs">
-          <button
-            onClick={() => router.push('/auth/login')}
-            className="
-              py-3 px-6 rounded-xl font-semibold
-              bg-emerald-600 hover:bg-emerald-500 text-white
-              transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-            "
-            data-testid="session-expired-signin-btn"
-          >
-            Sign In Again
-          </button>
+          <AccountControls signInOnly />
           <button
             onClick={() => router.push('/')}
             className="

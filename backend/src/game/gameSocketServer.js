@@ -119,6 +119,7 @@
  * turn timer so clients can resync their turn-countdown display.
  */
 
+const { accountDisplayName } = require('../sessions/accountDisplayName');
 const { WebSocketServer, WebSocket } = require('ws');
 const url = require('url');
 const crypto = require('crypto');
@@ -455,7 +456,7 @@ async function resolveUser(token) {
     const { user } = data;
     return {
       playerId:    user.id,
-      displayName: user.user_metadata?.display_name || user.email,
+      displayName: accountDisplayName(user),
       avatarId:    user.user_metadata?.avatar_id || null,
       isGuest:     false,
     };
@@ -614,18 +615,21 @@ async function updateStats(gs) {
       }
       const declarationsAttempted = declarationsCorrect + declarationsIncorrect;
 
-      await supabase.rpc('increment_user_stats', {
-        p_user_id:                 player.playerId,
-        p_games_played:            1,
-        p_games_completed:         1,
-        p_wins:                    isWin  ? 1 : 0,
-        p_losses:                  isLoss ? 1 : 0,
-        p_declarations_correct:    declarationsCorrect,
-        p_declarations_incorrect:  declarationsIncorrect,
-        p_declarations_attempted:  declarationsAttempted,
-      }).catch((err) => {
+      try {
+        const { error } = await supabase.rpc('increment_user_stats', {
+          p_user_id:                 player.playerId,
+          p_games_played:            1,
+          p_games_completed:         1,
+          p_wins:                    isWin  ? 1 : 0,
+          p_losses:                  isLoss ? 1 : 0,
+          p_declarations_correct:    declarationsCorrect,
+          p_declarations_incorrect:  declarationsIncorrect,
+          p_declarations_attempted:  declarationsAttempted,
+        });
+        if (error) throw error;
+      } catch (err) {
         console.error('[game] stats RPC failed for player', player.playerId, ':', err.message);
-      });
+      }
     }
   } catch (err) {
     console.error('[game] updateStats error:', err);
