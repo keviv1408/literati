@@ -19,6 +19,43 @@
   translate: 0 -50%;
 }
 
+.book-zone {
+  position: relative;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.book-team-label {
+  position: absolute;
+  inset-inline: 0;
+  height: 28%;
+  display: grid;
+  place-items: center;
+  font-size: min(.375rem, 14cqh);
+  line-height: 1;
+}
+
+.book-row {
+  /* Keep the outer cards inside the oval when one team wins all eight sets. */
+  width: 64%;
+  display: flex;
+  justify-content: center;
+  gap: min(.9cqw, .375rem);
+}
+
+.book-row > div {
+  container-type: inline-size;
+  min-width: 0;
+  flex: 0 1 min(1.1rem, 40cqh);
+}
+
+.book-row [role='img'] {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+}
+
 /* Keep tile centres fixed when a short window needs smaller seats. */
 .game-table-seat > * {
   zoom: min(1, tan(atan2(100cqw, var(--seat-fit-width, 23.5rem))));
@@ -165,6 +202,9 @@
 
 @media (min-width: 40rem) {
   .seats-6 { --seat-y-scale: 0.83; }
+
+  .book-team-label { font-size: min(.5625rem, 14cqh); }
+  .book-row > div { flex-basis: min(2.25rem, 33cqh); }
 
   .game-table {
     width: min(100cqw, calc(100cqh * 5 / 3));
