@@ -395,7 +395,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
           displayName={displayName}
           avatarId={avatarId}
           size={avatarSize}
-          className="lg:w-11 lg:h-11 xl:w-12 xl:h-12"
+          className="speech-avatar lg:w-11 lg:h-11 xl:w-12 xl:h-12"
           aria-label={undefined}
         />
 

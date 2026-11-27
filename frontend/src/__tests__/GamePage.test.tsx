@@ -842,7 +842,7 @@ describe('GamePage — in_progress game view', () => {
 
       expect(screen.getByTestId('ask-speech-bubble-overlay')).toBeTruthy();
       expect(screen.getByTestId('ask-speech-bubble-text').textContent).toBe(
-        'Carol, can I have the 5 of hearts?',
+        'Carol, can I have the 5♥?',
       );
       expect(screen.getByTestId('ask-denied-animation')).toBeTruthy();
       expect(screen.getByTestId('ask-denied-card')).toBeTruthy();
@@ -850,24 +850,16 @@ describe('GamePage — in_progress game view', () => {
       expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
 
       act(() => {
-        jest.advanceTimersByTime(1200);
+        jest.advanceTimersByTime(1400);
       });
 
       expect(screen.getByTestId('denied-speech-bubble-text').textContent).toMatch(/\S/);
-
-      act(() => {
-        jest.advanceTimersByTime(2300);
-      });
-
       expect(screen.queryByTestId('ask-speech-bubble-overlay')).toBeNull();
       expect(screen.queryByTestId('ask-denied-animation')).toBeNull();
-      expect(screen.getByTestId('denied-speech-bubble-overlay')).toBeTruthy();
 
-      act(() => {
-        jest.advanceTimersByTime(500);
-      });
-
+      act(() => { jest.advanceTimersByTime(1200); });
       expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
+      expect(screen.queryByTestId('ask-speech-bubble-overlay')).toBeNull();
 
       act(() => sendWsMessage({ type: 'game_players', players: [...roster] }));
       act(() => { jest.advanceTimersByTime(20); });
@@ -1354,8 +1346,22 @@ describe('GamePage — game controls always available', () => {
         });
 
         expect(screen.getByTestId('ask-speech-bubble-text').textContent).toBe(
-          'Carol, can I have the Ace of hearts and 2 of hearts?',
+          'Carol, can I have the A♥ and 2♥?',
         );
+        const table = screen.getByTestId('ask-speech-bubble-overlay').parentElement;
+        expect(table).toHaveClass('game-table-space');
+        expect(screen.getByTestId('card-flight-animation').parentElement).toBe(table);
+
+        act(() => { jest.advanceTimersByTime(1100); });
+        act(() => sendWsMessage({
+          type: 'ask_result', askerId: MY_PLAYER_ID, targetId: 'p4', cardId: '2_h',
+          batchCardIds: ['1_h', '2_h'], success: true, newTurnPlayerId: MY_PLAYER_ID,
+          lastMove: 'Me asked Carol for 2♥ — got it',
+        }));
+        act(() => { jest.advanceTimersByTime(20); });
+        expect(screen.getByTestId('ask-speech-bubble-text')).toHaveTextContent('A♥ and 2♥');
+        act(() => { jest.advanceTimersByTime(1300); });
+        expect(screen.queryByTestId('ask-speech-bubble-overlay')).toBeNull();
       } finally {
         jest.useRealTimers();
       }
@@ -1397,7 +1403,7 @@ describe('GamePage — game controls always available', () => {
 
         const bubbleText = screen.getByTestId('ask-speech-bubble-text').textContent ?? '';
         expect(bubbleText).toMatch(
-          /^(Locking in|Pretty sure)\. Me, can I have the Ace of hearts\?$/,
+          /^(Locking in|Pretty sure)\. Me, can I have the A♥\?$/,
         );
       } finally {
         jest.useRealTimers();

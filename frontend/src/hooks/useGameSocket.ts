@@ -485,6 +485,7 @@ export function useGameSocket({
         case 'game_init': {
           confirmSocket();
           setLastAskResult(null);
+          setLastDeclareResult(null);
           const payload = msg as unknown as {
             myPlayerId: string;
             myHand: CardId[];
@@ -522,6 +523,7 @@ export function useGameSocket({
         case 'spectator_init': {
           confirmSocket();
           setLastAskResult(null);
+          setLastDeclareResult(null);
           const payload = msg as unknown as {
             players: GamePlayer[];
             hands: SpectatorHands;
