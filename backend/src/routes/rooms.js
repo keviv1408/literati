@@ -112,10 +112,6 @@ router.post('/return', requireAuth, async (req, res) => {
     if (error) throw error;
     const hosting = hosted.length > 0;
     const candidates = [...new Set([...codes, ...hosted.map(room => room.code)])].filter(code => !isBlocked(code, playerId));
-    const firstHosted = hosted.find(room => room.code === candidates[0]);
-    if (firstHosted && firstHosted.status !== ROOM_STATUS.IN_PROGRESS) {
-      return res.json({ room: { code: firstHosted.code, destination: 'lobby' }, hosting });
-    }
     if (!candidates.length) return res.json({ room: null, hosting });
 
     const rooms = await db.from('rooms').select('code, status, player_count')
@@ -140,10 +136,10 @@ router.post('/return', requireAuth, async (req, res) => {
       if (snapshots.error) throw snapshots.error;
       for (const row of snapshots.data) games.set(row.code, row.game_state);
     }
+    const otherLobby = hostedLobby ? { hostedLobby } : {};
     for (const code of candidates) {
       const room = byCode.get(code);
-      if (!room) continue;
-      const otherLobby = hostedLobby && hostedLobby !== code ? { hostedLobby } : {};
+      if (!room || code === hostedLobby) continue;
       if (room.status === ROOM_STATUS.IN_PROGRESS) {
         const game = games.get(code);
         if (game?.status === 'active' && findReturningSeat(game.players, playerId, recoveryKey)) {
@@ -151,12 +147,12 @@ router.post('/return', requireAuth, async (req, res) => {
         }
       } else {
         const clients = roomClients.get(code);
-        if (code === hostedLobby || clients?.has(playerId) || (recentlyLeftLobby(playerId, code) && (clients?.size ?? 0) < room.player_count)) {
+        if (clients?.has(playerId) || (recentlyLeftLobby(playerId, code) && (clients?.size ?? 0) < room.player_count)) {
           return res.json({ room: { code, destination: 'lobby' }, hosting, ...otherLobby });
         }
       }
     }
-    return res.json({ room: null, hosting });
+    return res.json({ room: hostedLobby ? { code: hostedLobby, destination: 'lobby' } : null, hosting });
   } catch {
     return res.status(500).json({ error: 'Could not check your room' });
   }

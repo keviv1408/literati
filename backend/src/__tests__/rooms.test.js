@@ -69,7 +69,10 @@ describe('POST /api/rooms', () => {
 
   it('finds the authenticated host lobby without any client hints', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
-    mockSupabase._chain.order.mockResolvedValue({ data: [{ code: 'ABC123', status: 'waiting' }] });
+    const lobby = { code: 'ABC123', status: 'waiting' };
+    const chain = mockSupabase._chain;
+    chain.order.mockResolvedValue({ data: [lobby] });
+    chain.eq.mockImplementation(column => column === 'is_matchmaking' ? Promise.resolve({ data: [lobby] }) : chain);
 
     const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [] });
 
@@ -96,7 +99,12 @@ describe('POST /api/rooms', () => {
     expect((await lookup()).body).toEqual({ room: null, hosting: false });
   });
 
-  it.each(['waiting', 'in_progress'])('returns the recent game before an owned %s room', async (status) => {
+  it.each([
+    ['waiting', ['JOIN02']],
+    ['waiting', ['HOST01', 'JOIN02']],
+    ['waiting', ['STALE9', 'HOST01', 'JOIN02']],
+    ['in_progress', ['JOIN02']],
+  ])('offers the joined game alongside an owned %s room with hints %j', async (status, codes) => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'owner' } } });
     const hosted = { code: 'HOST01', status };
     const joined = { code: 'JOIN02', status: 'in_progress' };
@@ -111,7 +119,7 @@ describe('POST /api/rooms', () => {
       return chain;
     });
 
-    const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes: [joined.code] });
+    const response = await request(app).post('/api/rooms/return').set('Authorization', 'Bearer valid-token').send({ codes });
 
     expect(response.body).toEqual({
       room: { code: joined.code, destination: 'game' }, hosting: true,
