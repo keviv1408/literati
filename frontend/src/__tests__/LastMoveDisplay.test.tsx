@@ -97,13 +97,14 @@ describe('LastMoveDisplay', () => {
   it('renders ask-success message: "[player] asked [player] for [card] — got it"', () => {
     const msg = 'Alice asked Dave for 9♠ — got it';
     render(<LastMoveDisplay message={msg} />);
-    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
+    expect(screen.getByTestId('last-move-display')).toHaveTextContent(msg);
+    expect(screen.getByLabelText('Last move').querySelector('[data-ask-result="received"]')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('renders combined ask-success message with multiple cards', () => {
     const msg = 'Alice asked Bob for 8♣, 10♣, and J♣ — got them';
     render(<LastMoveDisplay message={msg} players={PLAYERS} />);
-    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
+    expect(screen.getByTestId('last-move-display')).toHaveTextContent(msg);
     expect(screen.getByText('8♣').className).toContain('text-slate-900');
     expect(screen.getByText('10♣').className).toContain('text-slate-900');
     expect(screen.getByText('J♣').className).toContain('text-slate-900');
@@ -112,7 +113,8 @@ describe('LastMoveDisplay', () => {
   it('renders combined ask message with mixed got and denied cards', () => {
     const msg = 'Alice asked Bob for 8♣ and 10♣ — got 8♣; denied 10♣';
     render(<LastMoveDisplay message={msg} players={PLAYERS} />);
-    expect(screen.getByTestId('last-move-display').textContent).toContain(msg);
+    expect(screen.getByTestId('last-move-display')).toHaveTextContent(msg);
+    expect(screen.getByLabelText('Last move').querySelectorAll('[data-ask-result]')).toHaveLength(2);
   });
 
   it('renders a multi-card ask preview without an outcome', () => {
@@ -145,6 +147,7 @@ describe('LastMoveDisplay', () => {
     render(<LastMoveDisplay message={msg} testId="spectator-last-move" />);
     const el = screen.getByTestId('spectator-last-move');
     expect(el.textContent).toBe(msg);
+    expect(el.querySelector('[data-ask-result="denied"]')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('updates display when message changes', () => {

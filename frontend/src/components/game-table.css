@@ -239,3 +239,19 @@
 .header-bot-speed > span { display: flex; }
 .header-bot-speed input { display: block; width: 100%; height: 1.75rem; accent-color: #58cfac; }
 .header-connection { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem; border-top: 1px solid #344551; color: #bdcbd4; font-size: 0.75rem; }
+
+.last-move-band:has([data-ask-result='received']):not(:has([data-ask-result='denied'])) {
+  background-color: #d9f4e7;
+}
+
+.last-move-band:has([data-ask-result='denied']):not(:has([data-ask-result='received'])) {
+  background-color: #fbe3e5;
+}
+
+.ask-result-mark {
+  margin-inline-start: 0.24em;
+  font-weight: 700;
+}
+
+.ask-result-mark[data-ask-result='received']::after { content: '✓'; color: #047857; }
+.ask-result-mark[data-ask-result='denied']::after { content: '×'; color: #be123c; }
