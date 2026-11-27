@@ -63,6 +63,7 @@ import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
 import GameHeader from '@/components/GameHeader';
+import ActionModeToggle from '@/components/ActionModeToggle';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import { useReactionBubble } from '@/hooks/useReactionBubble';
@@ -1428,53 +1429,18 @@ export default function GamePage({ params }: PageProps) {
                   )}
                   {isMyTurn && !isTurnPassMode && !showAskInline && (
                     <div className="flex items-center gap-2">
-                      {/* Ask / Declare toggle */}
-                      <div
-                        className="relative flex items-center rounded-full bg-slate-700/70 p-0.5"
-                        role="radiogroup"
-                        aria-label="Action mode"
-                        data-testid="ask-declare-toggle"
-                      >
-                        <button
-                          role="radio"
-                          aria-checked={!declareMode}
-                          onClick={() => {
-                            if (declareMode) resetDeclareMode();
-                          }}
-                          disabled={actionLoading || !canSend}
-                          className={[
-                            'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
-                            !declareMode
-                              ? 'bg-emerald-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white',
-                            actionLoading || !canSend ? 'opacity-50' : '',
-                          ].join(' ')}
-                          data-testid="toggle-ask"
-                        >
-                          Ask
-                        </button>
-                        <button
-                          role="radio"
-                          aria-checked={declareMode}
-                          onClick={() => {
-                            if (!declareMode) {
-                              resetAskMode();
-                              setDeclareMode(true);
-                            }
-                          }}
-                          disabled={actionLoading || !canSend}
-                          className={[
-                            'relative z-10 px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200',
-                            declareMode
-                              ? 'bg-violet-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white',
-                            actionLoading || !canSend ? 'opacity-50' : '',
-                          ].join(' ')}
-                          data-testid="toggle-declare"
-                        >
-                          Declare
-                        </button>
-                      </div>
+                      <ActionModeToggle
+                        declareMode={declareMode}
+                        disabled={actionLoading || !canSend}
+                        onChange={(declare) => {
+                          if (declare) {
+                            resetAskMode();
+                            setDeclareMode(true);
+                          } else {
+                            resetDeclareMode();
+                          }
+                        }}
+                      />
                     </div>
                   )}
                 </div>

@@ -55,6 +55,7 @@ import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
 import { LobbyStartControl, showStartPanel } from '@/components/LobbyStartControl';
 import AvatarPicker from '@/components/AvatarPicker';
 import LobbyInviteButton from '@/components/LobbyInviteButton';
+import LobbyPractice from '@/components/LobbyPractice';
 import { buildEmptySeats } from '@/types/lobby';
 import type { LobbyPlayer } from '@/types/lobby';
 
@@ -924,6 +925,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
                 </p>
               )}
             </div>
+          )}
+          {myWsPlayer && !isSpectator && room.status === 'waiting' && !isStarting && !lobbyStarting && (
+            <LobbyPractice />
           )}
         </header>
 
