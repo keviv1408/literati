@@ -1611,9 +1611,7 @@ export default function GamePage({ params }: PageProps) {
                       label={turnTimer.playerId === myPlayerId ? 'Your turn' : 'Turn timer'}
                     />
                   )}
-                  {/* during turn-pass mode the declarant must choose a
-                   * teammate seat -- Ask/Declare are hidden until the turn advances. */}
-                  {isMyTurn && !isTurnPassMode && (
+                  {isMyTurn && !isTurnPassMode && !showAskInline && (
                     <div className="flex items-center gap-2">
                       {/* Ask / Declare toggle */}
                       <div
@@ -1626,12 +1624,7 @@ export default function GamePage({ params }: PageProps) {
                           role="radio"
                           aria-checked={!declareMode}
                           onClick={() => {
-                            if (declareMode) {
-                              resetDeclareMode();
-                            } else if (showAskInline) {
-                              // Tapping Ask while ask tray is open cancels the current ask
-                              resetAskMode();
-                            }
+                            if (declareMode) resetDeclareMode();
                           }}
                           disabled={actionLoading || !canSend}
                           className={[

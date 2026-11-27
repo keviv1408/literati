@@ -1218,10 +1218,13 @@ describe('GamePage — game controls always available', () => {
 
       expect(screen.getByTestId('inline-ask-tray')).toBeTruthy();
 
+      expect(screen.queryByTestId('ask-declare-toggle')).toBeNull();
+
       fireEvent.click(document.body);
 
       await waitFor(() => {
         expect(screen.queryByTestId('inline-ask-tray')).toBeNull();
+        expect(screen.getByTestId('ask-declare-toggle')).toBeVisible();
       });
     });
 
