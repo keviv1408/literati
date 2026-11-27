@@ -128,6 +128,7 @@ const rateLimiter = require('../ws/rateLimiter');
 const { closeWithNotice } = require('../ws/closeWs');
 const { getSupabaseClient } = require('../db/supabase');
 const liveGamesStore = require('../liveGames/liveGamesStore');
+const { _startingRooms, _claimRoomStart, _releaseFailedStart } = require('../rooms/roomHost');
 const { clearRoom: clearBlocklistRoom } = require('../rooms/roomBlocklist');
 const {
   setGame,
@@ -3127,21 +3128,15 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
       return;
     }
 
+    if (_startingRooms.has(roomCode)) return;
+    _startingRooms.add(roomCode);
     const supabase = getSupabaseClient();
+    let claimed = false;
     try {
-      const { data, error } = await supabase.from('rooms').update({ status: 'starting' })
-        .eq('code', roomCode).eq('status', 'completed').select('code').maybeSingle();
-      if (error) throw error;
-      if (!data) return;
-    } catch (err) {
-      if (finishedGs) _openRematchVote(finishedGs);
-      if (ws) sendJson(ws, { type: 'error', code: 'REMATCH_START_FAILED', message: 'Could not start the rematch.' });
-      return;
-    }
-    clearRoomPartialSelections(roomCode);
-    clearDisconnectRoom(roomCode);
-
-    try {
+      claimed = await _claimRoomStart(supabase, roomCode, 'completed');
+      if (!claimed) return;
+      clearRoomPartialSelections(roomCode);
+      clearDisconnectRoom(roomCode);
       // Spin up a new game instance with the same team assignments and seat
       // positions — cards are freshly dealt but player identities, teams, and
       // seat indices are preserved exactly.
@@ -3192,12 +3187,13 @@ async function handleRematchVote(roomCode, playerId, vote, ws) {
       scheduleTurnTimerIfNeeded(newGs);
     } catch (err) {
       if (getGame(roomCode) === finishedGs) {
-        await supabase.from('rooms').update({ status: 'completed' }).eq('code', roomCode).eq('status', 'starting');
+        if (claimed) await _releaseFailedStart(supabase, roomCode, 'completed');
         if (finishedGs) _openRematchVote(finishedGs);
       }
       console.error('[game-ws] Failed to create rematch game:', err.message);
-      // Fall back to declining so clients aren't left waiting indefinitely.
-      broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'majority_no' });
+      if (ws) sendJson(ws, { type: 'error', code: 'REMATCH_START_FAILED', message: 'Could not start the rematch.' });
+    } finally {
+      _startingRooms.delete(roomCode);
     }
 
     return;

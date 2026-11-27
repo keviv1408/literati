@@ -1,6 +1,32 @@
 'use strict';
 
-const { isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
+const { _claimRoomStart, isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
+
+const { setGame, deleteGame } = require('../game/gameStore');
+
+describe('starting status recovery', () => {
+  it.each(['waiting', 'completed'])('restores %s after the database commits but its response is lost', async previousStatus => {
+    const write = {
+      eq: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockRejectedValue(new Error('lost response')),
+    };
+    const db = { from: jest.fn().mockReturnThis(), update: jest.fn().mockReturnValue(write) };
+    await expect(_claimRoomStart(db, 'ABCDEF', previousStatus)).rejects.toThrow('lost response');
+    expect(db.update.mock.calls).toEqual([[{ status: 'starting' }], [{ status: previousStatus }]]);
+    expect(write.eq).toHaveBeenCalledWith('status', 'starting');
+  });
+
+  it('leaves an already dealt game alone on a failed competing request', async () => {
+    const db = { from: jest.fn().mockReturnThis(), update: jest.fn(() => { throw new Error('lost response'); }) };
+    setGame('ABCDEF', { status: 'active' });
+    try {
+      await expect(_claimRoomStart(db, 'ABCDEF', 'waiting')).rejects.toThrow('lost response');
+      expect(db.update).toHaveBeenCalledTimes(1);
+    } finally {
+      deleteGame('ABCDEF');
+    }
+  });
+});
 
 describe('isRoomHost', () => {
   it('is true for the registered host', () => {

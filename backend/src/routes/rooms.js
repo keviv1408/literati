@@ -89,7 +89,7 @@ router.post('/:code/abandon', requireAuth, async (req, res) => {
   if (!/^[A-Z0-9]{6}$/.test(code)) return res.status(400).json({ error: 'Invalid room code' });
   const hostColumn = req.user.isGuest ? 'host_guest_id' : 'host_user_id';
   try {
-    const closed = await roomHost._transitionWaitingRoom(getSupabaseClient(), code, 'cancelled', hostColumn, getPlayerIdentifier(req.user));
+    const closed = await roomHost._cancelWaitingRoom(getSupabaseClient(), code, hostColumn, getPlayerIdentifier(req.user));
     if (!closed) return res.status(409).json({ error: 'Only the current host can close a waiting private lobby.' });
     closeCancelledLobby(code);
     return res.json({ code, status: 'cancelled' });
@@ -809,16 +809,13 @@ router.post('/:code/start', requireAuth, async (req, res) => {
     );
   }
 
-  try {
-    const claimed = await roomHost._transitionWaitingRoom(supabase, roomCode, 'starting', 'host_user_id', getPlayerIdentifier(req.user));
-    if (!claimed) return res.status(409).json({ error: 'Room or host changed before the game could start.' });
-  } catch (err) {
-    return res.status(500).json({ error: 'Could not start the game.' });
-  }
-
-  // ── Create in-memory game state ───────────────────────────────────────────
+  if (roomHost._startingRooms.has(roomCode)) return res.status(409).json({ error: 'A start is already in progress.' });
+  roomHost._startingRooms.add(roomCode);
   let gameState;
+  let claimed = false;
   try {
+    claimed = await roomHost._claimRoomStart(supabase, roomCode, 'waiting', 'host_user_id', getPlayerIdentifier(req.user));
+    if (!claimed) return res.status(409).json({ error: 'Room or host changed before the game could start.' });
     const { createGame, clearPendingRematchSettings } = require('../game/gameSocketServer');
     gameState = createGame({
       roomCode,
@@ -831,9 +828,11 @@ router.post('/:code/start', requireAuth, async (req, res) => {
     // game has been created — prevents stale data bleeding into future rounds.
     clearPendingRematchSettings(roomCode);
   } catch (err) {
-    await roomHost._releaseFailedStart(supabase, roomCode);
+    if (claimed && !gameState) await roomHost._releaseFailedStart(supabase, roomCode);
     console.error('[rooms/start] createGame error for room', roomCode, ':', err);
     return res.status(500).json({ error: 'Failed to initialise game' });
+  } finally {
+    roomHost._startingRooms.delete(roomCode);
   }
 
   // ── Persist initial game snapshot asynchronously (→ 'in_progress') ────────

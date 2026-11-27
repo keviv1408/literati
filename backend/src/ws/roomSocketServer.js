@@ -68,7 +68,7 @@ const { closeWithNotice } = require('./closeWs');
 const { buildGameSeats, toPublicSeat } = require('../game/gameInitService');
 const { persistGameState } = require('../game/gameState');
 const { getSupabaseClient } = require('../db/supabase');
-const { _releaseFailedStart, _transitionWaitingRoom, isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
+const { _startingRooms, _releaseFailedStart, _claimRoomStart, isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
 const { cancelLobbyTimer } = require('../matchmaking/lobbyTimer');
 const liveGamesStore = require('../liveGames/liveGamesStore');
 const {
@@ -111,7 +111,7 @@ function _setGameServer(mock) {
 
 // Idempotency guard: tracks rooms currently going through the start sequence
 // to prevent double-starts from concurrent host requests or timer races.
-const _startingRooms = new Set();
+
 
 // ---------------------------------------------------------------------------
 // Supabase client (injectable for tests)
@@ -1240,7 +1240,7 @@ async function handleStartGame(ctx) {
 
     try {
       const column = clients.get(ctx.userId)?.isGuest ? 'host_guest_id' : 'host_user_id';
-      const claimed = await _transitionWaitingRoom(getSupabase(), roomCode, 'starting', column, ctx.userId);
+      const claimed = await _claimRoomStart(getSupabase(), roomCode, 'waiting', column, ctx.userId);
       if (!claimed) {
         ws.send(JSON.stringify({ type: 'error', code: 'ROOM_NOT_WAITING', message: 'Room or host changed before the game could start.' }));
         return;
@@ -1636,7 +1636,7 @@ async function _executeRematchBotFill(roomCode, clientsOverride) {
     }
 
     try {
-      if (!await _transitionWaitingRoom(getSupabase(), code, 'starting')) return;
+      if (!await _claimRoomStart(getSupabase(), code, 'waiting')) return;
     } catch (err) {
       console.error('[RoomWS] Failed to claim rematch:', err);
       return;
