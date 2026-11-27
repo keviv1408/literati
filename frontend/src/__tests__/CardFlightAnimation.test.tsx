@@ -8,7 +8,7 @@
  * • Component mounts with correct data-testid
  * • aria-hidden="true" so the overlay is excluded from accessibility tree
  * • pointer-events-none class so game controls are not blocked
- * • fixed + inset-0 classes for full-viewport overlay
+ * • absolute + inset-0 classes for a table-relative overlay
  * • The flying card element is present on mount
  * • Card carries the transferred card face so players can identify it
  * • CSS custom properties --flight-dx and --flight-dy are set from props
@@ -69,10 +69,10 @@ describe('CardFlightAnimation — rendering', () => {
     expect(overlay.className).toContain('pointer-events-none');
   });
 
-  it('has fixed + inset-0 classes for full-viewport overlay', () => {
+  it('has absolute + inset-0 classes for a table-relative overlay', () => {
     renderFlight();
     const overlay = screen.getByTestId('card-flight-animation');
-    expect(overlay.className).toContain('fixed');
+    expect(overlay.className).toContain('absolute');
     expect(overlay.className).toContain('inset-0');
   });
 
@@ -248,9 +248,9 @@ describe('CardFlightAnimation — onComplete ref stability', () => {
 // ── z-index layer ────────────────────────────────────────────────────────────
 
 describe('CardFlightAnimation — z-index', () => {
-  it('has z-50 class to render above all other game UI', () => {
+  it('renders above the seats and below speech bubbles', () => {
     renderFlight();
     const overlay = screen.getByTestId('card-flight-animation');
-    expect(overlay.className).toContain('z-50');
+    expect(overlay.className).toContain('z-40');
   });
 });

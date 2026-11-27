@@ -1,21 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import type { AskSpeechBubbleState } from '@/components/AskSpeechBubbleOverlay';
-import {
-  buildAskSpeechBubble,
-  getPlayerSeatElement,
-} from '@/hooks/useAskResultAnimations';
-import type { AskResultPayload, DeclarationResultPayload } from '@/types/game';
+import { getPlayerSeatElement } from '@/hooks/useAskResultAnimations';
+import type { AskResultPayload, DeclarationResultPayload, GamePlayer } from '@/types/game';
 import { hashString } from '@/utils/avatar';
 
-export const DENIED_REACTION_DELAY_MS = 1200;
-export const REACTION_BUBBLE_MS = 2800;
-// AskDeniedAnimation draws a 108px card from 4px below the seat top; keep the
-// bubble clear of it when the seat sits in the bottom half of the screen.
-const DENIED_CARD_REACH = 112;
-
-const DENIED_LINES = ['Nope! 🙅', 'Not me 🤷', 'Wrong guess 😏', "Don't have it 🙈"];
+export const ASK_REPLY_DELAY_MS = 1400;
+export const REACTION_BUBBLE_MS = 1200;
+const GIVEN_LINES = [
+  'ggwp. All yours.',
+  'wtfff, how did you know?',
+  'Can I pay in snacks?',
+  'Fine. Take good care of it.',
+  'god dayum. Here you go.',
+  'Is my hand face up?',
+  'I want visitation rights.',
+  'There goes my whole plan.',
+  'Do I get a receipt?',
+];
+const DENIED_LINES = [
+  'Wrong number, bestie.',
+  'Go fish. Wait, wrong game.',
+  'Check my sleeves too?',
+  'Nope. Love the confidence.',
+  'My lawyer says no.',
+  'Fresh out of those.',
+  'All vibes, no cards.',
+  'All that suspense for a nope.',
+  'Got any other theories?',
+];
 const DECLARED_LINES = ['Declared! 🎉', 'Nailed it 🎯', 'Called it 🙌', 'Half-suit secured 🔥'];
 
 // Keyed on the event so every client shows the same line.
@@ -23,70 +37,51 @@ function pickLine(lines: readonly string[], key: string): string {
   return lines[hashString(key) % lines.length];
 }
 
-/**
- * Reaction bubble for the player on the receiving end of a move: the asked
- * player after a failed ask, the declarer after a correct declaration.
- */
+function _askReply(move: AskResultPayload, players: readonly GamePlayer[]): string {
+  const lines = move.success ? GIVEN_LINES : DENIED_LINES;
+  const key = `${move.askerId}|${move.targetId}|${move.cardId}`;
+  const line = lines[hashString(key) % (lines.length + 1)];
+  if (line) return line;
+
+  const asker = players.find(player => player.playerId === move.askerId);
+  const alternatives = players.filter(player =>
+    asker && player.teamId !== asker.teamId && player.playerId !== move.targetId &&
+    player.cardCount > 0 && !player.isEliminated,
+  ).sort((a, b) => a.seatIndex - b.seatIndex);
+  if (!alternatives.length) return pickLine(lines, key);
+  const other = alternatives[hashString(key) % alternatives.length];
+  return `You can ask ${other.displayName} too, y’know.`;
+}
+
 export function useReactionBubble(
   lastAskResult: AskResultPayload | null,
   lastDeclareResult: DeclarationResultPayload | null,
+  players: readonly GamePlayer[],
 ): AskSpeechBubbleState | null {
-  const [bubble, setBubble] = useState<AskSpeechBubbleState | null>(null);
+  const move = lastAskResult ?? lastDeclareResult;
+  const askReply = useEffectEvent((ask: AskResultPayload) => _askReply(ask, players));
+  const [shown, setShown] = useState<{ move: typeof move; bubble: AskSpeechBubbleState } | null>(null);
 
   useEffect(() => {
-    if (!lastAskResult || lastAskResult.success) return;
-    const { askerId, targetId, cardId } = lastAskResult;
-    const text = pickLine(DENIED_LINES, `${askerId}|${targetId}|${cardId}`);
-
+    if (!move) return;
+    const isAsk = move.type === 'ask_result';
+    if (!isAsk && (!move.correct || move.timedOut)) return;
+    const playerId = isAsk ? move.targetId : move.declarerId;
+    const delay = isAsk ? ASK_REPLY_DELAY_MS : 0;
     const showTimer = setTimeout(() => {
-      const seat = getPlayerSeatElement(targetId);
+      const seat = getPlayerSeatElement(playerId);
       if (!seat) return;
-      const rect = seat.getBoundingClientRect();
-      setBubble(
-        buildAskSpeechBubble(
-          {
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-            bottom: Math.max(rect.bottom, rect.top + DENIED_CARD_REACH),
-          },
-          text,
-          'denied',
-        ),
-      );
-    }, DENIED_REACTION_DELAY_MS);
-    const hideTimer = setTimeout(
-      () => setBubble(null),
-      DENIED_REACTION_DELAY_MS + REACTION_BUBBLE_MS,
-    );
-
+      const bubble: AskSpeechBubbleState = isAsk
+        ? { seat, variant: move.success ? 'given' : 'denied', text: askReply(move) }
+        : { seat, variant: 'declared', text: pickLine(DECLARED_LINES, `${playerId}|${move.halfSuitId}`) };
+      setShown({ move, bubble });
+    }, delay);
+    const hideTimer = setTimeout(() => setShown(null), delay + REACTION_BUBBLE_MS);
     return () => {
       clearTimeout(showTimer);
       clearTimeout(hideTimer);
     };
-  }, [lastAskResult]);
+  }, [move]);
 
-  useEffect(() => {
-    if (!lastDeclareResult?.correct || lastDeclareResult.timedOut) return;
-    const { declarerId, halfSuitId } = lastDeclareResult;
-    const frameId = requestAnimationFrame(() => {
-      const seat = getPlayerSeatElement(declarerId);
-      if (!seat) return;
-      setBubble(
-        buildAskSpeechBubble(
-          seat.getBoundingClientRect(),
-          pickLine(DECLARED_LINES, `${declarerId}|${halfSuitId}`),
-          'declared',
-        ),
-      );
-    });
-    const hideTimer = setTimeout(() => setBubble(null), REACTION_BUBBLE_MS);
-    return () => {
-      cancelAnimationFrame(frameId);
-      clearTimeout(hideTimer);
-    };
-  }, [lastDeclareResult]);
-
-  return bubble;
+  return shown && shown.move === move ? shown.bubble : null;
 }

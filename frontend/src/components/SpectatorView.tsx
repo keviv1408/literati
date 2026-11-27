@@ -188,7 +188,8 @@ export default function SpectatorView({
   } = useAskResultAnimations(lastAskResult, {
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult);
+  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult, players);
+  const speechBubble = reactionBubble ?? askSpeechBubble;
   const showTransientLastResult = useEffectEvent((msg: string, persistentMessage: string | null = null) => {
     setLastResultMsg(msg);
     setSyntheticLastMoveMsg(persistentMessage);
@@ -508,6 +509,7 @@ export default function SpectatorView({
               playerCount={effectivePlayerCount === 8 ? 8 : 6}
             />
           </CircularGameTable>
+          {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
         </div>
       </main>
 
@@ -649,24 +651,8 @@ export default function SpectatorView({
         </div>
       </footer>
 
-      {cardFlight && (
-        <CardFlightAnimation
-          cardId={cardFlight.cardId}
-          fromX={cardFlight.fromX}
-          fromY={cardFlight.fromY}
-          toX={cardFlight.toX}
-          toY={cardFlight.toY}
-          onComplete={clearCardFlight}
-        />
-      )}
 
-      {askSpeechBubble && (
-        <AskSpeechBubbleOverlay bubble={askSpeechBubble} />
-      )}
-
-      {reactionBubble && (
-        <AskSpeechBubbleOverlay bubble={reactionBubble} />
-      )}
+      {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
 
       {askDeniedCue && (
         <AskDeniedAnimation

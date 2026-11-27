@@ -1,17 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useEffectEvent, useState } from 'react';
-import type {
-  AskSpeechBubbleState,
-  SpeechBubbleVariant,
-} from '@/components/AskSpeechBubbleOverlay';
-import {
-  SUIT_NAMES,
-  parseCard,
-  type AskResultPayload,
-  type CardId,
-  type CardRank,
-} from '@/types/game';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import type { AskSpeechBubbleState } from '@/components/AskSpeechBubbleOverlay';
+import type { AskResultPayload, CardId } from '@/types/game';
 
 export interface CardFlightState {
   cardId: CardId;
@@ -31,7 +22,7 @@ export interface AskDeniedCueState {
 
 export type { AskSpeechBubbleState };
 
-const ASKER_BUBBLE_MS = 3500;
+const ASKER_BUBBLE_MS = 2400;
 
 interface UseAskResultAnimationsOptions {
   getAskBubbleCardIds?: (lastAskResult: AskResultPayload) => CardId[] | undefined;
@@ -40,50 +31,7 @@ interface UseAskResultAnimationsOptions {
 
 export function getPlayerSeatElement(playerId: string): HTMLElement | null {
   if (typeof document === 'undefined') return null;
-  return document.querySelector<HTMLElement>(`[data-player-id="${playerId}"]`);
-}
-
-function rankToWord(rank: CardRank): string {
-  switch (rank) {
-    case 1:
-      return 'Ace';
-    case 11:
-      return 'Jack';
-    case 12:
-      return 'Queen';
-    case 13:
-      return 'King';
-    default:
-      return String(rank);
-  }
-}
-
-function askBubbleText(cardId: CardId, askerName?: string): string {
-  const { rank, suit } = parseCard(cardId);
-  const prefix = askerName ? `${askerName}, c` : 'C';
-  return `${prefix}an I have the ${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}?`;
-}
-
-function cardPhrase(cardId: CardId): string {
-  const { rank, suit } = parseCard(cardId);
-  return `${rankToWord(rank)} of ${SUIT_NAMES[suit].toLowerCase()}`;
-}
-
-function formatNaturalList(items: string[]): string {
-  if (items.length === 0) return '';
-  if (items.length === 1) return items[0];
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
-}
-
-function askBubbleTextForCards(cardIds: CardId[], askerName?: string): string {
-  if (cardIds.length === 0) return 'Can I have that card?';
-  if (cardIds.length === 1) return askBubbleText(cardIds[0], askerName);
-
-  const requestedCards = cardIds.map((cardId) => cardPhrase(cardId));
-
-  const prefix = askerName ? `${askerName}, c` : 'C';
-  return `${prefix}an I have the ${formatNaturalList(requestedCards)}?`;
+  return document.querySelector<HTMLElement>(`.game-table-space [data-player-id="${playerId}"]`);
 }
 
 const BOT_ASK_BUBBLE_LEAD_INS = {
@@ -106,14 +54,9 @@ function stableHash(input: string): number {
   return hash >>> 0;
 }
 
-function buildNarratedBotAskBubbleText(
-  result: AskResultPayload,
-  targetName?: string,
-): string {
-  const askClause = askBubbleText(result.cardId, targetName);
+function _botAskLeadIn(result: AskResultPayload): string {
   const narration = result.botAskNarration;
-
-  if (!narration) return askClause;
+  if (!narration) return '';
 
   const templateKey = [
     result.askerId,
@@ -125,28 +68,7 @@ function buildNarratedBotAskBubbleText(
 
   const leadIns = BOT_ASK_BUBBLE_LEAD_INS[narration.reason];
   const leadIn = leadIns[stableHash(templateKey) % leadIns.length];
-  return `${leadIn}. ${askClause}`;
-}
-
-export type SeatRect = Pick<DOMRect, 'top' | 'bottom' | 'left' | 'width' | 'height'>;
-
-export function buildAskSpeechBubble(
-  playerRect: SeatRect,
-  text: string,
-  variant: SpeechBubbleVariant = 'ask',
-): AskSpeechBubbleState {
-  // Place above for seats in the top half of the viewport and below for seats
-  // in the bottom half. This pushes bubbles outward away from the table centre,
-  // preventing overlap with card-flight animations that travel between seats.
-  const seatCenterY = playerRect.top + playerRect.height / 2;
-  const placement = seatCenterY < window.innerHeight / 2 ? 'above' : 'below';
-  return {
-    text,
-    anchorX: playerRect.left + playerRect.width / 2,
-    anchorY: placement === 'above' ? playerRect.top - 10 : playerRect.bottom + 10,
-    placement,
-    variant,
-  };
+  return `${leadIn}. `;
 }
 
 /**
@@ -168,10 +90,15 @@ export function useAskResultAnimations(
   const [askDeniedCue, setAskDeniedCue] = useState<AskDeniedCueState | null>(null);
   const [askSpeechBubble, setAskSpeechBubble] = useState<AskSpeechBubbleState | null>(null);
 
+  const batchStart = useRef<{ key: string; time: number } | null>(null);
   useEffect(() => {
-    if (!lastAskResult) return;
+    if (!lastAskResult) {
+      batchStart.current = null;
+      return;
+    }
 
     const { overrideBubbleCardIds, targetName } = readAskContext(lastAskResult);
+    const receivedAt = Date.now();
     let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
     const frameId = requestAnimationFrame(() => {
       setShownResult(lastAskResult);
@@ -183,16 +110,29 @@ export function useAskResultAnimations(
             : lastAskResult.batchCardIds?.length
               ? lastAskResult.batchCardIds
               : [lastAskResult.cardId];
-        const bubbleText =
-          bubbleCardIds.length === 1 && !lastAskResult.batchCardIds?.length && lastAskResult.botAskNarration
-            ? buildNarratedBotAskBubbleText(lastAskResult, targetName)
-            : askBubbleTextForCards(bubbleCardIds, targetName);
-        setAskSpeechBubble(
-          buildAskSpeechBubble(askerEl.getBoundingClientRect(), bubbleText),
-        );
-        bubbleTimer = setTimeout(() => {
+        const leadIn = bubbleCardIds.length === 1 && !lastAskResult.batchCardIds?.length
+          ? _botAskLeadIn(lastAskResult)
+          : '';
+        const question = targetName ? `${targetName}, can I have the` : 'Can I have the';
+        // A multi-card ask receives a separate result for each card.
+        const batchKey = bubbleCardIds.length > 1
+          ? JSON.stringify([lastAskResult.askerId, lastAskResult.targetId, ...bubbleCardIds])
+          : null;
+        if (!batchKey) {
+          batchStart.current = null;
+        } else if (batchStart.current?.key !== batchKey || lastAskResult.cardId === bubbleCardIds[0]) {
+          batchStart.current = { key: batchKey, time: receivedAt };
+        }
+        const expiresAt = (batchStart.current?.time ?? receivedAt) + ASKER_BUBBLE_MS;
+        const remaining = expiresAt - Date.now();
+        if (remaining > 0) {
+          setAskSpeechBubble({
+            seat: askerEl, variant: 'ask', text: leadIn + question, cards: bubbleCardIds,
+          });
+          bubbleTimer = setTimeout(() => setAskSpeechBubble(null), remaining);
+        } else {
           setAskSpeechBubble(null);
-        }, ASKER_BUBBLE_MS);
+        }
       } else {
         setAskSpeechBubble(null);
       }
@@ -200,20 +140,22 @@ export function useAskResultAnimations(
       if (lastAskResult.success) {
         const fromEl = getPlayerSeatElement(lastAskResult.targetId);
         const toEl = getPlayerSeatElement(lastAskResult.askerId);
-        if (!fromEl || !toEl) {
+        const table = fromEl?.closest('.game-table-space');
+        if (!fromEl || !toEl || !table) {
           setCardFlight(null);
           setAskDeniedCue(null);
           return;
         }
 
+        const bounds = table.getBoundingClientRect();
         const fromRect = fromEl.getBoundingClientRect();
         const toRect = toEl.getBoundingClientRect();
         setCardFlight({
           cardId: lastAskResult.cardId,
-          fromX: fromRect.left + fromRect.width / 2,
-          fromY: fromRect.top + fromRect.height / 2,
-          toX: toRect.left + toRect.width / 2,
-          toY: toRect.top + toRect.height / 2,
+          fromX: fromRect.left - bounds.left + fromRect.width / 2,
+          fromY: fromRect.top - bounds.top + fromRect.height / 2,
+          toX: toRect.left - bounds.left + toRect.width / 2,
+          toY: toRect.top - bounds.top + toRect.height / 2,
         });
         setAskDeniedCue(null);
         return;

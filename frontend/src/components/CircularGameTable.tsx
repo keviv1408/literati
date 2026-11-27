@@ -222,6 +222,7 @@ export default function CircularGameTable({
             // Zero-size flex box centres the (overflowing) seat on the point without a
             // transform, which would make each slot its own stacking context and defeat
             // z-index ordering between seats and their neighbours' overlays.
+            data-upper-seat={pos.y < 50 || undefined}
             className="game-table-seat absolute flex h-0 w-0 items-center justify-center [&>*]:shrink-0"
             style={{
               left: `${pos.x}%`,

@@ -1,102 +1,87 @@
 'use client';
 
 import { useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { cardLabel, parseCard, SUIT_COLORS, type CardId } from '@/types/game';
 
-export type SpeechBubbleVariant = 'ask' | 'denied' | 'declared';
+export type AskSpeechBubbleState = { seat: HTMLElement; text: string } & (
+  | { variant: 'ask'; cards: CardId[] }
+  | { variant: 'given' | 'denied' | 'declared' }
+);
 
-export interface AskSpeechBubbleState {
-  text: string;
-  anchorX: number;
-  anchorY: number;
-  placement: 'above' | 'below';
-  variant?: SpeechBubbleVariant;
+const CARD_LIST = new Intl.ListFormat('en-US', { type: 'conjunction' });
+
+function _renderCards(cards: CardId[]) {
+  return CARD_LIST.formatToParts(cards).map(({ type, value }) => {
+    if (type === 'literal') return value;
+    const { suit } = parseCard(value);
+    return (
+      <span key={value} className={`whitespace-nowrap rounded-sm bg-amber-50 px-0.5 font-semibold ${SUIT_COLORS[suit]}`}>
+        {cardLabel(value)}
+      </span>
+    );
+  });
 }
 
-const VARIANT_CLASSES: Record<SpeechBubbleVariant, string> = {
+const VARIANT_CLASSES: Record<AskSpeechBubbleState['variant'], string> = {
   ask: 'border-amber-300/70 text-amber-50',
+  given: 'border-emerald-400/70 text-emerald-50',
   denied: 'border-rose-400/70 text-rose-50',
   declared: 'border-emerald-400/70 text-emerald-50',
 };
 
-interface AskSpeechBubbleOverlayProps {
-  bubble: AskSpeechBubbleState;
-}
+export default function AskSpeechBubbleOverlay({ bubble }: { bubble: AskSpeechBubbleState }) {
+  const { seat, text, variant } = bubble;
+  const space = seat.closest<HTMLElement>('.game-table-space');
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const tailRef = useRef<HTMLSpanElement>(null);
 
-const EDGE_PAD = 12;
-
-export default function AskSpeechBubbleOverlay({
-  bubble,
-}: AskSpeechBubbleOverlayProps) {
-  const isAbove = bubble.placement === 'above';
-  const variant = bubble.variant ?? 'ask';
-  const variantClasses = VARIANT_CLASSES[variant];
-  const bubbleRef = useRef<HTMLDivElement>(null);
-  const caretRef = useRef<HTMLSpanElement>(null);
-
-  // Apply horizontal nudge synchronously before paint to avoid a visible flash.
-  // Also update the caret position so it always points at the player's seat.
   useLayoutEffect(() => {
-    const el = bubbleRef.current;
-    if (!el) return;
+    const body = bodyRef.current;
+    const tail = tailRef.current;
+    if (!space || !body || !tail) return;
+    const avatar = seat.querySelector('.speech-avatar') ?? seat;
+    const position = () => {
+      const bounds = space.getBoundingClientRect();
+      const face = avatar.getBoundingClientRect();
+      const box = body.getBoundingClientRect();
+      const center = face.left + face.width / 2 - bounds.left;
+      const left = Math.max(0, Math.min(center - box.width / 2, bounds.width - box.width));
+      // The rotated 12px tail reaches 8px beyond the body to touch the avatar.
+      const above = face.top - bounds.top - box.height >= 8 && !seat.closest('[data-upper-seat]');
+      body.style.left = `${left}px`;
+      body.style.top = `${above ? face.top - bounds.top - box.height - 8 : face.bottom - bounds.top + 8}px`;
+      body.dataset.placement = above ? 'above' : 'below';
+      tail.style.left = `${Math.max(12, Math.min(center - left, box.width - 12))}px`;
+    };
 
-    // Reset any previous nudge so getBoundingClientRect reflects the natural position.
-    el.style.transform = '';
+    position();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(position);
+    for (const element of [space, avatar, seat, body]) observer?.observe(element);
+    window.addEventListener('resize', position);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', position);
+    };
+  }, [space, seat, bubble]);
 
-    const rect = el.getBoundingClientRect();
-    const vw = window.innerWidth;
-
-    let shift = 0;
-    if (rect.left < EDGE_PAD) {
-      shift = EDGE_PAD - rect.left;
-    } else if (rect.right > vw - EDGE_PAD) {
-      shift = vw - EDGE_PAD - rect.right;
-    }
-
-    if (shift !== 0) {
-      el.style.transform = `translateX(${shift}px)`;
-    }
-
-    // Keep the caret pointing at the original anchorX regardless of nudge.
-    const caret = caretRef.current;
-    if (caret && rect.width > 0) {
-      const bubbleLeft = rect.left + shift;
-      const caretPct = ((bubble.anchorX - bubbleLeft) / rect.width) * 100;
-      caret.style.left = `${Math.min(Math.max(caretPct, 8), 92)}%`;
-    }
-  });
-
-  return (
-    <div
-      className="fixed inset-0 z-50 pointer-events-none"
-      aria-hidden="true"
-      data-testid={`${variant}-speech-bubble-overlay`}
-    >
+  if (!space) return null;
+  return createPortal(
+    <div className="pointer-events-none absolute inset-0 z-50 overflow-hidden" aria-hidden="true" data-testid={`${variant}-speech-bubble-overlay`}>
       <div
-        className="absolute"
-        style={{
-          left: bubble.anchorX,
-          top: bubble.anchorY,
-          transform: isAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
-        }}
+        ref={bodyRef}
+        className={`group absolute w-max max-w-[min(18rem,100%)] rounded-2xl border bg-slate-950 px-3 py-1.5 text-center text-sm leading-tight font-medium wrap-anywhere shadow-lg sm:max-w-[min(22rem,100%)] ${VARIANT_CLASSES[variant]}`}
+        data-testid={`${variant}-speech-bubble`}
       >
-        <div
-          ref={bubbleRef}
-          className={`relative max-w-[18rem] rounded-2xl border bg-slate-950/95 px-3 py-2 text-center text-sm leading-snug font-medium shadow-[0_10px_30px_rgba(15,23,42,0.45)] sm:max-w-[22rem] ${variantClasses}`}
-          data-testid={`${variant}-speech-bubble`}
-        >
-          <span data-testid={`${variant}-speech-bubble-text`}>{bubble.text}</span>
-          <span
-            ref={caretRef}
-            className={[
-              'absolute h-3 w-3 -translate-x-1/2 rotate-45 border bg-slate-950/95',
-              variantClasses,
-              isAbove ? '-bottom-1.5 border-l-0 border-t-0' : '-top-1.5 border-b-0 border-r-0',
-            ].join(' ')}
-            style={{ left: '50%' }}
-            aria-hidden="true"
-          />
-        </div>
+        <span data-testid={`${variant}-speech-bubble-text`}>
+          {text}{bubble.variant === 'ask' && <> {_renderCards(bubble.cards)}?</>}
+        </span>
+        <span
+          ref={tailRef}
+          className="absolute -top-1.5 h-3 w-3 -translate-x-1/2 rotate-45 border border-inherit border-r-0 border-b-0 bg-slate-950 group-data-[placement=above]:top-auto group-data-[placement=above]:-bottom-1.5 group-data-[placement=above]:rotate-[225deg]"
+        />
       </div>
-    </div>
+    </div>,
+    space,
   );
 }

@@ -410,7 +410,8 @@ export default function GamePage({ params }: PageProps) {
     getAskBubbleCardIds,
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult);
+  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult, players);
+  const speechBubble = reactionBubble ?? askSpeechBubble;
 
   const publishMoveMessage = useCallback((message: string, persistentMessage: string | null = null) => {
     setLastResultMsg(message);
@@ -1359,6 +1360,7 @@ export default function GamePage({ params }: PageProps) {
                   playerCount={effectivePlayerCount === 8 ? 8 : 6}
                 />
               </CircularGameTable>
+              {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
             </div>
           </main>
           </>
@@ -1586,27 +1588,7 @@ export default function GamePage({ params }: PageProps) {
         </div>
       )}
 
-      {/* ── Card flight animation overlay (AC 33) ─────────────── */}
-      {/* Renders a face-up card flying from the card-giver's seat to the */}
-      {/* card-receiver's seat after every successful ask_card result. */}
-      {cardFlight && (
-        <CardFlightAnimation
-          cardId={cardFlight.cardId}
-          fromX={cardFlight.fromX}
-          fromY={cardFlight.fromY}
-          toX={cardFlight.toX}
-          toY={cardFlight.toY}
-          onComplete={clearCardFlight}
-        />
-      )}
-
-      {askSpeechBubble && (
-        <AskSpeechBubbleOverlay bubble={askSpeechBubble} />
-      )}
-
-      {reactionBubble && (
-        <AskSpeechBubbleOverlay bubble={reactionBubble} />
-      )}
+      {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
 
       {askDeniedCue && (
         <AskDeniedAnimation

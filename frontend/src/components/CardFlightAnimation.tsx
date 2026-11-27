@@ -6,8 +6,8 @@
  * successful ask_card result.
  *
  * The component:
- *  • Mounts as a fixed full-viewport overlay (pointer-events-none, aria-hidden)
- *  • Positions the transferred card at the source seat centre (viewport coordinates)
+ *  • Mounts as a table-relative overlay (pointer-events-none, aria-hidden)
+ *  • Positions the transferred card at the source seat centre (table coordinates)
  *  • Applies `animate-card-flight` which translates by (--flight-dx, --flight-dy)
  *    to land on the destination seat centre, with a slight arc lift at mid-flight
  *  • Calls `onComplete` after FLIGHT_DURATION_MS and expects the parent to unmount it
@@ -15,7 +15,7 @@
  * The parent (game page) is responsible for:
  *  1. Detecting a successful ask_result event
  *  2. Querying the DOM for both player seats via `[data-player-id]` attributes
- *  3. Computing viewport-coordinate centres from getBoundingClientRect()
+ *  3. Computing table-relative centres from getBoundingClientRect()
  *  4. Mounting this component with the computed from/to coordinates
  *  5. Unmounting on onComplete (by clearing the flight state)
  *
@@ -45,25 +45,25 @@ export interface CardFlightAnimationProps {
   cardId: CardId;
 
   /**
-   * X coordinate (horizontal, in viewport pixels) of the centre of the source
+   * X coordinate (horizontal, in table-relative pixels) of the centre of the source
    * seat — i.e. the player who gave up the card.
    */
   fromX: number;
 
   /**
-   * Y coordinate (vertical, in viewport pixels) of the centre of the source
+   * Y coordinate (vertical, in table-relative pixels) of the centre of the source
    * seat — i.e. the player who gave up the card.
    */
   fromY: number;
 
   /**
-   * X coordinate (horizontal, in viewport pixels) of the centre of the
+   * X coordinate (horizontal, in table-relative pixels) of the centre of the
    * destination seat — i.e. the player who receives the card.
    */
   toX: number;
 
   /**
-   * Y coordinate (vertical, in viewport pixels) of the centre of the
+   * Y coordinate (vertical, in table-relative pixels) of the centre of the
    * destination seat — i.e. the player who receives the card.
    */
   toY: number;
@@ -107,7 +107,7 @@ export default function CardFlightAnimation({
 
   return (
     <div
-      className="fixed inset-0 z-50 pointer-events-none"
+      className="absolute inset-0 z-40 pointer-events-none"
       aria-hidden="true"
       data-testid="card-flight-animation"
     >

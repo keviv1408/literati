@@ -256,6 +256,7 @@ export default function TutorialPage() {
             >
               <DeclaredBooksTable declaredSuits={state.declared} playerCount={6} />
             </CircularGameTable>
+            {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
           </div>
 
           {step.kind === 'intro' && (
@@ -374,16 +375,6 @@ export default function TutorialPage() {
           </div>
         </footer>
 
-        {cardFlight && (
-          <CardFlightAnimation
-            cardId={cardFlight.cardId}
-            fromX={cardFlight.fromX}
-            fromY={cardFlight.fromY}
-            toX={cardFlight.toX}
-            toY={cardFlight.toY}
-            onComplete={clearCardFlight}
-          />
-        )}
         {askSpeechBubble && <AskSpeechBubbleOverlay bubble={askSpeechBubble} />}
         {askDeniedCue && (
           <AskDeniedAnimation

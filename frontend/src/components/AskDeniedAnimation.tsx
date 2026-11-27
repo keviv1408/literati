@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import type { CardId } from '@/types/game';
 import PlayingCard from './PlayingCard';
 
-export const ASK_DENIED_ANIMATION_MS = 3000;
+export const ASK_DENIED_ANIMATION_MS = 1250;
 
 const CARD_W = 72;
 const CARD_H = 108;
