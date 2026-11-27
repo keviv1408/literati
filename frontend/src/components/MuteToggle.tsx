@@ -38,6 +38,7 @@ const MuteToggle: React.FC<MuteToggleProps> = ({
       data-testid="mute-toggle"
     >
       <span aria-hidden="true">{muted ? '🔇' : '🔔'}</span>
+      Game sound <span className="menu-value">{muted ? 'Off' : 'On'}</span>
     </button>
   );
 };

@@ -11,9 +11,7 @@
  * • Renders game view (data-testid="game-view") for 'in_progress' rooms.
  * • Renders "Game Cancelled" state for cancelled rooms.
  * • Renders "Game Over" state for completed rooms.
- * • Shows room code in the game view header.
- * • Shows variant label in the game view header.
- * • WebSocket status indicator is rendered in the game view.
+ * • Shows the player-relative score and connection state in the game header and menu.
  * • Turn indicator is NOT rendered when gameState is null.
  * • Player hand area is rendered in the game view footer.
  */
@@ -648,32 +646,31 @@ describe('GamePage — in_progress game view', () => {
     });
   });
 
-  it('shows the room code in the header', async () => {
+  it.each([1, 2] as const)('shows team %i first for a player on that team', async (teamId) => {
     render(<GamePage params={makeParams('ABC123')} />);
+    await screen.findByTestId('game-view');
+    act(() => openWs());
+    const init = makeGameInit('me', [makePlayer('me', 'Me', teamId, 0)]);
+    init.gameState.scores = { team1: 2, team2: 1 };
+    act(() => sendWsMessage(init));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('game-room-code')).toBeTruthy();
-    });
-    expect(screen.getByTestId('game-room-code').textContent).toBe('ABC123');
+    const score = screen.getByTestId('game-score');
+    expect([...score.querySelectorAll('strong')].map((el) => el.textContent)).toEqual(
+      teamId === 1 ? ['2', '1'] : ['1', '2'],
+    );
   });
 
-  it('shows the variant label in the header', async () => {
+  it('opens game controls from the header and closes them with Escape', async () => {
     render(<GamePage params={makeParams('ABC123')} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('game-view')).toBeTruthy();
-    });
-    // "Remove 7s (Classic)" appears in both header and table centre
-    const variantLabels = screen.getAllByText(/Remove 7s/);
-    expect(variantLabels.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('renders the WebSocket status indicator', async () => {
-    render(<GamePage params={makeParams('ABC123')} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('ws-status-indicator')).toBeTruthy();
-    });
+    const button = await screen.findByTestId('game-menu-toggle');
+    expect(screen.queryByTestId('bot-speed-slider')).toBeNull();
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('ws-status-indicator')).toBeVisible();
+    expect(screen.getByTestId('bot-speed-slider')).toBeVisible();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('ws-status-indicator')).toBeNull();
+    expect(button).toHaveFocus();
   });
 
   it('does NOT render the turn indicator when no game state is available', async () => {
@@ -927,7 +924,7 @@ describe('GamePage — room code normalisation (deep-link)', () => {
 // ---------------------------------------------------------------------------
 
 describe('GamePage — 8-player in_progress game', () => {
-  it('shows "4v4" in the header for an 8-player room', async () => {
+  it('labels the table for an 8-player room', async () => {
     mockGetRoomByCode.mockResolvedValue({
       room: buildRoom('in_progress', { player_count: 8 }),
     });
@@ -937,9 +934,7 @@ describe('GamePage — 8-player in_progress game', () => {
     await waitFor(() => {
       expect(screen.getByTestId('game-view')).toBeTruthy();
     });
-    // "4v4" may appear in header and/or table centre
-    const labels = screen.getAllByText(/4v4/);
-    expect(labels.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByLabelText('Declared books table for a 4v4 game')).toBeVisible();
   });
 });
 

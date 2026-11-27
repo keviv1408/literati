@@ -67,8 +67,7 @@ import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
 import DeclarationTurnPassPrompt from '@/components/DeclarationTurnPassPrompt';
-import MuteToggle from '@/components/MuteToggle';
-import KnowledgePanel from '@/components/KnowledgePanel';
+import GameHeader from '@/components/GameHeader';
 import VoiceAudioLayer from '@/components/VoiceAudioLayer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import { useReactionBubble } from '@/hooks/useReactionBubble';
@@ -173,7 +172,6 @@ export default function GamePage({ params }: PageProps) {
   const [invalidFormat, setInvalidFormat] = useState(false);
   const [notFound, setNotFound]           = useState(false);
   const [gameBearerToken, setGameBearerToken] = useState<string | null>(null);
-  const [showKnowledge, setShowKnowledge] = useState(false);
   const spectatorToken                    = searchParams.get('spectatorToken');
 
   // Prefer the room-specific token that originally joined this game.
@@ -1334,64 +1332,22 @@ export default function GamePage({ params }: PageProps) {
         <span className="absolute text-[14rem] bottom-0 -left-8 text-white">♣</span>
       </div>
 
-      <header className="relative z-20 flex items-center justify-between px-3 py-2 border-b border-slate-700/50 bg-slate-900/70 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <button onClick={handleGoHome} aria-label="Home" className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400">←</button>
-          <span className="font-mono font-bold text-white text-sm max-w-[7ch] truncate" data-testid="game-room-code">{room.code}</span>
-          <span className="text-xs text-slate-500 hidden sm:inline">{VARIANT_LABELS[room.card_removal_variant]} · {effectivePlayerCount === 6 ? '3v3' : '4v4'}</span>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* VoiceControls intentionally hidden to avoid production voice API costs.
-              Uncomment the line below when you want to re-enable voice chat. */}
-          {/* <VoiceControls /> */}
-          <button
-            onClick={() => setShowKnowledge((v) => !v)}
-            aria-pressed={showKnowledge}
-            aria-label="What I know"
-            title="What I know: cards other players are known to hold or lack"
-            className={[
-              'p-1.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400',
-              showKnowledge ? 'bg-emerald-700/60 text-white' : 'text-slate-400 hover:text-white',
-            ].join(' ')}
-            data-testid="knowledge-toggle"
-          >
-            🧠
-          </button>
-          {/* Mute toggle — persists across page refreshes via localStorage */}
-          <MuteToggle muted={muted} onToggle={toggleMute} />
-          {/* Bot speed - shared by everyone in the game, applies from the next bot turn */}
-          <label className="flex items-center gap-1.5 text-xs text-slate-400" title="Bot move delay (applies to everyone in this game)">
-            <span aria-hidden="true">🤖</span>
-            <input
-              type="range"
-              min={3000}
-              max={12000}
-              step={1000}
-              value={gameState?.botDelayMs ?? 5000}
-              onChange={(e) => sendBotSpeed(Number(e.target.value))}
-              disabled={!canSend}
-              aria-label="Bot speed"
-              className="w-20 accent-emerald-400"
-              data-testid="bot-speed-slider"
-            />
-            <span className="tabular-nums w-7" data-testid="bot-speed-value">{(gameState?.botDelayMs ?? 5000) / 1000}s</span>
-          </label>
-          <div className="flex items-center gap-1.5" title={`Connection: ${wsStatus}`} data-testid="ws-status-indicator">
-            <span className={['w-2 h-2 rounded-full', wsStatus === 'connected' ? 'bg-emerald-400' : wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : wsStatus === 'error' ? 'bg-red-500' : 'bg-slate-600'].join(' ')} />
-          </div>
-        </div>
-      </header>
-
-      {showKnowledge && effectiveVariant && (
-        <KnowledgePanel
-          players={players}
-          myPlayerId={myPlayerId}
-          askHistory={askHistory}
-          declaredSuits={(gameState?.declaredSuits ?? []).map((d) => d.halfSuitId)}
-          variant={effectiveVariant}
-          onClose={() => setShowKnowledge(false)}
-        />
-      )}
+      <GameHeader
+        gameState={gameState}
+        myTeamId={myTeamId}
+        wsStatus={wsStatus}
+        muted={muted}
+        onToggleMute={toggleMute}
+        onGoHome={handleGoHome}
+        onBotSpeed={sendBotSpeed}
+        knowledge={{
+          players,
+          myPlayerId,
+          askHistory,
+          declaredSuits: declaredSuits.map((suit) => suit.halfSuitId),
+          variant: effectiveVariant,
+        }}
+      />
 
       {gameState && isMyTurn && isTurnPassMode && (
         <div className="relative z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-700/60 text-emerald-100 border-b border-emerald-600/40" role="status" aria-live="polite" data-testid="turn-indicator">
