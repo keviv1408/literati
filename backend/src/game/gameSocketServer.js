@@ -2718,8 +2718,11 @@ function handleDeclareProgress(roomCode, declarerId, halfSuitId, assignment) {
 // Rematch vote handling
 // ---------------------------------------------------------------------------
 
+// Late stats must not reopen voting while the host reset is pending or the finished room is unavailable.
+const _hostResetStatus = new WeakMap();
+
 function _openRematchVote(gs) {
-  if (gs.status !== 'completed' || getGame(gs.roomCode) !== gs) return;
+  if (gs.status !== 'completed' || getGame(gs.roomCode) !== gs || _hostResetStatus.has(gs)) return;
   const summary = initRematch(gs.roomCode, gs.players, _handleRematchTimeout, {
     roomId: gs.roomId, variant: gs.variant, playerCount: gs.playerCount,
   });
@@ -2758,6 +2761,23 @@ function _handleRematchTimeout(roomCode) {
   }, 3000);
 }
 
+async function _resetHostRematch(db, roomId, hostId) {
+  try {
+    const { data, error } = await db.from('rooms').update({ status: 'waiting', game_state: null })
+      .eq('id', roomId).eq('status', 'completed').eq('is_matchmaking', false).eq('host_user_id', hostId)
+      .select('id').maybeSingle();
+    if (error) throw error;
+    return data ? 'waiting' : null;
+  } catch (err) {
+    // A lost write response can leave the original room waiting with its vote still on screen.
+    console.error('[game-ws] Checking room after rematch reset failed:', err.message);
+    const { data, error } = await db.from('rooms').select('status')
+      .eq('id', roomId).eq('is_matchmaking', false).eq('host_user_id', hostId).maybeSingle();
+    if (error) throw error;
+    return data?.status ?? null;
+  }
+}
+
 /**
  * Handle a `rematch_initiate` message from the host of a private room.
  *
@@ -2780,13 +2800,14 @@ function _handleRematchTimeout(roomCode) {
  */
 async function handleRematchInitiate(roomCode, playerId, ws) {
   const supabase = getSupabaseClient();
+  const gs = getGame(roomCode);
 
   // Look up host_user_id and is_matchmaking from Supabase
   let dbRoom;
   try {
     const { data, error } = await supabase
       .from('rooms')
-      .select('host_user_id, is_matchmaking')
+      .select('id, status, host_user_id, is_matchmaking')
       .eq('code', roomCode)
       .single();
     if (error || !data) throw error || new Error('Room not found');
@@ -2807,24 +2828,42 @@ async function handleRematchInitiate(roomCode, playerId, ws) {
     return;
   }
 
-  try {
-    const { data, error } = await supabase.from('rooms')
-      .update({ status: 'waiting', game_state: null })
-      .eq('code', roomCode).eq('status', 'completed')
-      .eq('is_matchmaking', false).eq('host_user_id', playerId)
-      .select('code').maybeSingle();
-    if (error || !data) throw error || new Error('Room is no longer eligible for a rematch');
-  } catch (err) {
-    console.error('[game-ws] Could not reset room for rematch:', err.message);
-    if (ws) sendJson(ws, { type: 'error', message: 'Failed to reset room for rematch', code: 'REMATCH_RESET_FAILED' });
+  const failure = { type: 'error', message: 'Failed to reset room for rematch', code: 'REMATCH_RESET_FAILED' };
+  const sameGame = getGame(roomCode) === gs && (!gs || (gs.status === 'completed' && gs.roomId === dbRoom.id));
+  const previousReset = _hostResetStatus.get(gs);
+  const resuming = dbRoom.status === 'waiting' && previousReset === 'pending';
+  const canReset = dbRoom.status === 'completed' && previousReset !== 'unavailable';
+  if (!sameGame || _startingRooms.has(roomCode) || (!canReset && !resuming)) {
+    sendJson(ws, failure);
     return;
   }
 
-  // Clear any active rematch vote (stops the auto-decline timer)
+  _startingRooms.add(roomCode);
+  if (gs) _hostResetStatus.set(gs, 'pending');
   clearRematch(roomCode);
+  let status;
+  try {
+    status = resuming ? 'waiting' : await _resetHostRematch(supabase, dbRoom.id, playerId);
+  } catch (err) {
+    console.error('[game-ws] Could not confirm the rematch reset:', err.message);
+  } finally {
+    _startingRooms.delete(roomCode);
+  }
+  if (getGame(roomCode) !== gs) return;
+  if (status !== 'waiting') {
+    if (gs && status === 'completed') {
+      _hostResetStatus.delete(gs);
+      _openRematchVote(gs);
+    } else {
+      if (gs && status !== undefined) _hostResetStatus.set(gs, 'unavailable');
+      broadcastToGame(roomCode, { type: 'rematch_declined', reason: 'room_unavailable' });
+    }
+    sendJson(ws, failure);
+    return;
+  }
+  if (gs) _hostResetStatus.delete(gs);
 
   // ── Clone previous room settings into a pending rematch ─────
-  const gs = getGame(roomCode);
   let previousSettings = null;
   if (gs) {
     previousSettings = {
