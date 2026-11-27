@@ -1,6 +1,6 @@
 'use strict';
 
-const { _claimRoomStart, isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
+const { _claimRoomStart, _cancelWaitingRoom, isRoomHost, hostColumns, storedHostId } = require('../rooms/roomHost');
 
 const { setGame, deleteGame } = require('../game/gameStore');
 
@@ -14,6 +14,48 @@ describe('starting status recovery', () => {
     await expect(_claimRoomStart(db, 'ABCDEF', previousStatus)).rejects.toThrow('lost response');
     expect(db.update.mock.calls).toEqual([[{ status: 'starting' }], [{ status: previousStatus }]]);
     expect(write.eq).toHaveBeenCalledWith('status', 'starting');
+  });
+
+  it.each([
+    ['start', false], ['abandon', false], ['start', true], ['abandon', true],
+  ])('recovers for %s after both writes lose responses (rollback committed: %s)', async (action, rollbackCommitted) => {
+    jest.useFakeTimers();
+    let status = 'waiting';
+    let calls = 0;
+    const db = { from: () => ({
+      update: ({ status: next }) => {
+        const filters = {};
+        const chain = {
+          eq(key, value) { filters[key] = [value]; return chain; },
+          in(key, values) { filters[key] = values; return chain; },
+          select() { return chain; },
+          async maybeSingle() {
+            calls++;
+            if (calls === 2 && !rollbackCommitted) throw new Error('rollback offline');
+            const matches = filters.status.includes(status);
+            if (matches) status = next;
+            if (calls <= 2) throw new Error('lost response');
+            return { data: matches ? { code: 'ABCDEF' } : null, error: null };
+          },
+          then(resolve, reject) { return chain.maybeSingle().then(resolve, reject); },
+        };
+        return chain;
+      },
+    }) };
+    try {
+      await expect(_claimRoomStart(db, 'ABCDEF', 'waiting', 'host_user_id', 'owner')).rejects.toThrow('lost response');
+      expect(status).toBe(rollbackCommitted ? 'waiting' : 'starting');
+      if (!rollbackCommitted) await jest.advanceTimersByTimeAsync(1000);
+      expect(status).toBe('waiting');
+      const claimed = action === 'start'
+        ? await _claimRoomStart(db, 'ABCDEF', 'waiting', 'host_user_id', 'owner')
+        : await _cancelWaitingRoom(db, 'ABCDEF', 'host_user_id', 'owner');
+      expect(claimed).toBe(true);
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(status).toBe(action === 'start' ? 'starting' : 'cancelled');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('leaves an already dealt game alone on a failed competing request', async () => {
