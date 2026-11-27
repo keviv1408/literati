@@ -42,7 +42,6 @@ test('a host whose lobby socket froze sees a guest who joined meanwhile', async 
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
   await page.getByRole('button', { name: 'Continue as Guest' }).click();
   await page.getByRole('button', { name: 'Create Room', exact: true }).click();
-  await page.getByTestId('enter-room-btn').click();
   const hostCount = page.getByTestId('lobby-player-count');
   await expect(hostCount).toHaveText(/^1\//, { timeout: 30_000 });
   await expect

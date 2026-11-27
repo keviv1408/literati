@@ -314,8 +314,18 @@ describe('room lobby start control', () => {
   it('shows the start button to the player the server flags host', async () => {
     await _renderLobby([_player('p-ada', 'Ada', true), _player('p-asha', 'Asha', false)]);
 
-    expect(await screen.findByTestId('start-game-btn')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start with 4 bots' })).toBeEnabled();
     expect(screen.queryByTestId('waiting-for-host')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [5, 'Start with 1 bot'],
+    [6, 'Start game'],
+  ] as const)('labels the start action for %i seated players', async (count, label) => {
+    const guests = Array.from({ length: count - 1 }, (_, i) => _player(`p-${i}`, `Guest ${i}`, false));
+    await _renderLobby([_player('p-ada', 'Ada', true), ...guests]);
+
+    expect(await screen.findByRole('button', { name: label })).toBeEnabled();
   });
 
   it('lets the host press Start again after the socket drops and reconnects', async () => {

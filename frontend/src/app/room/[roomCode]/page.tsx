@@ -4,14 +4,7 @@
  * Room Lobby Page — /room/[roomCode]
  *
  * The host lands here immediately after creating a private room.
- * Other players will join by entering the 6-character room code or following
- * a share link. Spectators append ?spectate=1 to the URL.
- *
- * Fetch + display room details (code, settings, share link).
- * Fast-path for the host — CreateRoomModal caches the room in
- * sessionStorage; the page consumes it immediately so there is no
- * loading spinner and both the invite link and spectator link are
- * visible the instant the host lands here.
+ * Invited friends join from the shared player link.
  * Two labelled team columns with player cards for each seat.
  * Seats alternate T1-T2-T1-T2; empty seats show "Waiting…".
  * Real-time WebSocket seat updates arrive in
@@ -35,8 +28,6 @@
  * • Shows a retryable "Connection Error" screen when the backend
  * is unreachable.
  *
- * The page is a Client Component so it can access window.location for the
- * share link and react to room state changes when WebSocket support is added.
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
@@ -63,16 +54,9 @@ import type { Room, Team } from '@/types/room';
 import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
 import { LobbyStartControl, showStartPanel } from '@/components/LobbyStartControl';
 import AvatarPicker from '@/components/AvatarPicker';
+import LobbyInviteButton from '@/components/LobbyInviteButton';
 import { buildEmptySeats } from '@/types/lobby';
 import type { LobbyPlayer } from '@/types/lobby';
-
-// ── Variant display helpers ──────────────────────────────────────────────────
-
-const VARIANT_LABELS: Record<string, string> = {
-  remove_2s: 'Remove 2s',
-  remove_7s: 'Remove 7s (Classic)',
-  remove_8s: 'Remove 8s',
-};
 
 // ── Page component ───────────────────────────────────────────────────────────
 
@@ -106,10 +90,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
   /** True when viewer arrives via ?spectate=1 URL param. */
   const [isSpectator, setIsSpectator] = useState(false);
-
-  /** Copy states for invite and spectator links. */
-  const [copiedInvite, setCopiedInvite] = useState(false);
-  const [copiedSpectator, setCopiedSpectator] = useState(false);
 
   /**
    * Lobby seats derived from the live WebSocket player list.
@@ -466,25 +446,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
     [socketEmit, seats],
   );
 
-  // ── Copy helpers ─────────────────────────────────────────────────────────
-  const handleCopyInvite = useCallback(() => {
-    if (typeof window === 'undefined' || !roomCode) return;
-    const url = `${window.location.origin}/room/${roomCode}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedInvite(true);
-      setTimeout(() => setCopiedInvite(false), 2000);
-    });
-  }, [roomCode]);
-
-  const handleCopySpectator = useCallback(() => {
-    if (typeof window === 'undefined' || !roomCode) return;
-    const url = `${window.location.origin}/room/${roomCode}?spectate=1`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedSpectator(true);
-      setTimeout(() => setCopiedSpectator(false), 2000);
-    });
-  }, [roomCode]);
-
   // ── Session-validation render gates ──────────────────────────
   // These are evaluated AFTER the kicked check (handled below) to avoid
   // delaying the kicked notice with a session-validation spinner.
@@ -657,10 +618,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
             <h1 className="text-xl font-bold text-white">
               {host ? `${host.displayName} invited you` : 'You’re invited'}
             </h1>
-            <p className="text-slate-400 text-sm mt-1">
-              Room <span className="font-mono font-bold tracking-widest text-emerald-300">{roomCode}</span>
-              {room && ` · ${room.player_count} players`}
-            </p>
           </div>
 
           {room && (
@@ -757,10 +714,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
           <p className="text-slate-300 text-sm mb-2">
             {kickReason ?? 'You have been removed from this room by the host.'}
           </p>
-          <p className="text-slate-500 text-xs">
-            Room code:{' '}
-            <span className="font-mono font-bold text-slate-400">{roomCode}</span>
-          </p>
         </div>
 
         <button
@@ -817,7 +770,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           <div className="text-5xl mb-4" aria-hidden="true">🃏</div>
           <h1 className="text-2xl font-bold text-white mb-2">Room Not Found</h1>
           <p className="text-slate-400 text-sm">
-            The room code <span className="font-mono font-bold text-emerald-400">{roomCode}</span> doesn&apos;t exist or has expired.
+            This invite link is invalid or has expired.
           </p>
         </div>
         <button
@@ -835,16 +788,21 @@ export default function RoomLobbyPage({ params }: PageProps) {
   }
 
   // ── Room lobby ───────────────────────────────────────────────────────────
-  const origin =
-    typeof window !== 'undefined' ? window.location.origin : '';
-  const inviteUrl = `${origin}/room/${room.code}`;
-  const spectatorUrl = `${origin}/room/${room.code}?spectate=1`;
-
   const isCancelled =
     room.status === 'cancelled' || room.status === 'completed';
+  const openSeats = Math.max(0, room.player_count - wsPlayers.length);
+  const startLabel = openSeats === 0
+    ? 'Start game'
+    : `Start with ${openSeats} ${openSeats === 1 ? 'bot' : 'bots'}`;
+  const hasStartPanel = showStartPanel({
+    isSpectator,
+    amIHost: amIHostLive,
+    isCancelled,
+    isMatchmaking: Boolean(room.is_matchmaking),
+  });
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4">
+    <div className="flex min-h-screen flex-col items-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-6 sm:py-10">
       {/* Background decoration — subtle floating drift */}
       <div
         className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none"
@@ -854,7 +812,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
         <span className="absolute text-[14rem] bottom-0 -left-8 text-white animate-suit-drift-2">♣</span>
       </div>
 
-      <main className="relative z-10 w-full max-w-md flex flex-col gap-6">
+      <main className="relative z-10 w-full max-w-md flex flex-col gap-4">
 
         {/* ── Spectator banner ────────────────────────────────────────────── */}
         {isSpectator && (
@@ -931,136 +889,43 @@ export default function RoomLobbyPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* ── Room code card ──────────────────────────────────────────────── */}
-        <div className="
-          bg-gradient-to-b from-slate-800/80 to-slate-900/80
-          border border-emerald-700/40
-          rounded-2xl p-6 text-center shadow-xl shadow-black/40
-          animate-lobby-section-in
-        " style={{ animationDelay: '0ms' }}>
-          <p className="text-sm text-emerald-300/80 font-medium mb-1 uppercase tracking-widest">
-            Room Code
-          </p>
-          <div
-            className="text-5xl font-black font-mono tracking-[0.2em] text-white my-3 select-all"
-            aria-label={`Room code: ${room.code}`}
-            data-testid="lobby-room-code"
-          >
-            {room.code}
-          </div>
-          <p className="text-xs text-slate-500">
-            {room.is_matchmaking
-              ? 'Waiting for matched players to join…'
-              : 'Share this code or the links below so friends can join'}
-          </p>
-
-          {/* Invite / spectator links — hidden for matchmaking rooms */}
-          {!room.is_matchmaking && (
-            <>
-              {/* Invite link + copy */}
-              <div className="mt-4 text-left">
-                <p className="text-xs text-emerald-300/60 font-medium mb-1.5 uppercase tracking-widest">
-                  Invite Link
-                </p>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="
-                      flex-1 bg-slate-800 border border-slate-700 rounded-xl
-                      px-3 py-2 text-xs font-mono text-slate-300 truncate
-                    "
-                    data-testid="lobby-invite-url"
+        <header className="flex flex-col gap-4">
+          <h1 className="text-2xl font-bold tracking-tight text-white">Room lobby</h1>
+          {hasStartPanel && (
+            <div className="flex flex-col gap-3" data-testid="start-game-panel">
+              <div className={amIHostLive ? 'grid grid-cols-2 items-start gap-2' : 'flex flex-col gap-3'}>
+                {!isSpectator && <LobbyInviteButton roomCode={room.code} />}
+                {myWsPlayer && (amIHostLive || !lobbyStarting) && (
+                  <LobbyStartControl
+                    isHost={amIHostLive}
+                    hostName={wsPlayers.find((player) => player.isHost)?.displayName ?? null}
                   >
-                    {inviteUrl}
-                  </div>
-                  <button
-                    onClick={handleCopyInvite}
-                    aria-label="Copy invite link"
-                    data-testid="lobby-copy-invite-btn"
-                    className={`
-                      px-3 py-2 rounded-xl text-xs font-semibold shrink-0
-                      text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-                      ${copiedInvite
-                        ? 'bg-emerald-500 animate-copy-confirm'
-                        : 'bg-emerald-700 hover:bg-emerald-600'}
-                    `}
-                  >
-                    {copiedInvite ? '✓ Copied' : 'Copy'}
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (startGame()) {
+                          trackEvent('lobby_game_started', { player_count: room.player_count });
+                          setIsStarting(true);
+                        }
+                      }}
+                      disabled={isStarting || lobbyStarting || !myPlayerId || wsStatus !== 'connected'}
+                      aria-busy={isStarting || lobbyStarting}
+                      data-testid="start-game-btn"
+                      className="min-h-12 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-300 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {isStarting || lobbyStarting ? 'Starting…' : startLabel}
+                    </button>
+                  </LobbyStartControl>
+                )}
               </div>
-
-              {/* Spectator link + copy */}
-              <div className="mt-3 text-left">
-                <p className="text-xs text-slate-400/60 font-medium mb-1.5 uppercase tracking-widest">
-                  Spectator Link
+              {wsError && !lobbyStarting && (
+                <p className="text-sm text-red-300" role="alert" data-testid="start-game-error">
+                  {wsError}
                 </p>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="
-                      flex-1 bg-slate-800 border border-slate-600/60 rounded-xl
-                      px-3 py-2 text-xs font-mono text-slate-400 truncate
-                    "
-                    data-testid="lobby-spectator-url"
-                  >
-                    {spectatorUrl}
-                  </div>
-                  <button
-                    onClick={handleCopySpectator}
-                    aria-label="Copy spectator link"
-                    data-testid="lobby-copy-spectator-btn"
-                    className={`
-                      px-3 py-2 rounded-xl text-xs font-semibold shrink-0
-                      text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-                      ${copiedSpectator
-                        ? 'bg-emerald-500 animate-copy-confirm'
-                        : 'bg-slate-600 hover:bg-slate-500'}
-                    `}
-                  >
-                    {copiedSpectator ? '✓ Copied' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-            </>
+              )}
+            </div>
           )}
-        </div>
-
-        {/* ── Room settings ────────────────────────────────────────────────── */}
-        <div className="
-          bg-slate-800/50 border border-slate-700/50
-          rounded-2xl p-5 flex flex-col gap-4
-          animate-lobby-section-in
-        " style={{ animationDelay: '80ms' }}>
-          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
-            Room Settings
-          </h2>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Player count */}
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500 uppercase tracking-wider">
-                Players
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-black text-white">
-                  {room.player_count}
-                </span>
-                <span className="text-xs text-slate-400">
-                  ({room.player_count === 6 ? '3v3' : '4v4'})
-                </span>
-              </div>
-            </div>
-
-            {/* Variant */}
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500 uppercase tracking-wider">
-                Variant
-              </span>
-              <span className="text-sm font-semibold text-emerald-300">
-                {VARIANT_LABELS[room.card_removal_variant] ?? room.card_removal_variant}
-              </span>
-            </div>
-          </div>
-        </div>
+        </header>
 
         {/* ── Team columns / waiting area ───────────────────────────────────── */}
         <div className="
@@ -1068,8 +933,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
           rounded-2xl p-5
           animate-lobby-section-in
         " style={{ animationDelay: '160ms' }}>
-          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+          <h2 className="mb-3 text-sm font-semibold text-slate-300 uppercase tracking-widest">
             Players
+            {hasStartPanel && (
+              <span className="sr-only" data-testid="lobby-player-count">
+                {wsPlayers.length}/{room.player_count} seated
+              </span>
+            )}
           </h2>
 
           {isCancelled ? (
@@ -1206,179 +1076,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
             </>
           )}
         </div>
-
-        {/* ── Start Game controls ───────────────────────
-            Only the host may start a private room; empty seats are filled
-            with bots server-side. Matchmaking rooms start automatically.
-            ─────────────────────────────────────────────────────────────── */}
-        {showStartPanel({
-          isSpectator,
-          amIHost: amIHostLive,
-          isCancelled,
-          isMatchmaking: Boolean(room.is_matchmaking),
-        }) && (
-          <div
-            className="
-              bg-slate-800/50 border border-slate-700/50
-              rounded-2xl p-5 flex flex-col gap-4
-              animate-lobby-section-in
-            "
-            style={{ animationDelay: '240ms' }}
-            data-testid="start-game-panel"
-          >
-            {/* ── Lobby readiness summary ────────────────────────────────── */}
-            {(() => {
-              const connected = wsPlayers.length;
-              const required  = room.player_count;
-              const empty     = required - connected;
-              const t1Count   = wsPlayers.filter((p) => p.teamId === 1).length;
-              const t2Count   = wsPlayers.filter((p) => p.teamId === 2).length;
-              const balanced  = t1Count === t2Count;
-
-              return (
-                <>
-                  {/* Player count + bot-fill info */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
-                      Lobby Status
-                    </span>
-                    <span
-                      className={`
-                        text-xs font-semibold px-2.5 py-1 rounded-lg
-                        ${connected >= required
-                          ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40'
-                          : 'bg-slate-700/60 text-slate-300 border border-slate-600/40'}
-                      `}
-                      aria-label={`${connected} of ${required} players connected`}
-                      data-testid="lobby-player-count"
-                    >
-                      {connected}/{required} players
-                    </span>
-                  </div>
-
-                  {/* Bot fill notice */}
-                  {empty > 0 && (
-                    <p
-                      className="text-xs text-slate-400 -mt-1"
-                      data-testid="lobby-bot-fill-notice"
-                      role="note"
-                    >
-                      <span aria-hidden="true">🤖</span>{' '}
-                      {empty} empty seat{empty !== 1 ? 's' : ''} will be filled
-                      with bot{empty !== 1 ? 's' : ''} when the game starts.
-                    </p>
-                  )}
-
-                  {/* Team-balance warning */}
-                  {connected > 1 && !balanced && (
-                    <p
-                      className="text-xs text-amber-400 -mt-1 flex items-center gap-1.5"
-                      data-testid="lobby-team-imbalance-warning"
-                      role="note"
-                    >
-                      <span aria-hidden="true">⚠️</span>
-                      Teams are uneven right now — bots will balance them on
-                      start.
-                    </p>
-                  )}
-
-                  {/* All seats filled confirmation */}
-                  {empty === 0 && balanced && (
-                    <p
-                      className="text-xs text-emerald-400 -mt-1 flex items-center gap-1.5"
-                      data-testid="lobby-all-filled-notice"
-                      role="note"
-                    >
-                      <span aria-hidden="true">✅</span>
-                      All {required} seats filled — ready to start!
-                    </p>
-                  )}
-                </>
-              );
-            })()}
-
-            {/* ── Server-side error feedback ─────────────────────────────── */}
-            {wsError && !lobbyStarting && (
-              <div
-                className="
-                  px-3 py-2 rounded-xl
-                  bg-red-900/40 border border-red-700/50
-                  text-red-300 text-xs
-                "
-                role="alert"
-                data-testid="start-game-error"
-              >
-                <span aria-hidden="true">❌</span>{' '}
-                {wsError}
-              </div>
-            )}
-
-            {/* ── Start Game button ─────────────────────────────────────── */}
-            {/* Before the roster has this player, the host would read "Waiting for a host…". */}
-            {/* A non-host would otherwise read "Waiting for…" right above the starting notice. */}
-            {myWsPlayer && (amIHostLive || !lobbyStarting) && (
-              <LobbyStartControl
-                isHost={amIHostLive}
-                hostName={wsPlayers.find((p) => p.isHost)?.displayName ?? null}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    const sent = startGame();
-                    if (sent) {
-                      trackEvent('lobby_game_started', { player_count: room.player_count });
-                      setIsStarting(true);
-                    }
-                  }}
-                  disabled={isStarting || lobbyStarting || !myPlayerId}
-                  aria-label="Start Game"
-                  aria-busy={isStarting || lobbyStarting}
-                  data-testid="start-game-btn"
-                  className={`
-                    w-full py-3.5 rounded-xl font-bold text-base
-                    bg-emerald-600 hover:bg-emerald-500
-                    disabled:bg-emerald-900/50 disabled:cursor-not-allowed
-                    text-white disabled:text-emerald-400/60
-                    transition-all duration-150
-                    focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2
-                    focus:ring-offset-slate-800
-                    active:scale-[0.98]
-                    shadow-lg shadow-emerald-900/30
-                    ${wsPlayers.length >= room.player_count && !isStarting && !lobbyStarting ? 'animate-start-ready-pulse' : ''}
-                  `}
-                >
-                  {isStarting || lobbyStarting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg
-                        className="animate-spin h-4 w-4 text-emerald-300"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8v8z"
-                        />
-                      </svg>
-                      Starting…
-                    </span>
-                  ) : (
-                    'Start Game'
-                  )}
-                </button>
-              </LobbyStartControl>
-            )}
-          </div>
-        )}
 
         {/* ── Matchmaking waiting panel ─────────────────────────────────────
             For matchmaking rooms (no host), show player count progress and
