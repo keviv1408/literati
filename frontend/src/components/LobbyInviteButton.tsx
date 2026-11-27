@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { isAndroidBuild } from '@/lib/appPaths';
 
-export default function LobbyInviteButton({ roomCode }: { roomCode: string }) {
+export default function LobbyInviteButton({ roomCode, inviteLink }: { roomCode: string; inviteLink?: string }) {
   const [copied, setCopied] = useState(false);
   const [manualLink, setManualLink] = useState('');
+  const [showUnavailable, setShowUnavailable] = useState(false);
   const linkInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -17,8 +19,32 @@ export default function LobbyInviteButton({ roomCode }: { roomCode: string }) {
     if (manualLink) linkInput.current?.select();
   }, [manualLink]);
 
-  async function inviteFriends() {
-    const url = new URL(`/room/${roomCode}`, window.location.origin).href;
+  async function _inviteFriends() {
+    let url: string;
+    if (isAndroidBuild()) {
+      if (!inviteLink) {
+        setShowUnavailable(true);
+        return;
+      }
+      url = inviteLink;
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          const { Share } = await import('@capacitor/share');
+          if ((await Share.canShare()).value) {
+            await Share.share({ title: 'Play Literati', url });
+            return;
+          }
+          return _copyInvite(url);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Share canceled') return;
+        return _copyInvite(url);
+      }
+    } else {
+      url = new URL(`/room/${roomCode}`, window.location.origin).href;
+    }
+
     if (navigator.share) {
       try {
         await navigator.share({ title: 'Play Literati', url });
@@ -28,6 +54,10 @@ export default function LobbyInviteButton({ roomCode }: { roomCode: string }) {
       }
     }
 
+    await _copyInvite(url);
+  }
+
+  async function _copyInvite(url: string) {
     try {
       await navigator.clipboard.writeText(url);
       setManualLink('');
@@ -42,7 +72,7 @@ export default function LobbyInviteButton({ roomCode }: { roomCode: string }) {
     <div className="min-w-0">
       <button
         type="button"
-        onClick={inviteFriends}
+        onClick={_inviteFriends}
         className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-700 bg-emerald-950 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-emerald-300"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -50,6 +80,11 @@ export default function LobbyInviteButton({ roomCode }: { roomCode: string }) {
         </svg>
         <span aria-live="polite">{copied ? 'Link copied' : 'Invite friends'}</span>
       </button>
+      {showUnavailable && !inviteLink && (
+        <p className="mt-2 text-xs text-emerald-200" role="status">
+          Invite link unavailable. Reopen this room and try again.
+        </p>
+      )}
       {manualLink && (
         <label className="mt-2 block text-xs text-emerald-200">
           Copy this invite link

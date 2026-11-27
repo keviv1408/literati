@@ -33,7 +33,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { getRoomByCode, ApiError } from '@/lib/api';
-import { gamePath } from '@/lib/appPaths';
+import { gamePath, isAndroidBuild } from '@/lib/appPaths';
 import { trackEvent } from '@/lib/analytics';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
 import {
@@ -87,6 +87,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
   const [joinError, setJoinError] = useState<string | null>(null);
 
   const [room, setRoom] = useState<Room | null>(null);
+  const [inviteLink, setInviteLink] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -377,48 +378,44 @@ export default function RoomLobbyPage({ params }: PageProps) {
       return;
     }
 
-    // consume the room data cached by CreateRoomModal so the host
-    // sees the lobby instantly without an additional API round-trip.
-    // When a cached room is found the current browser session CREATED this
-    // room — mark it as the host view so drag-and-drop is enabled.
+    // Keep the host's lobby available while Android fetches the public link.
     const cached = consumeCreatedRoom(roomCode);
     if (cached) {
       setRoom(cached);
+      setInviteLink(undefined);
       setSeats(buildEmptySeats(cached.player_count));
       setLoading(false);
-      return;
+      if (!isAndroidBuild()) return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
 
-    getRoomByCode(roomCode)
-      .then(({ room: fetched }) => {
-        if (!cancelled) {
-          // The game page handles seated players (reconnect) and everyone
-          // else; the lobby would only show an empty roster for a started game.
-          if (fetched.status === 'in_progress') {
-            router.replace(gamePath(fetched.code));
-            return;
-          }
-          setRoom(fetched);
-          // Initialise empty seat array sized to the room's player count.
-          // will fill these via WebSocket join events.
-          setSeats(buildEmptySeats(fetched.player_count));
-          setLoading(false);
+    getRoomByCode(roomCode, controller.signal)
+      .then(({ room: fetched, inviteLink }) => {
+        if (controller.signal.aborted) return;
+        if (cached) {
+          setInviteLink(inviteLink);
+          return;
         }
+        // The lobby has no roster for a game that's already started.
+        if (fetched.status === 'in_progress') {
+          router.replace(gamePath(fetched.code));
+          return;
+        }
+        setRoom(fetched);
+        setInviteLink(inviteLink);
+        setSeats(buildEmptySeats(fetched.player_count));
+        setLoading(false);
       })
       .catch((err) => {
-        if (!cancelled) {
-          if (err instanceof ApiError && err.status === 404) {
-            setNotFound(true);
-          }
-          setLoading(false);
+        if (controller.signal.aborted || cached) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setNotFound(true);
         }
+        setLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [roomCode, kickedOnEntry, isKicked]);
 
   // ── Seat reassignment ─────────────────────
@@ -896,7 +893,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           {hasStartPanel && (
             <div className="flex flex-col gap-3" data-testid="start-game-panel">
               <div className={amIHostLive ? 'grid grid-cols-2 items-start gap-2' : 'flex flex-col gap-3'}>
-                {!isSpectator && <LobbyInviteButton roomCode={room.code} />}
+                {!isSpectator && <LobbyInviteButton roomCode={room.code} inviteLink={inviteLink} />}
                 {myWsPlayer && (amIHostLive || !lobbyStarting) && (
                   <LobbyStartControl
                     isHost={amIHostLive}

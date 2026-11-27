@@ -8,6 +8,8 @@
 import React from 'react';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import type { LobbyPlayer, UseRoomSocketOptions, WsStatus } from '@/hooks/useRoomSocket';
+import type { Room } from '@/types/room';
+import { cacheCreatedRoom } from '@/components/CreateRoomModal';
 import { GuestProvider } from '@/contexts/GuestContext';
 import { ApiError } from '@/lib/api';
 import { saveToken } from '@/lib/backendSession';
@@ -18,6 +20,11 @@ import RoomLobbyPage from '@/app/room/[roomCode]/page';
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 jest.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
+}));
+
+jest.mock('@/components/LobbyInviteButton', () => ({
+  __esModule: true,
+  default: ({ inviteLink }: { inviteLink?: string }) => <div>invite:{inviteLink ?? 'none'}</div>,
 }));
 
 const mockGetRoomByCode = jest.fn();
@@ -92,7 +99,7 @@ jest.mock('@/hooks/useRoomSocket', () => {
   };
 });
 
-const ROOM = {
+const ROOM: Room = {
   id: 'room-1',
   code: 'ABC123',
   invite_code: '0123456789abcdef',
@@ -104,6 +111,8 @@ const ROOM = {
   created_at: '2026-11-26T00:00:00Z',
   updated_at: '2026-11-26T00:00:00Z',
 };
+
+const LINK = 'https://literati-ochre.vercel.app/room/ABC123';
 
 const SESSION = {
   isGuest: true,
@@ -288,6 +297,46 @@ describe('room lobby token choice after a restart', () => {
     await waitFor(() => expect(_lastToken()).toBe('stale-room-token'));
     expect(_tokenChangesSince(0)).toEqual([null, 'stale-room-token']);
     expect(mockGetGuestBearerToken).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('room lobby invite link', () => {
+  beforeEach(() => {
+    mockGetRoomByCode.mockResolvedValue({ room: ROOM, inviteLink: LINK });
+  });
+
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_BUILD_TARGET;
+  });
+
+  it('passes the public invite link to the Android lobby immediately after room creation', async () => {
+    process.env.NEXT_PUBLIC_BUILD_TARGET = 'android';
+    cacheCreatedRoom(ROOM);
+
+    await _renderConnecting();
+    _drive({ wsStatus: 'connected', stopCode: null });
+
+    expect(await screen.findByText(`invite:${LINK}`)).toBeVisible();
+  });
+
+  it('passes the public invite link to the Android lobby without a cached room', async () => {
+    process.env.NEXT_PUBLIC_BUILD_TARGET = 'android';
+
+    await _renderConnecting();
+    _drive({ wsStatus: 'connected', stopCode: null });
+
+    expect(await screen.findByText(`invite:${LINK}`)).toBeVisible();
+  });
+
+  it('skips the room lookup when the web lobby has a cached room', async () => {
+    delete process.env.NEXT_PUBLIC_BUILD_TARGET;
+    cacheCreatedRoom(ROOM);
+
+    await _renderConnecting();
+    _drive({ wsStatus: 'connected', stopCode: null });
+
+    expect(await screen.findByText('invite:none')).toBeVisible();
+    expect(mockGetRoomByCode).not.toHaveBeenCalled();
   });
 });
 
