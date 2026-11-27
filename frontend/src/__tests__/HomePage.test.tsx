@@ -185,6 +185,28 @@ describe('Home room recovery', () => {
     expect(mockPush).toHaveBeenCalledWith('/game/ABC123');
   });
 
+  it('keeps the room usable during refresh and ignores a superseded response', async () => {
+    jest.useFakeTimers();
+    try {
+      const room = { code: 'ABC123', destination: 'lobby' };
+      let resolveSlow!: (value: unknown) => void;
+      mockGetReturningRoom.mockResolvedValueOnce({ room, hosting: true })
+        .mockReturnValueOnce(new Promise(done => { resolveSlow = done; }))
+        .mockResolvedValueOnce({ room: null, hosting: false });
+      render(<Home />);
+      await act(async () => {});
+      await act(async () => { jest.advanceTimersByTime(15000); });
+      expect(screen.getByRole('button', { name: /Return to lobby/ })).toBeEnabled();
+      expect(mockGetReturningRoom).toHaveBeenCalledTimes(2);
+      await act(async () => { window.dispatchEvent(new Event('focus')); });
+      expect(screen.getByRole('button', { name: /Create Private Room/ })).toBeEnabled();
+      await act(async () => resolveSlow({ room, hosting: true }));
+      expect(screen.queryByRole('button', { name: /Return to lobby/ })).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('can retry a failed lookup and rejects a cancelled switch from a guest lobby', async () => {
     mockGetReturningRoom.mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce({ room: { code: 'ABC123', destination: 'lobby' }, hosting: false });

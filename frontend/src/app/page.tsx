@@ -39,15 +39,42 @@ export default function Home() {
 
   useEffect(() => {
     if (!identity || !displayName) return;
-    let active = true;
-    getReturningRoom(displayName, identity, recentPlayerRoomCodes().filter(code => !isKickedFromRoom(code)))
-      .then(({ room, hosting }) => {
-        if (active) setCheck({ identity, room, hosting });
-      })
-      .catch(() => {
-        if (active) setCheck({ identity, room: null, hosting: false, failed: true });
-      });
-    return () => { active = false; };
+    let latest = 0;
+    let hasResult = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const session = { identity, displayName };
+
+    async function refresh() {
+      const request = ++latest;
+      clearTimeout(timer);
+      try {
+        const codes = recentPlayerRoomCodes().filter(code => !isKickedFromRoom(code));
+        const { room, hosting } = await getReturningRoom(session.displayName, session.identity, codes);
+        if (request !== latest) return;
+        hasResult = true;
+        setCheck({ identity: session.identity, room, hosting });
+        if (room || hosting) timer = setTimeout(refreshWhenVisible, 15000);
+      } catch {
+        if (request !== latest) return;
+        if (hasResult) timer = setTimeout(refreshWhenVisible, 15000);
+        else setCheck({ identity: session.identity, room: null, hosting: false, failed: true });
+      }
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === 'visible') void refresh();
+    }
+
+    void refresh();
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      latest++;
+      clearTimeout(timer);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [identity, displayName, attempt]);
 
   useEffect(() => {
