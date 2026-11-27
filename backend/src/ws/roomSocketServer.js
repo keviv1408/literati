@@ -565,6 +565,7 @@ async function resolveUserFromToken(token) {
 
 const JOINABLE_STATUSES = ['waiting', 'starting'];
 const pendingRoomLookups = new Map();
+const _closureChecks = new Map();
 
 /**
  * Fetch minimal room metadata from Supabase — also retrieves spectator_token
@@ -2177,6 +2178,8 @@ function attachRoomSocketServer(httpServer) {
  * Used in tests to reset state between cases.
  */
 function _resetRoomState() {
+  for (const timer of _closureChecks.values()) clearTimeout(timer);
+  _closureChecks.clear();
   for (const { timer } of departedLobbies.values()) clearTimeout(timer);
   departedLobbies.clear();
   roomClients.clear();
@@ -2199,7 +2202,34 @@ function _resetRoomState() {
 // Exports
 // ---------------------------------------------------------------------------
 
+async function reconcileLobbyClosure(code) {
+  try {
+    const { data, error } = await getSupabase().from('rooms')
+      .select('status, is_matchmaking, host_guest_id, host_user_id').eq('code', code).maybeSingle();
+    if (error) throw error;
+    if (data?.status === 'cancelled' && data.is_matchmaking === false) {
+      closeCancelledLobby(code);
+      return data;
+    }
+  } catch {
+    // Guests may still be displaying the lobby after the host dismisses the failed request.
+    const observed = roomClients.get(code)?.size || roomSpectators.get(code)?.size
+      || Array.from(pendingRoomLookups.values()).includes(code);
+    if (observed && !_closureChecks.has(code)) {
+      const timer = setTimeout(() => {
+        _closureChecks.delete(code);
+        void reconcileLobbyClosure(code);
+      }, HEARTBEAT_INTERVAL_MS);
+      timer.unref?.();
+      _closureChecks.set(code, timer);
+    }
+  }
+  return null;
+}
+
 function closeCancelledLobby(code) {
+  clearTimeout(_closureChecks.get(code));
+  _closureChecks.delete(code);
   for (const [ws, roomCode] of pendingRoomLookups) {
     if (roomCode === code) closeWithNotice(ws, 4005, 'Lobby closed');
   }
@@ -2220,6 +2250,7 @@ function closeCancelledLobby(code) {
 }
 
 module.exports = {
+  reconcileLobbyClosure,
   closeCancelledLobby,
   attachRoomSocketServer,
   recentlyLeftLobby,

@@ -29,7 +29,7 @@ const {
 const { findReturningSeat } = require('../game/gameState');
 const { getGame } = require('../game/gameStore');
 const { getGuestSession } = require('../sessions/guestSessionStore');
-const { roomClients, recentlyLeftLobby, closeCancelledLobby } = require('../ws/roomSocketServer');
+const { roomClients, recentlyLeftLobby, closeCancelledLobby, reconcileLobbyClosure } = require('../ws/roomSocketServer');
 const { requireAuth, extractBearerToken } = require('../middleware/auth');
 const {
   blockPlayer,
@@ -102,7 +102,11 @@ router.post('/:code/abandon', requireAuth, async (req, res) => {
     return res.json({ code, status: 'cancelled' });
   } catch (err) {
     console.error('[rooms/abandon]', err);
-    return res.status(500).json({ error: 'Could not close the lobby.' });
+    const room = await reconcileLobbyClosure(code);
+    if (room && room[hostColumn] === getPlayerIdentifier(req.user)) {
+      return res.json({ code, status: 'cancelled' });
+    }
+    return res.status(503).json({ error: 'Could not confirm the lobby closure. Please try again.' });
   }
 });
 
