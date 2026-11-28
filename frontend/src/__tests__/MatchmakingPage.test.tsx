@@ -3,10 +3,14 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mockPush = jest.fn();
 const mockEnsureGuestName = jest.fn();
+const mockUseAccount = jest.fn();
+const mockSocket = jest.fn();
+
+jest.mock('@/contexts/AccountContext', () => ({ useAccount: () => mockUseAccount() }));
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -20,11 +24,7 @@ jest.mock('@/hooks/useGuestSession', () => ({
 }));
 
 jest.mock('@/hooks/useMatchmakingSocket', () => ({
-  useMatchmakingSocket: () => ({
-    status: 'idle',
-    queueSize: 0,
-    leaveQueue: jest.fn(),
-  }),
+  useMatchmakingSocket: (options: unknown) => mockSocket(options),
 }));
 
 const mockGetGuestBearerToken = jest.fn();
@@ -42,6 +42,12 @@ import MatchmakingPage from '@/app/matchmaking/page';
 
 describe('MatchmakingPage', () => {
   beforeEach(() => {
+    mockUseAccount.mockReturnValue({ session: null, loading: false, displayName: null });
+    mockSocket.mockImplementation(({ sessionId }) => ({
+      status: sessionId ? 'in-queue' : 'idle',
+      queueSize: 0,
+      leaveQueue: jest.fn(),
+    }));
     mockPush.mockReset();
     mockEnsureGuestName.mockReset();
     mockGetGuestBearerToken.mockReset();
@@ -79,6 +85,21 @@ describe('MatchmakingPage', () => {
         },
       ],
     });
+  });
+
+  it('retains the queue token through account refresh and uses the new one on the next search', async () => {
+    const account = (token: string) => ({ session: { user: { id: 'player' }, access_token: token }, displayName: 'Player', loading: false });
+    mockUseAccount.mockReturnValue(account('original'));
+    const { rerender } = render(<MatchmakingPage />);
+    fireEvent.click(screen.getByRole('button', { name: /Find Game/ }));
+    await screen.findByRole('button', { name: /Cancel/ });
+    expect(mockSocket).toHaveBeenLastCalledWith(expect.objectContaining({ bearerToken: 'original' }));
+    mockUseAccount.mockReturnValue(account('refreshed'));
+    rerender(<MatchmakingPage />);
+    expect(mockSocket).toHaveBeenLastCalledWith(expect.objectContaining({ bearerToken: 'original' }));
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Find Game/ }));
+    await waitFor(() => expect(mockSocket).toHaveBeenLastCalledWith(expect.objectContaining({ bearerToken: 'refreshed' })));
   });
 
   it('shows a public activity summary using queue + live-game counts', async () => {

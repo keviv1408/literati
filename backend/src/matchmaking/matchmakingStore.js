@@ -101,18 +101,22 @@ function joinQueue(filterKey, player) {
 }
 
 /**
- * Remove a player from whichever queue they are currently in.
+ * A delayed leave from an old connection must not remove a replacement entry.
  *
  * @param {string} playerId
+ * @param {string} [connectionId]
  * @returns {{ removed: boolean, filterKey: string|null }}
  */
-function leaveQueue(playerId) {
+function leaveQueue(playerId, connectionId) {
   const filterKey = _playerQueue.get(playerId);
   if (!filterKey) {
     return { removed: false, filterKey: null };
   }
 
   const queue = _queues.get(filterKey);
+  if (connectionId !== undefined && queue?.get(playerId)?.connectionId !== connectionId) {
+    return { removed: false, filterKey };
+  }
   if (queue) {
     queue.delete(playerId);
     if (queue.size === 0) {

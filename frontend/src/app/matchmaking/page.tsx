@@ -60,7 +60,7 @@ export default function MatchmakingPage() {
   // ── WebSocket matchmaking hook ───────────────────────────────────────────────
   const { status, queueSize, leaveQueue } = useMatchmakingSocket({
     sessionId,
-    bearerToken: bearerToken && (account?.access_token ?? bearerToken),
+    bearerToken,
     autoJoinFilter,
     onMatchFound: useCallback(
       (roomCode: string) => {

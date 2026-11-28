@@ -945,7 +945,7 @@ function createWsServer(httpServer) {
       // Clean up from any matchmaking queue the player may have been in.
       // This uses the `user` object captured from the connection-time auth
       // resolution — it remains valid for the lifetime of the socket.
-      cleanupQueuedPlayer(user.playerId);
+      cleanupQueuedPlayer(user.playerId, connectionId);
     });
 
     // Acknowledge successful authentication.
