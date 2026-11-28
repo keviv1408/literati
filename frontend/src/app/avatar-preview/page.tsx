@@ -10,6 +10,7 @@ import { TableScore } from '@/components/GameHeader';
 import { CREATURE_NAMES } from '@/components/creatures/kind';
 import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import { VoiceProvider } from '@/contexts/VoiceContext';
+import { useReactionBubble } from '@/hooks/useReactionBubble';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import { applyStep, type Step, type TableState } from '@/lib/tutorial/engine';
 import { PRACTICE_DEAL } from '@/lib/tutorial/quickTurn';
@@ -57,7 +58,7 @@ export default function AvatarPreviewPage() {
     setRound(current => current.frames[current.index]?.result === result
       ? { ...current, index: current.index + 1 } : current);
   }, []);
-  const { cardFlight, clearAskAnimation, askDeniedCue, askSpeechBubble } =
+  const { cardFlight, clearAskAnimation, askDeniedCue, askSpeechBubble, reactionAsk } =
     useAskResultAnimations(frame?.result ?? null, {
       getPlayerDisplayName: _name, nextAskAnimation: active, finishAskAnimation,
     });
@@ -65,6 +66,8 @@ export default function AvatarPreviewPage() {
     ...player,
     avatarId: player.playerId === 'maya' ? asker : player.playerId === 'ana' ? opponent : player.avatarId,
   }));
+
+  const speechBubble = useReactionBubble(reactionAsk, null, players) ?? askSpeechBubble;
 
   function _play(cards: CardId[]) {
     let before = DEAL;
@@ -103,9 +106,9 @@ export default function AvatarPreviewPage() {
               <AnimalSelect label="Opponent" player="Ana" avatar={opponent} onChange={setOpponent} disabled={!!active} />
             </div>
             <div className={styles.actions} role="group" aria-label="Play an ask">
-              <button type="button" disabled={!!active} onClick={() => _play(['2_d'])}>Successful ask</button>
-              <button type="button" disabled={!!active} onClick={() => _play(['4_d'])}>Denied ask</button>
-              <button type="button" disabled={!!active} onClick={() => _play(['2_d', '3_d', '4_d'])}>Three-card ask</button>
+              <button type="button" disabled={active?.success} onClick={() => _play(['2_d'])}>Successful ask</button>
+              <button type="button" disabled={active?.success} onClick={() => _play(['4_d'])}>Denied ask</button>
+              <button type="button" disabled={active?.success} onClick={() => _play(['2_d', '3_d', '4_d'])}>Three-card ask</button>
             </div>
           </div>
           <p role="status">
@@ -113,7 +116,7 @@ export default function AvatarPreviewPage() {
             {message}
           </p>
         </footer>
-        {askSpeechBubble && <AskSpeechBubbleOverlay bubble={askSpeechBubble} />}
+        {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
       </main>
     </VoiceProvider>
   );

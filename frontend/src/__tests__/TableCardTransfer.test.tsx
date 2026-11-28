@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render } from '@testing-library/react';
 import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import { createRetrievalScene } from '@/components/creatures/retrievalScene';
-import AskDeniedAnimation, { ASK_DENIED_ANIMATION_MS } from '@/components/AskDeniedAnimation';
+import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import { FLIGHT_DURATION_MS } from '@/components/CardFlightAnimation';
 import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAnimations';
 
@@ -48,7 +48,7 @@ it('waits for a successful grab and keeps a denied card visible if the creature 
     const targetSeat = view.container.querySelector<HTMLElement>('[data-player-id="other"]')!;
     view.rerender(content(null, {
       askerId: 'asker', targetId: 'other', cardId: '4_d',
-      seat: targetSeat,
+      seat: targetSeat, durationMs: 4000,
     }));
     expect(view.container.querySelectorAll('[data-creature="frog"][data-denial-role]')).toHaveLength(2);
     expect(view.queryByTestId('card-flight-card')).toBeNull();
@@ -57,7 +57,7 @@ it('waits for a successful grab and keeps a denied card visible if the creature 
     act(stop);
     expect(view.container.querySelectorAll('[data-denial-role]')).toHaveLength(0);
     expect(complete).toHaveBeenCalledTimes(1);
-    act(() => jest.advanceTimersByTime(ASK_DENIED_ANIMATION_MS - 81));
+    act(() => jest.advanceTimersByTime(4000 - 81));
     expect(complete).toHaveBeenCalledTimes(1);
     act(() => jest.advanceTimersByTime(1));
     expect(complete).toHaveBeenCalledTimes(2);
@@ -91,7 +91,7 @@ it('finds a clear side for the full-size denied card when both adjacent seats ar
     return new DOMRect(0, 0, 48, 72);
   });
   try {
-    view.rerender(table({ askerId: '0', targetId: '1', cardId: '4_d', seat }));
+    view.rerender(table({ askerId: '0', targetId: '1', cardId: '4_d', seat, durationMs: 4000 }));
     const card = view.getByTestId('ask-denied-animation');
     const left = parseFloat(card.style.left);
     expect(left >= 268 || left + 48 <= 120).toBe(true);

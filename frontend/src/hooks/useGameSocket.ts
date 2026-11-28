@@ -610,7 +610,8 @@ export function useGameSocket({
           setLastAskResult(payload);
           if (!document.hidden) {
             setLastVisibleAskResult(payload);
-            setAskAnimations(pending => [...pending, payload]);
+            // A new ask supersedes any earlier denial, while successful card transfers stay in order.
+            setAskAnimations(pending => [...pending.filter(ask => ask.success), payload]);
           }
           const { askerId, targetId, cardId, success } = payload;
           setAskHistory((prev) => [...prev, { askerId, targetId, cardId, success }]);
@@ -956,6 +957,8 @@ export function useGameSocket({
       ...(batchCardIds && batchCardIds.length > 1 ? { batchCardIds } : {}),
     });
     if (!sent) return;
+    setAskAnimations(pending => pending.filter(ask => ask.success));
+    setLastVisibleAskResult(previous => previous?.success ? previous : null);
     // A multi-card ask sends one message per card, so this fires once per card.
     trackEvent('game_ask_submitted', { batch_size: batchCardIds?.length ?? 1 });
   }, []);

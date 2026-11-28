@@ -389,15 +389,16 @@ export default function GamePage({ params }: PageProps) {
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
-    speechResult,
+    reactionAsk,
     clearAskAnimation,
   } = useAskResultAnimations(myPlayerId ? lastVisibleAskResult : null, {
     nextAskAnimation: myPlayerId ? nextAskAnimation : null,
     finishAskAnimation,
+    botDelayMs: gameState?.botDelayMs,
     getAskBubbleCardIds,
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(speechResult, lastAskResult ? null : lastDeclareResult, players);
+  const reactionBubble = useReactionBubble(reactionAsk, lastAskResult ? null : lastDeclareResult, players);
   const speechBubble = reactionBubble ?? askSpeechBubble;
 
   const publishMoveMessage = useCallback((message: string, persistentMessage: string | null = null) => {

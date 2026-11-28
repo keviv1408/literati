@@ -188,14 +188,15 @@ export default function SpectatorView({
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
-    speechResult,
+    reactionAsk,
     clearAskAnimation,
   } = useAskResultAnimations(lastVisibleAskResult, {
     nextAskAnimation,
     finishAskAnimation,
+    botDelayMs: gameState?.botDelayMs,
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(speechResult, lastAskResult ? null : lastDeclareResult, players);
+  const reactionBubble = useReactionBubble(reactionAsk, lastAskResult ? null : lastDeclareResult, players);
   const speechBubble = reactionBubble ?? askSpeechBubble;
   const showTransientLastResult = useEffectEvent((msg: string, persistentMessage: string | null = null) => {
     setLastResultMsg(msg);

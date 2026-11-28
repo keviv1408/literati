@@ -4,7 +4,6 @@ import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
 import type { AskDeniedCueState } from '@/hooks/useAskResultAnimations';
 import PlayingCard from './PlayingCard';
 
-export const ASK_DENIED_ANIMATION_MS = 1250;
 const GAP = 6;
 
 function _overlap(left: number, top: number, width: number, height: number, rect: DOMRect) {
@@ -19,7 +18,7 @@ export default function AskDeniedAnimation({ cue, onComplete }: {
   const cardRef = useRef<HTMLDivElement>(null);
   const finish = useEffectEvent(onComplete);
   useEffect(() => {
-    const timer = setTimeout(finish, ASK_DENIED_ANIMATION_MS);
+    const timer = setTimeout(finish, cue.durationMs);
     return () => clearTimeout(timer);
   }, [cue]);
 

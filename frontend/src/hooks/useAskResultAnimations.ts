@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { AskSpeechBubbleState } from '@/components/AskSpeechBubbleOverlay';
-import type { AskResultPayload, CardId } from '@/types/game';
+import { DEFAULT_BOT_DELAY_MS, type AskResultPayload, type CardId } from '@/types/game';
 
 export interface CardFlightState {
   askerId: string;
@@ -18,13 +18,16 @@ export interface AskDeniedCueState {
   targetId: string;
   cardId: CardId;
   seat: HTMLElement;
+  durationMs: number;
 }
 
 export type { AskSpeechBubbleState };
 
+export const DENIED_REPLY_MS = 1000;
 const ASKER_BUBBLE_MS = 2400;
 
 interface UseAskResultAnimationsOptions {
+  botDelayMs?: number;
   nextAskAnimation?: AskResultPayload | null;
   finishAskAnimation?: (result: AskResultPayload) => void;
   getAskBubbleCardIds?: (lastAskResult: AskResultPayload) => CardId[] | undefined;
@@ -87,6 +90,8 @@ export function useAskResultAnimations(
     overrideBubbleCardIds: options.getAskBubbleCardIds?.(result),
     targetName: options.getPlayerDisplayName?.(result.targetId),
   }));
+  // The server applies speed changes to the next bot turn, so snapshot the delay for each reveal.
+  const readDeniedCardDuration = useEffectEvent(() => (options.botDelayMs ?? DEFAULT_BOT_DELAY_MS) - DENIED_REPLY_MS);
   const { nextAskAnimation, finishAskAnimation } = options;
   const animationResult = nextAskAnimation === undefined ? lastAskResult : nextAskAnimation;
   const speechResult = nextAskAnimation ?? lastAskResult;
@@ -94,6 +99,7 @@ export function useAskResultAnimations(
     result: AskResultPayload;
     flight?: CardFlightState;
     denial?: AskDeniedCueState;
+    denialComplete?: true;
   } | null>(null);
   const [speech, setSpeech] = useState<{ result: AskResultPayload; bubble: AskSpeechBubbleState } | null>(null);
 
@@ -179,7 +185,7 @@ export function useAskResultAnimations(
       } else {
         setVisual({
           result: animationResult,
-          denial: { askerId, targetId, cardId, seat: fromEl },
+          denial: { askerId, targetId, cardId, seat: fromEl, durationMs: readDeniedCardDuration() },
         });
       }
     });
@@ -188,15 +194,20 @@ export function useAskResultAnimations(
 
   const clearAnimation = useCallback(() => {
     if (!animationResult) return;
-    setVisual(current => current?.result === animationResult ? null : current);
+    setVisual(current => {
+      if (current?.result !== animationResult) return current;
+      return current.denial ? { result: animationResult, denialComplete: true } : null;
+    });
     finishAskAnimation?.(animationResult);
   }, [animationResult, finishAskAnimation]);
+
+  const canReplyToDenial = visual?.denialComplete && visual.result === speechResult && speechResult === lastAskResult;
 
   return {
     cardFlight: visual?.result === animationResult ? visual.flight ?? null : null,
     askDeniedCue: visual?.result === animationResult ? visual.denial ?? null : null,
     askSpeechBubble: speech?.result === speechResult ? speech.bubble : null,
-    speechResult,
+    reactionAsk: speechResult?.success || canReplyToDenial ? speechResult : null,
     clearAskAnimation: clearAnimation,
   };
 }

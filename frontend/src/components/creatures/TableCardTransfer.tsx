@@ -5,7 +5,9 @@ import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAni
 import CardFlightAnimation, { FLIGHT_DURATION_MS } from '../CardFlightAnimation';
 import type { createRetrievalScene } from './retrievalScene';
 import { isCreatureKind } from './kind';
-import AskDeniedAnimation, { ASK_DENIED_ANIMATION_MS } from '../AskDeniedAnimation';
+import AskDeniedAnimation from '../AskDeniedAnimation';
+
+const DENIED_SHAKE_MS = 1250;
 
 export default function TableCardTransfer({ flight, denial, onComplete }: {
   flight: CardFlightState | null;
@@ -75,7 +77,7 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
       if (!giver || !asker) return;
       giver.avatar.dataset.denialRole = 'giver';
       asker.avatar.dataset.denialRole = 'asker';
-      scene.deny([{ ...giver, role: 'giver' }, { ...asker, role: 'asker' }], ASK_DENIED_ANIMATION_MS, () => {
+      scene.deny([{ ...giver, role: 'giver' }, { ...asker, role: 'asker' }], DENIED_SHAKE_MS, () => {
         delete giver.avatar.dataset.denialRole;
         delete asker.avatar.dataset.denialRole;
       });
