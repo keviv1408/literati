@@ -206,7 +206,7 @@ beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   saveGuestSession('Ada');
-  saveRoomMembership('ABC123', 'stale-room-token', 'sid-0', 'player');
+  saveRoomMembership('ABC123', 'sid-0', 'player');
   mockGetRoomByCode.mockResolvedValue({ room: ROOM });
   mockValidateSession.mockResolvedValue(SESSION);
   // clearAllMocks keeps once-queues, so a value a case left unused would leak into the next.
@@ -275,7 +275,7 @@ describe('room lobby recovery from a refused token', () => {
 
 describe('room lobby token choice after a restart', () => {
   it("connects with the fresh token when the stored room token is the same player's", async () => {
-    saveRoomMembership('ABC123', 'stale-room-token', 'sid-1', 'player');
+    saveRoomMembership('ABC123', 'sid-1', 'player');
     mockRefusedTokens.add('stale-room-token');
     _cacheStaleToken();
     mockValidateSession.mockImplementation(async (token: string) => {

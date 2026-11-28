@@ -41,6 +41,7 @@
  * { type: 'lobby-starting', roomCode, seats, botsAdded: string[] }
  */
 
+const { accountDisplayName } = require('../sessions/accountDisplayName');
 const { WebSocketServer, WebSocket } = require('ws');
 const url = require('url');
 const { v4: uuidv4 } = require('uuid');
@@ -113,7 +114,7 @@ async function resolveTokenToUser(token) {
     const { user } = data;
     return {
       playerId: user.id,
-      displayName: user.user_metadata?.display_name || user.email,
+      displayName: accountDisplayName(user),
       avatarId: user.user_metadata?.avatar_id || null,
       isGuest: false,
     };
@@ -944,7 +945,7 @@ function createWsServer(httpServer) {
       // Clean up from any matchmaking queue the player may have been in.
       // This uses the `user` object captured from the connection-time auth
       // resolution — it remains valid for the lifetime of the socket.
-      cleanupQueuedPlayer(user.playerId);
+      cleanupQueuedPlayer(user.playerId, connectionId);
     });
 
     // Acknowledge successful authentication.

@@ -33,6 +33,7 @@ export interface VoiceJoinResponse {
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3012';
+export const HTTP_API_URL = process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview' ? '' : API_URL;
 
 // ── Error class ──────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ async function apiFetch<T>(
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${API_URL}${path}`, { ...rest, headers });
+  const res = await fetch(`${HTTP_API_URL}${path}`, { ...rest, headers });
 
   if (!res.ok) {
     let body: unknown;
@@ -577,10 +578,12 @@ export interface ReturningRoom {
   destination: 'lobby' | 'game';
 }
 
-export async function getReturningRoom(displayName: string, recoveryKey: string, codes: string[]) {
-  const token = await getGuestBearerToken(displayName, recoveryKey);
-  return _withGuestRetry(token, { displayName, recoveryKey }, bearer =>
+export async function getReturningRoom(displayName: string, identity: string, codes: string[], accountToken?: string) {
+  const lookup = (token: string) =>
     apiFetch<{ room: ReturningRoom | null; hosting: boolean; hostedLobby?: string }>('/api/rooms/return', {
-      method: 'POST', token: bearer, body: JSON.stringify({ codes }),
-    }));
+      method: 'POST', token, body: JSON.stringify({ codes }),
+    });
+  if (accountToken) return lookup(accountToken);
+  const token = await getGuestBearerToken(displayName, identity);
+  return _withGuestRetry(token, { displayName, recoveryKey: identity }, lookup);
 }

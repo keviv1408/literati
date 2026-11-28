@@ -25,7 +25,7 @@ jest.mock('@/contexts/GuestContext', () => ({
   useGuest: () => ({ clearGuest: jest.fn() }),
 }));
 
-jest.mock('@/lib/api', () => ({ API_URL: 'http://api.test', getReturningRoom: (...args: unknown[]) => mockGetReturningRoom(...args) }));
+jest.mock('@/lib/api', () => ({ HTTP_API_URL: 'http://api.test', getReturningRoom: (...args: unknown[]) => mockGetReturningRoom(...args) }));
 
 jest.mock('@/components/CreateRoomModal', () => ({
   __esModule: true,

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Authentication routes (guest-only MVP).
+ * Authentication routes.
  *
  * POST /api/auth/guest — Create a temporary guest session (no DB writes)
  * DELETE /api/auth/guest — Destroy the caller's guest session
@@ -215,8 +215,8 @@ router.get('/me', requireAuth, (req, res) => {
   const { user } = req;
 
   return res.status(200).json({
-    isGuest: true,
-    sessionId: user.sessionId,
+    isGuest: user.isGuest,
+    ...(user.isGuest ? { sessionId: user.sessionId } : { id: user.id, email: user.email }),
     displayName: user.displayName,
     avatarId: user.avatarId,
   });

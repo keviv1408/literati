@@ -251,6 +251,12 @@ export function useRoomSocket({
 
   // Stable ref to the live socket so emit/kickPlayer don't need re-creation.
   const socketRef = useRef<ReconnectingSocket | null>(null);
+  const tokenRef = useRef(bearerToken);
+  const hasToken = Boolean(bearerToken);
+  useEffect(() => {
+    tokenRef.current = bearerToken;
+    socketRef.current?.retryWithNewCredentials();
+  }, [bearerToken]);
 
   // Stable ref to roomCode used inside the 'connected' handler to send join-room.
   const roomCodeRef = useRef<string | null>(roomCode);
@@ -269,7 +275,7 @@ export function useRoomSocket({
     // bearerToken is set one render after sessionId (via a useEffect in the
     // page component), so guarding on it prevents a wasted WS attempt that
     // the backend would reject with 4001 (Unauthorized).
-    if (!roomCode || !sessionId || !bearerToken) {
+    if (!roomCode || !sessionId || !hasToken) {
       setWsStatus('idle');
       return;
     }
@@ -280,8 +286,7 @@ export function useRoomSocket({
     // Authentication is passed as a ?token= query parameter (browser WS API
     // does not support custom headers).
     const wsBase = toWsBase(API_URL);
-    const tokenParam = bearerToken ? `?token=${encodeURIComponent(bearerToken)}` : '';
-    const wsUrl = `${wsBase}/ws/room/${roomCode.toUpperCase()}${tokenParam}`;
+    const roomUrl = `${wsBase}/ws/room/${roomCode.toUpperCase()}`;
 
     // Reset lobby state once per room/session, not per reconnect attempt, so
     // the roster doesn't flash empty while the socket is re-established.
@@ -485,7 +490,7 @@ export function useRoomSocket({
 
     // The helper reconnects on its own, including after a socket that went silent without a close.
     const socket = createReconnectingSocket({
-      getUrl: () => wsUrl,
+      getUrl: () => `${roomUrl}?token=${encodeURIComponent(tokenRef.current ?? '')}`,
       onMessage,
       onStatus: (status, stop) => {
         if (status === 'error' && stop) failWith(stop.code, stop.reason);
@@ -505,7 +510,7 @@ export function useRoomSocket({
       setStopCode(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode, sessionId, bearerToken]);
+  }, [roomCode, sessionId, hasToken]);
 
   // ── Stable callbacks ────────────────────────────────────────────────────────
 

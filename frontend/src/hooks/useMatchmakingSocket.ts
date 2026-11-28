@@ -263,11 +263,11 @@ export function useMatchmakingSocket({
 
     // Cleanup: gracefully leave queue before unmounting (if still in queue)
     return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        if (statusRef.current === 'in-queue') {
-          // Tell server to remove us so other players see the updated count
-          ws.send(JSON.stringify({ type: 'leave-queue' }));
-        }
+      ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+      if (ws.readyState === WebSocket.OPEN && statusRef.current === 'in-queue') {
+        ws.send(JSON.stringify({ type: 'leave-queue' }));
+      }
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close(1000, 'unmount');
       }
       wsRef.current = null;

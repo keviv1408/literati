@@ -17,12 +17,6 @@ export interface RoomMembership {
   /** Upper-cased 6-character room code. */
   roomCode: string;
   /**
-   * Backend bearer token that was accepted by the WS server for this room.
-   * This is the opaque guest token (from POST /api/auth/guest) or the
-   * Supabase JWT for registered users.
-   */
-  bearerToken: string;
-  /**
    * Server-assigned player ID returned in the WebSocket 'connected' event.
    * This is the authoritative backend identity for this room session.
    */
@@ -47,7 +41,6 @@ function loadRaw(roomCode: string): RoomMembership | null {
     const parsed = JSON.parse(raw) as RoomMembership;
     if (
       typeof parsed.roomCode === 'string' &&
-      typeof parsed.bearerToken === 'string' &&
       typeof parsed.playerId === 'string' &&
       typeof parsed.role === 'string' &&
       typeof parsed.expiresAt === 'number'
@@ -70,19 +63,16 @@ function loadRaw(roomCode: string): RoomMembership | null {
  * server re-sends a `room_players` snapshot and `amIHost` updates).
  *
  * @param roomCode    6-character room code (cased automatically).
- * @param bearerToken The token that was accepted by the WS server.
  * @param playerId    Server-assigned player ID from the 'connected' event.
  * @param role        The client's role in this room (default: 'player').
  */
 export function saveRoomMembership(
   roomCode: string,
-  bearerToken: string,
   playerId: string,
   role: RoomRole = 'player'
 ): RoomMembership {
   const membership: RoomMembership = {
     roomCode: roomCode.toUpperCase(),
-    bearerToken,
     playerId,
     role,
     expiresAt: Date.now() + MEMBERSHIP_TTL_MS,

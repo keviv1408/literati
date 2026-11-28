@@ -1,0 +1,2 @@
+export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://hsjbxavihobponmrysfk.supabase.co';
+export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzamJ4YXZpaG9icG9ubXJ5c2ZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MDQ1NzgsImV4cCI6MjA4ODk4MDU3OH0.FbTCGAMz7dJyRyucWei41b5WdZF0P1CG6DDYhrqGH8o';

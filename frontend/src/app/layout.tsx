@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import '@/components/game-table.css';
+import { AccountProvider } from '@/contexts/AccountContext';
 import { GuestProvider } from '@/contexts/GuestContext';
 import GuestNameModal from '@/components/GuestNameModal';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
@@ -52,13 +53,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <GuestProvider>
-          {children}
-          {/* Global guest name entry modal — rendered above all content */}
-          <GuestNameModal />
-          {/* PWA service worker registration */}
-          <ServiceWorkerRegistrar />
-        </GuestProvider>
+        <AccountProvider>
+          <GuestProvider>
+            {children}
+            {/* Global guest name entry modal — rendered above all content */}
+            <GuestNameModal />
+            {/* PWA service worker registration */}
+            <ServiceWorkerRegistrar />
+          </GuestProvider>
+        </AccountProvider>
       </body>
     </html>
   );

@@ -27,6 +27,7 @@ import { useRouter } from 'next/navigation';
 import { createRoom, ApiError } from '@/lib/api';
 import { gamePath, roomPath } from '@/lib/appPaths';
 import { trackEvent } from '@/lib/analytics';
+import { useAccount } from '@/contexts/AccountContext';
 import { useGuest } from '@/contexts/GuestContext';
 import {
   PLAYER_COUNT_OPTIONS,
@@ -93,6 +94,7 @@ export default function CreateRoomModal({
   onClose,
 }: CreateRoomModalProps) {
   const router = useRouter();
+  const { session: account } = useAccount();
   const { guestSession } = useGuest();
 
   // ── Form state ─────────────────────────────────────────────────────────────
@@ -143,8 +145,8 @@ export default function CreateRoomModal({
         const { room } = await createRoom(
           { playerCount, cardRemovalVariant: 'remove_7s' },
           displayName,
-          undefined,
-          guestSession?.sessionId ?? null,
+          account?.access_token,
+          account ? null : guestSession?.sessionId ?? null,
         );
         trackEvent('private_room_created', {
           player_count: room.player_count,
@@ -178,7 +180,7 @@ export default function CreateRoomModal({
         setIsSubmitting(false);
       }
     },
-    [isSubmitting, playerCount, displayName, guestSession, onClose, router]
+    [isSubmitting, playerCount, displayName, guestSession, account, onClose, router]
   );
 
   // ── Render guard ───────────────────────────────────────────────────────────

@@ -153,6 +153,22 @@ function _callOrder(...fns: unknown[]): number[] {
 }
 
 describe('useGameSocket reconnect', () => {
+  it('keeps the game connected on token refresh and uses the new token for the next handshake', () => {
+    const { rerender } = renderHook(
+      ({ bearerToken }) => useGameSocket({ roomCode: 'ABCDEF', sessionId: 'player', bearerToken }),
+      { initialProps: { bearerToken: 'original' } },
+    );
+    const original = _latestWs();
+    _confirm(original);
+    rerender({ bearerToken: 'refreshed' });
+    expect(wsInstances).toHaveLength(1);
+    expect(original.close).not.toHaveBeenCalled();
+
+    _serverClose(original, 1006);
+    _advance(1000);
+    expect(new URL(_latestWs().url).searchParams.get('token')).toBe('refreshed');
+  });
+
   it('drops active and pending ask visuals while hidden and keeps receiving game updates', () => {
     const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
     const table = document.createElement('div');

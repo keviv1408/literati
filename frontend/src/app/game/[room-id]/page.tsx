@@ -147,7 +147,7 @@ export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { guestSession } = useGuest();
-  const { status: reconnectStatus, bearerToken: reconnectBearerToken, isGuest, retry: retrySession } = useReconnect();
+  const { status: reconnectStatus, sessionId, bearerToken: reconnectBearerToken, isGuest, retry: retrySession } = useReconnect();
   const sessionRetriesRef = useRef(0);
 
   // Only from error: a retry from any other state would drop the game token and close the socket.
@@ -282,8 +282,9 @@ export default function GamePage({ params }: PageProps) {
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
+    sessionId,
     bearerToken: gameBearerToken,
-    guestRecoveryKey: guestSession?.sessionId ?? null,
+    guestRecoveryKey: isGuest ? guestSession?.sessionId ?? null : null,
     spectatorToken,
     onGameOver: (payload) => {
       setGameOver(payload);
@@ -303,7 +304,7 @@ export default function GamePage({ params }: PageProps) {
 
   useEffect(() => {
     if (!roomCode || !myPlayerId || !gameBearerToken) return;
-    saveRoomMembership(roomCode, gameBearerToken, myPlayerId, 'player');
+    saveRoomMembership(roomCode, myPlayerId, 'player');
   }, [roomCode, myPlayerId, gameBearerToken]);
 
   // ── Host detection for private-room Rematch button ───────────
@@ -975,6 +976,7 @@ export default function GamePage({ params }: PageProps) {
 
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
+  if (reconnectStatus === 'session_expired' && !spectatorToken) return <GameErrorView testId="session-expired-view" emoji="🔒" title="Session expired" body="Sign in again to return to your seat." onPrimary={handleGoHome} />;
   if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} />;
   if (loading && serverUnreachable) return <GameErrorView testId="server-unreachable-view" emoji="📡" title="Can't Reach the Server" body="Still trying. The game opens as soon as the server is back." onPrimary={handleGoHome} />;
   if (loading) return <LoadingView wakingUp={roomRetrying} />;

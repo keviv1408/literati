@@ -101,92 +101,20 @@ router.get('/leaderboard', async (req, res) => {
  *   404 — Profile not found
  *   500 — Internal error
  */
-router.get('/profile/:userId', async (req, res) => {
-  const { userId } = req.params;
-
-  const supabase = getSupabaseClient();
-
-  try {
-    const { data, error } = await supabase
-      .from('user_stats')
-      .select('*, user_profiles!inner(display_name, avatar_id)')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error fetching user profile stats:', error);
-      return res.status(500).json({ error: 'Failed to load profile' });
-    }
-
-    if (!data) {
-      return res.status(404).json({ error: 'Profile not found' });
-    }
-
-    const gamesCompleted = data.games_completed || 0;
-    const wins = data.wins || 0;
-    const winRate = gamesCompleted > 0
-      ? Math.round((wins / gamesCompleted) * 100) / 100
-      : 0;
-
-    const declarationsCorrect   = data.declarations_correct   || 0;
-    const declarationsIncorrect = data.declarations_incorrect || 0;
-    // declarations_attempted was added in migration 008; fall back to
-    // correct + incorrect for rows that pre-date the column migration.
-    const declarationsAttempted = data.declarations_attempted != null
-      ? data.declarations_attempted
-      : declarationsCorrect + declarationsIncorrect;
-
-    const profile = {
-      userId: data.user_id,
-      displayName: data.user_profiles ? data.user_profiles.display_name : null,
-      avatarId: data.user_profiles ? data.user_profiles.avatar_id : null,
-      wins,
-      losses: data.losses || 0,
-      gamesCompleted,
-      gamesPlayed: data.games_played || 0,
-      declarationsCorrect,
-      declarationsIncorrect,
-      declarationsAttempted,
-      winRate,
-    };
-
-    return res.status(200).json({ profile });
-  } catch (err) {
-    console.error('Unexpected error fetching user profile stats:', err);
-    return res.status(500).json({ error: 'Failed to load profile' });
-  }
-});
-
-/**
- * GET /api/stats/profile/by-username/:username
- *
- * Returns stats and profile info for a player identified by their display name.
- * Case-insensitive lookup.
- *
- * Response 200:  { profile: { userId, displayName, avatarId, ... } }
- * Errors:
- *   404 — Profile not found
- *   500 — Internal error
- */
-router.get('/profile/by-username/:username', async (req, res) => {
-  const { username } = req.params;
-
-  if (!username || username.trim().length === 0) {
+async function _getProfile(req, res) {
+  const { username, userId } = req.params;
+  if (username !== undefined && !username.trim()) {
     return res.status(400).json({ error: 'Username is required' });
   }
-
   const supabase = getSupabaseClient();
 
   try {
-    // Look up the user_profile row by display_name (case-insensitive)
-    const { data: profileRow, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('id, display_name, avatar_id')
-      .ilike('display_name', username.trim())
-      .maybeSingle();
+    const query = supabase.from('user_profiles').select('id, display_name, avatar_id');
+    const lookup = userId ? query.eq('id', userId) : query.ilike('display_name', username.trim());
+    const { data: profileRow, error: profileError } = await lookup.maybeSingle();
 
     if (profileError) {
-      console.error('Error looking up profile by username:', profileError);
+      console.error('Error looking up player profile:', profileError);
       return res.status(500).json({ error: 'Failed to load profile' });
     }
 
@@ -234,10 +162,13 @@ router.get('/profile/by-username/:username', async (req, res) => {
 
     return res.status(200).json({ profile });
   } catch (err) {
-    console.error('Unexpected error fetching profile by username:', err);
+    console.error('Unexpected error fetching profile:', err);
     return res.status(500).json({ error: 'Failed to load profile' });
   }
-});
+}
+
+router.get('/profile/:userId', _getProfile);
+router.get('/profile/by-username/:username', _getProfile);
 
 /**
  * GET /api/stats/game-summary/:roomCode

@@ -303,6 +303,18 @@ describe('GET /api/auth/me', () => {
     app = loadApp();
   });
 
+  it('returns the verified Google account ID and name for a registered player', async () => {
+    app = loadApp(buildMockSupabase({
+      data: { user: { id: 'google-player', email: 'player@example.com', user_metadata: { full_name: 'Card Player' } } },
+      error: null,
+    }));
+
+    const res = await request(app).get('/api/auth/me').set('Authorization', 'Bearer account-token');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: 'google-player', isGuest: false, displayName: 'Card Player' });
+    expect(res.body.sessionId).toBeUndefined();
+  });
+
   it('returns guest identity for a guest token', async () => {
     const createRes = await request(app)
       .post('/api/auth/guest')
