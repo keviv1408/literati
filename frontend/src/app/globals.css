@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@layer base {
+  :where(button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"], summary):not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 :root {
   --background: #0a0a0a;
   --foreground: #ededed;
