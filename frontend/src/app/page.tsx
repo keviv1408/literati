@@ -185,7 +185,7 @@ export default function Home() {
             {returning && (
               <button
                 onClick={() => router.push(returning.destination === 'game' ? gamePath(returning.code) : roomPath(returning.code))}
-                className="rounded-xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white hover:bg-emerald-500"
+                className="rounded-xl bg-copper px-6 py-4 text-lg font-bold text-felt hover:bg-copper-hover"
               >
                 Return to {returning.destination} · {returning.code}
               </button>
@@ -195,7 +195,7 @@ export default function Home() {
                 onClick={() => {
                   if (window.confirm('Return to your hosted lobby and leave your current seat?')) router.push(roomPath(hostedLobby));
                 }}
-                className="rounded-xl border border-emerald-700 px-6 py-3 font-semibold text-emerald-100 hover:bg-emerald-900"
+                className="rounded-xl border border-sage px-6 py-3 font-semibold text-paper hover:bg-felt-hover"
               >
                 Return to hosted lobby · {hostedLobby}
               </button>
@@ -244,7 +244,7 @@ export default function Home() {
                 <button
                   disabled={accountLoading || checking || current?.failed}
                   type="submit"
-                  className="shrink-0 rounded-lg border border-emerald-600 bg-emerald-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-emerald-300"
+                  className="shrink-0 rounded-lg border border-sage bg-transparent px-3 py-2.5 text-sm font-semibold text-paper hover:bg-felt-hover"
                 >
                   Join room
                 </button>

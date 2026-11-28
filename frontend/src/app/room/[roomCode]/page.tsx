@@ -424,10 +424,10 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
   if (lobbyClosed) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4" data-testid="closed-lobby">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-felt-glow text-paper" data-testid="closed-lobby">
         <h1 className="text-2xl font-bold">Lobby closed</h1>
         <p>This lobby is closed for everyone.</p>
-        <BackToHomeButton onClick={() => router.push('/')} />
+        <BackToHomeButton variant="felt" onClick={() => router.push('/')} />
       </main>
     );
   }
@@ -443,23 +443,23 @@ export default function RoomLobbyPage({ params }: PageProps) {
   ) {
     return (
       <div
-        className="animate-delayed-reveal flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950"
+        className="animate-delayed-reveal flex min-h-screen items-center justify-center bg-felt-glow text-paper"
         data-testid="reconnecting-screen"
         role="status"
         aria-label="Reconnecting…"
       >
-        <div className="flex flex-col items-center gap-5 text-slate-400">
+        <div className="flex flex-col items-center gap-5 text-paper-muted">
           <div className="flex gap-2" aria-hidden="true">
             <span
-              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
+              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-gold"
               style={{ animationDelay: '0ms' }}
             />
             <span
-              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
+              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-gold"
               style={{ animationDelay: '180ms' }}
             />
             <span
-              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
+              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-gold"
               style={{ animationDelay: '360ms' }}
             />
           </div>
@@ -473,20 +473,20 @@ export default function RoomLobbyPage({ params }: PageProps) {
   if (!kickedOnEntry && !isKicked && reconnectStatus === 'session_expired') {
     return (
       <div
-        className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6"
+        className="flex min-h-screen flex-col items-center justify-center bg-felt-glow text-paper px-4 gap-6"
         role="alert"
         data-testid="session-expired-screen"
       >
         <div className="text-center max-w-sm">
           <div className="text-5xl mb-4" aria-hidden="true">🔐</div>
-          <h1 className="text-2xl font-bold text-white mb-3">Session Expired</h1>
-          <p className="text-slate-300 text-sm mb-4">
+          <h1 className="text-2xl font-bold text-paper mb-3">Session Expired</h1>
+          <p className="text-paper text-sm mb-4">
             {reconnectError ?? 'Your session has expired. Please sign in again to continue.'}
           </p>
         </div>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <AccountControls signInOnly />
-          <BackToHomeButton onClick={() => router.push('/')} data-testid="session-expired-home-btn" />
+          <BackToHomeButton variant="felt" onClick={() => router.push('/')} data-testid="session-expired-home-btn" />
         </div>
       </div>
     );
@@ -506,14 +506,14 @@ export default function RoomLobbyPage({ params }: PageProps) {
         };
     return (
       <div
-        className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6"
+        className="flex min-h-screen flex-col items-center justify-center bg-felt-glow text-paper px-4 gap-6"
         role="alert"
         data-testid="connection-error-screen"
       >
         <div className="text-center max-w-sm">
           <div className="text-5xl mb-4" aria-hidden="true">📡</div>
-          <h1 className="text-2xl font-bold text-white mb-3">Connection Error</h1>
-          <p className="text-slate-300 text-sm mb-4">
+          <h1 className="text-2xl font-bold text-paper mb-3">Connection Error</h1>
+          <p className="text-paper text-sm mb-4">
             {reconnectStatus === 'error'
               ? (reconnectError ?? 'Could not reach the server. Please check your connection.')
               : (wsError ?? 'Lost connection to the room.')}
@@ -524,14 +524,14 @@ export default function RoomLobbyPage({ params }: PageProps) {
             onClick={retry}
             className="
               py-3 px-6 rounded-xl font-semibold
-              bg-emerald-600 hover:bg-emerald-500 text-white
-              transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
+              bg-copper hover:bg-copper-hover text-felt
+              transition-colors focus:outline-none focus:ring-2 focus:ring-sage
             "
             data-testid="connection-error-retry-btn"
           >
             Try Again
           </button>
-          <BackToHomeButton onClick={() => router.push('/')} data-testid="connection-error-home-btn" />
+          <BackToHomeButton variant="felt" onClick={() => router.push('/')} data-testid="connection-error-home-btn" />
         </div>
       </div>
     );
@@ -554,7 +554,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
     return (
       <div
-        className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4"
+        className="flex min-h-screen items-center justify-center bg-felt-glow text-paper px-4"
         data-testid="no-session-screen"
       >
         <form
@@ -562,12 +562,12 @@ export default function RoomLobbyPage({ params }: PageProps) {
           noValidate
           className="
             w-full max-w-sm flex flex-col gap-5 p-6 rounded-2xl
-            bg-gradient-to-b from-slate-800/80 to-slate-900/80
-            border border-emerald-700/40 shadow-xl shadow-black/40
+            bg-felt-panel
+            border border-sage/30 shadow-xl shadow-black/40
           "
         >
           <div className="text-center">
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-xl font-bold text-paper">
               {host ? `${host.displayName} invited you` : 'You’re invited'}
             </h1>
           </div>
@@ -578,7 +578,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                 room.players.map((p) => (
                   <span
                     key={p.userId}
-                    className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-slate-800 text-slate-200 text-xs"
+                    className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-felt-hover text-paper text-xs"
                   >
                     <Avatar displayName={p.displayName} avatarId={p.avatarId} size="xs" />
                     {p.displayName}
@@ -586,12 +586,12 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   </span>
                 ))
               ) : (
-                <span className="text-slate-500 text-xs">No one’s here yet</span>
+                <span className="text-paper-muted text-xs">No one’s here yet</span>
               )}
             </div>
           )}
 
-          <label className="flex flex-col gap-1.5 text-sm text-slate-300">
+          <label className="flex flex-col gap-1.5 text-sm text-paper">
             Your name
             <input
               autoFocus
@@ -605,9 +605,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
               aria-describedby={joinError ? 'join-name-error' : undefined}
               placeholder="e.g. Ada"
               className="
-                px-3 py-2.5 rounded-xl bg-slate-950/60 text-white
-                border border-slate-700 focus:border-emerald-500
-                focus:outline-none focus:ring-2 focus:ring-emerald-500/40
+                px-3 py-2.5 rounded-xl bg-felt-inset text-paper
+                border border-sage
+                focus:outline-none focus:ring-2 focus:ring-sage
               "
               data-testid="join-name-input"
             />
@@ -623,15 +623,15 @@ export default function RoomLobbyPage({ params }: PageProps) {
             disabled={!joinName.trim()}
             className="
               py-3 px-6 rounded-xl font-semibold
-              bg-emerald-600 hover:bg-emerald-500 text-white
+              bg-copper hover:bg-copper-hover text-felt
               disabled:opacity-50 disabled:cursor-not-allowed
-              transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
+              transition-colors focus:outline-none focus:ring-2 focus:ring-sage
             "
             data-testid="join-room-btn"
           >
             Join room
           </button>
-          <BackToHomeButton onClick={() => router.push('/')} />
+          <BackToHomeButton variant="felt" onClick={() => router.push('/')} />
         </form>
       </div>
     );
@@ -643,22 +643,22 @@ export default function RoomLobbyPage({ params }: PageProps) {
   if (kickedOnEntry || isKicked) {
     return (
       <div
-        className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6"
+        className="flex min-h-screen flex-col items-center justify-center bg-felt-glow text-paper px-4 gap-6"
         role="alert"
         aria-live="assertive"
         data-testid="kicked-notice"
       >
         <div className="text-center max-w-sm">
           <div className="text-5xl mb-4" aria-hidden="true">🚫</div>
-          <h1 className="text-2xl font-bold text-white mb-3">
+          <h1 className="text-2xl font-bold text-paper mb-3">
             Removed from Room
           </h1>
-          <p className="text-slate-300 text-sm mb-2">
+          <p className="text-paper text-sm mb-2">
             {kickReason ?? 'You have been removed from this room by the host.'}
           </p>
         </div>
 
-        <BackToHomeButton onClick={() => router.push('/')} data-testid="kicked-go-home" />
+        <BackToHomeButton variant="felt" onClick={() => router.push('/')} data-testid="kicked-go-home" />
       </div>
     );
   }
@@ -666,10 +666,10 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── Loading skeleton ─────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950">
-        <div className="flex flex-col items-center gap-4 text-slate-400">
+      <div className="flex min-h-screen items-center justify-center bg-felt-glow text-paper">
+        <div className="flex flex-col items-center gap-4 text-paper-muted">
           <svg
-            className="animate-spin h-8 w-8 text-emerald-500"
+            className="animate-spin h-8 w-8 text-gold"
             viewBox="0 0 24 24"
             fill="none"
             aria-label="Loading room…"
@@ -697,15 +697,15 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── 404 state ────────────────────────────────────────────────────────────
   if (notFound || !room) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-felt-glow text-paper px-4 gap-6">
         <div className="text-center">
           <div className="text-5xl mb-4" aria-hidden="true">🃏</div>
-          <h1 className="text-2xl font-bold text-white mb-2">Room Not Found</h1>
-          <p className="text-slate-400 text-sm">
+          <h1 className="text-2xl font-bold text-paper mb-2">Room Not Found</h1>
+          <p className="text-paper-muted text-sm">
             This invite link is invalid or has expired.
           </p>
         </div>
-        <BackToHomeButton onClick={() => router.push('/')} />
+        <BackToHomeButton variant="felt" onClick={() => router.push('/')} />
       </div>
     );
   }
@@ -738,14 +738,14 @@ export default function RoomLobbyPage({ params }: PageProps) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-6 sm:py-10">
+    <div className="flex min-h-screen flex-col items-center bg-felt-glow text-paper px-4 py-6 sm:py-10">
       {/* Background decoration — subtle floating drift */}
       <div
         className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none"
         aria-hidden="true"
       >
-        <span className="absolute text-[20rem] -top-16 -right-16 text-white animate-suit-drift-1">♦</span>
-        <span className="absolute text-[14rem] bottom-0 -left-8 text-white animate-suit-drift-2">♣</span>
+        <span className="absolute text-[20rem] -top-16 -right-16 text-gold animate-suit-drift-1">♦</span>
+        <span className="absolute text-[14rem] bottom-0 -left-8 text-gold animate-suit-drift-2">♣</span>
       </div>
 
       <main className="relative z-10 w-full max-w-md flex flex-col gap-4">
@@ -842,7 +842,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                       disabled={isStarting || lobbyStarting || !myPlayerId || wsStatus !== 'connected'}
                       aria-busy={isStarting || lobbyStarting}
                       data-testid="start-game-btn"
-                      className="min-h-12 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-emerald-300 disabled:cursor-wait disabled:opacity-60"
+                      className="min-h-12 rounded-xl bg-copper px-3 py-2 text-sm font-bold text-felt hover:bg-copper-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-60"
                     >
                       {isStarting || lobbyStarting ? 'Starting…' : startLabel}
                     </button>
@@ -863,11 +863,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
         {/* ── Team columns / waiting area ───────────────────────────────────── */}
         <div className="
-          bg-slate-800/50 border border-slate-700/50
+          bg-felt-panel border border-sage/30
           rounded-2xl p-5
           animate-lobby-section-in
         " style={{ animationDelay: '160ms' }}>
-          <h2 className="mb-3 text-sm font-semibold text-slate-300 uppercase tracking-widest">
+          <h2 className="mb-3 text-sm font-semibold text-paper uppercase tracking-widest">
             Players
             {hasStartPanel && (
               <span className="sr-only" data-testid="lobby-player-count">
@@ -918,9 +918,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
                     onClick={() => changeTeam(myTeamId === 1 ? 2 : 1)}
                     className="
                       px-4 py-2 rounded-xl text-xs font-semibold
-                      bg-slate-700 hover:bg-slate-600 text-slate-200
-                      border border-slate-600
-                      transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
+                      bg-felt-inset hover:bg-felt-hover text-paper
+                      border border-sage
+                      transition-colors focus:outline-none focus:ring-2 focus:ring-sage
                       active:scale-95
                     "
                     aria-label={`Switch to Team ${myTeamId === 1 ? 2 : 1}`}
@@ -933,7 +933,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
               {myWsPlayer && !isSpectator && (
                 <div className="mt-4 flex flex-col items-center gap-2">
-                  <span className="text-[0.65rem] font-semibold uppercase tracking-widest text-slate-400">
+                  <span className="text-[0.65rem] font-semibold uppercase tracking-widest text-paper-muted">
                     Your avatar
                   </span>
                   <AvatarPicker value={myWsPlayer.avatarId ?? null} onChange={setAvatar} />
@@ -948,10 +948,10 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   ────────────────────────────────────────────────────── */}
               {!isSpectator && amIHostLive && wsPlayers.length > 0 && (
                 <div
-                  className="mt-4 pt-4 border-t border-slate-700/50"
+                  className="mt-4 pt-4 border-t border-sage/30"
                   data-testid="host-kick-panel"
                 >
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
+                  <h3 className="text-xs font-semibold text-paper-muted uppercase tracking-widest mb-2">
                     Connected Players
                   </h3>
                   <ul
@@ -965,19 +965,19 @@ export default function RoomLobbyPage({ params }: PageProps) {
                       return (
                         <li
                           key={player.playerId}
-                          className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/40"
+                          className="flex items-center justify-between px-3 py-2 rounded-xl bg-felt-inset border border-sage/20"
                           data-testid={`player-row-${player.playerId}`}
                         >
-                          <span className="flex items-center gap-2 text-sm text-slate-200 min-w-0">
+                          <span className="flex items-center gap-2 text-sm text-paper min-w-0">
                             <span aria-hidden="true" className="shrink-0">
                               {player.isHost ? '👑' : '👤'}
                             </span>
                             <span className="truncate">{player.displayName}</span>
                             {isMe && (
-                              <span className="text-xs text-slate-500 shrink-0">(you)</span>
+                              <span className="text-xs text-paper-muted shrink-0">(you)</span>
                             )}
                             {player.isHost && (
-                              <span className="text-xs text-emerald-400 shrink-0">Host</span>
+                              <span className="text-xs text-gold shrink-0">Host</span>
                             )}
                           </span>
 
@@ -1018,13 +1018,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
         {room.is_matchmaking && !isSpectator && !lobbyStarting && (
           <div
             className="
-              bg-slate-800/50 border border-slate-700/50
+              bg-felt-panel border border-sage/30
               rounded-2xl p-5 flex flex-col gap-3
             "
             data-testid="matchmaking-waiting-panel"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+              <span className="text-xs font-semibold text-paper-muted uppercase tracking-widest">
                 Waiting for Players
               </span>
               <span
@@ -1032,7 +1032,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   text-xs font-semibold px-2.5 py-1 rounded-lg
                   ${wsPlayers.length >= room.player_count
                     ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40'
-                    : 'bg-slate-700/60 text-slate-300 border border-slate-600/40'}
+                    : 'bg-felt-inset text-paper border border-sage/30'}
                 `}
                 aria-label={`${wsPlayers.length} of ${room.player_count} players joined`}
                 data-testid="matchmaking-player-count"
@@ -1043,7 +1043,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
             {wsPlayers.length < room.player_count && (
               <p
-                className="text-xs text-slate-400 flex items-center gap-1.5"
+                className="text-xs text-paper-muted flex items-center gap-1.5"
                 role="note"
                 data-testid="matchmaking-auto-start-notice"
               >
@@ -1102,7 +1102,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
             <p className="text-sm font-semibold text-emerald-300">
               Game is starting…
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-paper-muted">
               {room.is_matchmaking
                 ? 'All players matched — redirecting to the game board.'
                 : 'The host has started the game. Redirecting to the game board.'}
@@ -1119,13 +1119,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
             <dialog ref={abandonDialog} role="alertdialog" aria-labelledby="abandon-title" aria-describedby="abandon-description"
               onCancel={(event) => { if (closing) event.preventDefault(); }}
               onClose={() => setCloseError('')}
-              className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-slate-600 bg-slate-900 p-6 text-slate-100 shadow-xl backdrop:bg-slate-950/80">
+              className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-sage/50 bg-felt-panel p-6 text-paper shadow-xl backdrop:bg-felt-inset/80">
               <h2 id="abandon-title" className="text-xl font-bold">Abandon this lobby?</h2>
-              <p id="abandon-description" className="mt-2 text-sm text-slate-300">This closes the lobby for everyone. Its invite link will stop working.</p>
+              <p id="abandon-description" className="mt-2 text-sm text-paper">This closes the lobby for everyone. Its invite link will stop working.</p>
               {closeError && <p role="alert" className="mt-2 text-sm text-red-300">{closeError}</p>}
               <div className="mt-5 flex flex-wrap justify-end gap-2">
                 <button type="button" autoFocus disabled={closing} onClick={() => abandonDialog.current?.close()}
-                  className="min-h-11 rounded-lg border border-slate-500 px-4 font-semibold hover:bg-slate-800 focus-visible:outline-2">Cancel</button>
+                  className="min-h-11 rounded-lg border border-sage px-4 font-semibold hover:bg-felt-hover focus-visible:outline-2">Cancel</button>
                 <button type="button" disabled={closing} onClick={_confirmAbandon}
                   className="min-h-11 rounded-lg bg-red-700 px-4 font-semibold text-white hover:bg-red-600 focus-visible:outline-2 disabled:opacity-60">
                   {closing ? 'Closing…' : 'Confirm abandon'}
@@ -1136,7 +1136,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
         )}
 
         {/* ── Back button ──────────────────────────────────────────────────── */}
-        <BackToHomeButton onClick={() => router.push('/')} />
+        <BackToHomeButton variant="felt" onClick={() => router.push('/')} />
       </main>
     </div>
   );

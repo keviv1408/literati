@@ -160,8 +160,8 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
     isOccupied
       ? player?.isCurrentUser
         ? `border ${teamStyle.playerBorder} ${teamStyle.playerBg}`
-        : "border border-slate-700/60 bg-slate-800/40"
-      : "border border-dashed border-slate-700/40 bg-slate-800/20 animate-seat-shimmer",
+        : "border border-sage/30 bg-felt-inset"
+      : "border border-dashed border-sage/25 bg-felt-inset/60 animate-seat-shimmer",
     "select-none transition-opacity duration-150",
     // Join animation
     justJoined && !isOverlay ? "animate-player-join" : "",
@@ -217,7 +217,7 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
             <span
               className={[
                 "text-xs font-medium truncate max-w-[6rem] text-center",
-                player.isCurrentUser ? teamStyle.playerText : "text-slate-300",
+                player.isCurrentUser ? teamStyle.playerText : "text-paper",
               ].join(" ")}
               title={player.displayName}
             >
@@ -243,7 +243,7 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
           {/* Drag handle hint for host */}
           {isDragEnabled && (
             <span
-              className="text-[0.55rem] text-slate-600 mt-0.5"
+              className="text-[0.55rem] text-paper-muted mt-0.5"
               aria-hidden="true"
             >
               ⠿ drag to reassign
@@ -253,13 +253,13 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
       ) : (
         <>
           <span
-            className="text-xl text-slate-600 animate-seat-breathe"
+            className="text-xl text-paper-muted animate-seat-breathe"
             aria-hidden="true"
             style={{ animationDelay: `${seatIndex * 300}ms` }}
           >
             ⌛
           </span>
-          <span className="text-xs text-slate-600 font-medium">Waiting…</span>
+          <span className="text-xs text-paper-muted font-medium">Waiting…</span>
         </>
       )}
     </div>
@@ -525,7 +525,7 @@ const DraggableLobbyTeamColumns: React.FC<DraggableLobbyTeamColumnsProps> = ({
       </DragOverlay>
 
       {isHost && (
-        <p className="mt-2 text-center text-[0.65rem] text-slate-600">
+        <p className="mt-2 text-center text-[0.65rem] text-paper-muted">
           Drag player cards between columns to reassign teams
         </p>
       )}

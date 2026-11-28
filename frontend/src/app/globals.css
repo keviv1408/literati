@@ -33,6 +33,27 @@
   --team-b-pill-bg:      rgba(37,  99, 235, 0.40); /* blue-600/40    */
 }
 
+@theme {
+  --color-felt: #102f29;
+  --color-felt-panel: #15362e;
+  --color-felt-inset: #0c251f;
+  --color-felt-hover: #294a40;
+  --color-paper: #f6efda;
+  --color-paper-muted: #cdc8b4;
+  --color-gold: #dfbb78;
+  --color-copper: #d8956f;
+  --color-copper-hover: #e3a580;
+  --color-sage: #91ad9b;
+}
+
+:root {
+  --felt-backdrop: radial-gradient(ellipse at 80% 45%, #33564a, transparent 60%), var(--color-felt);
+}
+
+@utility bg-felt-glow {
+  background: var(--felt-backdrop);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -293,10 +314,10 @@ body:has([role="dialog"]) {
 /* Empty seat border shimmer — subtle border glow cycle */
 @keyframes seat-shimmer {
   0%, 100% {
-    border-color: rgba(71, 85, 105, 0.3);
+    border-color: color-mix(in srgb, var(--color-sage) 25%, transparent);
   }
   50% {
-    border-color: rgba(71, 85, 105, 0.55);
+    border-color: color-mix(in srgb, var(--color-sage) 40%, transparent);
   }
 }
 
