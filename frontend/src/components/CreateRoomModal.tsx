@@ -43,17 +43,17 @@ export function getCreatedRoomCacheKey(code: string): string {
 }
 
 /** Persist a freshly created room to sessionStorage (tab-scoped). */
-export function cacheCreatedRoom(room: Room): void {
+export function cacheCreatedRoom(room: Room, startWithBots = false): void {
   if (typeof window === 'undefined') return;
   try {
-    sessionStorage.setItem(getCreatedRoomCacheKey(room.code), JSON.stringify(room));
+    sessionStorage.setItem(getCreatedRoomCacheKey(room.code), JSON.stringify(startWithBots ? { ...room, startWithBots } : room));
   } catch {
     // sessionStorage unavailable — non-fatal; lobby will fetch via API
   }
 }
 
 /** Read and clear the cached room (one-shot consumption). */
-export function consumeCreatedRoom(code: string): Room | null {
+export function consumeCreatedRoom(code: string): (Room & { startWithBots?: boolean }) | null {
   if (typeof window === 'undefined') return null;
   const key = getCreatedRoomCacheKey(code);
   try {
@@ -64,6 +64,20 @@ export function consumeCreatedRoom(code: string): Room | null {
   } catch {
     return null;
   }
+}
+
+export async function createPrivateLobby(playerCount: 6 | 8, displayName: string, { bearerToken, recoveryKey, startWithBots = false }: {
+  bearerToken?: string;
+  recoveryKey: string | null;
+  startWithBots?: boolean;
+}) {
+  const { room } = await createRoom({ playerCount, cardRemovalVariant: 'remove_7s' }, displayName, bearerToken, recoveryKey);
+  trackEvent('private_room_created', {
+    player_count: room.player_count,
+    card_removal_variant: room.card_removal_variant,
+  });
+  cacheCreatedRoom(room, startWithBots);
+  return room;
 }
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -142,18 +156,10 @@ export default function CreateRoomModal({
       setIsSubmitting(true);
 
       try {
-        const { room } = await createRoom(
-          { playerCount, cardRemovalVariant: 'remove_7s' },
-          displayName,
-          account?.access_token,
-          account ? null : guestSession?.sessionId ?? null,
-        );
-        trackEvent('private_room_created', {
-          player_count: room.player_count,
-          card_removal_variant: room.card_removal_variant,
+        const room = await createPrivateLobby(playerCount, displayName, {
+          bearerToken: account?.access_token,
+          recoveryKey: account ? null : guestSession?.sessionId ?? null,
         });
-        // Cache room data so the lobby page can render without an extra fetch
-        cacheCreatedRoom(room);
         onClose();
         router.push(roomPath(room.code));
       } catch (err) {

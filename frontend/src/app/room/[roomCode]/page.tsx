@@ -227,6 +227,19 @@ export default function RoomLobbyPage({ params }: PageProps) {
    * spinner on the button and prevent double-submission.
    */
   const [isStarting, setIsStarting] = useState(false);
+  const botStartRoom = useRef<string | null>(null);
+
+  const _startLobbyGame = useCallback(() => {
+    if (!room || !startGame()) return;
+    trackEvent('lobby_game_started', { player_count: room.player_count });
+    setIsStarting(true);
+  }, [room, startGame]);
+
+  useEffect(() => {
+    if (!room || botStartRoom.current !== room.code || !myWsPlayer || wsStatus !== 'connected') return;
+    botStartRoom.current = null;
+    if (amIHostLive && wsPlayers.length === 1 && room.status === 'waiting' && !lobbyStarting) _startLobbyGame();
+  }, [room, myWsPlayer, wsStatus, amIHostLive, wsPlayers.length, lobbyStarting, _startLobbyGame]);
 
   // Reset isStarting on every server error frame (e.g. start_game rejected),
   // including a repeat of the same message.
@@ -339,6 +352,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
     // Keep the host's lobby available while Android fetches the public link.
     const cached = consumeCreatedRoom(roomCode);
     if (cached) {
+      botStartRoom.current = cached.startWithBots ? cached.code : null;
       setRoom(cached);
       setInviteLink(undefined);
       setSeats(buildEmptySeats(cached.player_count));
@@ -824,12 +838,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   >
                     <button
                       type="button"
-                      onClick={() => {
-                        if (startGame()) {
-                          trackEvent('lobby_game_started', { player_count: room.player_count });
-                          setIsStarting(true);
-                        }
-                      }}
+                      onClick={_startLobbyGame}
                       disabled={isStarting || lobbyStarting || !myPlayerId || wsStatus !== 'connected'}
                       aria-busy={isStarting || lobbyStarting}
                       data-testid="start-game-btn"

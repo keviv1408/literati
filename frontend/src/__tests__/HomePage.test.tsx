@@ -3,12 +3,15 @@
  */
 
 import React from 'react';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, within } from '@testing-library/react';
+import * as Account from '@/contexts/AccountContext';
+import type { Session } from '@supabase/supabase-js';
 import Home from '@/app/page';
 
 const mockPush = jest.fn();
 const mockEnsureGuestName = jest.fn();
 const mockGetReturningRoom = jest.fn();
+const mockCreatePrivateLobby = jest.fn();
 let mockGuest: { displayName: string; sessionId: string } | null = null;
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
@@ -30,6 +33,7 @@ jest.mock('@/lib/api', () => ({ HTTP_API_URL: 'http://api.test', getReturningRoo
 jest.mock('@/components/CreateRoomModal', () => ({
   __esModule: true,
   default: () => null,
+  createPrivateLobby: (...args: unknown[]) => mockCreatePrivateLobby(...args),
 }));
 
 describe('Home wake-up notice', () => {
@@ -106,6 +110,34 @@ describe('Home entry points', () => {
     process.env = originalEnv;
   });
 
+  it('creates the bot game with the signed-in account even when a guest identity exists', async () => {
+    mockGuest = { displayName: 'Old guest', sessionId: 'old-key' };
+    const account = jest.spyOn(Account, 'useAccount').mockReturnValue({
+      session: { user: { id: 'account-id' }, access_token: 'account-token' } as Session,
+      displayName: 'Ada',
+      loading: false,
+    });
+    try {
+      mockGetReturningRoom.mockResolvedValue({ room: null, hosting: false });
+      mockCreatePrivateLobby.mockResolvedValue({ code: 'ABC123' });
+      await act(async () => { render(<Home />); });
+      const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
+      expect(nav.queryByRole('button', { name: 'Sign out' })).toBeNull();
+      fireEvent.click(nav.getByRole('button', { name: 'Profile' }));
+      expect(nav.getByText('Signed in as Ada')).toBeVisible();
+      expect(nav.getByRole('link', { name: 'My stats' })).toHaveAttribute('href', '/stats');
+      expect(nav.getByRole('button', { name: 'Sign out' })).toBeEnabled();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play with bots' })); });
+      expect(mockCreatePrivateLobby).toHaveBeenCalledWith(6, 'Ada', {
+        bearerToken: 'account-token', recoveryKey: null, startWithBots: true,
+      });
+      expect(mockPush).toHaveBeenCalledWith('/room/ABC123');
+    } finally {
+      mockGuest = null;
+      account.mockRestore();
+    }
+  });
+
   it('offers a clear way to create a private room', () => {
     render(<Home />);
     expect(screen.getByRole('button', { name: /Play now!/ })).toBeInTheDocument();
@@ -116,7 +148,10 @@ describe('Home entry points', () => {
     expect(screen.getByText('Play with friends or bots in a private room.')).toBeVisible();
     expect(screen.getByText('10–15 min')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Literature', level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Start a short tutorial to learn the basics/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /short tutorial/i })).toBeNull();
+    expect(screen.getAllByRole('article')).toHaveLength(10);
+    expect(screen.queryByRole('link', { name: 'How to play' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Scroll to learn the game' })).toHaveAttribute('href', '#lesson-1');
     expect(screen.queryByTitle(/tutorial video/i)).toBeNull();
     expect(screen.getByRole('link', { name: /full interactive tutorial/i })).toHaveAttribute('href', '/tutorial');
   });
