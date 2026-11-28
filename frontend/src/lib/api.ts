@@ -33,6 +33,7 @@ export interface VoiceJoinResponse {
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3012';
+export const HTTP_API_URL = process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview' ? '' : API_URL;
 
 // ── Error class ──────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ async function apiFetch<T>(
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${API_URL}${path}`, { ...rest, headers });
+  const res = await fetch(`${HTTP_API_URL}${path}`, { ...rest, headers, credentials: 'omit' });
 
   if (!res.ok) {
     let body: unknown;

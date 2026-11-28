@@ -8,7 +8,7 @@ import AccountControls from '@/components/AccountControls';
 import { useGuest } from '@/contexts/GuestContext';
 import { recentPlayerRoomCodes } from '@/lib/roomMembership';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
-import { API_URL, getReturningRoom, type ReturningRoom } from '@/lib/api';
+import { HTTP_API_URL, getReturningRoom, type ReturningRoom } from '@/lib/api';
 import { gamePath, isAndroidBuild, roomPath, tutorialPath } from '@/lib/appPaths';
 import { parseRoomJoinInput } from '@/lib/roomJoinInput';
 import tutorialStyles from '@/components/ShortTutorial.module.css';
@@ -96,7 +96,7 @@ export default function Home() {
       if (!cancelled) setIsWakingServer(true);
     }, WAKE_NOTICE_DELAY_MS);
 
-    fetch(`${API_URL}/health`)
+    fetch(`${HTTP_API_URL}/health`, { credentials: 'omit' })
       .catch(() => {})
       .finally(() => {
         clearTimeout(slowTimer);

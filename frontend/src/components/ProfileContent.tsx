@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Avatar from '@/components/Avatar';
+import { getMyStats } from '@/lib/supabase/myStats';
 import {
   ApiError,
   getProfileByUsername,
-  getPublicProfile,
   type PublicProfile,
 } from '@/lib/api';
 
@@ -61,7 +61,7 @@ export function ProfileContent({ username, userId }: { username?: string; userId
   useEffect(() => {
     let cancelled = false;
 
-    const request = userId ? getPublicProfile(userId) : getProfileByUsername(username ?? '');
+    const request = userId ? getMyStats(userId) : getProfileByUsername(username ?? '');
     request
       .then((response) => {
         if (cancelled) return;
