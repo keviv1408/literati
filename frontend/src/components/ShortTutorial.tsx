@@ -1,10 +1,17 @@
 'use client';
 
+import CardFan from '@/components/CardFan';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import styles from './ShortTutorial.module.css';
 
-const PracticeSession = dynamic(() => import('./PracticeHand'));
+const PracticeSession = dynamic(() => import('./PracticeHand'), {
+  loading: () => (
+    <p role="status" className="animate-delayed-reveal flex items-center justify-center gap-2 text-sm text-paper-muted">
+      <CardFan compact /> Opening tutorial…
+    </p>
+  ),
+});
 
 export default function ShortTutorial({ returnTo }: { returnTo: 'home' | 'lobby' }) {
   const [open, setOpen] = useState(false);

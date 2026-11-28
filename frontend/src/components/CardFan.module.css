@@ -1,0 +1,44 @@
+.fan {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 2.2em;
+  height: 1.8em;
+  font-size: clamp(3rem, 9vw, 4rem);
+  vertical-align: middle;
+  pointer-events: none;
+}
+
+.compact {
+  font-size: .8rem;
+}
+
+.fan > span {
+  position: absolute;
+  top: 5%;
+  left: 50%;
+  width: 1em;
+  aspect-ratio: 2 / 3;
+  border: 1px solid #c9b694;
+  border-radius: 8% / 5.33%;
+  background: #223858 url('../assets/hotel-back.webp') center / cover no-repeat;
+  box-shadow: 0 .04em .09em #06171155;
+  transform-origin: 50% 90%;
+  --spread: 0%;
+  --tilt: 0deg;
+  transform: translateX(calc(-50% + var(--spread))) rotate(var(--tilt));
+}
+
+.fan > span:first-child { --spread: -30%; --tilt: -19deg; }
+.fan > span:nth-child(2) { --spread: 30%; --tilt: 19deg; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .fan > span {
+    animation: fan-cards 2.4s ease-in-out infinite;
+  }
+
+  @keyframes fan-cards {
+    0%, 12%, 100% { transform: translateX(-50%) rotate(0deg); }
+    44%, 68% { transform: translateX(calc(-50% + var(--spread))) rotate(var(--tilt)); }
+  }
+}

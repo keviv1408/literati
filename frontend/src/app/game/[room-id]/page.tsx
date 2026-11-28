@@ -18,6 +18,7 @@
  * a spectator if the playerId is not in the game's player list.
  */
 
+import CardFan from '@/components/CardFan';
 import BackToHomeButton from '@/components/BackToHomeButton';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -1035,8 +1036,8 @@ export default function GamePage({ params }: PageProps) {
     // Show a brief "Rematch starting…" overlay while redirect is in flight
     if (rematchStarted) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-4" data-testid="rematch-starting-view">
-          <span className="text-4xl animate-spin" style={{ animationDuration: '1s' }}>🔄</span>
+        <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-4" role="status" data-testid="rematch-starting-view">
+          <CardFan />
           <p className="text-xl font-bold text-white">Rematch starting…</p>
           <p className="text-sm text-slate-400">Starting the new game…</p>
         </div>
@@ -1123,7 +1124,7 @@ export default function GamePage({ params }: PageProps) {
         ) : (
           <>
             <h1 className="text-2xl font-bold text-white">Game Over</h1>
-            <p role="status" className="text-slate-300">Waiting for the final score…</p>
+            <p role="status" className="flex items-center gap-2 text-slate-300"><CardFan compact />Waiting for the final score…</p>
             {resultActions}
           </>
         )}
@@ -1473,7 +1474,7 @@ export default function GamePage({ params }: PageProps) {
                 </div>
               </div>
             ) : (
-              <div className="text-center text-xs text-slate-500 py-2" data-testid="spectator-status">
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500 py-2" data-testid="spectator-status">
                 {/*
                  * Distinguish "truly spectating" (spectator_init was received so
                  * players is populated but myPlayerId was never set) from
@@ -1482,6 +1483,7 @@ export default function GamePage({ params }: PageProps) {
                  * legitimate players who connected but haven't yet received
                  * their personalised game_init message.
                  */}
+                {(wsStatus === 'reconnecting' || wsStatus === 'connecting' || (wsStatus === 'connected' && !players.length)) && <CardFan compact />}
                 {wsStatus === 'reconnecting'
                   ? 'Reconnecting…'
                   : wsStatus === 'connected' && players.length > 0
@@ -1524,7 +1526,7 @@ export default function GamePage({ params }: PageProps) {
       {room.status === 'starting' && !gameState && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" role="status" data-testid="starting-overlay">
           <div className="flex flex-col items-center gap-4 text-white">
-            <svg className="animate-spin h-10 w-10 text-emerald-400" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+            <CardFan />
             <p className="text-lg font-semibold">Game starting…</p>
           </div>
         </div>
@@ -1548,20 +1550,7 @@ function LoadingView({ wakingUp = false, label = 'Loading game…' }: { wakingUp
       aria-label={label}
     >
       <div className="flex flex-col items-center gap-5 text-slate-400">
-        <div className="flex gap-2" aria-hidden="true">
-          <span
-            className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
-            style={{ animationDelay: '0ms' }}
-          />
-          <span
-            className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
-            style={{ animationDelay: '180ms' }}
-          />
-          <span
-            className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-emerald-500"
-            style={{ animationDelay: '360ms' }}
-          />
-        </div>
+        <CardFan />
         <span className="text-sm tracking-wide">{label}</span>
         {wakingUp && <span className="text-sm text-amber-200">Waking up the table… this can take up to a minute.</span>}
       </div>

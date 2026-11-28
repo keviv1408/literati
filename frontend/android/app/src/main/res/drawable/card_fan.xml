@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="288dp" android:height="288dp">
+        <shape><solid android:color="@android:color/transparent" /></shape>
+    </item>
+    <item android:width="60dp" android:height="90dp" android:gravity="center" android:right="36dp">
+        <rotate android:fromDegrees="-19" android:toDegrees="-19" android:pivotY="90%">
+            <bitmap android:src="@drawable/hotel_card_back" android:gravity="fill" />
+        </rotate>
+    </item>
+    <item android:width="60dp" android:height="90dp" android:gravity="center" android:left="36dp">
+        <rotate android:fromDegrees="19" android:toDegrees="19" android:pivotY="90%">
+            <bitmap android:src="@drawable/hotel_card_back" android:gravity="fill" />
+        </rotate>
+    </item>
+    <item android:width="60dp" android:height="90dp" android:gravity="center">
+        <bitmap android:src="@drawable/hotel_card_back" android:gravity="fill" />
+    </item>
+</layer-list>

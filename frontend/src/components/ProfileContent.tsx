@@ -1,5 +1,6 @@
 'use client';
 
+import CardFan from '@/components/CardFan';
 import { useEffect, useState } from 'react';
 import Avatar from '@/components/Avatar';
 import { getMyStats } from '@/lib/supabase/myStats';
@@ -46,7 +47,7 @@ export function LoadingState() {
       aria-label="Loading profile"
       className="flex min-h-[18rem] flex-col items-center justify-center gap-3 rounded-3xl border border-slate-700/60 bg-slate-900/60 text-slate-300"
     >
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-400/25 border-t-emerald-400" />
+      <CardFan />
       <p className="text-sm font-medium">Loading profile…</p>
     </div>
   );
