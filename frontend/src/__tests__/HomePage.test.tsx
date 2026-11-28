@@ -158,7 +158,7 @@ describe('Home entry points', () => {
 
   it.each([
     ['  abc123  ', '/room/ABC123'],
-    [' https://literati-ochre.vercel.app/room/def456 ', '/room/DEF456'],
+    [' https://literationline.com/room/def456 ', '/room/DEF456'],
     ['http://localhost/room/ghi789', '/room/GHI789'],
   ])('opens the player lobby for %s', (input, path) => {
     render(<Home />);
@@ -174,7 +174,7 @@ describe('Home entry points', () => {
     process.env.NEXT_PUBLIC_BUILD_TARGET = 'android';
     render(<Home />);
 
-    _submitJoin('https://literati-ochre.vercel.app/room/abc123');
+    _submitJoin('https://literationline.com/room/abc123');
 
     expect(mockPush).toHaveBeenCalledWith('/?room=ABC123');
   });
@@ -208,12 +208,12 @@ describe('Home entry points', () => {
     'ſBC123',
     '/room/ABC123',
     'https://example.com/room/ABC123',
-    'https://literati-ochre.vercel.app.example.com/room/ABC123',
-    'https://user@literati-ochre.vercel.app/room/ABC123',
-    'https://literati-ochre.vercel.app/room/ABC12',
-    'https://literati-ochre.vercel.app/spectate/ABC123',
-    'https://literati-ochre.vercel.app/room/ABC123?spectate=1',
-    'https://literati-ochre.vercel.app/live/../room/ABC123',
+    'https://literationline.com.example.com/room/ABC123',
+    'https://user@literationline.com/room/ABC123',
+    'https://literationline.com/room/ABC12',
+    'https://literationline.com/spectate/ABC123',
+    'https://literationline.com/room/ABC123?spectate=1',
+    'https://literationline.com/live/../room/ABC123',
   ])('shows an inline error without navigating for %s', (input) => {
     render(<Home />);
 

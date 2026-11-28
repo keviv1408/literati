@@ -1,4 +1,4 @@
-const DEFAULT_PUBLIC_ORIGIN = 'https://literati-ochre.vercel.app';
+const DEFAULT_PUBLIC_ORIGIN = 'https://literationline.com';
 const ROOM_CODE = /^[A-Za-z0-9]{6}$/;
 const PLAYER_INVITE_URL = /^https?:\/\/[^/?#@\\\s]+\/room\/([A-Za-z0-9]{6})\/?$/;
 

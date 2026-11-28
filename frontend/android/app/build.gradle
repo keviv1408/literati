@@ -1,6 +1,6 @@
 apply plugin: 'com.android.application'
 
-def inviteOrigin = new URI(System.getenv('FRONTEND_URL') ?: 'https://literati-ochre.vercel.app')
+def inviteOrigin = new URI(System.getenv('FRONTEND_URL') ?: 'https://literationline.com')
 
 android {
     namespace = "com.literationline.app"

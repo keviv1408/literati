@@ -234,7 +234,7 @@ describe('POST /api/rooms', () => {
       error: null,
     });
 
-    process.env.FRONTEND_URL = 'https://literati-ochre.vercel.app';
+    process.env.FRONTEND_URL = 'https://literationline.com';
 
     const res = await request(app)
       .post('/api/rooms')
@@ -254,7 +254,7 @@ describe('POST /api/rooms', () => {
     // spectator_token: 32-char hex token
     expect(res.body.room.spectator_token).toHaveLength(32);
     expect(res.body.room.spectator_token).toMatch(/^[0-9A-F]{32}$/i);
-    expect(res.body.inviteLink).toBe('https://literati-ochre.vercel.app/room/ABC123');
+    expect(res.body.inviteLink).toBe('https://literationline.com/room/ABC123');
   });
 
   it('insert payload includes invite_code and spectator_token', async () => {

@@ -1,6 +1,6 @@
 'use strict';
 
-process.env.FRONTEND_URL = 'https://literati-ochre.vercel.app';
+process.env.FRONTEND_URL = 'https://literationline.com';
 
 const request = require('supertest');
 const app = require('../index');
@@ -15,7 +15,7 @@ function _preflight(origin) {
 describe('CORS origins', () => {
   it.each([
     'https://localhost',
-    'https://literati-ochre.vercel.app',
+    'https://literationline.com',
     'http://localhost:3011',
   ])('allows %s', async (origin) => {
     const res = await _preflight(origin);
