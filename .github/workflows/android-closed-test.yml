@@ -1,0 +1,84 @@
+name: Android closed test
+
+on:
+  push:
+    tags: ['android-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-closed-test
+  queue: max
+
+jobs:
+  build:
+    if: github.event.created && !github.event.deleted
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build Android App Bundle
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build:android -- --webpack
+          npx --no-install cap sync android
+          android/gradlew -p android :app:bundleRelease "-PandroidReleaseVersion=${GITHUB_REF_NAME#android-v}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: android-release
+          path: frontend/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: android-closed-test
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: android-release
+          path: ${{ runner.temp }}/bundle
+      - name: Sign and verify the bundle
+        env:
+          UPLOAD_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE }}
+          UPLOAD_PASSWORD: ${{ secrets.ANDROID_UPLOAD_PASSWORD }}
+        run: |
+          umask 077
+          key="$RUNNER_TEMP/literati-upload.p12"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$UPLOAD_KEYSTORE" | base64 --decode > "$key"
+          bundle="$RUNNER_TEMP/bundle/app-release.aab"
+          jarsigner -keystore "$key" -storepass:env UPLOAD_PASSWORD "$bundle" literati-upload
+          jarsigner -verify -strict -keystore "$key" -storepass:env UPLOAD_PASSWORD "$bundle" literati-upload
+      - id: google
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+      - name: Publish to closed testing
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJson: ${{ steps.google.outputs.credentials_file_path }}
+          packageName: com.literationline.app
+          releaseFiles: ${{ runner.temp }}/bundle/app-release.aab
+          track: alpha
+          status: completed

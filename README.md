@@ -111,6 +111,22 @@ npm run dev
 
 Then open [http://localhost:3011](http://localhost:3011).
 
+## Android closed-test releases
+
+Once the first closed release is live in Play Console, push a new version tag on the commit to release. For example, after merging the changes you want:
+
+```sh
+git fetch origin main
+git tag android-v1.0.1 origin/main
+git push origin android-v1.0.1
+```
+
+The **Android closed test** workflow builds and signs the bundle and submits it to Play’s default closed track (`alpha`). Google reviews releases as usual. Use a higher `major.minor.patch` for each release. For example, `1.0.1` sets the Play version code to `1000001`.
+
+For the first release, create `com.literationline.app` in Play Console, enroll in Play App Signing, and upload the initial signed bundle. Under **Users and permissions**, grant the publisher service account access to this app with **Release apps to testing tracks**. For room links on Play-installed builds, add the SHA-256 fingerprint of the Play app-signing certificate to the website’s `assetlinks.json`.
+
+GitHub stores the upload key and password in the `android-closed-test` environment. Its `PLAY_IDENTITY_PROVIDER` and `PLAY_SERVICE_ACCOUNT` variables select the Google identity used for publishing.
+
 ## Useful Scripts
 
 Frontend:
