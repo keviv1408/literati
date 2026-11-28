@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render } from '@testing-library/react';
 import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import { createRetrievalScene } from '@/components/creatures/retrievalScene';
-import { ASK_DENIED_ANIMATION_MS } from '@/components/AskDeniedAnimation';
+import AskDeniedAnimation, { ASK_DENIED_ANIMATION_MS } from '@/components/AskDeniedAnimation';
 import { FLIGHT_DURATION_MS } from '@/components/CardFlightAnimation';
 import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAnimations';
 
@@ -29,7 +29,7 @@ it('waits for a successful grab and keeps a denied card visible if the creature 
     warm: jest.fn(), deny: (_seats, _duration, onStop) => { finish = onStop; }, play: (_args, onStop) => { finish = onStop; }, stop, dispose: stop,
   });
   const complete = jest.fn();
-  const content = (flight: CardFlightState | null, denial?: AskDeniedCueState) => <div>
+  const content = (flight: CardFlightState | null, denial?: AskDeniedCueState) => <div className="game-table-space">
     <div data-player-id="asker"><span className="speech-avatar" data-creature="frog" /></div>
     <div data-player-id="other"><span className="speech-avatar" data-creature="frog" /></div>
     <TableCardTransfer denial={denial} flight={flight} onComplete={complete} />
@@ -52,7 +52,7 @@ it('waits for a successful grab and keeps a denied card visible if the creature 
     }));
     expect(view.container.querySelectorAll('[data-creature="frog"][data-denial-role]')).toHaveLength(2);
     expect(view.queryByTestId('card-flight-card')).toBeNull();
-    expect(targetSeat).toContainElement(view.getByTestId('ask-denied-card'));
+    expect(view.getByTestId('ask-denied-animation').parentElement).toBe(targetSeat.parentElement);
     act(() => jest.advanceTimersByTime(80));
     act(stop);
     expect(view.container.querySelectorAll('[data-denial-role]')).toHaveLength(0);
@@ -69,5 +69,34 @@ it('waits for a successful grab and keeps a denied card visible if the creature 
       else Reflect.deleteProperty(window, key);
     }
     jest.useRealTimers();
+  }
+});
+
+it('finds a clear side for the full-size denied card when both adjacent seats are occupied', () => {
+  const seats = [0, 1, 2].map(index => (
+    <div className="game-table-seat" key={index}>
+      <div data-player-id={index}><span className="speech-avatar" /></div>
+    </div>
+  ));
+  const table = (cue?: AskDeniedCueState) => <div className="game-table-space">
+    {seats}
+    {cue && <AskDeniedAnimation cue={cue} onComplete={jest.fn()} />}
+  </div>;
+  const view = render(table());
+  const seat = view.container.querySelector<HTMLElement>('[data-player-id="1"]')!;
+  const bounds = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const id = this.closest<HTMLElement>('[data-player-id]')?.dataset.playerId;
+    if (id !== undefined) return new DOMRect(120 + Number(id) * 50, 20, 48, 44);
+    if (this.classList.contains('game-table-space')) return new DOMRect(0, 0, 400, 84);
+    return new DOMRect(0, 0, 48, 72);
+  });
+  try {
+    view.rerender(table({ askerId: '0', targetId: '1', cardId: '4_d', seat }));
+    const card = view.getByTestId('ask-denied-animation');
+    const left = parseFloat(card.style.left);
+    expect(left >= 268 || left + 48 <= 120).toBe(true);
+  } finally {
+    bounds.mockRestore();
+    view.unmount();
   }
 });

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAnimations';
 import CardFlightAnimation, { FLIGHT_DURATION_MS } from '../CardFlightAnimation';
 import type { createRetrievalScene } from './retrievalScene';
@@ -112,7 +111,7 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
 
   return <>
     <canvas ref={canvasRef} className="creature-retrieval" aria-hidden="true" />
-    {denial && createPortal(<AskDeniedAnimation cue={denial} onComplete={onComplete} />, denial.seat)}
+    {denial && <AskDeniedAnimation cue={denial} onComplete={onComplete} />}
     {flight && <CardFlightAnimation {...flight} cardRef={cardRef} onComplete={() => {
       if (activeSceneFlight.current !== flight) onComplete();
     }} />}
