@@ -17,10 +17,7 @@ export interface AskDeniedCueState {
   askerId: string;
   targetId: string;
   cardId: CardId;
-  seatLeft: number;
-  seatTop: number;
-  seatWidth: number;
-  seatHeight: number;
+  seat: HTMLElement;
 }
 
 export type { AskSpeechBubbleState };
@@ -165,8 +162,8 @@ export function useAskResultAnimations(
       }
 
       const { cardId, askerId, targetId } = animationResult;
-      const fromRect = fromEl.getBoundingClientRect();
       if (animationResult.success) {
+        const fromRect = fromEl.getBoundingClientRect();
         const bounds = table.getBoundingClientRect();
         const toRect = toEl.getBoundingClientRect();
         setVisual({
@@ -182,10 +179,7 @@ export function useAskResultAnimations(
       } else {
         setVisual({
           result: animationResult,
-          denial: {
-            askerId, targetId, cardId, seatLeft: fromRect.left, seatTop: fromRect.top,
-            seatWidth: fromRect.width, seatHeight: fromRect.height,
-          },
+          denial: { askerId, targetId, cardId, seat: fromEl },
         });
       }
     });

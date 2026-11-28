@@ -2,12 +2,13 @@ import React from 'react';
 import { act, render } from '@testing-library/react';
 import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import { createRetrievalScene } from '@/components/creatures/retrievalScene';
+import { ASK_DENIED_ANIMATION_MS } from '@/components/AskDeniedAnimation';
 import { FLIGHT_DURATION_MS } from '@/components/CardFlightAnimation';
 import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAnimations';
 
 jest.mock('@/components/creatures/retrievalScene', () => ({ createRetrievalScene: jest.fn() }));
 
-it('lets the active creature finish and cancels the previous grab without clearing the next card', async () => {
+it('waits for a successful grab and keeps a denied card visible if the creature scene stops early', async () => {
   jest.useFakeTimers();
   const replacements = {
     WebGL2RenderingContext: class {},
@@ -44,17 +45,21 @@ it('lets the active creature finish and cancels the previous grab without cleari
     expect(complete).not.toHaveBeenCalled();
     act(stop);
     expect(complete).toHaveBeenCalledTimes(1);
+    const targetSeat = view.container.querySelector<HTMLElement>('[data-player-id="other"]')!;
     view.rerender(content(null, {
       askerId: 'asker', targetId: 'other', cardId: '4_d',
-      seatLeft: 0, seatTop: 0, seatWidth: 48, seatHeight: 48,
+      seat: targetSeat,
     }));
     expect(view.container.querySelectorAll('[data-creature="frog"][data-denial-role]')).toHaveLength(2);
     expect(view.queryByTestId('card-flight-card')).toBeNull();
-    expect(view.getByTestId('ask-denied-card')).toBeInTheDocument();
-    act(() => jest.advanceTimersByTime(2000));
-    expect(complete).toHaveBeenCalledTimes(1);
+    expect(targetSeat).toContainElement(view.getByTestId('ask-denied-card'));
+    act(() => jest.advanceTimersByTime(80));
     act(stop);
     expect(view.container.querySelectorAll('[data-denial-role]')).toHaveLength(0);
+    expect(complete).toHaveBeenCalledTimes(1);
+    act(() => jest.advanceTimersByTime(ASK_DENIED_ANIMATION_MS - 81));
+    expect(complete).toHaveBeenCalledTimes(1);
+    act(() => jest.advanceTimersByTime(1));
     expect(complete).toHaveBeenCalledTimes(2);
   } finally {
     view.unmount();
