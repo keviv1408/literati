@@ -116,8 +116,8 @@ export default function GuestNameModal() {
       <div
         className="
           relative z-10 w-full max-w-sm mx-4
-          bg-gradient-to-b from-emerald-950 to-slate-900
-          border border-emerald-700/50
+          bg-felt-panel
+          border border-sage/40
           rounded-2xl shadow-2xl shadow-black/60
           p-6 sm:p-8
           animate-modal-in
@@ -126,13 +126,13 @@ export default function GuestNameModal() {
       >
         {/* Card suit decorations */}
         <div
-          className="absolute top-3 left-4 text-emerald-700/40 text-2xl select-none"
+          className="absolute top-3 left-4 text-sage/40 text-2xl select-none"
           aria-hidden="true"
         >
           ♠
         </div>
         <div
-          className="absolute top-3 right-4 text-emerald-700/40 text-2xl select-none"
+          className="absolute top-3 right-4 text-sage/40 text-2xl select-none"
           aria-hidden="true"
         >
           ♥
@@ -145,11 +145,11 @@ export default function GuestNameModal() {
           </div>
           <h2
             id="guest-modal-title"
-            className="text-2xl font-bold text-white tracking-tight"
+            className="text-2xl font-bold text-paper tracking-tight"
           >
             Welcome to Literati
           </h2>
-          <p className="mt-1 text-sm text-emerald-300/80">
+          <p className="mt-1 text-sm text-paper-muted">
             Choose the name your friends will see at the table.
           </p>
         </div>
@@ -159,7 +159,7 @@ export default function GuestNameModal() {
           <div className="mb-4">
             <label
               htmlFor="guest-display-name"
-              className="block text-sm font-medium text-emerald-200 mb-1.5"
+              className="block text-sm font-medium text-paper mb-1.5"
             >
               Display Name
             </label>
@@ -186,15 +186,15 @@ export default function GuestNameModal() {
                 }
                 aria-invalid={!!error}
                 className={`
-                  w-full px-4 py-3 rounded-xl text-white text-base
-                  bg-slate-800/80 border
-                  placeholder:text-slate-500
-                  focus:outline-none focus:ring-2 focus:ring-emerald-500
+                  w-full px-4 py-3 rounded-xl text-paper text-base
+                  bg-felt-inset border
+                  placeholder:text-paper-muted/70
+                  focus:outline-none focus:ring-2 focus:ring-sage
                   transition-colors
                   ${
                     error
                       ? 'border-red-500 focus:ring-red-500'
-                      : 'border-slate-600 hover:border-slate-500'
+                      : 'border-sage/50 hover:border-sage'
                   }
                 `}
               />
@@ -204,7 +204,7 @@ export default function GuestNameModal() {
                 aria-live="polite"
                 className={`
                   absolute right-3 top-1/2 -translate-y-1/2 text-xs
-                  ${isNearLimit ? 'text-amber-400' : 'text-slate-500'}
+                  ${isNearLimit ? 'text-amber-400' : 'text-paper-muted'}
                 `}
               >
                 {remaining}
@@ -223,7 +223,7 @@ export default function GuestNameModal() {
             ) : (
               <p
                 id="guest-name-hint"
-                className="mt-1.5 text-xs text-slate-500"
+                className="mt-1.5 text-xs text-paper-muted"
               >
                 Letters, numbers, spaces, and _ - &#39; . only
               </p>
@@ -236,11 +236,11 @@ export default function GuestNameModal() {
             disabled={isSubmitting || name.trim().length === 0}
             className="
               w-full py-3 px-4 rounded-xl font-semibold text-base
-              bg-emerald-600 hover:bg-emerald-500
-              disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed
-              text-white
+              enabled:cursor-pointer bg-copper enabled:hover:bg-copper-hover
+              disabled:bg-felt-hover disabled:text-paper-muted/70 disabled:cursor-not-allowed
+              text-felt
               transition-all duration-150
-              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900
+              focus:outline-none focus:ring-2 focus:ring-sage focus:ring-offset-2 focus:ring-offset-felt-panel
               active:scale-[0.98]
             "
           >
@@ -276,7 +276,7 @@ export default function GuestNameModal() {
         </form>
 
         {/* Footer note */}
-        <p className="mt-4 text-center text-xs text-slate-600">
+        <p className="mt-4 text-center text-xs text-paper-muted">
           Guest stats are not saved.
         </p>
       </div>

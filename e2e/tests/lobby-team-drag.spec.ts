@@ -26,7 +26,13 @@ async function _createRoom(host: Page) {
   await host.getByRole('button', { name: /Play now!/ }).click();
   await host.getByPlaceholder('e.g. CardShark99').fill('Robin');
   await host.getByRole('button', { name: 'Continue as Guest' }).click();
-  await host.getByRole('button', { name: 'Create Room', exact: true }).click();
+  const dialog = host.getByRole('dialog', { name: 'Create Private Room' });
+  const createRoom = dialog.getByRole('button', { name: 'Create Room', exact: true });
+  for (const control of [createRoom, dialog.getByRole('button', { name: 'Cancel' })]) {
+    await control.hover();
+    await expect(control).toHaveCSS('cursor', 'pointer');
+  }
+  await createRoom.click();
   await expect(host.getByTestId('lobby-player-count')).toHaveText('1/6 seated');
 }
 
