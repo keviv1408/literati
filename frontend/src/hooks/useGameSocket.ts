@@ -75,6 +75,7 @@ function toWsUrl(
 interface UseGameSocketOptions {
   roomCode: string | null;
   bearerToken: string | null;
+  sessionId?: string | null;
   spectatorToken?: string | null;
   guestRecoveryKey?: string | null;
   onGameOver?: (payload: GameOverPayload) => void;
@@ -387,6 +388,7 @@ function describeClose(code: number): string | null {
 export function useGameSocket({
   roomCode,
   bearerToken,
+  sessionId,
   spectatorToken = null,
   guestRecoveryKey = null,
   onGameOver,
@@ -435,6 +437,12 @@ export function useGameSocket({
   const [error, setError]                   = useState<string | null>(null);
 
   const socketRef  = useRef<ReconnectingSocket | null>(null);
+  const tokenRef = useRef(bearerToken);
+  const playerIdentity = bearerToken ? sessionId ?? bearerToken : null;
+  useEffect(() => {
+    tokenRef.current = bearerToken;
+    socketRef.current?.retryWithNewCredentials();
+  }, [bearerToken]);
   // Persist the variant across message handlers so hand_update (which only
   // carries the new hand array) can still apply the half-suit sort.
   const variantRef = useRef<CardVariant | null>(null);
@@ -447,7 +455,7 @@ export function useGameSocket({
 
   // ── Connect / reconnect when roomCode and token are ready ─────────────────
   useEffect(() => {
-    if (!roomCode || (!bearerToken && !spectatorToken)) return;
+    if (!roomCode || (!playerIdentity && !spectatorToken)) return;
 
     let lost: { drop: SocketDrop; at: number } | null = null;
     let countTimer: ReturnType<typeof setTimeout> | undefined;
@@ -898,7 +906,7 @@ export function useGameSocket({
     };
 
     const socket = createReconnectingSocket({
-      getUrl: () => toWsUrl(roomCode, bearerToken, spectatorToken, guestRecoveryKey),
+      getUrl: () => toWsUrl(roomCode, tokenRef.current, spectatorToken, guestRecoveryKey),
       onMessage,
       onStatus: (status, stop) => {
         setWsStatus(status);
@@ -930,7 +938,7 @@ export function useGameSocket({
       setWsStatus('idle');
       _resetAskPlayback();
     };
-  }, [roomCode, bearerToken, spectatorToken, guestRecoveryKey]);
+  }, [roomCode, playerIdentity, spectatorToken, guestRecoveryKey]);
 
   useEffect(() => {
     if (!declarationReveal) return;

@@ -273,6 +273,22 @@ describe('useRoomSocket', () => {
       expect(result.current.wsStatus).toBe('connected');
     });
 
+    it('keeps the lobby connected on token refresh and uses the new token after a disconnect', () => {
+      const { rerender } = renderHook(
+        ({ bearerToken }) => useRoomSocket({ roomCode: 'ABC123', sessionId: 'player', bearerToken }),
+        { initialProps: { bearerToken: 'original' } },
+      );
+      const original = wsInstances[0];
+      openSocket(original);
+      rerender({ bearerToken: 'refreshed' });
+      expect(wsInstances).toHaveLength(1);
+      expect(original.close).not.toHaveBeenCalled();
+
+      dropSocket(original);
+      act(() => { jest.advanceTimersByTime(1000); });
+      expect(new URL(wsInstances[1].url).searchParams.get('token')).toBe('refreshed');
+    });
+
     it('keeps retrying with the delay capped at 10 s and never gives up', () => {
       const { result } = renderHook(() =>
         useRoomSocket({ roomCode: 'ABC123', sessionId: 'sess-1' })

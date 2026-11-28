@@ -112,6 +112,29 @@ beforeEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('useReconnect', () => {
+  it('keeps a verified account ready through a slow or failed refresh and stops on rejection', async () => {
+    stubNoSession();
+    const account = (token: string) => ({ session: { user: { id: 'account' }, access_token: token }, loading: false });
+    mockUseAccount.mockReturnValue(account('original'));
+    resolveValidateSession({ id: 'account', isGuest: false, displayName: 'Player', avatarId: null });
+    const { result, rerender } = renderHook(() => useReconnect());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    let rejectRefresh!: (reason: Error) => void;
+    mockValidateSession.mockImplementationOnce(() => new Promise((_, reject) => { rejectRefresh = reject; }));
+    mockUseAccount.mockReturnValue(account('refreshed'));
+    rerender();
+    expect(result.current).toMatchObject({ status: 'ready', sessionId: 'account', bearerToken: 'refreshed' });
+    await act(async () => { rejectRefresh(new Error('offline')); });
+    expect(result.current.status).toBe('ready');
+
+    rejectValidateWithUnauthorized();
+    mockUseAccount.mockReturnValue(account('revoked'));
+    rerender();
+    await waitFor(() => expect(result.current.status).toBe('session_expired'));
+    expect(result.current.bearerToken).toBeNull();
+  });
+
   it('waits for account hydration and prefers a verified account over a saved guest', async () => {
     stubGuestSession();
     mockUseAccount.mockReturnValue({ session: null, loading: true });
