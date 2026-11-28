@@ -7,7 +7,7 @@ import LobbyInviteButton from '@/components/LobbyInviteButton';
 jest.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: jest.fn() } }));
 jest.mock('@capacitor/share', () => ({ Share: { canShare: jest.fn(), share: jest.fn() } }));
 
-const LINK = 'https://literati-ochre.vercel.app/room/ABC123';
+const LINK = 'https://literationline.com/room/ABC123';
 const UNAVAILABLE = 'Invite link unavailable. Reopen this room and try again.';
 const mockIsNative = jest.mocked(Capacitor.isNativePlatform);
 const mockCanShare = jest.mocked(Share.canShare);

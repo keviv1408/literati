@@ -113,7 +113,7 @@ const ROOM: Room = {
   updated_at: '2026-11-26T00:00:00Z',
 };
 
-const LINK = 'https://literati-ochre.vercel.app/room/ABC123';
+const LINK = 'https://literationline.com/room/ABC123';
 
 const SESSION = {
   isGuest: true,
