@@ -55,6 +55,12 @@ describe('Home wake-up notice', () => {
     expect(global.fetch).toHaveBeenCalledWith('http://api.test/health');
   });
 
+  it('shows the tutorial link without advertising the avatar demo', () => {
+    render(<Home />);
+    expect(screen.getByRole('link', { name: /full interactive tutorial/i })).toBeVisible();
+    expect(screen.queryByRole('link', { name: /preview avatar animations/i })).toBeNull();
+  });
+
   it('shows the notice only once the health ping has been slow', async () => {
     render(<Home />);
     expect(screen.queryByRole('status')).toBeNull();
@@ -102,11 +108,13 @@ describe('Home entry points', () => {
 
   it('offers a clear way to create a private room', () => {
     render(<Home />);
-    expect(screen.getByRole('button', { name: /Create Private Room/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Play now!/ })).toBeInTheDocument();
     expect(screen.queryByText(/Find Online Match/)).toBeNull();
     expect(screen.queryByText(/Spectate Live Games/)).toBeNull();
     expect(screen.queryByText('Spectators')).toBeNull();
-    expect(screen.getByText('Smart Bots')).toBeInTheDocument();
+    expect(screen.queryByText('Smart Bots')).toBeNull();
+    expect(screen.getByText('Play with friends or bots in a private room.')).toBeVisible();
+    expect(screen.getByText('10–15 min')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Literature', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Start a short tutorial to learn the basics/ })).toBeInTheDocument();
     expect(screen.queryByTitle(/tutorial video/i)).toBeNull();
@@ -206,7 +214,7 @@ describe('Home room recovery', () => {
     render(<Home />);
     expect(screen.getByRole('button', { name: /Checking your room/ })).toBeDisabled();
     await act(async () => resolve({ room: { code: 'ABC123', destination: 'game' }, hosting: true }));
-    expect(screen.queryByRole('button', { name: /Create Private Room/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Play now!/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Return to game/ }));
     expect(mockPush).toHaveBeenCalledWith('/game/ABC123');
   });
@@ -217,7 +225,7 @@ describe('Home room recovery', () => {
     });
     render(<Home />);
     expect(await screen.findByRole('button', { name: /Return to game · JOIN02/ })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: /Create Private Room/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Play now!/ })).toBeNull();
     const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: /Return to hosted lobby · HOST01/ }));
     expect(mockPush).toHaveBeenCalledWith('/room/HOST01');
@@ -238,7 +246,7 @@ describe('Home room recovery', () => {
       expect(screen.getByRole('button', { name: /Return to lobby/ })).toBeEnabled();
       expect(mockGetReturningRoom).toHaveBeenCalledTimes(2);
       await act(async () => { window.dispatchEvent(new Event('focus')); });
-      expect(screen.getByRole('button', { name: /Create Private Room/ })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /Play now!/ })).toBeEnabled();
       await act(async () => resolveSlow({ room, hosting: true }));
       expect(screen.queryByRole('button', { name: /Return to lobby/ })).toBeNull();
     } finally {

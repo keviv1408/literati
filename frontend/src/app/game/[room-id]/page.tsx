@@ -18,6 +18,7 @@
  * a spectator if the playerId is not in the game's player list.
  */
 
+import BackToHomeButton from '@/components/BackToHomeButton';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
@@ -57,8 +58,7 @@ import ReconnectBar from '@/components/ReconnectBar';
 import GameOverScreen from '@/components/GameOverScreen';
 import SpectatorView from '@/components/SpectatorView';
 import { takeOpeningDeal } from '@/lib/openingDeal';
-import CardFlightAnimation from '@/components/CardFlightAnimation';
-import AskDeniedAnimation from '@/components/AskDeniedAnimation';
+import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import CountdownTimer from '@/components/CountdownTimer';
@@ -270,7 +270,7 @@ export default function GamePage({ params }: PageProps) {
 
   const {
     wsStatus, myPlayerId, myHand, spectatorHands, spectatorMoveHistory, askHistory, players, gameState, variant, playerCount,
-    lastAskResult, lastDeclareResult, declarationReveal, turnTimer, declarationTimer,
+    lastAskResult, lastVisibleAskResult, nextAskAnimation, finishAskAnimation, lastDeclareResult, declarationReveal, turnTimer, declarationTimer,
     botTakeover, reclaimQueued, rematchVote, rematchDeclined, roomDissolved,
     sendAsk, sendDeclare, sendRematchVote, sendRematchInitiate,
     sendPartialSelection, sendDeclareProgress, sendDeclareSelecting,
@@ -387,13 +387,15 @@ export default function GamePage({ params }: PageProps) {
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
-    clearCardFlight,
-    clearAskDeniedCue,
-  } = useAskResultAnimations(lastAskResult, {
+    speechResult,
+    clearAskAnimation,
+  } = useAskResultAnimations(myPlayerId ? lastVisibleAskResult : null, {
+    nextAskAnimation: myPlayerId ? nextAskAnimation : null,
+    finishAskAnimation,
     getAskBubbleCardIds,
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult, players);
+  const reactionBubble = useReactionBubble(speechResult, lastAskResult ? null : lastDeclareResult, players);
   const speechBubble = reactionBubble ?? askSpeechBubble;
 
   const publishMoveMessage = useCallback((message: string, persistentMessage: string | null = null) => {
@@ -973,13 +975,13 @@ export default function GamePage({ params }: PageProps) {
 
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
-  if (reconnectStatus === 'session_expired' && !spectatorToken) return <GameErrorView testId="session-expired-view" emoji="🔒" title="Session expired" body="Sign in again to return to your seat." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (loading && serverUnreachable) return <GameErrorView testId="server-unreachable-view" emoji="📡" title="Can't Reach the Server" body="Still trying. The game opens as soon as the server is back." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
+  if (reconnectStatus === 'session_expired' && !spectatorToken) return <GameErrorView testId="session-expired-view" emoji="🔒" title="Session expired" body="Sign in again to return to your seat." onPrimary={handleGoHome} />;
+  if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} />;
+  if (loading && serverUnreachable) return <GameErrorView testId="server-unreachable-view" emoji="📡" title="Can't Reach the Server" body="Still trying. The game opens as soon as the server is back." onPrimary={handleGoHome} />;
   if (loading) return <LoadingView wakingUp={roomRetrying} />;
-  if (notFound) return <GameErrorView testId="not-found-view" emoji="🔍" title="Room Not Found" body={<>No room <span className="font-mono text-emerald-400">{roomCode}</span> found.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (!room) return <GameErrorView testId="generic-error-view" emoji="⚠️" title="Something Went Wrong" body="Could not load the game." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (room.status === 'cancelled') return <GameErrorView testId="cancelled-view" emoji="🚫" title="Game Cancelled" body={<>Room <span className="font-mono text-slate-300">{room.code}</span> was cancelled.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
+  if (notFound) return <GameErrorView testId="not-found-view" emoji="🔍" title="Room Not Found" body={<>No room <span className="font-mono text-emerald-400">{roomCode}</span> found.</>} onPrimary={handleGoHome} />;
+  if (!room) return <GameErrorView testId="generic-error-view" emoji="⚠️" title="Something Went Wrong" body="Could not load the game." onPrimary={handleGoHome} />;
+  if (room.status === 'cancelled') return <GameErrorView testId="cancelled-view" emoji="🚫" title="Game Cancelled" body={<>Room <span className="font-mono text-slate-300">{room.code}</span> was cancelled.</>} onPrimary={handleGoHome} />;
   if (room.status === 'abandoned' || roomDissolved?.reason === 'all_bots') {
     return (
       <GameErrorView
@@ -988,7 +990,6 @@ export default function GamePage({ params }: PageProps) {
         title="Game Abandoned"
         body={<>All human players left room <span className="font-mono text-slate-300">{room.code}</span>, so the bot-only game was ended automatically.</>}
         onPrimary={handleGoHome}
-        primaryLabel="Back to Home"
       />
     );
   }
@@ -1086,12 +1087,7 @@ export default function GamePage({ params }: PageProps) {
           </button>
         )}
 
-        <button
-          onClick={handleGoHome}
-          className="min-h-11 px-5 rounded-xl font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
-        >
-          Back to Home
-        </button>
+        <BackToHomeButton onClick={handleGoHome} />
       </div>
     );
 
@@ -1168,6 +1164,9 @@ export default function GamePage({ params }: PageProps) {
           turnTimer={turnTimer}
           declarationTimer={declarationTimer}
           lastAskResult={lastAskResult}
+          lastVisibleAskResult={lastVisibleAskResult}
+          nextAskAnimation={nextAskAnimation}
+          finishAskAnimation={finishAskAnimation}
           lastDeclareResult={lastDeclareResult}
           declareProgress={declareProgress ?? null}
           declarationReveal={declarationReveal}
@@ -1337,7 +1336,7 @@ export default function GamePage({ params }: PageProps) {
                   playerCount={effectivePlayerCount === 8 ? 8 : 6}
                 />
               </CircularGameTable>
-              {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
+              <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearAskAnimation} />
             </div>
           </main>
           </>
@@ -1532,16 +1531,6 @@ export default function GamePage({ params }: PageProps) {
 
       {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
 
-      {askDeniedCue && (
-        <AskDeniedAnimation
-          cardId={askDeniedCue.cardId}
-          seatLeft={askDeniedCue.seatLeft}
-          seatTop={askDeniedCue.seatTop}
-          seatWidth={askDeniedCue.seatWidth}
-          seatHeight={askDeniedCue.seatHeight}
-          onComplete={clearAskDeniedCue}
-        />
-      )}
 
     </div>
     </VoiceProvider>
@@ -1579,11 +1568,11 @@ function LoadingView({ wakingUp = false, label = 'Loading game…' }: { wakingUp
   );
 }
 
-function GameErrorView({ emoji, title, body, onPrimary, primaryLabel, testId }: { emoji: string; title: string; body: React.ReactNode; onPrimary: () => void; primaryLabel: string; testId?: string; }) {
+function GameErrorView({ emoji, title, body, onPrimary, testId }: { emoji: string; title: string; body: React.ReactNode; onPrimary: () => void; testId?: string; }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6" data-testid={testId}>
       <div className="text-center max-w-sm"><div className="text-5xl mb-4">{emoji}</div><h1 className="text-2xl font-bold text-white mb-3">{title}</h1><p className="text-slate-300 text-sm">{body}</p></div>
-      <button onClick={onPrimary} className="py-3 px-6 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400">{primaryLabel}</button>
+      <BackToHomeButton onClick={onPrimary} />
     </div>
   );
 }

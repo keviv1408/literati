@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import BackToHomeButton from '@/components/BackToHomeButton';
 import { useLiveGamesSocket } from '@/hooks/useLiveGamesSocket';
 import type { LiveGame } from '@/lib/api';
 
@@ -204,12 +205,7 @@ export default function LiveGamesPage() {
 
       <main className="relative z-10 w-full max-w-2xl flex flex-col gap-8">
         {/* Back button */}
-        <button
-          onClick={() => router.push('/')}
-          className="self-start text-sm text-slate-400 hover:text-emerald-400 transition-colors"
-        >
-          ← Back to Home
-        </button>
+        <BackToHomeButton onClick={() => router.push('/')} className="self-start" />
 
         {/* Header */}
         <div className="space-y-1 text-center">

@@ -50,7 +50,6 @@ import CircularGameTable from '@/components/CircularGameTable';
 import CardHand from '@/components/CardHand';
 import type { GameWsStatus, TurnTimerPayload, DeclarationTimerPayload, PostDeclarationTimerPayload } from '@/hooks/useGameSocket';
 import DeclarationTimerBar from '@/components/DeclarationTimerBar';
-import AskDeniedAnimation from '@/components/AskDeniedAnimation';
 import AskSpeechBubbleOverlay from '@/components/AskSpeechBubbleOverlay';
 import DeclaredBooksTable from '@/components/DeclaredBooksTable';
 import type {
@@ -69,7 +68,7 @@ import LastMoveDisplay from '@/components/LastMoveDisplay';
 import DeclarationCardReveal from '@/components/DeclarationCardReveal';
 import ReconnectBar from '@/components/ReconnectBar';
 import CountdownTimer from '@/components/CountdownTimer';
-import CardFlightAnimation from '@/components/CardFlightAnimation';
+import TableCardTransfer from '@/components/creatures/TableCardTransfer';
 import { useAskResultAnimations } from '@/hooks/useAskResultAnimations';
 import { useReactionBubble } from '@/hooks/useReactionBubble';
 
@@ -102,6 +101,9 @@ export interface SpectatorViewProps {
   turnTimer: TurnTimerPayload | null;
   /** Most recent ask-card result (used for the move log and last-move text). */
   lastAskResult: AskResultPayload | null;
+  lastVisibleAskResult?: AskResultPayload | null;
+  nextAskAnimation?: AskResultPayload | null;
+  finishAskAnimation?: (result: AskResultPayload) => void;
   /** Most recent declaration result (used for the move log and last-move text). */
   lastDeclareResult: DeclarationResultPayload | null;
   /** 6-character room code shown in the header. */
@@ -155,6 +157,9 @@ export default function SpectatorView({
   turnTimer,
   declarationTimer,
   lastAskResult,
+  lastVisibleAskResult = lastAskResult,
+  nextAskAnimation,
+  finishAskAnimation,
   lastDeclareResult,
   declareProgress,
   declarationReveal,
@@ -182,12 +187,14 @@ export default function SpectatorView({
     cardFlight,
     askDeniedCue,
     askSpeechBubble,
-    clearCardFlight,
-    clearAskDeniedCue,
-  } = useAskResultAnimations(lastAskResult, {
+    speechResult,
+    clearAskAnimation,
+  } = useAskResultAnimations(lastVisibleAskResult, {
+    nextAskAnimation,
+    finishAskAnimation,
     getPlayerDisplayName,
   });
-  const reactionBubble = useReactionBubble(lastAskResult, lastDeclareResult, players);
+  const reactionBubble = useReactionBubble(speechResult, lastAskResult ? null : lastDeclareResult, players);
   const speechBubble = reactionBubble ?? askSpeechBubble;
   const showTransientLastResult = useEffectEvent((msg: string, persistentMessage: string | null = null) => {
     setLastResultMsg(msg);
@@ -507,7 +514,7 @@ export default function SpectatorView({
               playerCount={effectivePlayerCount === 8 ? 8 : 6}
             />
           </CircularGameTable>
-          {cardFlight && <CardFlightAnimation {...cardFlight} onComplete={clearCardFlight} />}
+          <TableCardTransfer denial={askDeniedCue} flight={cardFlight} onComplete={clearAskAnimation} />
         </div>
       </main>
 
@@ -652,16 +659,6 @@ export default function SpectatorView({
 
       {speechBubble && <AskSpeechBubbleOverlay bubble={speechBubble} />}
 
-      {askDeniedCue && (
-        <AskDeniedAnimation
-          cardId={askDeniedCue.cardId}
-          seatLeft={askDeniedCue.seatLeft}
-          seatTop={askDeniedCue.seatTop}
-          seatWidth={askDeniedCue.seatWidth}
-          seatHeight={askDeniedCue.seatHeight}
-          onComplete={clearAskDeniedCue}
-        />
-      )}
 
     </div>
   );

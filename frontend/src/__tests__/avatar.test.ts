@@ -1,6 +1,6 @@
 import {
   getAvatarColor,
-  getAvatarEmoji,
+  getAvatarCreature,
   hashString,
   AVATAR_IDS,
   AVATAR_PALETTE,
@@ -74,27 +74,27 @@ describe("getAvatarColor", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getAvatarEmoji
+// getAvatarCreature
 // ---------------------------------------------------------------------------
-describe("getAvatarEmoji", () => {
-  it("maps every avatar id to a distinct glyph", () => {
-    const glyphs = AVATAR_IDS.map((id) => getAvatarEmoji(id, "whoever"));
-    expect(new Set(glyphs).size).toBe(12);
+describe("getAvatarCreature", () => {
+  it("maps every avatar id to a distinct portrait", () => {
+    const portraits = AVATAR_IDS.map((id) => getAvatarCreature(id, "whoever"));
+    expect(new Set(portraits).size).toBe(12);
   });
 
   it("prefers a valid avatarId over the name", () => {
-    expect(getAvatarEmoji("avatar-1", "Mochi")).toBe(getAvatarEmoji("avatar-1", "Nova"));
+    expect(getAvatarCreature("avatar-1", "Mochi")).toBe(getAvatarCreature("avatar-1", "Nova"));
   });
 
-  it("gives known bot names a fixed glyph regardless of casing", () => {
-    expect(getAvatarEmoji(null, "Mochi")).toBe("🍡");
-    expect(getAvatarEmoji(undefined, "  mochi ")).toBe("🍡");
-    expect(getAvatarEmoji("not-an-avatar", "Nova")).toBe("🌟");
+  it("gives known bot names a fixed portrait regardless of casing", () => {
+    expect(getAvatarCreature(null, "Mochi")).toBe("penguin");
+    expect(getAvatarCreature(undefined, "  mochi ")).toBe("penguin");
+    expect(getAvatarCreature("not-an-avatar", "Nova")).toBe("butterfly");
   });
 
-  it("falls back to a deterministic glyph from the avatar set for other names", () => {
-    const glyph = getAvatarEmoji(null, "Kalven");
-    expect(glyph).toBe(getAvatarEmoji(null, "kalven"));
-    expect(AVATAR_IDS.map((id) => getAvatarEmoji(id, ""))).toContain(glyph);
+  it("falls back to a deterministic portrait from the avatar set for other names", () => {
+    const portrait = getAvatarCreature(null, "Kalven");
+    expect(portrait).toBe(getAvatarCreature(null, "kalven"));
+    expect(AVATAR_IDS.map((id) => getAvatarCreature(id, ""))).toContain(portrait);
   });
 });

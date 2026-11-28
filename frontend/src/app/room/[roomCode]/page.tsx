@@ -32,6 +32,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import BackToHomeButton from '@/components/BackToHomeButton';
 import { abandonLobby, getRoomByCode, ApiError } from '@/lib/api';
 import { gamePath, isAndroidBuild } from '@/lib/appPaths';
 import { trackEvent } from '@/lib/analytics';
@@ -55,6 +56,7 @@ import type { Room, Team } from '@/types/room';
 import DraggableLobbyTeamColumns from '@/components/DraggableLobbyTeamColumns';
 import { LobbyStartControl, showStartPanel } from '@/components/LobbyStartControl';
 import AvatarPicker from '@/components/AvatarPicker';
+import LobbyHeading from '@/components/LobbyHeading';
 import LobbyInviteButton from '@/components/LobbyInviteButton';
 import ShortTutorial from '@/components/ShortTutorial';
 import { buildEmptySeats } from '@/types/lobby';
@@ -83,16 +85,11 @@ export default function RoomLobbyPage({ params }: PageProps) {
   } = useReconnect();
 
   const { setGuestName } = useGuest();
-  const [abandonPrompt, setAbandonPrompt] = useState<'idle' | 'confirming' | 'dismissed'>('idle');
-  const abandonActionRef = useRef<HTMLButtonElement>(null);
+  const abandonDialog = useRef<HTMLDialogElement>(null);
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState('');
   const [joinName, setJoinName] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (abandonPrompt !== 'idle') abandonActionRef.current?.focus();
-  }, [abandonPrompt]);
 
   const [room, setRoom] = useState<Room | null>(null);
   const [inviteLink, setInviteLink] = useState<string>();
@@ -416,7 +413,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
       <main className="flex min-h-screen flex-col items-center justify-center gap-4" data-testid="closed-lobby">
         <h1 className="text-2xl font-bold">Lobby closed</h1>
         <p>This lobby is closed for everyone.</p>
-        <button onClick={() => router.push('/')}>Back to Home</button>
+        <BackToHomeButton onClick={() => router.push('/')} />
       </main>
     );
   }
@@ -475,19 +472,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
         </div>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <AccountControls signInOnly />
-          <button
-            onClick={() => router.push('/')}
-            className="
-              py-3 px-6 rounded-xl font-medium text-sm text-slate-400
-              hover:text-white hover:bg-slate-800/50
-              border border-transparent hover:border-slate-700
-              transition-all duration-150
-              focus:outline-none focus:ring-2 focus:ring-emerald-400
-            "
-            data-testid="session-expired-home-btn"
-          >
-            Back to Home
-          </button>
+          <BackToHomeButton onClick={() => router.push('/')} data-testid="session-expired-home-btn" />
         </div>
       </div>
     );
@@ -532,19 +517,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           >
             Try Again
           </button>
-          <button
-            onClick={() => router.push('/')}
-            className="
-              py-3 px-6 rounded-xl font-medium text-sm text-slate-400
-              hover:text-white hover:bg-slate-800/50
-              border border-transparent hover:border-slate-700
-              transition-all duration-150
-              focus:outline-none focus:ring-2 focus:ring-emerald-400
-            "
-            data-testid="connection-error-home-btn"
-          >
-            Back to Home
-          </button>
+          <BackToHomeButton onClick={() => router.push('/')} data-testid="connection-error-home-btn" />
         </div>
       </div>
     );
@@ -593,7 +566,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                     key={p.userId}
                     className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-slate-800 text-slate-200 text-xs"
                   >
-                    <Avatar displayName={p.displayName} size="xs" />
+                    <Avatar displayName={p.displayName} avatarId={p.avatarId} size="xs" />
                     {p.displayName}
                     {p.isHost && <span aria-label="host">👑</span>}
                   </span>
@@ -644,17 +617,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           >
             Join room
           </button>
-          <button
-            type="button"
-            onClick={() => router.push('/')}
-            className="
-              py-1.5 px-3 rounded-xl text-xs font-medium
-              text-slate-400 hover:text-slate-200
-              transition-colors focus:outline-none
-            "
-          >
-            Back to Home
-          </button>
+          <BackToHomeButton onClick={() => router.push('/')} />
         </form>
       </div>
     );
@@ -681,17 +644,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           </p>
         </div>
 
-        <button
-          onClick={() => router.push('/')}
-          className="
-            py-3 px-6 rounded-xl font-semibold
-            bg-emerald-600 hover:bg-emerald-500 text-white
-            transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-          "
-          data-testid="kicked-go-home"
-        >
-          Back to Home
-        </button>
+        <BackToHomeButton onClick={() => router.push('/')} data-testid="kicked-go-home" />
       </div>
     );
   }
@@ -738,16 +691,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
             This invite link is invalid or has expired.
           </p>
         </div>
-        <button
-          onClick={() => router.push('/')}
-          className="
-            py-3 px-6 rounded-xl font-semibold
-            bg-emerald-600 hover:bg-emerald-500 text-white
-            transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400
-          "
-        >
-          Back to Home
-        </button>
+        <BackToHomeButton onClick={() => router.push('/')} />
       </div>
     );
   }
@@ -764,6 +708,20 @@ export default function RoomLobbyPage({ params }: PageProps) {
     isCancelled,
     isMatchmaking: Boolean(room.is_matchmaking),
   });
+
+  async function _confirmAbandon() {
+    if (!room || !bearerToken || closing) return;
+    setClosing(true);
+    setCloseError('');
+    try {
+      await abandonLobby(room.code, bearerToken);
+      setRoom({ ...room, status: 'cancelled' });
+    } catch (error) {
+      setCloseError(error instanceof Error ? error.message : 'Could not close the lobby.');
+    } finally {
+      setClosing(false);
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 py-6 sm:py-10">
@@ -854,7 +812,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
         )}
 
         <header className="flex flex-col gap-4">
-          <h1 className="text-2xl font-bold tracking-tight text-white">Room lobby</h1>
+          <LobbyHeading roomCode={hasStartPanel && !isSpectator ? room.code : undefined} />
           {hasStartPanel && (
             <div className="flex flex-col gap-3" data-testid="start-game-panel">
               <div className={amIHostLive ? 'grid grid-cols-2 items-start gap-2' : 'flex flex-col gap-3'}>
@@ -1144,41 +1102,32 @@ export default function RoomLobbyPage({ params }: PageProps) {
         )}
 
         {amIHostLive && !isSpectator && !room.is_matchmaking && room.status === 'waiting' && (
-          abandonPrompt === 'confirming' ? (
-            <section role="alertdialog" aria-labelledby="abandon-title" aria-describedby="abandon-description" className="rounded-xl border border-red-800 p-4">
-              <h2 id="abandon-title" className="font-semibold">Abandon this lobby?</h2>
-              <p id="abandon-description" className="my-2">This closes the lobby for everyone. Its invite link will stop working.</p>
-              <button ref={abandonActionRef} disabled={closing} onClick={() => { setAbandonPrompt('dismissed'); setCloseError(''); }}>Cancel</button>
-              <button className="ml-6 text-red-300" disabled={closing} onClick={async () => {
-                if (!bearerToken || closing) return;
-                setClosing(true);
-                try {
-                  await abandonLobby(room.code, bearerToken);
-                  setRoom({ ...room, status: 'cancelled' });
-                } catch (error) {
-                  setCloseError(error instanceof Error ? error.message : 'Could not close the lobby.');
-                } finally {
-                  setClosing(false);
-                }
-              }}>Confirm abandon</button>
-              {closeError && <p role="alert">{closeError}</p>}
-            </section>
-          ) : <button ref={abandonActionRef} className="py-2 text-red-300" onClick={() => setAbandonPrompt('confirming')}>Abandon lobby</button>
+          <>
+            <button type="button" onClick={() => abandonDialog.current?.showModal()}
+              className="min-h-11 rounded-xl border border-red-600 bg-red-950 px-5 py-2 text-sm font-semibold text-red-100 hover:bg-red-900 focus-visible:outline-2 focus-visible:outline-red-300">
+              Abandon lobby
+            </button>
+            <dialog ref={abandonDialog} role="alertdialog" aria-labelledby="abandon-title" aria-describedby="abandon-description"
+              onCancel={(event) => { if (closing) event.preventDefault(); }}
+              onClose={() => setCloseError('')}
+              className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-slate-600 bg-slate-900 p-6 text-slate-100 shadow-xl backdrop:bg-slate-950/80">
+              <h2 id="abandon-title" className="text-xl font-bold">Abandon this lobby?</h2>
+              <p id="abandon-description" className="mt-2 text-sm text-slate-300">This closes the lobby for everyone. Its invite link will stop working.</p>
+              {closeError && <p role="alert" className="mt-2 text-sm text-red-300">{closeError}</p>}
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button type="button" autoFocus disabled={closing} onClick={() => abandonDialog.current?.close()}
+                  className="min-h-11 rounded-lg border border-slate-500 px-4 font-semibold hover:bg-slate-800 focus-visible:outline-2">Cancel</button>
+                <button type="button" disabled={closing} onClick={_confirmAbandon}
+                  className="min-h-11 rounded-lg bg-red-700 px-4 font-semibold text-white hover:bg-red-600 focus-visible:outline-2 disabled:opacity-60">
+                  {closing ? 'Closing…' : 'Confirm abandon'}
+                </button>
+              </div>
+            </dialog>
+          </>
         )}
 
         {/* ── Back button ──────────────────────────────────────────────────── */}
-        <button
-          onClick={() => router.push('/')}
-          className="
-            py-3 rounded-xl font-medium text-sm text-slate-400
-            hover:text-white hover:bg-slate-800/50
-            border border-transparent hover:border-slate-700
-            transition-all duration-150
-            focus:outline-none focus:ring-2 focus:ring-emerald-400
-          "
-        >
-          ← Back to Home
-        </button>
+        <BackToHomeButton onClick={() => router.push('/')} />
       </main>
     </div>
   );

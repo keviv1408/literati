@@ -6,7 +6,7 @@ export function toGamePlayers(state: TableState): GamePlayer[] {
   return PLAYERS.map((p, seatIndex) => ({
     playerId: p.id,
     displayName: p.name,
-    avatarId: null,
+    avatarId: p.avatarId ?? null,
     teamId: p.teamId,
     seatIndex,
     cardCount: state.hands[p.id].length,

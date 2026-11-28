@@ -279,7 +279,7 @@ describe('LiveGamesPage', () => {
 
   it('navigates home when Back button is clicked', () => {
     render(<LiveGamesPage />);
-    const backBtn = screen.getByText('← Back to Home');
+    const backBtn = screen.getByRole('button', { name: 'Back to Home' });
     fireEvent.click(backBtn);
     expect(mockPush).toHaveBeenCalledWith('/');
   });

@@ -5,7 +5,7 @@
  *
  * Covers:
  * • Empty seat rendering (null player)
- * • Occupied seat: avatar glyph, display name, team colour
+ * • Occupied seat: avatar portrait, display name, team colour
  * • Bot player: BotBadge rendered instead of plain name
  * • "You" pill: shown only for myPlayerId match
  * • Current-turn ring: shown when currentTurnPlayerId matches
@@ -208,7 +208,7 @@ describe('GamePlayerSeat — avatar rendering', () => {
     expect(avatars.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders a bot glyph derived from the name when avatarId is null', () => {
+  it('renders a bot portrait derived from the name when avatarId is null', () => {
     render(
       <GamePlayerSeat
         seatIndex={0}
@@ -217,10 +217,10 @@ describe('GamePlayerSeat — avatar rendering', () => {
         currentTurnPlayerId={null}
       />,
     );
-    expect(screen.getByText('🍡')).toBeDefined();
+    expect(document.querySelector('img[src="/creatures/penguin.webp"]')).toBeInTheDocument();
   });
 
-  it('renders the chosen avatar glyph when avatarId is set', () => {
+  it('renders the chosen avatar portrait when avatarId is set', () => {
     render(
       <GamePlayerSeat
         seatIndex={0}
@@ -229,7 +229,7 @@ describe('GamePlayerSeat — avatar rendering', () => {
         currentTurnPlayerId={null}
       />,
     );
-    expect(screen.getByText('🐙')).toBeDefined();
+    expect(document.querySelector('img[src="/creatures/octopus.webp"]')).toBeInTheDocument();
   });
 });
 
