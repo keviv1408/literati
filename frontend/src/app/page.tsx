@@ -8,12 +8,14 @@ import AccountControls from '@/components/AccountControls';
 import { useGuest } from '@/contexts/GuestContext';
 import { recentPlayerRoomCodes } from '@/lib/roomMembership';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
-import { HTTP_API_URL, getReturningRoom, type ReturningRoom } from '@/lib/api';
-import { gamePath, isAndroidBuild, roomPath, tutorialPath } from '@/lib/appPaths';
+import { HTTP_API_URL, ApiError, getReturningRoom, type ReturningRoom } from '@/lib/api';
+import { gamePath, isAndroidBuild, roomPath } from '@/lib/appPaths';
+import { loadGuestSession } from '@/lib/guestSession';
 import { parseRoomJoinInput } from '@/lib/roomJoinInput';
-import tutorialStyles from '@/components/ShortTutorial.module.css';
-import ShortTutorial from '@/components/ShortTutorial';
-import CreateRoomModal from '@/components/CreateRoomModal';
+import TableGuide from '@/components/home/TableGuide';
+import GuideCard from '@/components/home/GuideCard';
+import styles from '@/components/home/Guide.module.css';
+import CreateRoomModal, { createPrivateLobby } from '@/components/CreateRoomModal';
 
 const emptySubscribe = () => () => {};
 
@@ -24,10 +26,12 @@ export default function Home() {
   const router = useRouter();
   const { guestSession, hasName, ensureGuestName } = useGuestSession();
   const { session: account, loading: accountLoading, displayName: accountName } = useAccount();
-  const { clearGuest } = useGuest();
+  const { clearGuest, setGuestName } = useGuest();
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [isWakingServer, setIsWakingServer] = useState(false);
+  const [startingBots, setStartingBots] = useState(false);
+  const [botError, setBotError] = useState('');
   const [roomInput, setRoomInput] = useState('');
   const [invalidRoomInput, setInvalidRoomInput] = useState(false);
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
@@ -119,6 +123,32 @@ export default function Home() {
     if (!returning || window.confirm('Create another room and leave your current seat?')) setIsCreateRoomOpen(true);
   }
 
+  async function _playWithBots() {
+    if (startingBots) return;
+    if (current?.hosting) {
+      if (hostedLobby) router.push(roomPath(hostedLobby));
+      else if (returning) router.push(returning.destination === 'game' ? gamePath(returning.code) : roomPath(returning.code));
+      else setBotError('You already host an active room.');
+      return;
+    }
+    if (returning && !window.confirm('Start a bot game and leave your current seat?')) return;
+    setStartingBots(true);
+    setBotError('');
+    try {
+      const guest = account ? null : guestSession ?? loadGuestSession() ?? setGuestName('Guest');
+      const room = await createPrivateLobby(6, accountName ?? guest!.displayName, {
+        bearerToken: account?.access_token,
+        recoveryKey: guest?.sessionId ?? null,
+        startWithBots: true,
+      });
+      router.push(roomPath(room.code));
+    } catch (error) {
+      setBotError(error instanceof ApiError ? error.message : 'Could not start the game. Try again.');
+      setStartingBots(false);
+      setAttempt(value => value + 1);
+    }
+  }
+
   function _joinPrivateRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const origin = isAndroidBuild() ? undefined : window.location.origin;
@@ -132,154 +162,142 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4">
-      {/* Background decorative suits */}
-      <div
-        className="pointer-events-none fixed inset-0 overflow-hidden opacity-5 select-none"
-        aria-hidden="true"
-      >
-        <span className="absolute text-[30rem] -top-24 -left-24 text-white">
-          ♠
-        </span>
-        <span className="absolute text-[20rem] bottom-0 right-0 text-white">
-          ♦
-        </span>
-      </div>
-
-      {/* Hero */}
-      <main className="relative z-10 flex flex-col items-center text-center max-w-lg w-full gap-6 py-10 sm:gap-8">
-        <div className="space-y-2">
-          <h1 className="flex items-center justify-center gap-3 text-[clamp(2.8rem,9vw,4.2rem)] leading-none font-bold tracking-[-0.045em] text-white" style={{ fontFamily: 'Georgia, serif' }}>
-            <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" className="size-[.9em] shrink-0">
-              <use href="/icons/high-diamond.svg#diamond" />
-            </svg>
-            Literature
-          </h1>
-          <p className="mt-4 text-emerald-200 text-base sm:text-lg">
-            Remember who took the card. Ask for it back.
-          </p>
-        </div>
-
-        {/* Guest session indicator */}
-        {!isAndroidBuild() && <AccountControls />}
-        {mounted && !accountLoading && !account && hasName && guestSession && (
-          <div className="flex items-center gap-2 bg-emerald-900/50 border border-emerald-700/50 rounded-full px-4 py-2 text-sm text-emerald-200">
-            <span className="text-base" aria-hidden="true">
-              👤
-            </span>
-            Playing as{' '}
-            <span className="font-semibold">{guestSession.displayName}</span>
-            <button
-              onClick={() => {
-                if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
-              }}
-              disabled={accountLoading || checking || current?.failed}
-              className="ml-1 text-emerald-400 hover:text-white text-xs underline focus:outline-none focus:ring-1 focus:ring-emerald-400 rounded"
-              aria-label="Change display name"
-            >
-              change
-            </button>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div className="flex flex-col gap-3 w-full">
-          {returning && (
-            <button
-              onClick={() => router.push(returning.destination === 'game' ? gamePath(returning.code) : roomPath(returning.code))}
-              className="rounded-xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white hover:bg-emerald-500"
-            >
-              Return to {returning.destination} · {returning.code}
-            </button>
-          )}
-          {hostedLobby && (
-            <button
-              onClick={() => {
-                if (window.confirm('Return to your hosted lobby and leave your current seat?')) router.push(roomPath(hostedLobby));
-              }}
-              className="rounded-xl border border-emerald-700 px-6 py-3 font-semibold text-emerald-100 hover:bg-emerald-900"
-            >
-              Return to hosted lobby · {hostedLobby}
-            </button>
-          )}
-          {current?.failed && (
-            <button onClick={() => { setCheck(null); setAttempt(value => value + 1); }} className="rounded-xl border border-amber-600 p-3 text-amber-200">
-              Couldn’t check your room. Retry
-            </button>
-          )}
-          {current?.hosting && !returning && <p role="status" className="text-amber-200">You already host an active room.</p>}
-          {!current?.hosting && <button
-            disabled={accountLoading || checking || current?.failed}
-            onClick={_createPrivateRoom}
-            className="
-              flex-1 py-4 px-6 rounded-xl font-bold text-lg
-              bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700
-              text-white shadow-lg shadow-emerald-900/50
-              transition-all duration-150 active:scale-[0.97]
-              focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
-            "
-          >
-            <span className="flex flex-col items-center leading-tight">
-              <span>{checking ? 'Checking your room…' : 'Play now!'}</span>
-              <span className="text-xs font-medium text-emerald-100/90 mt-1">
-                Play with friends or bots in a private room.
+    <main className={styles.home} id="play">
+      <header className={styles.mast}>
+        <a href="#play" aria-label="Literati home">
+          <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><use href="/icons/high-diamond.svg#diamond" /></svg>
+          Literati
+        </a>
+        <a href="#lesson-1">How to play <span aria-hidden="true">↘</span></a>
+      </header>
+      <section className={styles.hero}>
+        <div className={styles.intro}>
+          <h1>Literature</h1>
+          <p className={styles.tagline}>Remember who took the card.<br /><em>Ask for it back.</em></p>
+          {/* Guest session indicator */}
+          {!isAndroidBuild() && <AccountControls />}
+          {mounted && !accountLoading && !account && hasName && guestSession && (
+            <div className="flex items-center gap-2 bg-emerald-900/50 border border-emerald-700/50 rounded-full px-4 py-2 text-sm text-emerald-200">
+              <span className="text-base" aria-hidden="true">
+                👤
               </span>
-            </span>
-          </button>}
-          <form
-            onSubmit={_joinPrivateRoom}
-            className="rounded-xl border border-emerald-800/70 bg-emerald-950/40 p-3 text-left sm:p-4"
-          >
-            <label htmlFor="room-join-input" className="mb-2 block text-sm font-semibold text-emerald-100">
-              Join by code
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="room-join-input"
-                value={roomInput}
-                onChange={(event) => {
-                  setRoomInput(event.target.value);
-                  setInvalidRoomInput(false);
-                }}
-                placeholder="Room code or invite link"
-                autoCapitalize="none"
-                autoComplete="off"
-                spellCheck={false}
-                aria-invalid={invalidRoomInput}
-                aria-describedby={invalidRoomInput ? 'room-join-error' : undefined}
-                className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-emerald-300"
-              />
+              Playing as{' '}
+              <span className="font-semibold">{guestSession.displayName}</span>
               <button
+                onClick={() => {
+                  if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
+                }}
                 disabled={accountLoading || checking || current?.failed}
-                type="submit"
-                className="shrink-0 rounded-lg border border-emerald-600 bg-emerald-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-emerald-300"
+                className="ml-1 text-emerald-400 hover:text-white text-xs underline focus:outline-none focus:ring-1 focus:ring-emerald-400 rounded"
+                aria-label="Change display name"
               >
-                Join room
+                change
               </button>
             </div>
-            {invalidRoomInput && (
-              <p id="room-join-error" role="alert" className="mt-2 text-sm text-rose-200">
-                Enter a 6-character room code or invite link for players.
-              </p>
-            )}
-          </form>
-          <ShortTutorial returnTo="home" />
-          <a href={tutorialPath()} className={tutorialStyles.homeEntry}>
-            <strong>Play the full interactive tutorial</strong>
-            <span>10–15 min</span>
-          </a>
-        </div>
+          )}
 
-        {isWakingServer && (
-          <p
-            role="status"
-            className="flex items-center gap-2 rounded-full border border-amber-700/50 bg-amber-900/30 px-4 py-2 text-sm text-amber-200 animate-pulse"
-          >
-            <span aria-hidden="true">☕</span>
-            Waking up the table… this can take up to a minute.
-          </p>
-        )}
-      </main>
+          {/* Action buttons */}
+          <div className={styles.actions}>
+            {returning && (
+              <button
+                onClick={() => router.push(returning.destination === 'game' ? gamePath(returning.code) : roomPath(returning.code))}
+                className="rounded-xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white hover:bg-emerald-500"
+              >
+                Return to {returning.destination} · {returning.code}
+              </button>
+            )}
+            {hostedLobby && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Return to your hosted lobby and leave your current seat?')) router.push(roomPath(hostedLobby));
+                }}
+                className="rounded-xl border border-emerald-700 px-6 py-3 font-semibold text-emerald-100 hover:bg-emerald-900"
+              >
+                Return to hosted lobby · {hostedLobby}
+              </button>
+            )}
+            {current?.failed && (
+              <button onClick={() => { setCheck(null); setAttempt(value => value + 1); }} className="rounded-xl border border-amber-600 p-3 text-amber-200">
+                Couldn’t check your room. Retry
+              </button>
+            )}
+            {current?.hosting && !returning && <p role="status" className="text-amber-200">You already host an active room.</p>}
+            {!current?.hosting && <button
+              disabled={accountLoading || checking || current?.failed}
+              onClick={_createPrivateRoom}
+              className={styles.play}
+            >
+              <span className="flex flex-col items-start leading-tight">
+                <span>{checking ? 'Checking your room…' : 'Play now!'}</span>
+                <span className="text-xs font-medium mt-1">
+                  Play with friends or bots in a private room.
+                </span>
+              </span>
+            </button>}
+            <form
+              onSubmit={_joinPrivateRoom}
+              className="rounded-xl border border-emerald-800/70 bg-emerald-950/40 p-3 text-left sm:p-4"
+            >
+              <label htmlFor="room-join-input" className="mb-2 block text-sm font-semibold text-emerald-100">
+                Join by code
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="room-join-input"
+                  value={roomInput}
+                  onChange={(event) => {
+                    setRoomInput(event.target.value);
+                    setInvalidRoomInput(false);
+                  }}
+                  placeholder="Room code or invite link"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={invalidRoomInput}
+                  aria-describedby={invalidRoomInput ? 'room-join-error' : undefined}
+                  className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-emerald-300"
+                />
+                <button
+                  disabled={accountLoading || checking || current?.failed}
+                  type="submit"
+                  className="shrink-0 rounded-lg border border-emerald-600 bg-emerald-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-emerald-300"
+                >
+                  Join room
+                </button>
+              </div>
+              {invalidRoomInput && (
+                <p id="room-join-error" role="alert" className="mt-2 text-sm text-rose-200">
+                  Enter a 6-character room code or invite link for players.
+                </p>
+              )}
+            </form>
+          </div>
+
+          {isWakingServer && (
+            <p
+              role="status"
+              className="flex items-center gap-2 rounded-full border border-amber-700/50 bg-amber-900/30 px-4 py-2 text-sm text-amber-200 animate-pulse"
+            >
+              <span aria-hidden="true">☕</span>
+              Waking up the table… this can take up to a minute.
+            </p>
+          )}
+          <a className={styles.read} href="#lesson-1"><span aria-hidden="true">↓</span> Scroll to learn the game</a>
+        </div>
+        <div className={styles.cover} aria-hidden="true">
+          <div className={styles.fan}>
+            <div><GuideCard rank={13} suit="s" /></div>
+            <div><GuideCard rank={12} suit="h" /></div>
+            <div><GuideCard rank={1} /></div>
+          </div>
+        </div>
+      </section>
+      <TableGuide
+        onPlay={_playWithBots}
+        playLabel={startingBots ? 'Starting your game…' : current?.hosting ? 'Return to your room' : 'Play with bots'}
+        playDisabled={!mounted || accountLoading || startingBots || checking}
+        playError={botError}
+      />
 
       {/* Create Room modal — shown after guest name is confirmed */}
       {mounted && displayName && (
@@ -289,6 +307,6 @@ export default function Home() {
           onClose={() => setIsCreateRoomOpen(false)}
         />
       )}
-    </div>
+    </main>
   );
 }
