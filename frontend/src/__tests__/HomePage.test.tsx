@@ -122,6 +122,8 @@ describe('Home entry points', () => {
       mockCreatePrivateLobby.mockResolvedValue({ code: 'ABC123' });
       await act(async () => { render(<Home />); });
       const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
+      expect(nav.queryByRole('button', { name: 'Sign out' })).toBeNull();
+      fireEvent.click(nav.getByRole('button', { name: 'Profile' }));
       expect(nav.getByText('Signed in as Ada')).toBeVisible();
       expect(nav.getByRole('link', { name: 'My stats' })).toHaveAttribute('href', '/stats');
       expect(nav.getByRole('button', { name: 'Sign out' })).toBeEnabled();
@@ -148,7 +150,8 @@ describe('Home entry points', () => {
     expect(screen.getByRole('heading', { name: 'Literature', level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /short tutorial/i })).toBeNull();
     expect(screen.getAllByRole('article')).toHaveLength(10);
-    expect(screen.getByRole('link', { name: 'How to play' })).toHaveAttribute('href', '#lesson-1');
+    expect(screen.queryByRole('link', { name: 'How to play' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Scroll to learn the game' })).toHaveAttribute('href', '#lesson-1');
     expect(screen.queryByTitle(/tutorial video/i)).toBeNull();
     expect(screen.getByRole('link', { name: /full interactive tutorial/i })).toHaveAttribute('href', '/tutorial');
   });

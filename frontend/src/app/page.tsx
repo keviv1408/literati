@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import { useAccount } from '@/contexts/AccountContext';
-import AccountControls from '@/components/AccountControls';
+import ProfilePanel from '@/components/home/ProfilePanel';
 import { useGuest } from '@/contexts/GuestContext';
 import { recentPlayerRoomCodes } from '@/lib/roomMembership';
 import { isKickedFromRoom } from '@/lib/kickedRooms';
@@ -168,23 +168,13 @@ export default function Home() {
           <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><use href="/icons/high-diamond.svg#diamond" /></svg>
           Literati
         </a>
-        <a href="#lesson-1" className={styles.guideLink}>How to play <span aria-hidden="true">↘</span></a>
-        {mounted && !accountLoading && !account && hasName && guestSession && (
-          <div className={styles.guest}>
-            <span>Playing as <strong>{guestSession.displayName}</strong></span>
-            <button
-              type="button"
-              aria-label="Change display name"
-              disabled={checking || current?.failed}
-              onClick={() => {
-                if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
-              }}
-            >
-              Change
-            </button>
-          </div>
-        )}
-        {!isAndroidBuild() && <AccountControls />}
+        <ProfilePanel
+          guestName={mounted && !accountLoading && !account && hasName ? guestSession?.displayName : undefined}
+          changeDisabled={checking || Boolean(current?.failed)}
+          onChangeName={() => {
+            if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
+          }}
+        />
       </nav>
       <section className={styles.hero}>
         <div className={styles.intro}>

@@ -12,16 +12,26 @@
   min-height: 4.5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem;
   padding-block: .5rem; border-bottom: 1px solid var(--line); background: #102f29;
 }
-.brand, .guideLink { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; }
+.brand { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; }
 .brand { margin-right: auto; font: 600 1.55rem Georgia, serif; letter-spacing: -.055em; }
 .brand svg { width: 1.05rem; color: var(--gold); }
-.guideLink { font-size: .84rem; }
-.guideLink span { color: var(--gold); font-size: 1.15rem; }
-.guest, .mast > section { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .65rem; max-width: 100%; overflow-wrap: anywhere; }
-.guest { font-size: .875rem; }
+.profile { position: relative; }
+.profileButton {
+  display: grid; place-items: center; inline-size: 2.75rem; block-size: 2.75rem;
+  border: 1px solid var(--line); border-radius: 50%; color: var(--paper); cursor: pointer;
+}
+.profileButton:hover, .profileButton[aria-expanded='true'] { background: #28473d; border-color: var(--gold); }
+.profileButton svg { width: 1.35rem; height: 1.35rem; }
+.profilePanel {
+  position: absolute; z-index: 10; top: calc(100% + .5rem); right: 0;
+  width: min(17rem, calc(100vw - 2 * var(--gutter))); padding: 1rem;
+  border: 1px solid var(--line); border-radius: .65rem; background: #15362e;
+  box-shadow: 0 .65rem 1.5rem #071a1770; overflow-wrap: anywhere; font-size: .875rem;
+}
+.guest { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.guest:has(+ section) { padding-bottom: .6rem; margin-bottom: .75rem; border-bottom: 1px solid var(--line); }
 .guest button { min-height: 2.75rem; color: var(--gold); text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
-.mast > section > * { margin-block: 0; }
-.mast [role='alert'] { flex-basis: 100%; }
+.profilePanel section button { min-height: 2.75rem; }
 .hero {
   isolation: isolate; position: relative; overflow: hidden; min-height: calc(100svh - 4.5rem);
   display: grid; grid-template-columns: .92fr 1.08fr; align-items: center;

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useAccount } from '@/contexts/AccountContext';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
-export default function AccountControls({ signInOnly = false }: { signInOnly?: boolean }) {
+export default function AccountControls({ signInOnly = false, onSignInFailure }: { signInOnly?: boolean; onSignInFailure?: () => void }) {
   const { session, loading, displayName } = useAccount();
   const signedIn = !!session && !signInOnly;
   const [busy, setBusy] = useState(false);
@@ -15,10 +15,11 @@ export default function AccountControls({ signInOnly = false }: { signInOnly?: b
     const url = new URL(window.location.href);
     if (url.searchParams.get('signin') === 'failed') {
       setMessage('Google sign-in didn’t finish. You can try again.');
+      onSignInFailure?.();
       url.searchParams.delete('signin');
       window.history.replaceState(window.history.state, '', url);
     }
-  }, []);
+  }, [onSignInFailure]);
 
   async function _changeAccount() {
     setBusy(true);
