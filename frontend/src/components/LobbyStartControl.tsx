@@ -21,7 +21,7 @@ interface LobbyStartControlProps {
 export function LobbyStartControl({ isHost, hostName, children }: LobbyStartControlProps) {
   if (isHost) return <>{children}</>;
   return (
-    <p className="text-xs text-slate-400 text-center" role="status" data-testid="waiting-for-host">
+    <p className="text-xs text-paper-muted text-center" role="status" data-testid="waiting-for-host">
       {hostName ? `Waiting for ${hostName} to start the game` : 'Waiting for a host…'}
     </p>
   );
