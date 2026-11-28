@@ -323,6 +323,21 @@ describe('handleLeaveQueue', () => {
 // =============================================================================
 
 describe('cleanupQueuedPlayer', () => {
+  it('keeps a newer queue entry when the previous connection leaves or closes', async () => {
+    const user = makeUser({ playerId: 'p1' });
+    const oldSocket = makeWs();
+    const replacement = makeWs();
+    const filters = { playerCount: 6, cardRemovalVariant: 'remove_7s' };
+    await handleJoinQueue(oldSocket, 'old', user, filters);
+    await handleJoinQueue(replacement, 'new', user, filters);
+
+    handleLeaveQueue(oldSocket, 'old', user);
+    cleanupQueuedPlayer(user.playerId, 'old');
+    expect(getPlayerFilterKey(user.playerId)).toBe(makeFilterKey(6, 'remove_7s'));
+    cleanupQueuedPlayer(user.playerId, 'new');
+    expect(getPlayerFilterKey(user.playerId)).toBeNull();
+  });
+
   it('removes player on disconnect and broadcasts queue-update', async () => {
     const ws1 = makeWs();
     const ws2 = makeWs();

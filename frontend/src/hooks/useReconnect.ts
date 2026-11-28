@@ -46,7 +46,7 @@
  * });
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAccount } from '@/contexts/AccountContext';
 import { useGuest } from '@/contexts/GuestContext';
 import { clearToken, getCachedToken } from '@/lib/backendSession';
@@ -103,6 +103,7 @@ export function useReconnect(): ReconnectResult {
   const { session: account, loading: accountLoading } = useAccount();
   const accountToken = account?.access_token;
   const accountId = account?.user.id;
+  const verifiedAccountId = useRef<string | null>(null);
   const { guestSession } = useGuest();
 
   const [status, setStatus] = useState<ReconnectStatus>('loading');
@@ -116,6 +117,7 @@ export function useReconnect(): ReconnectResult {
   const [retryCounter, setRetryCounter] = useState(0);
 
   const retry = useCallback(() => {
+    verifiedAccountId.current = null;
     setStatus('loading');
     setErrorMessage(null);
     setRetryCounter((c) => c + 1);
@@ -126,10 +128,19 @@ export function useReconnect(): ReconnectResult {
 
     if (accountLoading) return;
     if (accountId && accountToken) {
-      setStatus('reconnecting');
+      const refreshing = verifiedAccountId.current === accountId;
+      if (refreshing) {
+        setBearerToken(accountToken);
+      } else {
+        verifiedAccountId.current = null;
+        setSessionId(null);
+        setBearerToken(null);
+        setStatus('reconnecting');
+      }
       validateSession(accountToken).then(me => {
         if (cancelled) return;
         if (me.isGuest || me.id !== accountId) throw new ApiError(401, 'Account mismatch');
+        verifiedAccountId.current = accountId;
         setSessionId(me.id);
         setBearerToken(accountToken);
         setDisplayName(me.displayName);
@@ -139,6 +150,9 @@ export function useReconnect(): ReconnectResult {
       }).catch(err => {
         if (cancelled) return;
         const expired = err instanceof ApiError && err.status === 401;
+        const transient = !(err instanceof ApiError) || err.status >= 500 || err.status === 429 || err.status === 408;
+        if (refreshing && transient) return;
+        verifiedAccountId.current = null;
         setSessionId(null);
         setBearerToken(null);
         setStatus(expired ? 'session_expired' : 'error');
@@ -146,6 +160,7 @@ export function useReconnect(): ReconnectResult {
       });
       return () => { cancelled = true; };
     }
+    verifiedAccountId.current = null;
 
     // ── Guest path ────────────────────────────────────────────────────────────
     // GuestContext loads the display name from localStorage on mount (sync).

@@ -16,6 +16,7 @@ export interface ReconnectingSocket {
   send(payload: unknown): boolean;
   confirm(): void;
   retryNow(): void;
+  retryWithNewCredentials(): void;
   close(): void;
 }
 
@@ -43,6 +44,8 @@ export function createReconnectingSocket(options: ReconnectingSocketOptions): Re
   let failures = 0;
   let status: SocketStatus | null = null;
   let stopped = false;
+  let unauthorized = false;
+  let handshakeUrl = '';
   let wait: ReturnType<typeof setTimeout> | undefined;
   let silence: ReturnType<typeof setTimeout> | undefined;
 
@@ -56,7 +59,9 @@ export function createReconnectingSocket(options: ReconnectingSocketOptions): Re
     wait = undefined;
     let ws: WebSocket;
     try {
-      ws = new WebSocket(getUrl());
+      unauthorized = false;
+      handshakeUrl = getUrl();
+      ws = new WebSocket(handshakeUrl);
     } catch {
       teardown();
       setStatus('error');
@@ -106,6 +111,13 @@ export function createReconnectingSocket(options: ReconnectingSocketOptions): Re
   }
 
   function drop(code: number | null, reason: string, detectedBy: DropCause) {
+    if (code === 4001) {
+      confirmed = false;
+      unauthorized = true;
+      setStatus('error', { code, reason });
+      retryWithNewCredentials();
+      return;
+    }
     if (code !== null && _isStopCode(code)) {
       teardown();
       setStatus('error', { code, reason });
@@ -124,6 +136,12 @@ export function createReconnectingSocket(options: ReconnectingSocketOptions): Re
   function retryNow() {
     if (wait === undefined) return;
     clearTimeout(wait);
+    connect();
+  }
+
+  function retryWithNewCredentials() {
+    if (stopped || !unauthorized || getUrl() === handshakeUrl) return;
+    setStatus('connecting');
     connect();
   }
 
@@ -163,6 +181,7 @@ export function createReconnectingSocket(options: ReconnectingSocketOptions): Re
       setStatus('connected');
     },
     retryNow,
+    retryWithNewCredentials,
     close() {
       teardown();
       detach()?.close(1000);

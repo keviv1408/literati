@@ -189,7 +189,7 @@ function handleLeaveQueue(ws, connectionId, user) {
     return;
   }
 
-  const { removed } = leaveQueue(user.playerId);
+  const { removed } = leaveQueue(user.playerId, connectionId);
 
   if (removed) {
     sendJson(ws, { type: 'queue-left', filterKey });
@@ -221,12 +221,10 @@ function handleLeaveQueue(ws, connectionId, user) {
  * automatically removed without needing to send 'leave-queue' explicitly.
  *
  * @param {string} playerId
+ * @param {string} connectionId
  */
-function cleanupQueuedPlayer(playerId) {
-  const filterKey = getPlayerFilterKey(playerId);
-  if (!filterKey) return; // not in any queue
-
-  const { removed } = leaveQueue(playerId);
+function cleanupQueuedPlayer(playerId, connectionId) {
+  const { removed, filterKey } = leaveQueue(playerId, connectionId);
   if (removed) {
     const newSize = getQueueSize(filterKey);
     broadcastToQueue(filterKey, {

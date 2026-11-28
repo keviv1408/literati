@@ -147,7 +147,7 @@ export default function GamePage({ params }: PageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { guestSession } = useGuest();
-  const { status: reconnectStatus, bearerToken: reconnectBearerToken, isGuest, retry: retrySession } = useReconnect();
+  const { status: reconnectStatus, sessionId, bearerToken: reconnectBearerToken, isGuest, retry: retrySession } = useReconnect();
   const sessionRetriesRef = useRef(0);
 
   // Only from error: a retry from any other state would drop the game token and close the socket.
@@ -282,6 +282,7 @@ export default function GamePage({ params }: PageProps) {
     error: wsError,
   } = useGameSocket({
     roomCode: isGameActive ? roomCode : null,
+    sessionId,
     bearerToken: gameBearerToken,
     guestRecoveryKey: isGuest ? guestSession?.sessionId ?? null : null,
     spectatorToken,
