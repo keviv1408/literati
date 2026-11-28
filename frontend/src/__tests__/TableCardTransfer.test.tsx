@@ -43,8 +43,14 @@ it('waits for a successful grab and keeps a denied card visible if the creature 
     view.rerender(content({ ...flight, cardId: '4_d' }));
     act(() => jest.advanceTimersByTime(FLIGHT_DURATION_MS + 100));
     expect(complete).not.toHaveBeenCalled();
+    const receivedCard = view.getByTestId('card-flight-card');
+    expect(receivedCard).toBeVisible();
     act(stop);
     expect(complete).toHaveBeenCalledTimes(1);
+    expect(receivedCard).not.toBeVisible();
+    view.rerender(content({ ...flight, cardId: '4_d' }));
+    expect(view.getByTestId('card-flight-card')).toBe(receivedCard);
+    expect(receivedCard).toBeVisible();
     const targetSeat = view.container.querySelector<HTMLElement>('[data-player-id="other"]')!;
     view.rerender(content(null, {
       askerId: 'asker', targetId: 'other', cardId: '4_d',

@@ -92,7 +92,11 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
       }, () => {
         delete asker.avatar.dataset.retrieving;
         delete card.dataset.retrieving;
-        if (!cancelled && activeSceneFlight.current === flight) finish();
+        if (!cancelled && activeSceneFlight.current === flight) {
+          // The fallback animation starts at the giver if the finished card is still visible.
+          card.hidden = true;
+          finish();
+        }
       });
       if (card.hasAttribute('data-retrieving')) activeSceneFlight.current = flight;
     }
@@ -108,6 +112,7 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
       observer.disconnect();
       motion.removeEventListener('change', stop);
       stop();
+      if (card) card.hidden = false;
     };
   }, [flight, denial]);
 
