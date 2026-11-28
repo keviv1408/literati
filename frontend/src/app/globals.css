@@ -41,8 +41,9 @@
   --color-paper: #f6efda;
   --color-paper-muted: #cdc8b4;
   --color-gold: #dfbb78;
-  --color-gold-light: #eed8a8;
-  --color-gold-hover: #ffe8b7;
+  --color-copper: #d8956f;
+  --color-copper-hover: #e3a580;
+  --color-sage: #91ad9b;
 }
 
 :root {
@@ -313,10 +314,10 @@ body:has([role="dialog"]) {
 /* Empty seat border shimmer — subtle border glow cycle */
 @keyframes seat-shimmer {
   0%, 100% {
-    border-color: color-mix(in srgb, var(--color-gold) 25%, transparent);
+    border-color: color-mix(in srgb, var(--color-sage) 25%, transparent);
   }
   50% {
-    border-color: color-mix(in srgb, var(--color-gold) 40%, transparent);
+    border-color: color-mix(in srgb, var(--color-sage) 40%, transparent);
   }
 }
 

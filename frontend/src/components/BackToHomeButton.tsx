@@ -4,7 +4,7 @@ type BackToHomeProps = ComponentPropsWithoutRef<'button'> & { variant?: 'default
 
 export default function BackToHomeButton({ variant = 'default', className = '', ...props }: BackToHomeProps) {
   const colors = variant === 'felt'
-    ? 'border-gold/45 text-paper hover:bg-felt-hover focus-visible:outline-gold'
+    ? 'border-sage text-paper hover:bg-felt-hover focus-visible:outline-sage'
     : 'border-emerald-600 bg-emerald-900 text-emerald-50 hover:bg-emerald-800 focus-visible:outline-emerald-300';
   return (
     <button

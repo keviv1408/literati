@@ -73,7 +73,7 @@ export default function LobbyInviteButton({ roomCode, inviteLink }: { roomCode: 
       <button
         type="button"
         onClick={_inviteFriends}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-gold bg-transparent px-3 py-2 text-sm font-semibold text-paper hover:bg-felt-hover focus-visible:outline-2 focus-visible:outline-gold"
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-sage bg-transparent px-3 py-2 text-sm font-semibold text-paper hover:bg-felt-hover focus-visible:outline-2 focus-visible:outline-sage"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M12 15V3m-4 4 4-4 4 4M6 11H4v10h16V11h-2" />
@@ -93,7 +93,7 @@ export default function LobbyInviteButton({ roomCode, inviteLink }: { roomCode: 
             readOnly
             value={manualLink}
             onFocus={(event) => event.currentTarget.select()}
-            className="mt-1 w-full rounded border border-gold/50 bg-felt-inset p-2 text-paper"
+            className="mt-1 w-full rounded border border-sage bg-felt-inset p-2 text-paper"
           />
         </label>
       )}

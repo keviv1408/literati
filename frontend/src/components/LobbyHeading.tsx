@@ -26,12 +26,12 @@ export default function LobbyHeading({ roomCode }: { roomCode?: string }) {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <h1 className="text-2xl font-bold tracking-tight text-paper">Room lobby</h1>
       {roomCode && (
-        <div className="inline-flex items-center gap-1 rounded-xl border border-gold/40 bg-felt-inset pl-3 text-gold">
+        <div className="inline-flex items-center gap-1 rounded-xl border border-sage bg-felt-inset pl-3 text-paper">
           <input ref={codeInput} aria-label="Room code" readOnly value={roomCode}
             onFocus={(event) => event.currentTarget.select()}
-            className="w-[7ch] select-all bg-transparent font-mono font-semibold tracking-wide text-paper focus-visible:outline-2 focus-visible:outline-gold" />
+            className="w-[7ch] select-all bg-transparent font-mono font-semibold tracking-wide text-paper focus-visible:outline-2 focus-visible:outline-sage" />
           <button type="button" onClick={_copyCode} aria-label="Copy room code" title="Copy room code"
-            className="flex size-11 items-center justify-center rounded-xl hover:bg-felt-hover focus-visible:outline-2 focus-visible:outline-gold">
+            className="flex size-11 items-center justify-center rounded-xl hover:bg-felt-hover focus-visible:outline-2 focus-visible:outline-sage">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <rect x="8" y="8" width="12" height="13" rx="2" />
               <path d="M15 5V4a1 1 0 0 0-1-1H5a2 2 0 0 0-2 2v10a1 1 0 0 0 1 1h1" />

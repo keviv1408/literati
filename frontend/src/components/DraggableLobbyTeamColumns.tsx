@@ -160,8 +160,8 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
     isOccupied
       ? player?.isCurrentUser
         ? `border ${teamStyle.playerBorder} ${teamStyle.playerBg}`
-        : "border border-gold/30 bg-felt-inset"
-      : "border border-dashed border-gold/25 bg-felt-inset/60 animate-seat-shimmer",
+        : "border border-sage/30 bg-felt-inset"
+      : "border border-dashed border-sage/25 bg-felt-inset/60 animate-seat-shimmer",
     "select-none transition-opacity duration-150",
     // Join animation
     justJoined && !isOverlay ? "animate-player-join" : "",

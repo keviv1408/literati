@@ -524,8 +524,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
             onClick={retry}
             className="
               py-3 px-6 rounded-xl font-semibold
-              bg-gold-light hover:bg-gold-hover text-felt
-              transition-colors focus:outline-none focus:ring-2 focus:ring-gold
+              bg-copper hover:bg-copper-hover text-felt
+              transition-colors focus:outline-none focus:ring-2 focus:ring-sage
             "
             data-testid="connection-error-retry-btn"
           >
@@ -563,7 +563,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
           className="
             w-full max-w-sm flex flex-col gap-5 p-6 rounded-2xl
             bg-felt-panel
-            border border-gold/30 shadow-xl shadow-black/40
+            border border-sage/30 shadow-xl shadow-black/40
           "
         >
           <div className="text-center">
@@ -606,8 +606,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
               placeholder="e.g. Ada"
               className="
                 px-3 py-2.5 rounded-xl bg-felt-inset text-paper
-                border border-gold/50 focus:border-gold
-                focus:outline-none focus:ring-2 focus:ring-gold/40
+                border border-sage
+                focus:outline-none focus:ring-2 focus:ring-sage
               "
               data-testid="join-name-input"
             />
@@ -623,9 +623,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
             disabled={!joinName.trim()}
             className="
               py-3 px-6 rounded-xl font-semibold
-              bg-gold-light hover:bg-gold-hover text-felt
+              bg-copper hover:bg-copper-hover text-felt
               disabled:opacity-50 disabled:cursor-not-allowed
-              transition-colors focus:outline-none focus:ring-2 focus:ring-gold
+              transition-colors focus:outline-none focus:ring-2 focus:ring-sage
             "
             data-testid="join-room-btn"
           >
@@ -842,7 +842,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                       disabled={isStarting || lobbyStarting || !myPlayerId || wsStatus !== 'connected'}
                       aria-busy={isStarting || lobbyStarting}
                       data-testid="start-game-btn"
-                      className="min-h-12 rounded-xl bg-gold-light px-3 py-2 text-sm font-bold text-felt hover:bg-gold-hover focus-visible:outline-2 focus-visible:outline-gold disabled:cursor-wait disabled:opacity-60"
+                      className="min-h-12 rounded-xl bg-copper px-3 py-2 text-sm font-bold text-felt hover:bg-copper-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-60"
                     >
                       {isStarting || lobbyStarting ? 'Starting…' : startLabel}
                     </button>
@@ -863,7 +863,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
 
         {/* ── Team columns / waiting area ───────────────────────────────────── */}
         <div className="
-          bg-felt-panel border border-gold/30
+          bg-felt-panel border border-sage/30
           rounded-2xl p-5
           animate-lobby-section-in
         " style={{ animationDelay: '160ms' }}>
@@ -919,8 +919,8 @@ export default function RoomLobbyPage({ params }: PageProps) {
                     className="
                       px-4 py-2 rounded-xl text-xs font-semibold
                       bg-felt-inset hover:bg-felt-hover text-paper
-                      border border-gold/50
-                      transition-colors focus:outline-none focus:ring-2 focus:ring-gold
+                      border border-sage
+                      transition-colors focus:outline-none focus:ring-2 focus:ring-sage
                       active:scale-95
                     "
                     aria-label={`Switch to Team ${myTeamId === 1 ? 2 : 1}`}
@@ -948,7 +948,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   ────────────────────────────────────────────────────── */}
               {!isSpectator && amIHostLive && wsPlayers.length > 0 && (
                 <div
-                  className="mt-4 pt-4 border-t border-gold/30"
+                  className="mt-4 pt-4 border-t border-sage/30"
                   data-testid="host-kick-panel"
                 >
                   <h3 className="text-xs font-semibold text-paper-muted uppercase tracking-widest mb-2">
@@ -965,7 +965,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                       return (
                         <li
                           key={player.playerId}
-                          className="flex items-center justify-between px-3 py-2 rounded-xl bg-felt-inset border border-gold/20"
+                          className="flex items-center justify-between px-3 py-2 rounded-xl bg-felt-inset border border-sage/20"
                           data-testid={`player-row-${player.playerId}`}
                         >
                           <span className="flex items-center gap-2 text-sm text-paper min-w-0">
@@ -1018,7 +1018,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
         {room.is_matchmaking && !isSpectator && !lobbyStarting && (
           <div
             className="
-              bg-felt-panel border border-gold/30
+              bg-felt-panel border border-sage/30
               rounded-2xl p-5 flex flex-col gap-3
             "
             data-testid="matchmaking-waiting-panel"
@@ -1032,7 +1032,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   text-xs font-semibold px-2.5 py-1 rounded-lg
                   ${wsPlayers.length >= room.player_count
                     ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40'
-                    : 'bg-felt-inset text-paper border border-gold/30'}
+                    : 'bg-felt-inset text-paper border border-sage/30'}
                 `}
                 aria-label={`${wsPlayers.length} of ${room.player_count} players joined`}
                 data-testid="matchmaking-player-count"
@@ -1119,13 +1119,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
             <dialog ref={abandonDialog} role="alertdialog" aria-labelledby="abandon-title" aria-describedby="abandon-description"
               onCancel={(event) => { if (closing) event.preventDefault(); }}
               onClose={() => setCloseError('')}
-              className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-gold/50 bg-felt-panel p-6 text-paper shadow-xl backdrop:bg-felt-inset/80">
+              className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-sage/50 bg-felt-panel p-6 text-paper shadow-xl backdrop:bg-felt-inset/80">
               <h2 id="abandon-title" className="text-xl font-bold">Abandon this lobby?</h2>
               <p id="abandon-description" className="mt-2 text-sm text-paper">This closes the lobby for everyone. Its invite link will stop working.</p>
               {closeError && <p role="alert" className="mt-2 text-sm text-red-300">{closeError}</p>}
               <div className="mt-5 flex flex-wrap justify-end gap-2">
                 <button type="button" autoFocus disabled={closing} onClick={() => abandonDialog.current?.close()}
-                  className="min-h-11 rounded-lg border border-gold/60 px-4 font-semibold hover:bg-felt-hover focus-visible:outline-2">Cancel</button>
+                  className="min-h-11 rounded-lg border border-sage px-4 font-semibold hover:bg-felt-hover focus-visible:outline-2">Cancel</button>
                 <button type="button" disabled={closing} onClick={_confirmAbandon}
                   className="min-h-11 rounded-lg bg-red-700 px-4 font-semibold text-white hover:bg-red-600 focus-visible:outline-2 disabled:opacity-60">
                   {closing ? 'Closing…' : 'Confirm abandon'}
