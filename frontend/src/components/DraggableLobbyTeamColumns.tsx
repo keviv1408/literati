@@ -189,6 +189,7 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
           {/* Avatar with optional host crown */}
           <div className="relative">
             <Avatar
+              variant="platform"
               displayName={player.displayName}
               avatarId={player.avatarId}
               size="sm"
