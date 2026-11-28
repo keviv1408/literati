@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, within } from '@testing-library/react';
 import * as Account from '@/contexts/AccountContext';
 import type { Session } from '@supabase/supabase-js';
 import Home from '@/app/page';
@@ -121,6 +121,10 @@ describe('Home entry points', () => {
       mockGetReturningRoom.mockResolvedValue({ room: null, hosting: false });
       mockCreatePrivateLobby.mockResolvedValue({ code: 'ABC123' });
       await act(async () => { render(<Home />); });
+      const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
+      expect(nav.getByText('Signed in as Ada')).toBeVisible();
+      expect(nav.getByRole('link', { name: 'My stats' })).toHaveAttribute('href', '/stats');
+      expect(nav.getByRole('button', { name: 'Sign out' })).toBeEnabled();
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play with bots' })); });
       expect(mockCreatePrivateLobby).toHaveBeenCalledWith(6, 'Ada', {
         bearerToken: 'account-token', recoveryKey: null, startWithBots: true,

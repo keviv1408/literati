@@ -163,39 +163,33 @@ export default function Home() {
 
   return (
     <main className={styles.home} id="play">
-      <header className={styles.mast}>
-        <a href="#play" aria-label="Literati home">
+      <nav className={styles.mast} aria-label="Main navigation">
+        <a href="#play" aria-label="Literati home" className={styles.brand}>
           <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><use href="/icons/high-diamond.svg#diamond" /></svg>
           Literati
         </a>
-        <a href="#lesson-1">How to play <span aria-hidden="true">↘</span></a>
-      </header>
+        <a href="#lesson-1" className={styles.guideLink}>How to play <span aria-hidden="true">↘</span></a>
+        {mounted && !accountLoading && !account && hasName && guestSession && (
+          <div className={styles.guest}>
+            <span>Playing as <strong>{guestSession.displayName}</strong></span>
+            <button
+              type="button"
+              aria-label="Change display name"
+              disabled={checking || current?.failed}
+              onClick={() => {
+                if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
+              }}
+            >
+              Change
+            </button>
+          </div>
+        )}
+        {!isAndroidBuild() && <AccountControls />}
+      </nav>
       <section className={styles.hero}>
         <div className={styles.intro}>
           <h1>Literature</h1>
           <p className={styles.tagline}>Remember who took the card.<br /><em>Ask for it back.</em></p>
-          {/* Guest session indicator */}
-          {!isAndroidBuild() && <AccountControls />}
-          {mounted && !accountLoading && !account && hasName && guestSession && (
-            <div className="flex items-center gap-2 bg-emerald-900/50 border border-emerald-700/50 rounded-full px-4 py-2 text-sm text-emerald-200">
-              <span className="text-base" aria-hidden="true">
-                👤
-              </span>
-              Playing as{' '}
-              <span className="font-semibold">{guestSession.displayName}</span>
-              <button
-                onClick={() => {
-                  if (!returning || window.confirm('Changing your name starts a new guest session. Leave your current seat?')) clearGuest();
-                }}
-                disabled={accountLoading || checking || current?.failed}
-                className="ml-1 text-emerald-400 hover:text-white text-xs underline focus:outline-none focus:ring-1 focus:ring-emerald-400 rounded"
-                aria-label="Change display name"
-              >
-                change
-              </button>
-            </div>
-          )}
-
           {/* Action buttons */}
           <div className={styles.actions}>
             {returning && (

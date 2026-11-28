@@ -9,14 +9,19 @@
 .home :is(a,button,input):focus-visible { outline: 2px solid #f6ce83; outline-offset: 3px; }
 .mast, .hero, .guide, .footer { padding-inline: var(--gutter); }
 .mast {
-  height: 4.5rem; display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid var(--line); background: #102f29;
+  min-height: 4.5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem;
+  padding-block: .5rem; border-bottom: 1px solid var(--line); background: #102f29;
 }
-.mast a { display: inline-flex; align-items: center; gap: .7rem; }
-.mast a:first-child { font: 600 1.55rem Georgia, serif; letter-spacing: -.055em; }
-.mast svg { width: 1.05rem; color: var(--gold); }
-.mast a:last-child { font-size: .84rem; }
-.mast a:last-child span { color: var(--gold); font-size: 1.15rem; }
+.brand, .guideLink { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; }
+.brand { margin-right: auto; font: 600 1.55rem Georgia, serif; letter-spacing: -.055em; }
+.brand svg { width: 1.05rem; color: var(--gold); }
+.guideLink { font-size: .84rem; }
+.guideLink span { color: var(--gold); font-size: 1.15rem; }
+.guest, .mast > section { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .65rem; max-width: 100%; overflow-wrap: anywhere; }
+.guest { font-size: .875rem; }
+.guest button { min-height: 2.75rem; color: var(--gold); text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
+.mast > section > * { margin-block: 0; }
+.mast [role='alert'] { flex-basis: 100%; }
 .hero {
   isolation: isolate; position: relative; overflow: hidden; min-height: calc(100svh - 4.5rem);
   display: grid; grid-template-columns: .92fr 1.08fr; align-items: center;
@@ -122,7 +127,7 @@
   .footer { grid-template-columns: 1fr; }
   .footer > div + div { padding: 2rem 0 0; border-left: 0; border-top: 1px solid var(--line); }
   .footer h2 { margin-bottom: 1.15rem; }
-  .mast { height: 3.5rem; }
+  .mast { min-height: 3.5rem; gap: .25rem .75rem; }
   .hero { grid-template-columns: 1fr; gap: 0; padding-block: 1.3rem 2.2rem; min-height: 0; }
   .cover { width: min(72%, 22rem); aspect-ratio: 1.65; margin: 0 auto .6rem; order: -1; }
   .fan > div { top: 0; width: 30%; left: 37%; }
