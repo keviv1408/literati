@@ -91,6 +91,7 @@ Notes:
 - For Google sign-in, set the Supabase Site URL to the production web origin. Add the exact `/auth/callback` URL for production, the stable Vercel branch preview you test, and `http://localhost:3011/auth/callback` for local development. Start each sign-in from that same origin so the browser can finish it.
 - Voice routes are unavailable unless `DAILY_API_KEY` and `DAILY_DOMAIN` are set
 - Build Android with the same `FRONTEND_URL` the backend uses for player invites. It defaults to `https://literati-ochre.vercel.app` in the app. Rebuild the app if the public web origin changes.
+- Android verifies room invites against `/.well-known/assetlinks.json` on that origin. The checked-in fingerprint matches the sideloaded test build. For a Play Store release, add the SHA-256 fingerprint of the Play app signing certificate to `frontend/public/.well-known/assetlinks.json`. Serve the file directly over HTTPS, then install the matching app build to test a shared `/room/ABC123` link.
 
 ### 3. Run the apps
 

@@ -1,5 +1,7 @@
 apply plugin: 'com.android.application'
 
+def inviteOrigin = new URI(System.getenv('FRONTEND_URL') ?: 'https://literati-ochre.vercel.app')
+
 android {
     namespace = "com.literationline.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -9,6 +11,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        resValue "string", "invite_host", inviteOrigin.host
+        resValue "integer", "invite_port", inviteOrigin.port.toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
