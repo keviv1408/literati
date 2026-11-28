@@ -63,7 +63,7 @@ async function apiFetch<T>(
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${HTTP_API_URL}${path}`, { ...rest, headers, credentials: 'omit' });
+  const res = await fetch(`${HTTP_API_URL}${path}`, { ...rest, headers });
 
   if (!res.ok) {
     let body: unknown;

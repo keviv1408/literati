@@ -52,7 +52,7 @@ describe('Home wake-up notice', () => {
 
   it('pings /health on mount', () => {
     render(<Home />);
-    expect(global.fetch).toHaveBeenCalledWith('http://api.test/health', { credentials: 'omit' });
+    expect(global.fetch).toHaveBeenCalledWith('http://api.test/health');
   });
 
   it('shows the tutorial link without advertising the avatar demo', () => {

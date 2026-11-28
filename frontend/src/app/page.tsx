@@ -96,7 +96,7 @@ export default function Home() {
       if (!cancelled) setIsWakingServer(true);
     }, WAKE_NOTICE_DELAY_MS);
 
-    fetch(`${HTTP_API_URL}/health`, { credentials: 'omit' })
+    fetch(`${HTTP_API_URL}/health`)
       .catch(() => {})
       .finally(() => {
         clearTimeout(slowTimer);
