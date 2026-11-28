@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { type CSSProperties } from "react";
 import Image from "next/image";
 import { getAvatarColor, getAvatarCreature } from "@/utils/avatar";
+import styles from "./AvatarPlatform.module.css";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
 
@@ -27,6 +28,7 @@ export interface AvatarProps {
   "aria-label"?: string;
   /** Whether to show a tooltip with the full display name on hover. */
   showTooltip?: boolean;
+  variant?: 'portrait' | 'platform' | 'picker';
 }
 
 const Avatar: React.FC<AvatarProps> = ({
@@ -36,7 +38,9 @@ const Avatar: React.FC<AvatarProps> = ({
   className = "",
   "aria-label": ariaLabel,
   showTooltip = false,
+  variant = 'portrait',
 }) => {
+  const platform = variant !== 'portrait';
   const color = getAvatarColor(displayName);
   const label = ariaLabel ?? `Avatar for ${displayName}`;
   const creature = getAvatarCreature(avatarId, displayName);
@@ -44,7 +48,7 @@ const Avatar: React.FC<AvatarProps> = ({
   return (
     <div
       className={[
-        "inline-flex items-center justify-center select-none flex-shrink-0 rounded-full overflow-hidden",
+        platform ? styles.platform : "inline-flex items-center justify-center select-none flex-shrink-0 rounded-full overflow-hidden",
         SIZE_STYLES[size],
         className,
       ]
@@ -54,13 +58,17 @@ const Avatar: React.FC<AvatarProps> = ({
       data-creature={creature}
       aria-label={label}
       title={showTooltip ? displayName : undefined}
-      style={{
+      style={platform ? undefined : {
         backgroundColor: color.bg,
         // Subtle inset ring for depth on dark backgrounds
         boxShadow: "inset 0 0 0 1.5px rgba(255,255,255,0.15)",
       }}
     >
-      <Image unoptimized width={192} height={192} src={`/creatures/${creature}.webp`}
+      {variant === 'picker' && (
+        <span aria-hidden="true" className={styles.figurine}
+          style={{ '--denied-frames': `url("/creatures/platform/${creature}-denied.webp")` } as CSSProperties} />
+      )}
+      <Image unoptimized width={192} height={192} src={`/creatures/${platform ? 'platform/' : ''}${creature}.webp`}
         alt="" className="h-full w-full" draggable={false} />
     </div>
   );

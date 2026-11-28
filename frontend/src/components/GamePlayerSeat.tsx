@@ -392,6 +392,7 @@ const GamePlayerSeat: React.FC<GamePlayerSeatProps> = ({
       {/* in turn-pass selection mode; 'sm' (32px) otherwise. */}
       <div className="relative">
         <Avatar
+          variant="platform"
           displayName={displayName}
           avatarId={avatarId}
           size={avatarSize}

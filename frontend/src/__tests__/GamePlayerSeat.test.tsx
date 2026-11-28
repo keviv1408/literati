@@ -217,7 +217,7 @@ describe('GamePlayerSeat — avatar rendering', () => {
         currentTurnPlayerId={null}
       />,
     );
-    expect(document.querySelector('img[src="/creatures/penguin.webp"]')).toBeInTheDocument();
+    expect(document.querySelector('img[src="/creatures/platform/penguin.webp"]')).toBeInTheDocument();
   });
 
   it('renders the chosen avatar portrait when avatarId is set', () => {
@@ -229,7 +229,7 @@ describe('GamePlayerSeat — avatar rendering', () => {
         currentTurnPlayerId={null}
       />,
     );
-    expect(document.querySelector('img[src="/creatures/octopus.webp"]')).toBeInTheDocument();
+    expect(document.querySelector('img[src="/creatures/platform/octopus.webp"]')).toBeInTheDocument();
   });
 });
 
