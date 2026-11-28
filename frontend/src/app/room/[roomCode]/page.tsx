@@ -110,11 +110,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
    */
   const [seats, setSeats] = useState<Array<LobbyPlayer | null>>([]);
 
-  /**
-   * True when the current browser session created this room. Used to decide whether to render draggable
-   * team columns so only the host can reassign players between teams.
-   */
-
   // Resolve async params (Next.js 15+ params are Promises)
   const [roomCode, setRoomCode] = useState<string | null>(null);
 
@@ -262,12 +257,6 @@ export default function RoomLobbyPage({ params }: PageProps) {
     router.push(gamePath(roomCode));
   }, [lobbyStarting, roomCode, router, isSpectator]);
 
-  /**
-   * The current player's team assignment as reported by the server.
-   * Used to determine which "Switch Team" button to display.
-   */
-  const myTeamId = (myWsPlayer?.teamId ?? null) as 1 | 2 | null;
-
   useEffect(() => {
     if (!roomCode || !bearerToken || !myPlayerId) return;
     if (isKicked || kickedOnEntry) return;  // Don't save after being kicked.
@@ -390,32 +379,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
     return () => controller.abort();
   }, [roomCode, kickedOnEntry, isKicked]);
 
-  // ── Seat reassignment ─────────────────────
-  /**
-   * Called by DraggableLobbyTeamColumns when the host drops a player card
-   * onto the opposite team column.
-   *
-   * Resolves the player's server identity (playerId) from the seats array and
-   * emits a `reassign_team` WebSocket message to the room WS server
-   * (/ws/room/<CODE>). The server validates host authority, enforces team
-   * capacity limits, and broadcasts an updated `room_players` snapshot to all
-   * connected clients.
-   *
-   * @param seatIndex 0-based index of the seat being reassigned.
-   * @param toTeam The team the seat was dropped onto (1 or 2).
-   */
-  const handleReassign = useCallback(
-    (seatIndex: number, toTeam: Team) => {
-      const seat = seats[seatIndex];
-      // Empty seats or seats without a resolved playerId cannot be reassigned.
-      if (!seat?.playerId) return;
-      socketEmit('reassign_team', {
-        targetId: seat.playerId,
-        teamId:   toTeam,
-      });
-    },
-    [socketEmit, seats],
-  );
+  const handleReassign = (playerId: string, teamId: Team, swapWithId?: string) => {
+    if (!swapWithId && playerId === myPlayerId) {
+      changeTeam(teamId);
+    } else if (amIHostLive) {
+      socketEmit('reassign_team', { targetId: playerId, teamId, swapWithId });
+    }
+  };
 
   const lobbyClosed = room?.status === 'cancelled' || (stopCode === 4005 && wsError === 'Lobby closed');
   useEffect(() => {
@@ -888,48 +858,13 @@ export default function RoomLobbyPage({ params }: PageProps) {
             </p>
           ) : (
             <>
-              {/*
-               * Two labelled team columns — seats alternate T1-T2-T1-T2.
-               * All seats start empty (null). fills them via
-               * WebSocket join events by calling setSeats(updatedSeats).
-               *
-               * DnD-enabled version — the host (isHostUser) can
-               * drag player cards between team columns; each successful drop
-               * calls handleReassign which emits a `reassign_team` socket event.
-               * Non-host clients (isHostUser=false) see static columns only.
-               */}
               <DraggableLobbyTeamColumns
                 playerCount={room.player_count}
                 seats={seats}
-                isHost={amIHostLive && !isSpectator}
+                isHost={amIHostLive}
+                readOnly={isSpectator || !!room.is_matchmaking || !myWsPlayer || wsStatus !== 'connected' || isStarting || lobbyStarting}
                 onReassign={handleReassign}
               />
-
-              {/* ── Switch Team button ────────────────────────
-                  Visible ONLY to the current connected player (not spectators)
-                  and NOT in matchmaking rooms (teams are auto-assigned there).
-                  Sends change_team to the room WS server; the server enforces
-                  capacity limits and broadcasts room_players to everyone.
-                  ────────────────────────────────────────────────────── */}
-              {myTeamId && !isSpectator && !room.is_matchmaking && (
-                <div className="mt-4 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => changeTeam(myTeamId === 1 ? 2 : 1)}
-                    className="
-                      px-4 py-2 rounded-xl text-xs font-semibold
-                      bg-felt-inset hover:bg-felt-hover text-paper
-                      border border-sage
-                      transition-colors focus:outline-none focus:ring-2 focus:ring-sage
-                      active:scale-95
-                    "
-                    aria-label={`Switch to Team ${myTeamId === 1 ? 2 : 1}`}
-                    data-testid="switch-team-btn"
-                  >
-                    Switch to Team {myTeamId === 1 ? 2 : 1}
-                  </button>
-                </div>
-              )}
 
               {myWsPlayer && !isSpectator && (
                 <div className="mt-4 flex flex-col items-center gap-2">

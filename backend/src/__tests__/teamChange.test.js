@@ -14,6 +14,7 @@
 
 const {
   handleChangeTeam,
+  handleReassignTeam,
   autoAssignTeam,
   broadcast,
   getRoomPlayers,
@@ -433,5 +434,28 @@ describe('getRoomPlayers', () => {
 
   it('returns an empty array for an unknown room', () => {
     expect(getRoomPlayers('XXXXXX')).toEqual([]);
+  });
+});
+
+describe('host swaps in a full lobby', () => {
+  it.each([6, 8])('exchanges only the chosen players in a %i-player room', size => {
+    const players = Array.from({ length: size }, (_, i) => ({
+      userId: String(i), teamId: i % 2 + 1, isHost: i === 0, ws: createMockWs(),
+    }));
+    const clients = seedRoom(ROOM, size, players);
+    const ctx = { roomCode: ROOM, clients, userId: '0', ws: players[0].ws, isHost: true };
+    const message = { targetId: '0', teamId: 2, swapWithId: '3' };
+    handleReassignTeam({ ...ctx, userId: '2', ws: players[2].ws, isHost: false }, message);
+    expect(lastSent(players[2].ws).type).toBe('error');
+    expect(clients.get('0').teamId).toBe(1);
+    handleReassignTeam(ctx, message);
+    for (const player of players) {
+      const expected = player.userId === '0' ? 2 : player.userId === '3' ? 1 : player.teamId;
+      expect(clients.get(player.userId).teamId).toBe(expected);
+      expect(allSent(player.ws).filter(msg => msg.type === 'room_players')).toHaveLength(1);
+    }
+    handleReassignTeam(ctx, message);
+    expect(clients.get('0').teamId).toBe(2);
+    expect(clients.get('3').teamId).toBe(1);
   });
 });

@@ -212,8 +212,8 @@ export default function CreateRoomModal({
         className="
           relative z-10 w-full max-w-sm
           overflow-y-auto max-h-[calc(100dvh-2rem)]
-          bg-gradient-to-b from-emerald-950 to-slate-900
-          border border-emerald-700/50
+          bg-felt-panel
+          border border-sage/40
           rounded-2xl shadow-2xl shadow-black/60
           p-6 sm:p-8
           animate-modal-in
@@ -222,13 +222,13 @@ export default function CreateRoomModal({
       >
         {/* Decorative suit symbols */}
         <div
-          className="absolute top-3 left-4 text-emerald-700/40 text-2xl select-none"
+          className="absolute top-3 left-4 text-sage/40 text-2xl select-none"
           aria-hidden="true"
         >
           ♣
         </div>
         <div
-          className="absolute top-3 right-4 text-emerald-700/40 text-2xl select-none"
+          className="absolute top-3 right-4 text-sage/40 text-2xl select-none"
           aria-hidden="true"
         >
           ♦
@@ -241,7 +241,7 @@ export default function CreateRoomModal({
           </div>
           <h2
             id="create-room-title"
-            className="text-2xl font-bold text-white tracking-tight"
+            className="text-2xl font-bold text-paper tracking-tight"
           >
             Create Private Room
           </h2>
@@ -252,7 +252,7 @@ export default function CreateRoomModal({
 
           {/* ── Player count ──────────────────────────────────────────────── */}
           <fieldset className="mb-5">
-            <legend className="block text-sm font-medium text-emerald-200 mb-2">
+            <legend className="block text-sm font-medium text-paper mb-2">
               Number of Players
             </legend>
 
@@ -266,11 +266,11 @@ export default function CreateRoomModal({
                       relative flex flex-col items-center justify-center
                       h-20 rounded-xl border-2 cursor-pointer
                       transition-all duration-150 select-none
-                      focus-within:ring-2 focus-within:ring-emerald-400 focus-within:ring-offset-2 focus-within:ring-offset-slate-900
+                      focus-within:ring-2 focus-within:ring-sage focus-within:ring-offset-2 focus-within:ring-offset-felt-panel
                       ${
                         isSelected
-                          ? 'border-emerald-500 bg-emerald-900/60 text-white'
-                          : 'border-slate-600 bg-slate-800/40 text-slate-300 hover:border-slate-500 hover:bg-slate-800/60'
+                          ? 'border-sage bg-felt-hover text-paper'
+                          : 'border-sage/40 bg-felt-inset text-paper-muted hover:border-sage hover:bg-felt-hover'
                       }
                     `}
                   >
@@ -298,7 +298,7 @@ export default function CreateRoomModal({
                             key={i}
                             className={`
                               w-2 h-2 rounded-full
-                              ${isSelected ? 'bg-emerald-400' : 'bg-slate-500'}
+                              ${isSelected ? 'bg-sage' : 'bg-sage/40'}
                             `}
                           />
                         )
@@ -313,7 +313,7 @@ export default function CreateRoomModal({
                     {/* Selected checkmark */}
                     {isSelected && (
                       <span
-                        className="absolute top-1.5 right-2 text-emerald-400 text-xs"
+                        className="absolute top-1.5 right-2 text-sage text-xs"
                         aria-hidden="true"
                       >
                         ✓
@@ -343,11 +343,11 @@ export default function CreateRoomModal({
               disabled={isSubmitting}
               className="
                 flex-1 py-3 px-4 rounded-xl font-medium text-sm
-                border border-slate-600 text-slate-300
-                hover:border-slate-500 hover:text-white hover:bg-slate-800/50
+                enabled:cursor-pointer border border-sage text-paper
+                enabled:hover:bg-felt-hover
                 disabled:opacity-40 disabled:cursor-not-allowed
                 transition-all duration-150
-                focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900
+                focus:outline-none focus:ring-2 focus:ring-sage focus:ring-offset-2 focus:ring-offset-felt-panel
               "
             >
               Cancel
@@ -358,11 +358,11 @@ export default function CreateRoomModal({
               disabled={isSubmitting}
               className="
                 flex-1 py-3 px-4 rounded-xl font-semibold text-sm
-                bg-emerald-600 hover:bg-emerald-500
-                disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed
-                text-white shadow-lg shadow-emerald-900/40
+                enabled:cursor-pointer bg-copper enabled:hover:bg-copper-hover
+                disabled:bg-felt-hover disabled:text-paper-muted/70 disabled:cursor-not-allowed
+                text-felt shadow-lg shadow-black/20
                 transition-all duration-150 active:scale-[0.98]
-                focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-900
+                focus:outline-none focus:ring-2 focus:ring-sage focus:ring-offset-2 focus:ring-offset-felt-panel
               "
             >
               {isSubmitting ? (

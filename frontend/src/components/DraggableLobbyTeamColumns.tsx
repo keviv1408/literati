@@ -1,92 +1,39 @@
 "use client";
 
-/**
- * DraggableLobbyTeamColumns — DnD-enabled team column layout for the lobby.
- *
- * Wraps the static lobby team layout with @dnd-kit drag-and-drop support so
- * that the host can reassign players to different teams by dragging their
- * player card between the Team 1 and Team 2 columns.
- *
- * Architecture
- * ────────────
- * • Each occupied (or empty) player card is a `Draggable` item identified as
- *   `"seat-{seatIndex}"`.
- * • Each team column is a `Droppable` zone identified as `"team-1"` or
- *   `"team-2"`.
- * • On a successful drop the component:
- *   1. Updates its local `teamOverrides` state so the card visually moves.
- *   2. Calls `onReassign(seatIndex, toTeam)` so the parent can emit a
- *      `reassign_seat` WebSocket event to the server.
- * • The `teamOverrides` map stores host-driven overrides; the default team
- *   for a seat is `getTeamForSeat(seatIndex)` from `@/types/lobby`.
- *
- * Only the host sees drag handles — other connected clients (and spectators)
- * receive the `isHost={false}` prop which disables dragging.
- *
- * @example
- * <DraggableLobbyTeamColumns
- *   playerCount={6}
- *   seats={lobbySeats}
- *   isHost={true}
- *   onReassign={(seatIndex, toTeam) =>
- *     emit("reassign_seat", { seatIndex, toTeam })
- *   }
- * />
- */
-
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import {
   DndContext,
-  DragEndEvent,
+  type DragEndEvent,
   DragOverlay,
-  DragStartEvent,
+  type CollisionDetection,
+  pointerWithin,
   PointerSensor,
-  TouchSensor,
   useSensor,
   useSensors,
   useDroppable,
   useDraggable,
-  closestCenter,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
 import Avatar from "@/components/Avatar";
 import { BotBadge } from "@/components/BotBadge";
-import { getTeamForSeat } from "@/types/lobby";
+import { getTeamForSeat, splitSeatsByTeam } from "@/types/lobby";
 import type { LobbyPlayer } from "@/types/lobby";
 import type { Team } from "@/types/room";
 import { TEAM_STYLES } from "@/lib/teamTheme";
 
-const EMPTY_OVERRIDES: Map<number, Team> = new Map();
-
-// ── Prop types ────────────────────────────────────────────────────────────────
+const _dropTargets: CollisionDetection = args => {
+  const hits = pointerWithin(args);
+  const opponent = hits.find(hit => String(hit.id).startsWith("swap-"));
+  return opponent ? [opponent] : hits;
+};
 
 export interface DraggableLobbyTeamColumnsProps {
-  /** Total number of players this room supports (6 or 8). */
   playerCount: 6 | 8;
-
-  /**
-   * Ordered array of `playerCount` entries. Index = seat index.
-   * `null` means the seat is unoccupied (shows "Waiting…" card).
-   */
   seats: Array<LobbyPlayer | null>;
-
-  /**
-   * Whether the current user is the room host.
-   * Only the host can drag cards; other clients render static columns.
-   */
   isHost: boolean;
-
-  /**
-   * Called when the host successfully drops a seat card onto the opposite
-   * team column.  The parent is responsible for emitting the socket event.
-   *
-   * @param seatIndex  0-based index of the moved seat.
-   * @param toTeam     The team the seat was dropped onto (1 or 2).
-   */
-  onReassign?: (seatIndex: number, toTeam: Team) => void;
-
-  /** Extra Tailwind classes forwarded to the outer wrapper. */
+  readOnly?: boolean;
+  onReassign?: (playerId: string, toTeam: Team, swapWithId?: string) => void;
   className?: string;
 }
 
@@ -102,6 +49,9 @@ interface DraggablePlayerCardProps {
    * Defaults to the seat's natural team (derived from seatIndex) when omitted.
    */
   team?: Team;
+  swapTarget?: boolean;
+  picked?: boolean;
+  onActivate?: () => void;
   /** Used in DragOverlay (no dragging, just visual). */
   isOverlay?: boolean;
 }
@@ -112,34 +62,27 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
   isDragEnabled,
   team,
   isOverlay = false,
+  swapTarget = false,
+  picked = false,
+  onActivate,
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
-      id: `seat-${seatIndex}`,
-      data: { seatIndex, player },
-      disabled: !isDragEnabled || isOverlay,
+      id: isOverlay ? "drag-preview" : player?.playerId ?? `seat-${seatIndex}`,
+      data: { team },
+      disabled: !player || !isDragEnabled || isOverlay,
     });
+
+  const drop = useDroppable({
+    id: `swap-${isOverlay ? "preview" : seatIndex}`,
+    data: { team, swapWithId: player?.playerId },
+    disabled: !swapTarget,
+  });
 
   const style =
     transform && !isOverlay
       ? { transform: CSS.Translate.toString(transform) }
       : undefined;
-
-  // Track whether this seat just became occupied (for join animation).
-  const prevPlayerRef = useRef<string | null>(null);
-  const [justJoined, setJustJoined] = useState(false);
-
-  useEffect(() => {
-    const prevId = prevPlayerRef.current;
-    const currId = player?.playerId ?? null;
-    prevPlayerRef.current = currId;
-    if (currId && !prevId) {
-      // Seat went from empty → occupied
-      setJustJoined(true);
-      const t = setTimeout(() => setJustJoined(false), 450);
-      return () => clearTimeout(t);
-    }
-  }, [player?.playerId]);
 
   const isOccupied = player !== null;
   // Resolve effective team for colour tokens: use prop, fall back to natural seat assignment.
@@ -152,9 +95,10 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
     "min-h-[4.5rem] px-3 py-3 rounded-xl",
     // Drag affordance
     isDragEnabled && isOccupied
-      ? "cursor-grab active:cursor-grabbing"
+      ? "touch-none cursor-grab active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-sage"
       : "cursor-default",
     isDragging ? "opacity-40" : "",
+    drop.isOver || picked ? "ring-2 ring-sage" : "",
     isOverlay ? "shadow-2xl rotate-2 opacity-95 scale-105" : "",
     // Occupied vs empty — current user gets team-coloured highlight
     isOccupied
@@ -163,8 +107,6 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
         : "border border-sage/30 bg-felt-inset"
       : "border border-dashed border-sage/25 bg-felt-inset/60 animate-seat-shimmer",
     "select-none transition-opacity duration-150",
-    // Join animation
-    justJoined && !isOverlay ? "animate-player-join" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -175,14 +117,23 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={node => { setNodeRef(node); drop.setNodeRef(node); }}
       style={style}
       aria-label={ariaLabel}
       className={cardClasses}
       {...(isDragEnabled && isOccupied && !isOverlay
         ? { ...listeners, ...attributes }
         : {})}
-      role="listitem"
+      onKeyDown={event => {
+        if (onActivate && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          if (!event.repeat) onActivate();
+        }
+      }}
+      onClick={event => { if (event.detail === 0) onActivate?.(); }}
+      aria-describedby={isDragEnabled ? "team-move-help" : undefined}
+      aria-pressed={isDragEnabled && picked ? true : undefined}
+      role={isDragEnabled && isOccupied && !isOverlay ? "button" : "listitem"}
     >
       {isOccupied ? (
         <>
@@ -240,7 +191,6 @@ const DraggablePlayerCard: React.FC<DraggablePlayerCardProps> = ({
             </span>
           )}
 
-          {/* Drag handle hint for host */}
           {isDragEnabled && (
             <span
               className="text-[0.55rem] text-paper-muted mt-0.5"
@@ -272,22 +222,32 @@ interface DroppableTeamColumnProps {
   team: 1 | 2;
   entries: Array<{ seatIndex: number; player: LobbyPlayer | null }>;
   seatsPerTeam: number;
-  isDragEnabled: boolean;
+  isHost: boolean;
+  readOnly: boolean;
+  full: boolean;
+  keyboardSource: string | null;
+  onActivate: (player: LobbyPlayer) => void;
 }
 
 const DroppableTeamColumn: React.FC<DroppableTeamColumnProps> = ({
   team,
   entries,
   seatsPerTeam,
-  isDragEnabled,
+  isHost,
+  readOnly,
+  full,
+  keyboardSource,
+  onActivate,
 }) => {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef, isOver, active } = useDroppable({
     id: `team-${team}`,
     data: { team },
   });
 
   const style = TEAM_STYLES[team];
   const occupied = entries.filter((e) => e.player !== null).length;
+
+  const isTarget = isOver && active?.data.current?.team !== team;
 
   return (
     <section
@@ -296,7 +256,7 @@ const DroppableTeamColumn: React.FC<DroppableTeamColumnProps> = ({
       className={[
         "flex flex-col gap-3 flex-1 min-w-0",
         "rounded-xl p-2 transition-colors duration-150",
-        isDragEnabled && isOver
+        isTarget
           ? `${style.dropActiveBg} ring-2 ring-inset ring-offset-0 ${style.dropActiveBorder}`
           : "ring-0",
       ]
@@ -345,11 +305,14 @@ const DroppableTeamColumn: React.FC<DroppableTeamColumnProps> = ({
         aria-label={`${style.label} player seats`}
       >
         {entries.map(({ seatIndex, player }) => (
-          <li key={seatIndex} className="list-none">
+          <li key={player?.playerId ?? seatIndex} className={player ? "list-none animate-player-join" : "list-none"}>
             <DraggablePlayerCard
               seatIndex={seatIndex}
               player={player}
-              isDragEnabled={isDragEnabled}
+              isDragEnabled={!readOnly && !!player && (isHost || (!full && player.isCurrentUser))}
+              swapTarget={full && isHost && !readOnly && !!player && !!active && active.data.current?.team !== team}
+              picked={!!player && keyboardSource === player.playerId}
+              onActivate={!readOnly && player && (isHost || (!full && player.isCurrentUser)) ? () => onActivate(player) : undefined}
               team={team}
             />
           </li>
@@ -357,7 +320,7 @@ const DroppableTeamColumn: React.FC<DroppableTeamColumnProps> = ({
       </ol>
 
       {/* Drop cue when dragging over */}
-      {isDragEnabled && isOver && (
+      {isTarget && (
         <div
           className={[
             "text-xs text-center py-1.5 rounded-lg border border-dashed",
@@ -367,7 +330,7 @@ const DroppableTeamColumn: React.FC<DroppableTeamColumnProps> = ({
           ].join(" ")}
           aria-hidden="true"
         >
-          Drop here to assign to {style.label}
+          {occupied === seatsPerTeam ? `${style.label} is full` : `Drop here to join ${style.label}`}
         </div>
       )}
     </section>
@@ -376,157 +339,110 @@ const DroppableTeamColumn: React.FC<DroppableTeamColumnProps> = ({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-/**
- * DraggableLobbyTeamColumns — DnD-enabled two-column team layout.
- *
- * The host can drag player cards between team columns; every successful drop
- * calls `onReassign(seatIndex, toTeam)` so the parent can emit the
- * `reassign_seat` WebSocket event.
- */
 const DraggableLobbyTeamColumns: React.FC<DraggableLobbyTeamColumnsProps> = ({
   playerCount,
   seats,
   isHost,
+  readOnly = false,
   onReassign,
   className = "",
 }) => {
-  // ── Team override state ──────────────────────────────────────────────────
-  // Key = seatIndex, value = override team (1 or 2).
-  // Default team is derived from seatIndex % 2 (getTeamForSeat).
-  // Optimistic placement for the one drag in flight. Seat indices are repacked
-  // on every server snapshot, so an override is only valid for the `seats`
-  // reference it was made against.
-  const [pendingOverride, setPendingOverride] = useState<{
-    forSeats: typeof seats;
-    map: Map<number, Team>;
-  } | null>(null);
-  const teamOverrides: Map<number, Team> =
-    pendingOverride && pendingOverride.forSeats === seats
-      ? pendingOverride.map
-      : EMPTY_OVERRIDES;
-
-  // The currently dragged seat (for DragOverlay rendering).
-  const [activeSeatIndex, setActiveSeatIndex] = useState<number | null>(null);
-
-  // Stable ref so useCallback below always sees the latest seats without
-  // rebuilding the drag handler on every render.
-  const seatsRef = useRef(seats);
-  seatsRef.current = seats;
-
-  // ── Sensors (pointer + touch for mobile) ─────────────────────────────────
+  const [keyboardSource, setKeyboardSource] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 8 },
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
-
-  // ── Drag handlers ─────────────────────────────────────────────────────────
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    const idStr = String(event.active.id);
-    const idx = parseInt(idStr.replace("seat-", ""), 10);
-    setActiveSeatIndex(isNaN(idx) ? null : idx);
-  }, []);
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      setActiveSeatIndex(null);
-
-      const { active, over } = event;
-      if (!over) return;
-
-      const idStr = String(active.id);
-      const seatIndex = parseInt(idStr.replace("seat-", ""), 10);
-      if (isNaN(seatIndex)) return;
-
-      const dropId = String(over.id);
-      const toTeamNum = parseInt(dropId.replace("team-", ""), 10);
-      if (toTeamNum !== 1 && toTeamNum !== 2) return;
-      const toTeam = toTeamNum as Team;
-
-      // Skip if dropped on the same team.
-      const currentTeam =
-        teamOverrides.get(seatIndex) ?? getTeamForSeat(seatIndex);
-      if (currentTeam === toTeam) return;
-
-      setPendingOverride({ forSeats: seats, map: new Map([[seatIndex, toTeam]]) });
-
-      // Notify parent to emit the socket event.
-      onReassign?.(seatIndex, toTeam);
-    },
-    [teamOverrides, onReassign, seats],
-  );
-
-  // ── Build team entry arrays ────────────────────────────────────────────────
-  const normalizedSeats: Array<LobbyPlayer | null> = Array.from(
-    { length: playerCount },
-    (_, i) => seats[i] ?? null,
-  );
-
-  const team1Entries: Array<{ seatIndex: number; player: LobbyPlayer | null }> =
-    [];
-  const team2Entries: Array<{ seatIndex: number; player: LobbyPlayer | null }> =
-    [];
-
-  normalizedSeats.forEach((player, idx) => {
-    const effectiveTeam: Team =
-      teamOverrides.get(idx) ?? getTeamForSeat(idx);
-    const entry = { seatIndex: idx, player };
-    if (effectiveTeam === 1) {
-      team1Entries.push(entry);
-    } else {
-      team2Entries.push(entry);
-    }
-  });
-
+  const normalizedSeats = Array.from({ length: playerCount }, (_, i) => seats[i] ?? null);
+  const { team1, team2 } = splitSeatsByTeam(normalizedSeats);
+  const activeSeatPlayer = seats.find(player => player?.playerId === activeId);
   const seatsPerTeam = playerCount / 2;
-  const activeSeatPlayer =
-    activeSeatIndex !== null ? (normalizedSeats[activeSeatIndex] ?? null) : null;
+
+  const full = normalizedSeats.every(Boolean);
+  const picked = seats.find(seat => keyboardSource && seat?.playerId === keyboardSource);
+  function _move(player: LobbyPlayer | null | undefined, team: Team, swapWithId?: string) {
+    if (readOnly || !player?.playerId || (!isHost && !player.isCurrentUser)) return;
+    if ((team !== 1 && team !== 2) || team === getTeamForSeat(player.seatIndex)) return;
+    const destination = team === 1 ? team1 : team2;
+    if (full && isHost && swapWithId && destination.some(seat => seat.player?.playerId === swapWithId)) {
+      onReassign?.(player.playerId, team, swapWithId);
+    } else if (!swapWithId && destination.some(seat => !seat.player)) {
+      onReassign?.(player.playerId, team);
+    }
+  }
+
+  function _drop({ active, over }: DragEndEvent) {
+    setActiveId(null);
+    const target = over?.data.current;
+    if (target) _move(seats.find(seat => seat?.playerId === active.id), target.team, target.swapWithId);
+  }
+
+  function _activate(player: LobbyPlayer) {
+    const team = getTeamForSeat(player.seatIndex);
+    if (!full) {
+      _move(player, team === 1 ? 2 : 1);
+    } else if (picked && getTeamForSeat(picked.seatIndex) !== team) {
+      _move(picked, team, player.playerId);
+      setKeyboardSource(null);
+    } else {
+      setKeyboardSource(picked === player ? null : player.playerId ?? null);
+    }
+  }
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+      collisionDetection={_dropTargets}
+      onDragStart={({ active }) => { setKeyboardSource(null); setActiveId(String(active.id)); }}
+      onDragCancel={() => setActiveId(null)}
+      onDragEnd={_drop}
     >
       <div
         className={["flex flex-row gap-3", className].filter(Boolean).join(" ")}
         aria-label="Lobby teams"
+        onKeyDown={event => { if (event.key === "Escape") setKeyboardSource(null); }}
       >
         <DroppableTeamColumn
           team={1}
-          entries={team1Entries}
+          entries={team1}
           seatsPerTeam={seatsPerTeam}
-          isDragEnabled={isHost}
+          isHost={isHost}
+          readOnly={readOnly}
+          full={full}
+          keyboardSource={full && isHost ? keyboardSource : null}
+          onActivate={_activate}
         />
         <DroppableTeamColumn
           team={2}
-          entries={team2Entries}
+          entries={team2}
           seatsPerTeam={seatsPerTeam}
-          isDragEnabled={isHost}
+          isHost={isHost}
+          readOnly={readOnly}
+          full={full}
+          keyboardSource={full && isHost ? keyboardSource : null}
+          onActivate={_activate}
         />
       </div>
 
       {/* Drag overlay — floating copy rendered above everything while dragging */}
       <DragOverlay dropAnimation={null}>
-        {activeSeatIndex !== null ? (
-          <div className="w-[calc(50%-0.75rem)] max-w-[200px]">
-            <DraggablePlayerCard
-              seatIndex={activeSeatIndex}
-              player={activeSeatPlayer}
-              isDragEnabled={false}
-              isOverlay
-            />
-          </div>
+        {activeSeatPlayer ? (
+          <DraggablePlayerCard
+            seatIndex={activeSeatPlayer.seatIndex}
+            player={activeSeatPlayer}
+            isDragEnabled={false}
+            isOverlay
+          />
         ) : null}
       </DragOverlay>
 
-      {isHost && (
-        <p className="mt-2 text-center text-[0.65rem] text-paper-muted">
-          Drag player cards between columns to reassign teams
+      {!readOnly && (isHost || seats.some(player => player?.isCurrentUser)) && (
+        <p id="team-move-help" aria-live="polite" className="mt-2 text-center text-[0.65rem] text-paper-muted">
+          {full ? isHost
+            ? picked ? `Choose an opponent for ${picked.displayName}, or press Escape to cancel.`
+              : "Drag one player onto an opponent to swap teams."
+            : "Both teams are full. The host can swap players."
+            : isHost ? "Drag player cards between columns to change teams." : "Drag your card to the other team to switch."}
+          <span className="sr-only">{full && isHost ? " Use Tab and Enter to choose each player." : " Press Enter on a movable player to change teams."}</span>
         </p>
       )}
     </DndContext>

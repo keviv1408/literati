@@ -851,9 +851,9 @@ function handleSetAvatar(ctx, message) {
  *
  * Rules:
  * - Only the host may reassign.
- * - Host cannot reassign themselves (use change_team instead).
+ * - The host uses change_team for a solo move and may include themselves in a swap.
  * - Target must be present in the room.
- * - Target team must not already be at capacity (playerCount 2).
+ * - A full lobby requires a named opponent for an atomic swap.
  *
  * @param {{
  * ws: import('ws'),
@@ -862,7 +862,7 @@ function handleSetAvatar(ctx, message) {
  * roomCode: string,
  * clients: Map<string, Object>
  * }} ctx
- * @param {{ type: string, targetId?: string, teamId?: number, payload?: { targetId?: string, teamId?: number } }} message
+ * @param {{ type: string, targetId?: string, teamId?: number, swapWithId?: string, payload?: { targetId?: string, teamId?: number, swapWithId?: string } }} message
  */
 function handleReassignTeam(ctx, message) {
   const { ws, userId, isHost, roomCode, clients } = ctx;
@@ -896,7 +896,8 @@ function handleReassignTeam(ctx, message) {
     return;
   }
 
-  if (targetId === userId) {
+  const swapWithId = message.swapWithId ?? message.payload?.swapWithId;
+  if (targetId === userId && swapWithId === undefined) {
     ws.send(
       JSON.stringify({ type: 'error', message: 'Use change_team to switch your own team' }),
     );
@@ -911,13 +912,24 @@ function handleReassignTeam(ctx, message) {
     return;
   }
 
-  // No-op: target is already on the requested team
-  if (targetEntry.teamId === teamId) return;
-
-  // Check capacity
   const meta = roomMeta.get(roomCode);
   const playerCount = meta?.playerCount || 6;
   const maxPerTeam = Math.floor(playerCount / 2);
+
+  if (swapWithId !== undefined) {
+    const opponent = clients.get(swapWithId);
+    if (_startingRooms.has(roomCode) || meta?.isMatchmaking || clients.size !== playerCount ||
+        !opponent || opponent.teamId !== teamId || targetEntry.teamId === teamId) {
+      ws.send(JSON.stringify({ type: 'error', message: 'The lobby changed. Choose two players on opposite teams to swap.' }));
+      return;
+    }
+    opponent.teamId = targetEntry.teamId;
+    targetEntry.teamId = teamId;
+    broadcast(roomCode, { type: 'room_players', players: getRoomPlayers(roomCode) });
+    return;
+  }
+
+  if (targetEntry.teamId === teamId) return;
 
   let targetTeamCount = 0;
   for (const e of clients.values()) {
