@@ -38,7 +38,7 @@ async function _freeze(socket: RoomSocket) {
 test('a host whose lobby socket froze sees a guest who joined meanwhile', async ({ page, browser }) => {
   const sockets = await _routeRoomSocket(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Private Room/ }).click();
+  await page.getByRole('button', { name: /Play now!/ }).click();
   await page.getByPlaceholder('e.g. CardShark99').fill('E2E Host');
   await page.getByRole('button', { name: 'Continue as Guest' }).click();
   await page.getByRole('button', { name: 'Create Room', exact: true }).click();

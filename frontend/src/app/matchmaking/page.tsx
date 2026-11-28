@@ -17,6 +17,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import BackToHomeButton from '@/components/BackToHomeButton';
 import { useGuestSession } from '@/hooks/useGuestSession';
 import {
   useMatchmakingSocket,
@@ -399,12 +400,7 @@ export default function MatchmakingPage() {
             </button>
 
             {/* Back to home */}
-            <button
-              onClick={() => router.push('/')}
-              className="w-full text-sm text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              ← Back to home
-            </button>
+            <BackToHomeButton onClick={() => router.push('/')} />
           </div>
         )}
       </main>

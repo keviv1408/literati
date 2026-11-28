@@ -360,23 +360,23 @@ describe('room lobby controls', () => {
     window.history.replaceState({}, '', '/');
   });
 
-  it('focuses Cancel when the host opens the confirmation and restores focus on dismissal', async () => {
+  it('copies just the room code from the lobby heading', async () => {
     const user = userEvent.setup();
     await _renderLobby([_player('p-ada', 'Ada', true)]);
-    const trigger = await screen.findByRole('button', { name: 'Abandon lobby' });
-    expect(trigger).not.toHaveFocus();
+    await user.click(await screen.findByRole('button', { name: 'Copy room code' }));
+    expect(await navigator.clipboard.readText()).toBe('ABC123');
+    expect(screen.getByText('Copied')).toBeVisible();
+  });
 
-    trigger.focus();
-    await user.keyboard('{Enter}');
-
-    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
-    expect(screen.getByRole('alertdialog', { name: 'Abandon this lobby?' })).toHaveAccessibleDescription(
-      'This closes the lobby for everyone. Its invite link will stop working.',
-    );
-
-    await user.keyboard('{Enter}');
-    expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Abandon lobby' })).toHaveFocus();
+  it('selects the code for manual copying when the clipboard is unavailable', async () => {
+    const user = userEvent.setup();
+    jest.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('Denied'));
+    await _renderLobby([_player('p-ada', 'Ada', true)]);
+    await user.click(await screen.findByRole('button', { name: 'Copy room code' }));
+    const code = screen.getByRole('textbox', { name: 'Room code' }) as HTMLInputElement;
+    expect(code).toHaveFocus();
+    expect(code.value.slice(code.selectionStart!, code.selectionEnd!)).toBe('ABC123');
+    expect(screen.getByText('Select and copy the code')).toBeVisible();
   });
 
   it('shows the start button to the player the server flags host', async () => {

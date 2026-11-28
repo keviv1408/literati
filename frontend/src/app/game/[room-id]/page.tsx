@@ -18,6 +18,7 @@
  * a spectator if the playerId is not in the game's player list.
  */
 
+import BackToHomeButton from '@/components/BackToHomeButton';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRoomByCode, getGameSummary, ApiError } from '@/lib/api';
@@ -974,12 +975,12 @@ export default function GamePage({ params }: PageProps) {
 
   const handleGoHome = useCallback(() => router.push('/'), [router]);
 
-  if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (loading && serverUnreachable) return <GameErrorView testId="server-unreachable-view" emoji="📡" title="Can't Reach the Server" body="Still trying. The game opens as soon as the server is back." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
+  if (invalidFormat) return <GameErrorView testId="invalid-format-view" emoji="🃏" title="Invalid Room Code" body={<>Invalid code: <span className="font-mono text-red-400">{roomCode}</span></>} onPrimary={handleGoHome} />;
+  if (loading && serverUnreachable) return <GameErrorView testId="server-unreachable-view" emoji="📡" title="Can't Reach the Server" body="Still trying. The game opens as soon as the server is back." onPrimary={handleGoHome} />;
   if (loading) return <LoadingView wakingUp={roomRetrying} />;
-  if (notFound) return <GameErrorView testId="not-found-view" emoji="🔍" title="Room Not Found" body={<>No room <span className="font-mono text-emerald-400">{roomCode}</span> found.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (!room) return <GameErrorView testId="generic-error-view" emoji="⚠️" title="Something Went Wrong" body="Could not load the game." onPrimary={handleGoHome} primaryLabel="Back to Home" />;
-  if (room.status === 'cancelled') return <GameErrorView testId="cancelled-view" emoji="🚫" title="Game Cancelled" body={<>Room <span className="font-mono text-slate-300">{room.code}</span> was cancelled.</>} onPrimary={handleGoHome} primaryLabel="Back to Home" />;
+  if (notFound) return <GameErrorView testId="not-found-view" emoji="🔍" title="Room Not Found" body={<>No room <span className="font-mono text-emerald-400">{roomCode}</span> found.</>} onPrimary={handleGoHome} />;
+  if (!room) return <GameErrorView testId="generic-error-view" emoji="⚠️" title="Something Went Wrong" body="Could not load the game." onPrimary={handleGoHome} />;
+  if (room.status === 'cancelled') return <GameErrorView testId="cancelled-view" emoji="🚫" title="Game Cancelled" body={<>Room <span className="font-mono text-slate-300">{room.code}</span> was cancelled.</>} onPrimary={handleGoHome} />;
   if (room.status === 'abandoned' || roomDissolved?.reason === 'all_bots') {
     return (
       <GameErrorView
@@ -988,7 +989,6 @@ export default function GamePage({ params }: PageProps) {
         title="Game Abandoned"
         body={<>All human players left room <span className="font-mono text-slate-300">{room.code}</span>, so the bot-only game was ended automatically.</>}
         onPrimary={handleGoHome}
-        primaryLabel="Back to Home"
       />
     );
   }
@@ -1086,12 +1086,7 @@ export default function GamePage({ params }: PageProps) {
           </button>
         )}
 
-        <button
-          onClick={handleGoHome}
-          className="min-h-11 px-5 rounded-xl font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400"
-        >
-          Back to Home
-        </button>
+        <BackToHomeButton onClick={handleGoHome} />
       </div>
     );
 
@@ -1572,11 +1567,11 @@ function LoadingView({ wakingUp = false, label = 'Loading game…' }: { wakingUp
   );
 }
 
-function GameErrorView({ emoji, title, body, onPrimary, primaryLabel, testId }: { emoji: string; title: string; body: React.ReactNode; onPrimary: () => void; primaryLabel: string; testId?: string; }) {
+function GameErrorView({ emoji, title, body, onPrimary, testId }: { emoji: string; title: string; body: React.ReactNode; onPrimary: () => void; testId?: string; }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 px-4 gap-6" data-testid={testId}>
       <div className="text-center max-w-sm"><div className="text-5xl mb-4">{emoji}</div><h1 className="text-2xl font-bold text-white mb-3">{title}</h1><p className="text-slate-300 text-sm">{body}</p></div>
-      <button onClick={onPrimary} className="py-3 px-6 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400">{primaryLabel}</button>
+      <BackToHomeButton onClick={onPrimary} />
     </div>
   );
 }

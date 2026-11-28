@@ -9,6 +9,7 @@ import { isKickedFromRoom } from '@/lib/kickedRooms';
 import { API_URL, getReturningRoom, type ReturningRoom } from '@/lib/api';
 import { gamePath, isAndroidBuild, roomPath, tutorialPath } from '@/lib/appPaths';
 import { parseRoomJoinInput } from '@/lib/roomJoinInput';
+import tutorialStyles from '@/components/ShortTutorial.module.css';
 import ShortTutorial from '@/components/ShortTutorial';
 import CreateRoomModal from '@/components/CreateRoomModal';
 
@@ -215,9 +216,9 @@ export default function Home() {
             "
           >
             <span className="flex flex-col items-center leading-tight">
-              <span><span aria-hidden="true">🔒 </span>{checking ? 'Checking your room…' : 'Create Private Room'}</span>
+              <span>{checking ? 'Checking your room…' : 'Play now!'}</span>
               <span className="text-xs font-medium text-emerald-100/90 mt-1">
-                Play with friends in your own room
+                Play with friends or bots in a private room.
               </span>
             </span>
           </button>}
@@ -259,6 +260,10 @@ export default function Home() {
             )}
           </form>
           <ShortTutorial returnTo="home" />
+          <a href={tutorialPath()} className={tutorialStyles.homeEntry}>
+            <strong>Play the full interactive tutorial</strong>
+            <span>10–15 min</span>
+          </a>
         </div>
 
         {isWakingServer && (
@@ -270,25 +275,6 @@ export default function Home() {
             Waking up the table… this can take up to a minute.
           </p>
         )}
-
-        {/* Feature pills */}
-        <div className="flex flex-wrap justify-center gap-2 text-xs text-slate-400">
-          {[
-            '6 or 8 Players',
-            'Smart Bots',
-            'No Account Required',
-          ].map((f) => (
-            <span
-              key={f}
-              className="bg-slate-800/60 border border-slate-700/50 rounded-full px-3 py-1"
-            >
-              {f}
-            </span>
-          ))}
-        </div>
-        <a href={tutorialPath()} className="rounded px-3 py-2 text-sm text-emerald-200 underline underline-offset-4 hover:text-white focus-visible:outline-2">
-          Play the full interactive tutorial
-        </a>
       </main>
 
       {/* Create Room modal — shown after guest name is confirmed */}
