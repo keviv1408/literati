@@ -2,6 +2,21 @@ apply plugin: 'com.android.application'
 
 def inviteOrigin = new URI(System.getenv('FRONTEND_URL') ?: 'https://literationline.com')
 
+def releaseVersion = providers.gradleProperty('androidReleaseVersion').orNull
+def playVersionCode = 1
+if (releaseVersion != null) {
+    def component = /(?:0|[1-9][0-9]{0,2})/
+    if (!(releaseVersion ==~ /(?:0|[1-9][0-9]{0,3})\.${component}\.${component}/)) {
+        throw new GradleException('Expected an Android version such as 1.0.1')
+    }
+    def (major, minor, patch) = releaseVersion.tokenize('.').collect { it.toLong() }
+    def code = major * 1_000_000 + minor * 1_000 + patch
+    if (code < 2 || code > 2_100_000_000) {
+        throw new GradleException('Android release version is outside the available Play version codes')
+    }
+    playVersionCode = code.toInteger()
+}
+
 android {
     namespace = "com.literationline.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -9,8 +24,8 @@ android {
         applicationId "com.literationline.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode playVersionCode
+        versionName releaseVersion ?: "1.0"
         resValue "string", "invite_host", inviteOrigin.host
         resValue "integer", "invite_port", inviteOrigin.port.toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
