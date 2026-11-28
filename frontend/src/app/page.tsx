@@ -1,5 +1,6 @@
 'use client';
 
+import CardFan from '@/components/CardFan';
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGuestSession } from '@/hooks/useGuestSession';
@@ -212,7 +213,7 @@ export default function Home() {
               className={styles.play}
             >
               <span className="flex flex-col items-start leading-tight">
-                <span>{checking ? 'Checking your room…' : 'Play now!'}</span>
+                <span className="inline-flex items-center gap-2">{checking && <CardFan compact />}{checking ? 'Checking your room…' : 'Play now!'}</span>
                 <span className="text-xs font-medium mt-1">
                   Play with friends or bots in a private room.
                 </span>
@@ -260,9 +261,9 @@ export default function Home() {
           {isWakingServer && (
             <p
               role="status"
-              className="flex items-center gap-2 rounded-full border border-amber-700/50 bg-amber-900/30 px-4 py-2 text-sm text-amber-200 animate-pulse"
+              className="flex items-center gap-2 rounded-full border border-amber-700/50 bg-amber-900/30 px-4 py-2 text-sm text-amber-200"
             >
-              <span aria-hidden="true">☕</span>
+              <CardFan compact />
               Waking up the table… this can take up to a minute.
             </p>
           )}
@@ -278,7 +279,7 @@ export default function Home() {
       </section>
       <TableGuide
         onPlay={_playWithBots}
-        playLabel={startingBots ? 'Starting your game…' : current?.hosting ? 'Return to your room' : 'Play with bots'}
+        playLabel={startingBots ? <span className="inline-flex items-center gap-2"><CardFan compact />Starting your game…</span> : current?.hosting ? 'Return to your room' : 'Play with bots'}
         playDisabled={!mounted || accountLoading || startingBots || checking}
         playError={botError}
       />

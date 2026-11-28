@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { tutorialPath } from '@/lib/appPaths';
 import type { CardRank } from '@/types/game';
 import GuideCard from './GuideCard';
@@ -10,7 +10,7 @@ import styles from './Guide.module.css';
 
 export default function TableGuide({ onPlay, playLabel, playDisabled, playError }: {
   onPlay: () => void;
-  playLabel: string;
+  playLabel: ReactNode;
   playDisabled: boolean;
   playError: string;
 }) {

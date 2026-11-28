@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import type { AskDeniedCueState, CardFlightState } from '@/hooks/useAskResultAnimations';
 import CardFlightAnimation, { FLIGHT_DURATION_MS } from '../CardFlightAnimation';
 import type { createRetrievalScene } from './retrievalScene';
 import { isCreatureKind } from './kind';
-import AskDeniedAnimation, { ASK_DENIED_ANIMATION_MS } from '../AskDeniedAnimation';
+import AskDeniedAnimation from '../AskDeniedAnimation';
+
+const DENIED_SHAKE_MS = 1250;
 
 export default function TableCardTransfer({ flight, denial, onComplete }: {
   flight: CardFlightState | null;
@@ -17,7 +18,7 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
   const cardRef = useRef<HTMLDivElement>(null);
   const factoryRef = useRef<typeof createRetrievalScene | null>(null);
   const sceneRef = useRef<ReturnType<typeof createRetrievalScene>>(null);
-  const activeSceneResult = useRef<CardFlightState | AskDeniedCueState | null>(null);
+  const activeSceneFlight = useRef<CardFlightState | null>(null);
   const finish = useEffectEvent(onComplete);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
   }, []);
 
   useLayoutEffect(() => {
-    activeSceneResult.current = null;
+    activeSceneFlight.current = null;
     const canvas = canvasRef.current;
     const card = cardRef.current;
     if ((!flight && !denial) || !canvas || !factoryRef.current) return;
@@ -76,12 +77,10 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
       if (!giver || !asker) return;
       giver.avatar.dataset.denialRole = 'giver';
       asker.avatar.dataset.denialRole = 'asker';
-      scene.deny([{ ...giver, role: 'giver' }, { ...asker, role: 'asker' }], ASK_DENIED_ANIMATION_MS, () => {
+      scene.deny([{ ...giver, role: 'giver' }, { ...asker, role: 'asker' }], DENIED_SHAKE_MS, () => {
         delete giver.avatar.dataset.denialRole;
         delete asker.avatar.dataset.denialRole;
-        if (!cancelled && activeSceneResult.current === denial) finish();
       });
-      if (asker.avatar.hasAttribute('data-denial-role')) activeSceneResult.current = denial;
     } else if (flight && card) {
       const asker = findSeat(flight.askerId);
       if (!asker) return;
@@ -93,9 +92,13 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
       }, () => {
         delete asker.avatar.dataset.retrieving;
         delete card.dataset.retrieving;
-        if (!cancelled && activeSceneResult.current === flight) finish();
+        if (!cancelled && activeSceneFlight.current === flight) {
+          // The fallback animation starts at the giver if the finished card is still visible.
+          card.hidden = true;
+          finish();
+        }
       });
-      if (card.hasAttribute('data-retrieving')) activeSceneResult.current = flight;
+      if (card.hasAttribute('data-retrieving')) activeSceneFlight.current = flight;
     }
     const stop = () => scene.stop();
     const observer = new ResizeObserver(() => {
@@ -109,16 +112,15 @@ export default function TableCardTransfer({ flight, denial, onComplete }: {
       observer.disconnect();
       motion.removeEventListener('change', stop);
       stop();
+      if (card) card.hidden = false;
     };
   }, [flight, denial]);
 
   return <>
     <canvas ref={canvasRef} className="creature-retrieval" aria-hidden="true" />
-    {denial && createPortal(<AskDeniedAnimation {...denial} onComplete={() => {
-      if (activeSceneResult.current !== denial) onComplete();
-    }} />, document.body)}
+    {denial && <AskDeniedAnimation cue={denial} onComplete={onComplete} />}
     {flight && <CardFlightAnimation {...flight} cardRef={cardRef} onComplete={() => {
-      if (activeSceneResult.current !== flight) onComplete();
+      if (activeSceneFlight.current !== flight) onComplete();
     }} />}
   </>;
 }

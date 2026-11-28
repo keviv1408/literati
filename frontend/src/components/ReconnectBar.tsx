@@ -1,5 +1,6 @@
 'use client';
 
+import CardFan from '@/components/CardFan';
 import { useEffect, useState } from 'react';
 
 const _SLOW_AFTER_MS = 10_000;
@@ -19,7 +20,7 @@ export default function ReconnectBar({ onRetry }: { onRetry: () => void }) {
       aria-live="polite"
       data-testid="ws-reconnecting-banner"
     >
-      <span aria-hidden="true">⟳</span>
+      <CardFan compact />
       <span>{slow ? 'Reconnecting… the server may be restarting.' : 'Reconnecting…'}</span>
       {slow && (
         <button

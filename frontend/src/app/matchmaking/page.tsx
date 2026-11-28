@@ -15,6 +15,7 @@
  *   6. "Cancel" button sends 'leave-queue' and resets to filter form.
  */
 
+import CardFan from '@/components/CardFan';
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAccount } from '@/contexts/AccountContext';
@@ -241,11 +242,11 @@ export default function MatchmakingPage() {
         {isMatchFound && (
           <div className="flex flex-col items-center gap-4">
             <div
-              className="text-6xl animate-bounce"
+              className="flex justify-center"
               role="img"
               aria-label="Match found"
             >
-              🃏
+              <CardFan />
             </div>
             <p className="text-emerald-300 text-sm">Your game is ready — heading there now!</p>
           </div>
@@ -258,12 +259,9 @@ export default function MatchmakingPage() {
             aria-live="polite"
             aria-label="Matchmaking queue status"
           >
-            {/* Spinner */}
-            <div
-              className="w-16 h-16 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"
-              role="status"
-              aria-label="Searching for players"
-            />
+            <div role="status" aria-label="Searching for players">
+              <CardFan />
+            </div>
 
             {/* Queue info */}
             {status === 'in-queue' && (
@@ -400,7 +398,7 @@ export default function MatchmakingPage() {
                 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950
               "
             >
-              {isFetching ? '⏳ Connecting…' : '🔍 Find Game'}
+              {isFetching ? <span className="inline-flex items-center gap-2"><CardFan compact />Connecting…</span> : '🔍 Find Game'}
             </button>
 
             {/* Back to home */}

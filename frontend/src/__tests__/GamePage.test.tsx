@@ -803,7 +803,7 @@ describe('GamePage — in_progress game view', () => {
     });
   });
 
-  it('shows a denied ask overlay over the asked player and clears it shortly after', async () => {
+  it.each([3000, 5000, 12000])('shows the denied card first and reserves the last second for its reply at %i ms', async delay => {
     render(<GamePage params={makeParams('ABC123')} />);
     await waitFor(() => {
       expect(screen.getByTestId('game-view')).toBeTruthy();
@@ -818,7 +818,8 @@ describe('GamePage — in_progress game view', () => {
       makePlayer('p5', 'Dave', 2, 3),
       makePlayer('p6', 'Eve', 2, 5),
     ];
-    act(() => sendWsMessage(makeGameInit('player-me', roster)));
+    const init = makeGameInit('player-me', roster);
+    act(() => sendWsMessage({ ...init, gameState: { ...init.gameState, botDelayMs: delay } }));
 
     await waitFor(() => {
       expect(screen.getAllByTestId('game-player-seat').length).toBeGreaterThan(0);
@@ -849,15 +850,17 @@ describe('GamePage — in_progress game view', () => {
       expect(screen.getByTestId('ask-denied-x')).toBeTruthy();
       expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
 
-      act(() => {
-        jest.advanceTimersByTime(1400);
-      });
+      await _advanceTime(delay - 1010);
+      expect(screen.getByTestId('ask-denied-card')).toBeInTheDocument();
+      expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
+      await _advanceTime(20);
+      await _advanceTime(1);
 
       expect(screen.getByTestId('denied-speech-bubble-text').textContent).toMatch(/\S/);
       expect(screen.queryByTestId('ask-speech-bubble-overlay')).toBeNull();
       expect(screen.queryByTestId('ask-denied-animation')).toBeNull();
 
-      act(() => { jest.advanceTimersByTime(1200); });
+      await _advanceTime(1000);
       expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
       expect(screen.queryByTestId('ask-speech-bubble-overlay')).toBeNull();
 
@@ -991,6 +994,47 @@ function makeGameInit(
 }
 
 describe('queued ask animations', () => {
+  it.each(['player', 'spectator'])('clears a denial as soon as the next human ask reaches the %s', async viewer => {
+    mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
+    render(<GamePage params={makeParams('ABC123')} />);
+    await screen.findByTestId('game-view');
+    const me = 'player-me';
+    const roster = [makePlayer(me, 'Me', 1, 0), makePlayer('p2', 'Alice', 2, 1)];
+    const init = makeGameInit(me, roster);
+    act(() => {
+      openWs();
+      sendWsMessage({ ...init, type: viewer === 'player' ? 'game_init' : 'spectator_init', hands: {},
+        gameState: { ...init.gameState, botDelayMs: 3000 } });
+    });
+    await screen.findByTestId(viewer === 'player' ? 'game-view' : 'spectator-view');
+    const ask = (askerId: string, targetId: string, cardId: string, success: boolean) => act(() =>
+      sendWsMessage({ type: 'ask_result', askerId, targetId, cardId, success,
+        newTurnPlayerId: success ? askerId : targetId, lastMove: cardId }));
+    jest.useFakeTimers();
+    try {
+      ask(me, 'p2', '5_h', false);
+      await _advanceTime(20);
+      expect(screen.getByTestId('ask-denied-card')).toHaveTextContent('5');
+      await _advanceTime(500);
+      ask('p2', me, '9_s', false);
+      expect(screen.queryByTestId('ask-denied-card')).toBeNull();
+      await _advanceTime(20);
+      expect(screen.getByTestId('ask-denied-card')).toHaveTextContent('9');
+      await _advanceTime(1500);
+      expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
+      expect(screen.getByTestId('ask-denied-card')).toHaveTextContent('9');
+      await _advanceTime(510);
+      await _advanceTime(1);
+      expect(screen.getByTestId('denied-speech-bubble-overlay')).toBeInTheDocument();
+      ask(me, 'p2', '8_s', true);
+      expect(screen.queryByTestId('denied-speech-bubble-overlay')).toBeNull();
+      await _advanceTime(20);
+      expect(screen.getByTestId('card-flight-card')).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it.each(['player', 'spectator'])('plays each received bot ask in order for a %s while the turn advances', async viewer => {
     mockGetRoomByCode.mockResolvedValue({ room: buildRoom('in_progress') });
     render(<GamePage params={makeParams('ABC123')} />);
@@ -1039,7 +1083,7 @@ describe('queued ask animations', () => {
       await _advanceTime(20);
       expectRank('ask-denied-card', '5');
       expect(screen.queryByTestId('card-flight-card')).toBeNull();
-      await _advanceTime(1300);
+      await _advanceTime(4000);
       expect(screen.queryByTestId('ask-denied-card')).toBeNull();
       expect(screen.queryByTestId('card-flight-card')).toBeNull();
     } finally {

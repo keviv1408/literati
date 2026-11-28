@@ -1,5 +1,6 @@
 'use client';
 
+import CardFan from '@/components/CardFan';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import BackToHomeButton from '@/components/BackToHomeButton';
@@ -211,6 +212,7 @@ export default function LiveGamesPage() {
         <div className="space-y-1 text-center">
           <h1 className="text-4xl font-black text-white tracking-tight">Spectate Live Games</h1>
           <div className="flex items-center justify-center gap-2 text-sm">
+            {!isConnected && <CardFan compact />}
             {isConnected ? (
               <span className="flex items-center gap-1.5 text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />

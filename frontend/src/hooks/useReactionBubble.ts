@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { AskSpeechBubbleState } from '@/components/AskSpeechBubbleOverlay';
-import { getPlayerSeatElement } from '@/hooks/useAskResultAnimations';
+import { DENIED_REPLY_MS, getPlayerSeatElement } from '@/hooks/useAskResultAnimations';
 import type { AskResultPayload, DeclarationResultPayload, GamePlayer } from '@/types/game';
 import { hashString } from '@/utils/avatar';
 
@@ -54,11 +54,11 @@ function _askReply(move: AskResultPayload, players: readonly GamePlayer[]): stri
 }
 
 export function useReactionBubble(
-  lastAskResult: AskResultPayload | null,
+  reactionAsk: AskResultPayload | null,
   lastDeclareResult: DeclarationResultPayload | null,
   players: readonly GamePlayer[],
 ): AskSpeechBubbleState | null {
-  const move = lastAskResult ?? lastDeclareResult;
+  const move = reactionAsk ?? lastDeclareResult;
   const askReply = useEffectEvent((ask: AskResultPayload) => _askReply(ask, players));
   const [shown, setShown] = useState<{ move: typeof move; bubble: AskSpeechBubbleState } | null>(null);
 
@@ -67,7 +67,8 @@ export function useReactionBubble(
     const isAsk = move.type === 'ask_result';
     if (!isAsk && (!move.correct || move.timedOut)) return;
     const playerId = isAsk ? move.targetId : move.declarerId;
-    const delay = isAsk ? ASK_REPLY_DELAY_MS : 0;
+    const delay = isAsk && move.success ? ASK_REPLY_DELAY_MS : 0;
+    const duration = isAsk && !move.success ? DENIED_REPLY_MS : REACTION_BUBBLE_MS;
     const showTimer = setTimeout(() => {
       const seat = getPlayerSeatElement(playerId);
       if (!seat) return;
@@ -76,7 +77,7 @@ export function useReactionBubble(
         : { seat, variant: 'declared', text: pickLine(DECLARED_LINES, `${playerId}|${move.halfSuitId}`) };
       setShown({ move, bubble });
     }, delay);
-    const hideTimer = setTimeout(() => setShown(null), delay + REACTION_BUBBLE_MS);
+    const hideTimer = setTimeout(() => setShown(null), delay + duration);
     return () => {
       clearTimeout(showTimer);
       clearTimeout(hideTimer);

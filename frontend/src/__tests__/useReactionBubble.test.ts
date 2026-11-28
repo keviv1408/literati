@@ -46,16 +46,18 @@ describe('useReactionBubble', () => {
   });
   afterEach(() => jest.useRealTimers());
 
-  it('shows a delayed denied bubble at the asked player and then hides it', () => {
+  it('shows the completed denial’s reply at the asked player for one second', () => {
     mountSeat('t', { top: 700, bottom: 760 });
     const { result } = renderHook(() => useReactionBubble(deniedAsk, null, []));
     expect(result.current).toBeNull();
 
-    act(() => jest.advanceTimersByTime(ASK_REPLY_DELAY_MS));
+    act(() => jest.advanceTimersByTime(0));
     expect(result.current?.variant).toBe('denied');
     expect(result.current?.seat.dataset.playerId).toBe('t');
 
-    act(() => jest.advanceTimersByTime(REACTION_BUBBLE_MS));
+    act(() => jest.advanceTimersByTime(999));
+    expect(result.current?.variant).toBe('denied');
+    act(() => jest.advanceTimersByTime(1));
     expect(result.current).toBeNull();
   });
 
@@ -65,7 +67,7 @@ describe('useReactionBubble', () => {
       ({ ask }) => useReactionBubble(ask, null, []),
       { initialProps: { ask: deniedAsk } },
     );
-    act(() => jest.advanceTimersByTime(ASK_REPLY_DELAY_MS));
+    act(() => jest.advanceTimersByTime(0));
     expect(result.current?.variant).toBe('denied');
     const next = { ...deniedAsk, askerId: 't', targetId: 'a', success: true };
     rerender({ ask: next });
@@ -101,7 +103,7 @@ describe('useReactionBubble', () => {
       { ...base, playerId: 'other', teamId: 2, displayName: 'Echo' },
     ];
     const { result } = renderHook(() => useReactionBubble(ask, null, players));
-    act(() => jest.advanceTimersByTime(ASK_REPLY_DELAY_MS));
+    act(() => jest.advanceTimersByTime(0));
     expect(result.current?.text).toBe('You can ask Echo too, y’know.');
   });
 

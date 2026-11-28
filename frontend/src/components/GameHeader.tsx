@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import type { GameWsStatus } from '@/hooks/useGameSocket';
-import type { PublicGameState } from '@/types/game';
+import { DEFAULT_BOT_DELAY_MS, type PublicGameState } from '@/types/game';
 import KnowledgePanel from './KnowledgePanel';
 import MuteToggle from './MuteToggle';
 
@@ -50,7 +50,7 @@ export default function GameHeader({
   const trigger = useRef<HTMLButtonElement>(null);
   const connected = wsStatus === 'connected';
   const status = CONNECTION_LABELS[wsStatus];
-  const delay = gameState?.botDelayMs ?? 5000;
+  const delay = gameState?.botDelayMs ?? DEFAULT_BOT_DELAY_MS;
   function closePanel() {
     setPanel(null);
     trigger.current?.focus();

@@ -1,5 +1,6 @@
 'use client';
 
+import CardFan from '@/components/CardFan';
 import { Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Home from './page';
@@ -20,7 +21,12 @@ function Entry() {
 
 export default function AndroidEntry() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={
+      <main role="status" className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-felt text-paper">
+        <CardFan />
+        <span>Opening the table…</span>
+      </main>
+    }>
       <Entry />
     </Suspense>
   );

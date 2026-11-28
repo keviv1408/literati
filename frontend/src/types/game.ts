@@ -49,6 +49,8 @@ export interface DeclaredSuit {
   declaredBy: string;
 }
 
+export const DEFAULT_BOT_DELAY_MS = 5000;
+
 /** Public game state broadcast to all players. */
 export interface PublicGameState {
   status: 'active' | 'completed' | 'abandoned';

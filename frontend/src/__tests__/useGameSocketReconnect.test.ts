@@ -169,6 +169,19 @@ describe('useGameSocket reconnect', () => {
     expect(new URL(_latestWs().url).searchParams.get('token')).toBe('refreshed');
   });
 
+  it('dismisses a denial on local submission before the next result arrives', () => {
+    const { result } = renderHook(() => useGameSocket({ roomCode: 'ABCDEF', bearerToken: 't' }));
+    const ws = _latestWs();
+    _confirm(ws);
+    _message(ws, { type: 'ask_result', askerId: 'p2', targetId: 'p1', cardId: '2_h',
+      success: false, newTurnPlayerId: 'p1', lastMove: 'Denied' });
+    expect(result.current.nextAskAnimation?.cardId).toBe('2_h');
+    act(() => result.current.sendAsk('p2', '5_s'));
+    expect(result.current.nextAskAnimation).toBeNull();
+    expect(result.current.lastVisibleAskResult).toBeNull();
+    expect(result.current.askHistory).toHaveLength(1);
+  });
+
   it('drops active and pending ask visuals while hidden and keeps receiving game updates', () => {
     const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
     const table = document.createElement('div');
@@ -210,7 +223,7 @@ describe('useGameSocket reconnect', () => {
       expect(result.current.socket.myHand).toEqual(['4_h']);
       expect(result.current.socket.gameState?.currentTurnPlayerId).toBe('p2');
       expect(result.current.animation).toMatchObject({
-        cardFlight: null, askDeniedCue: null, speechResult: null, askSpeechBubble: null,
+        cardFlight: null, askDeniedCue: null, reactionAsk: null, askSpeechBubble: null,
       });
       _message(ws, { ...ask, cardId: '6_h' });
       _advance(20);
@@ -260,7 +273,7 @@ describe('useGameSocket reconnect', () => {
       _message(_latestWs(), { type: 'game_over' });
       _advance(20);
       expect(result.current.cardFlight).toBeNull();
-      expect(result.current.speechResult).toBeNull();
+      expect(result.current.reactionAsk).toBeNull();
     } finally {
       table.remove();
     }

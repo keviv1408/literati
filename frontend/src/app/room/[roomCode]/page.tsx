@@ -30,6 +30,7 @@
  *
  */
 
+import CardFan from '@/components/CardFan';
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import BackToHomeButton from '@/components/BackToHomeButton';
@@ -419,20 +420,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
         aria-label="Reconnecting…"
       >
         <div className="flex flex-col items-center gap-5 text-paper-muted">
-          <div className="flex gap-2" aria-hidden="true">
-            <span
-              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-gold"
-              style={{ animationDelay: '0ms' }}
-            />
-            <span
-              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-gold"
-              style={{ animationDelay: '180ms' }}
-            />
-            <span
-              className="animate-loading-dot h-2.5 w-2.5 rounded-full bg-gold"
-              style={{ animationDelay: '360ms' }}
-            />
-          </div>
+          <CardFan />
           <span className="text-sm tracking-wide">Reconnecting…</span>
         </div>
       </div>
@@ -636,28 +624,9 @@ export default function RoomLobbyPage({ params }: PageProps) {
   // ── Loading skeleton ─────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-felt-glow text-paper">
+      <div role="status" aria-label="Loading room…" className="animate-delayed-reveal flex min-h-screen items-center justify-center bg-felt-glow text-paper">
         <div className="flex flex-col items-center gap-4 text-paper-muted">
-          <svg
-            className="animate-spin h-8 w-8 text-gold"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-label="Loading room…"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8z"
-            />
-          </svg>
+          <CardFan />
           <span className="text-sm">Loading room…</span>
         </div>
       </div>
@@ -764,7 +733,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
             aria-live="polite"
             data-testid="reconnecting-banner"
           >
-            <span aria-hidden="true">📡</span>
+            <CardFan compact />
             Reconnecting to the room…
           </div>
         )}
@@ -814,7 +783,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                       data-testid="start-game-btn"
                       className="min-h-12 rounded-xl bg-copper px-3 py-2 text-sm font-bold text-felt hover:bg-copper-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sage disabled:cursor-wait disabled:opacity-60"
                     >
-                      {isStarting || lobbyStarting ? 'Starting…' : startLabel}
+                      {isStarting || lobbyStarting ? <span className="inline-flex items-center gap-2"><CardFan compact />Starting…</span> : startLabel}
                     </button>
                   </LobbyStartControl>
                 )}
@@ -1014,26 +983,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
             role="status"
             data-testid="game-starting-notice"
           >
-            <svg
-              className="animate-spin h-6 w-6 text-emerald-400"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden="true"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8z"
-              />
-            </svg>
+            <CardFan />
             <p className="text-sm font-semibold text-emerald-300">
               Game is starting…
             </p>
@@ -1063,7 +1013,7 @@ export default function RoomLobbyPage({ params }: PageProps) {
                   className="min-h-11 rounded-lg border border-sage px-4 font-semibold hover:bg-felt-hover focus-visible:outline-2">Cancel</button>
                 <button type="button" disabled={closing} onClick={_confirmAbandon}
                   className="min-h-11 rounded-lg bg-red-700 px-4 font-semibold text-white hover:bg-red-600 focus-visible:outline-2 disabled:opacity-60">
-                  {closing ? 'Closing…' : 'Confirm abandon'}
+                  {closing ? <span className="inline-flex items-center gap-2"><CardFan compact />Closing…</span> : 'Confirm abandon'}
                 </button>
               </div>
             </dialog>
